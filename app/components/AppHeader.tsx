@@ -1,42 +1,19 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
-
-type UserLike = { id: string; email?: string | null } | null;
+import { useAuth } from "@/app/lib/auth";
 
 export default function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
+  const { user, loading } = useAuth();
 
-  const [user, setUser] = useState<UserLike>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = React.useState(false);
 
-  // セッション状態を追跡（初期取得 + 変化を購読）
-  useEffect(() => {
-    let mounted = true;
-
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!mounted) return;
-      setUser(data.user ? { id: data.user.id, email: data.user.email } : null);
-    })();
-
-    const { data: sub } = supabase.auth.onAuthStateChange(async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!mounted) return;
-      setUser(data.user ? { id: data.user.id, email: data.user.email } : null);
-    });
-
-    return () => {
-      mounted = false;
-      sub.subscription.unsubscribe();
-    };
-  }, []);
-
-  // ログイン画面ではヘッダーを表示しない（好みで）
+  // ✅ ログインページでもヘッダーを出したいなら、この行は消す
   if (pathname === "/login") return null;
 
   const onLogout = async () => {
@@ -58,7 +35,9 @@ export default function AppHeader() {
       </Link>
 
       <nav style={styles.nav}>
-        {user ? (
+        {loading ? (
+          <span style={styles.email}>...</span>
+        ) : user ? (
           <>
             <span style={styles.email}>{user.email ?? "login"}</span>
             <button
@@ -72,7 +51,11 @@ export default function AppHeader() {
             </button>
           </>
         ) : (
-          <Link href="/login" className="sh-btn" style={{ ...styles.btn, textDecoration: "none" }}>
+          <Link
+            href="/login"
+            className="sh-btn"
+            style={{ ...styles.btn, textDecoration: "none" }}
+          >
             ログイン
           </Link>
         )}
