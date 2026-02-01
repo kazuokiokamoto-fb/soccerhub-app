@@ -20,20 +20,15 @@ export const metadata: Metadata = {
   description: "U-12 練習試合 自動マッチング",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {/* 🔐 認証状態を全アプリで共有 */}
-        <AuthProvider>
-          {/* ✅ 全ページ共通ヘッダー（ログアウト/ログイン表示） */}
-          <AppHeader />
-          {children}
-        </AuthProvider>
+        {/* ✅ ここは常に出る */}
+        <AppHeader />
+
+        {/* 🔐 認証の共有は内側 */}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

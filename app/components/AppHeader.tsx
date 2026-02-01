@@ -3,24 +3,24 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
 
 export default function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, loading } = useAuth();
 
+  const { user, loading, signOut } = useAuth();
   const [busy, setBusy] = React.useState(false);
 
-  // ✅ ログインページでもヘッダーを出したいなら、この行は消す
-  if (pathname === "/login") return null;
+  // ※ ここは好み：ログイン画面ではヘッダー不要なら true
+  const hideOnLogin = true;
+  if (hideOnLogin && pathname === "/login") return null;
 
   const onLogout = async () => {
     if (busy) return;
     setBusy(true);
     try {
-      await supabase.auth.signOut();
+      await signOut();
       router.replace("/login");
       router.refresh();
     } finally {
@@ -28,39 +28,61 @@ export default function AppHeader() {
     }
   };
 
-  return (
-    <header style={styles.header}>
-      <Link href="/" style={styles.brand}>
-        SoccerHub
-      </Link>
+  // ✅ 追加：超目立つデバッグバー（return の直前）
+  // これが出ない＝AppHeader自体が読み込まれていない/別デプロイを見ている可能性が高い
+  const debugText = `HEADER TEST | path=${pathname} | user=${
+    loading ? "loading" : user ? "yes" : "no"
+  }`;
 
-      <nav style={styles.nav}>
-        {loading ? (
-          <span style={styles.email}>...</span>
-        ) : user ? (
-          <>
-            <span style={styles.email}>{user.email ?? "login"}</span>
-            <button
-              type="button"
-              onClick={onLogout}
-              disabled={busy}
+  return (
+    <>
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 9999,
+          background: "yellow",
+          padding: 8,
+          borderBottom: "1px solid #000",
+          fontWeight: 900,
+        }}
+      >
+        {debugText}
+      </div>
+
+      <header style={styles.header}>
+        <Link href="/" style={styles.brand}>
+          SoccerHub
+        </Link>
+
+        <nav style={styles.nav}>
+          {loading ? (
+            <span style={styles.email}>...</span>
+          ) : user ? (
+            <>
+              <span style={styles.email}>{user.email ?? user.id}</span>
+              <button
+                type="button"
+                onClick={onLogout}
+                disabled={busy}
+                className="sh-btn"
+                style={styles.btn}
+              >
+                {busy ? "ログアウト中…" : "ログアウト"}
+              </button>
+            </>
+          ) : (
+            <Link
+              href="/login"
               className="sh-btn"
-              style={styles.btn}
+              style={{ ...styles.btn, textDecoration: "none" }}
             >
-              {busy ? "ログアウト中…" : "ログアウト"}
-            </button>
-          </>
-        ) : (
-          <Link
-            href="/login"
-            className="sh-btn"
-            style={{ ...styles.btn, textDecoration: "none" }}
-          >
-            ログイン
-          </Link>
-        )}
-      </nav>
-    </header>
+              ログイン
+            </Link>
+          )}
+        </nav>
+      </header>
+    </>
   );
 }
 
