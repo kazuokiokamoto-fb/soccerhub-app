@@ -1,21 +1,34 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/app/lib/auth";
 
 export default function AdminPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading, isAdmin, adminLoading } = useAuth();
 
-  // 未ログインなら /login へ
+  // redirect 先（なければ /admin に滞在）
+  const redirect = searchParams.get("redirect") || "/admin";
+
+  // router.replace の多重発火防止
+  const redirectedRef = useRef(false);
+
+  // 未ログインなら /login へ（redirect 付き）
   useEffect(() => {
     if (loading) return;
-    if (!user) router.replace("/login");
-  }, [loading, user, router]);
+    if (user) return;
 
-  // まだ auth の初期化中
+    if (redirectedRef.current) return;
+    redirectedRef.current = true;
+
+    router.replace(`/login?redirect=${encodeURIComponent(redirect)}`);
+    router.refresh();
+  }, [loading, user, router, redirect]);
+
+  // まだ auth 初期化中
   if (loading) {
     return <main style={{ padding: 24 }}>読み込み中…</main>;
   }
@@ -25,7 +38,7 @@ export default function AdminPage() {
     return <main style={{ padding: 24 }}>ログイン画面へ移動中…</main>;
   }
 
-  // 管理者判定の問い合わせ中（admins テーブル照会など）
+  // 管理者判定中
   if (adminLoading) {
     return <main style={{ padding: 24 }}>管理者権限を確認中…</main>;
   }
@@ -36,9 +49,13 @@ export default function AdminPage() {
       <main style={{ padding: 24, maxWidth: 720, margin: "0 auto" }}>
         <h1 style={{ fontSize: 28, fontWeight: 800 }}>403</h1>
         <p>このページは管理者のみ閲覧できます。</p>
-        <div style={{ marginTop: 12 }}>
-          <Link href="/" className="sh-btn">
+
+        <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link href="/" className="sh-btn" style={{ textDecoration: "none" }}>
             トップへ戻る
+          </Link>
+          <Link href="/match" className="sh-btn" style={{ textDecoration: "none" }}>
+            マッチへ
           </Link>
         </div>
       </main>
@@ -49,16 +66,18 @@ export default function AdminPage() {
   return (
     <main style={{ padding: 24, maxWidth: 720, margin: "0 auto" }}>
       <h1 style={{ fontSize: 28, fontWeight: 800 }}>🛡 管理者ページ</h1>
-      <p style={{ color: "#555" }}>ログイン中：{user.email}</p>
+      <p style={{ color: "#555" }}>
+        ログイン中：{user.email ?? "(emailなし)"} / {user.id}
+      </p>
 
       <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
-        <Link className="sh-btn" href="/teams/new">
+        <Link className="sh-btn" href="/teams/new" style={{ textDecoration: "none" }}>
           チーム登録（管理）
         </Link>
-        <Link className="sh-btn" href="/venues">
+        <Link className="sh-btn" href="/venues" style={{ textDecoration: "none" }}>
           グラウンド管理
         </Link>
-        <Link className="sh-btn" href="/">
+        <Link className="sh-btn" href="/" style={{ textDecoration: "none" }}>
           トップへ
         </Link>
       </div>
