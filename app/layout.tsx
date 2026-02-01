@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/app/lib/auth";
+import AppHeader from "@/app/components/AppHeader";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,7 +29,11 @@ export default function RootLayout({
     <html lang="ja">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {/* 🔐 認証状態を全アプリで共有 */}
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          {/* ✅ 全ページ共通ヘッダー（ログアウト/ログイン表示） */}
+          <AppHeader />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
