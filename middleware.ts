@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-function createSupabase(req: NextRequest) {
-  const res = NextResponse.next();
+export async function middleware(req: NextRequest) {
+  let res = NextResponse.next();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,58 +21,37 @@ function createSupabase(req: NextRequest) {
     }
   );
 
-  return { supabase, res };
-}
-
-export async function middleware(req: NextRequest) {
-  const { supabase, res } = createSupabase(req);
-
-  const { data: userData } = await supabase.auth.getUser();
-  const user = userData.user;
+  // ★ ここが重要：サーバー側でセッションを読めるようにする
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const pathname = req.nextUrl.pathname;
 
-  // 触ってOKなパス（未ログインでも可）
-  const publicPaths = ["/login", "/"];
-  const isPublic =
-    publicPaths.includes(pathname) ||
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon.ico") ||
-    pathname.startsWith("/api");
+  // ✅ 公開ページ（ログイン不要）
+  const publicPaths = ["/", "/login"];
+  const isPublic = publicPaths.includes(pathname);
 
-  // ここはログイン必須にしたいパス（必要に応じて増やしてOK）
-  const requiresAuth =
+  // ✅ 保護したいページ（ログイン必須）
+  const isProtected =
     pathname.startsWith("/teams") ||
-    pathname.startsWith("/venues") ||
     pathname.startsWith("/match") ||
-    pathname.startsWith("/admin");
+    pathname.startsWith("/venues") ||
+    pathname.startsWith("/calendar") ||
+    pathname.startsWith("/chat") ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/map") ||
+    pathname.startsWith("/results") ||
+    pathname.startsWith("/search") ||
+    pathname.startsWith("/selection") ||
+    pathname.startsWith("/video");
 
-  // 未ログインなら /login へ
-  if (!user && requiresAuth) {
+  if (!user && isProtected && !isPublic) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("next", pathname); // ログイン後に戻す用
+    url.searchParams.set("redirect", pathname);
     return NextResponse.redirect(url);
   }
-
-  // /admin は「admins テーブルに自分のUIDがある人」だけ許可
-  if (user && pathname.startsWith("/admin")) {
-    const { data: adminRow, error } = await supabase
-      .from("admins")
-      .select("user_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    // RLSで読めない/存在しない = 管理者じゃない
-    if (error || !adminRow) {
-      const url = req.nextUrl.clone();
-      url.pathname = "/";
-      return NextResponse.redirect(url);
-    }
-  }
-
-  // 公開ページはそのまま
-  if (isPublic) return res;
 
   return res;
 }
