@@ -21,18 +21,18 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  // ★ ここが重要：サーバー側でセッションを読めるようにする
+  // サーバー側で user 判定
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const pathname = req.nextUrl.pathname;
 
-  // ✅ 公開ページ（ログイン不要）
+  // 公開ページ
   const publicPaths = ["/", "/login"];
   const isPublic = publicPaths.includes(pathname);
 
-  // ✅ 保護したいページ（ログイン必須）
+  // 保護ページ（ログイン必須）
   const isProtected =
     pathname.startsWith("/teams") ||
     pathname.startsWith("/match") ||
@@ -50,12 +50,18 @@ export async function middleware(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(url);
+
+    // ★ここ超重要：res を redirect に差し替えて返す
+    res = NextResponse.redirect(url);
+    return res;
   }
 
   return res;
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    // _next や画像などは除外
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };
