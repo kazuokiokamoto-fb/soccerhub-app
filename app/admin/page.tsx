@@ -1,39 +1,33 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+export const dynamic = "force-dynamic"; // ★ これが超重要（prerender 無効）
+
+import { useEffect } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/lib/auth";
 
 export default function AdminPage() {
+  // ★ ビルド時（window がない）には何も描画しない
+  if (typeof window === "undefined") {
+    return null;
+  }
+
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { user, loading, isAdmin, adminLoading } = useAuth();
 
-  // redirect 先（なければ /admin に滞在）
-  const redirect = searchParams.get("redirect") || "/admin";
-
-  // router.replace の多重発火防止
-  const redirectedRef = useRef(false);
-
-  // 未ログインなら /login へ（redirect 付き）
+  // 未ログインなら /login へ
   useEffect(() => {
     if (loading) return;
-    if (user) return;
+    if (!user) router.replace("/login");
+  }, [loading, user, router]);
 
-    if (redirectedRef.current) return;
-    redirectedRef.current = true;
-
-    router.replace(`/login?redirect=${encodeURIComponent(redirect)}`);
-    router.refresh();
-  }, [loading, user, router, redirect]);
-
-  // まだ auth 初期化中
+  // auth 初期化中
   if (loading) {
     return <main style={{ padding: 24 }}>読み込み中…</main>;
   }
 
-  // 未ログイン（useEffectで飛ばすが、描画も安全に）
+  // 未ログイン（保険）
   if (!user) {
     return <main style={{ padding: 24 }}>ログイン画面へ移動中…</main>;
   }
@@ -43,19 +37,15 @@ export default function AdminPage() {
     return <main style={{ padding: 24 }}>管理者権限を確認中…</main>;
   }
 
-  // 管理者じゃない
+  // 管理者でない
   if (!isAdmin) {
     return (
       <main style={{ padding: 24, maxWidth: 720, margin: "0 auto" }}>
         <h1 style={{ fontSize: 28, fontWeight: 800 }}>403</h1>
         <p>このページは管理者のみ閲覧できます。</p>
-
-        <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <Link href="/" className="sh-btn" style={{ textDecoration: "none" }}>
+        <div style={{ marginTop: 12 }}>
+          <Link href="/" className="sh-btn">
             トップへ戻る
-          </Link>
-          <Link href="/match" className="sh-btn" style={{ textDecoration: "none" }}>
-            マッチへ
           </Link>
         </div>
       </main>
@@ -66,18 +56,16 @@ export default function AdminPage() {
   return (
     <main style={{ padding: 24, maxWidth: 720, margin: "0 auto" }}>
       <h1 style={{ fontSize: 28, fontWeight: 800 }}>🛡 管理者ページ</h1>
-      <p style={{ color: "#555" }}>
-        ログイン中：{user.email ?? "(emailなし)"} / {user.id}
-      </p>
+      <p style={{ color: "#555" }}>ログイン中：{user.email}</p>
 
       <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
-        <Link className="sh-btn" href="/teams/new" style={{ textDecoration: "none" }}>
+        <Link className="sh-btn" href="/teams/new">
           チーム登録（管理）
         </Link>
-        <Link className="sh-btn" href="/venues" style={{ textDecoration: "none" }}>
+        <Link className="sh-btn" href="/venues">
           グラウンド管理
         </Link>
-        <Link className="sh-btn" href="/" style={{ textDecoration: "none" }}>
+        <Link className="sh-btn" href="/">
           トップへ
         </Link>
       </div>
