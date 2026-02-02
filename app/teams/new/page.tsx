@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { supabase } from "../../lib/supabase";
-import { GradeKey, Team } from "../../lib/types";
+import { GradeKey } from "../../lib/types";
+
+// ✅ カテゴリ統一（あなたが作った categories.ts を参照）
+import { CATEGORY_OPTIONS } from "@/app/lib/categories";
 
 const gradeKeys: GradeKey[] = ["G1", "G2", "G3", "G4", "G5", "G6"];
 
@@ -13,18 +16,27 @@ type Toast = { type: "success" | "error" | "info"; text: string };
 
 // 23区だけ先に運用
 type WardRow = { ward: string };
-type AreaRow = { ward: string; name: string }; // tokyo_areas が入ってくればここに候補が出る
+type AreaRow = { ward: string; name: string }; // tokyo_areas
 
 function makeDefaultRoster11(): Record<GradeKey, string> {
   return { G1: "11", G2: "11", G3: "11", G4: "11", G5: "11", G6: "11" };
 }
+
+// ✅ DBが空でも町名候補が出るフォールバック
+const FALLBACK_TOWNS_BY_WARD: Record<string, string[]> = {
+  世田谷区: ["三宿", "池尻", "下馬", "太子堂", "三軒茶屋", "駒沢", "桜新町", "用賀", "二子玉川", "奥沢", "等々力", "深沢"],
+  目黒区: ["中目黒", "青葉台", "上目黒", "下目黒", "目黒", "五本木", "鷹番", "祐天寺"],
+  渋谷区: ["恵比寿", "広尾", "代官山", "神宮前", "渋谷", "松濤", "代々木"],
+  港区: ["南青山", "北青山", "西麻布", "六本木", "麻布十番", "白金", "高輪", "芝", "赤坂"],
+};
 
 export default function TeamNewPage() {
   const router = useRouter();
 
   // --- base fields ---
   const [name, setName] = useState("");
-  const [category, setCategory] = useState("U-12");
+  // ✅ デフォルトは options の先頭（なければ空）
+  const [category, setCategory] = useState<string>(CATEGORY_OPTIONS[0]?.value ?? "");
   const [level, setLevel] = useState(5);
   const [hasGround, setHasGround] = useState(false);
   const [bikeParking, setBikeParking] = useState("不明");
@@ -32,20 +44,17 @@ export default function TeamNewPage() {
   const [uniformSub, setUniformSub] = useState("");
 
   // ✅ エリア入力（区＋町名）
-  const [prefecture] = useState("東京都"); // まず固定（後で拡張）
+  const [prefecture] = useState("東京都"); // まず固定
   const [ward, setWard] = useState<string>(""); // 23区
-  const [neighborhood, setNeighborhood] = useState<string>(""); // 町名（まず自由入力OK）
+  const [neighborhood, setNeighborhood] = useState<string>(""); // 町名（datalist候補あり）
 
   // 23区候補 & 町名候補（tokyo_areas が空でもOK）
   const [wardOptions, setWardOptions] = useState<string[]>([]);
   const [areaOptions, setAreaOptions] = useState<string[]>([]);
 
   // ✅ 0が消せない問題対策：入力は string で持つ（空欄OK）
-  const [rosterByGradeText, setRosterByGradeText] = useState<Record<GradeKey, string>>(
-    makeDefaultRoster11()
-  );
+  const [rosterByGradeText, setRosterByGradeText] = useState<Record<GradeKey, string>>(makeDefaultRoster11());
 
-  // ✅ 「希望日」ではなく、いったんメモ欄に寄せる（マッチングは match_slots に寄せて作る想定）
   const [note, setNote] = useState("");
 
   const [saving, setSaving] = useState(false);
@@ -63,22 +72,32 @@ export default function TeamNewPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  // ✅ 23区をDBからロード
+  // ✅ 23区をDBからロード（ダメならフォールバック）
   useEffect(() => {
     (async () => {
       const { data, error } = await supabase.from("tokyo_23wards").select("ward").order("ward");
       if (error) {
         console.error(error);
-        // DBが見えないときも進めたいので、最低限のフォールバック
         setWardOptions([
-          "千代田区","中央区","港区","新宿区","文京区","台東区","墨田区","江東区","品川区","目黒区",
-          "大田区","世田谷区","渋谷区","中野区","杉並区","豊島区","北区","荒川区","板橋区","練馬区",
-          "足立区","葛飾区","江戸川区",
+          "千代田区", "中央区", "港区", "新宿区", "文京区", "台東区", "墨田区", "江東区", "品川区", "目黒区",
+          "大田区", "世田谷区", "渋谷区", "中野区", "杉並区", "豊島区", "北区", "荒川区", "板橋区", "練馬区",
+          "足立区", "葛飾区", "江戸川区",
         ]);
         return;
       }
       const rows = (data ?? []) as WardRow[];
-      setWardOptions(rows.map((r) => r.ward));
+      const list = rows.map((r) => r.ward).filter(Boolean);
+
+      // DBが空だった時もフォールバック
+      if (list.length === 0) {
+        setWardOptions([
+          "千代田区", "中央区", "港区", "新宿区", "文京区", "台東区", "墨田区", "江東区", "品川区", "目黒区",
+          "大田区", "世田谷区", "渋谷区", "中野区", "杉並区", "豊島区", "北区", "荒川区", "板橋区", "練馬区",
+          "足立区", "葛飾区", "江戸川区",
+        ]);
+      } else {
+        setWardOptions(list);
+      }
     })();
   }, []);
 
@@ -88,6 +107,7 @@ export default function TeamNewPage() {
       setAreaOptions([]);
       if (!ward) return;
 
+      // まずDBから試す
       const { data, error } = await supabase
         .from("tokyo_areas")
         .select("ward,name")
@@ -95,19 +115,27 @@ export default function TeamNewPage() {
         .order("name");
 
       if (error) {
-        // 町名テーブルがまだ空/権限/未作成でも落ちない
         console.warn("tokyo_areas load skipped:", error.message);
+        // DBが無理ならフォールバック
+        setAreaOptions(FALLBACK_TOWNS_BY_WARD[ward] ?? []);
         return;
       }
 
       const rows = (data ?? []) as AreaRow[];
-      setAreaOptions(rows.map((r) => r.name));
+      const dbList = rows.map((r) => r.name).filter(Boolean);
+
+      // DBが空ならフォールバック
+      if (dbList.length === 0) {
+        setAreaOptions(FALLBACK_TOWNS_BY_WARD[ward] ?? []);
+      } else {
+        setAreaOptions(dbList);
+      }
     })();
   }, [ward]);
 
   const resetForm = () => {
     setName("");
-    setCategory("U-12");
+    setCategory(CATEGORY_OPTIONS[0]?.value ?? "");
     setLevel(5);
     setHasGround(false);
     setBikeParking("不明");
@@ -128,11 +156,15 @@ export default function TeamNewPage() {
       setToast({ type: "error", text: "区（23区）を選んでください" });
       return;
     }
+    if (!category.trim()) {
+      setToast({ type: "error", text: "カテゴリを選んでください" });
+      return;
+    }
 
     setSaving(true);
     setToast({ type: "info", text: "保存中…" });
 
-    // roster: 空欄は 0 扱い（UIは空欄OK）
+    // roster: 空欄は 0 扱い
     const roster_by_grade = gradeKeys.reduce((acc, g) => {
       const v = (rosterByGradeText[g] ?? "").trim();
       acc[g] = v === "" ? 0 : Math.max(0, Number(v) || 0);
@@ -160,7 +192,7 @@ export default function TeamNewPage() {
     const payload: any = {
       owner_id: user.id,
       name: name.trim(),
-      category,
+      category: category.trim(),
       level,
       has_ground: hasGround,
       bike_parking: bikeParking,
@@ -179,11 +211,7 @@ export default function TeamNewPage() {
     };
 
     try {
-      const { data, error } = await supabase
-        .from("teams")
-        .insert(payload)
-        .select("id")
-        .single();
+      const { data, error } = await supabase.from("teams").insert(payload).select("id").single();
 
       if (error) {
         console.error(error);
@@ -196,10 +224,7 @@ export default function TeamNewPage() {
 
       setToast({ type: "success", text: "✅ チームを登録しました" });
 
-      // ✅成功体験：一覧へ自動遷移（ハイライト用）
       router.push(`/teams?created=${encodeURIComponent(data.id)}`);
-
-      // ※ UX的には遷移するので reset は不要だが、戻ったときのため残してもOK
       resetForm();
     } finally {
       setSaving(false);
@@ -213,11 +238,7 @@ export default function TeamNewPage() {
         <div
           style={{
             ...toastBox,
-            ...(toast.type === "success"
-              ? toastSuccess
-              : toast.type === "error"
-              ? toastError
-              : toastInfo),
+            ...(toast.type === "success" ? toastSuccess : toast.type === "error" ? toastError : toastInfo),
           }}
           role="status"
           aria-live="polite"
@@ -233,8 +254,12 @@ export default function TeamNewPage() {
       <p style={{ color: "#555", marginTop: 6 }}>Supabase（DB）に保存します。</p>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
-        <Link href="/teams" className="sh-btn">一覧へ</Link>
-        <Link href="/" className="sh-btn">トップへ</Link>
+        <Link href="/teams" className="sh-btn">
+          一覧へ
+        </Link>
+        <Link href="/" className="sh-btn">
+          トップへ
+        </Link>
       </div>
 
       <section style={{ ...card, marginTop: 16 }}>
@@ -273,7 +298,9 @@ export default function TeamNewPage() {
                 >
                   <option value="">選択してください</option>
                   {wardOptions.map((w) => (
-                    <option key={w} value={w}>{w}</option>
+                    <option key={w} value={w}>
+                      {w}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -289,7 +316,8 @@ export default function TeamNewPage() {
                 disabled={saving || !ward}
                 list="neighborhood-list"
               />
-              {/* tokyo_areas が入ってきたら候補が出る。空でも問題なし */}
+
+              {/* ✅ 候補（DB or フォールバック） */}
               <datalist id="neighborhood-list">
                 {areaOptions.map((n) => (
                   <option key={n} value={n} />
@@ -297,23 +325,42 @@ export default function TeamNewPage() {
               </datalist>
 
               <span style={{ color: "#777", fontSize: 12 }}>
-                表示例：{ward ? <b>{`${ward}${neighborhood.trim() ? "・" + neighborhood.trim() : ""}`}</b> : "（未選択）"}
+                表示例：
+                {ward ? <b>{`${ward}${neighborhood.trim() ? "・" + neighborhood.trim() : ""}`}</b> : "（未選択）"}
               </span>
             </label>
+
+            {/* ✅ 候補が無い時の案内 */}
+            {ward && areaOptions.length === 0 ? (
+              <div style={{ marginTop: 8, fontSize: 12, color: "#777" }}>
+                ※ 町名候補がまだありません（自由入力OK）
+              </div>
+            ) : null}
           </div>
 
+          {/* ✅ カテゴリ（統一） */}
           <label style={label}>
             <span>カテゴリ</span>
             <select value={category} onChange={(e) => setCategory(e.target.value)} style={input} disabled={saving}>
-              <option value="U-12">U-12</option>
-              <option value="U-15">U-15</option>
-              <option value="社会人">社会人</option>
+              {CATEGORY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </select>
           </label>
 
           <label style={label}>
             <span>強さ（自己申告 1〜10）：{level}</span>
-            <input type="range" min={1} max={10} value={level} onChange={(e) => setLevel(Number(e.target.value))} style={{ width: "100%" }} disabled={saving} />
+            <input
+              type="range"
+              min={1}
+              max={10}
+              value={level}
+              onChange={(e) => setLevel(Number(e.target.value))}
+              style={{ width: "100%" }}
+              disabled={saving}
+            />
           </label>
 
           <label style={{ ...checkLabel, opacity: saving ? 0.7 : 1 }}>
@@ -376,9 +423,7 @@ export default function TeamNewPage() {
                 </label>
               ))}
             </div>
-            <p style={{ margin: "8px 0 0", color: "#777", fontSize: 12 }}>
-              ※ 空欄もOK（保存時は 0 扱い）
-            </p>
+            <p style={{ margin: "8px 0 0", color: "#777", fontSize: 12 }}>※ 空欄もOK（保存時は 0 扱い）</p>
           </div>
 
           <label style={label}>
