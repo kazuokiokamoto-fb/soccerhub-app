@@ -61,7 +61,6 @@ function guessPartsFromAreaText(area?: string | null): { prefecture?: string; ci
   const raw = (area ?? "").trim();
   if (!raw) return {};
 
-  // 例："東京都 世田谷区・三宿" / "世田谷区・三宿" / "横浜市・中区"
   let prefecture = "";
   let rest = raw;
 
@@ -73,10 +72,19 @@ function guessPartsFromAreaText(area?: string | null): { prefecture?: string; ci
     }
   }
 
-  // rest 先頭の市区町村を推定：スペース区切りがあれば最初、なければ全体
-  // ただし "世田谷区・三宿" なら city=世田谷区, town=三宿
-  const firstToken = rest.split(/\s+/).filter(Boolean)[0] ?? rest;
-  const [city, town] = firstToken.split("・").map((s) => s.trim());
+  // rest: "世田谷区・三宿" / "世田谷区" / "横浜市・中区" / "横浜市 中区" など想定
+  rest = rest.replace(/^\s+/, "");
+
+  // まず "・" を優先して分割
+  if (rest.includes("・")) {
+    const [c, t] = rest.split("・").map((s) => s.trim());
+    return { prefecture: prefecture || undefined, city: c || undefined, town: t || undefined };
+  }
+
+  // 次にスペース分割
+  const tokens = rest.split(/\s+/).filter(Boolean);
+  const city = tokens[0] ?? "";
+  const town = tokens[1] ?? "";
 
   return {
     prefecture: prefecture || undefined,
