@@ -11,12 +11,10 @@ import { Calendar } from "./components/Calendar";
 import { DaySlotList } from "./components/DaySlotList";
 import { CreateSlotModal } from "./components/CreateSlotModal";
 
-// ★追加（チェックボックス用）
+// ✅ 追加：検索UI
 import { CATEGORY_OPTIONS } from "@/app/lib/categories";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
-
-/** CheckboxGroup の options 型 */
-type Option = { value: string; label: string };
+import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
 
 /** ===== Date utils ===== */
 function ymdToday() {
@@ -49,9 +47,51 @@ function weekdayIndexMondayFirst(date: Date) {
   return (w + 6) % 7;
 }
 
-// unique helper
-function uniq(arr: string[]) {
-  return Array.from(new Set(arr.filter(Boolean)));
+/** ===== helpers ===== */
+type SlotEx = DbSlot & {
+  prefecture?: string | null;
+  city?: string | null;
+  town?: string | null;
+};
+
+const KANTO_PREFS = ["東京都", "神奈川県", "千葉県", "埼玉県", "茨城県", "栃木県", "群馬県"];
+
+// slot.area 互換から推定（完璧じゃないが、旧データ救済用）
+function guessPartsFromAreaText(area?: string | null): { prefecture?: string; city?: string; town?: string } {
+  const raw = (area ?? "").trim();
+  if (!raw) return {};
+
+  // 例："東京都 世田谷区・三宿" / "世田谷区・三宿" / "横浜市・中区"
+  let prefecture = "";
+  let rest = raw;
+
+  for (const p of KANTO_PREFS) {
+    if (raw.startsWith(p)) {
+      prefecture = p;
+      rest = raw.slice(p.length).trim();
+      break;
+    }
+  }
+
+  // rest 先頭の市区町村を推定：スペース区切りがあれば最初、なければ全体
+  // ただし "世田谷区・三宿" なら city=世田谷区, town=三宿
+  const firstToken = rest.split(/\s+/).filter(Boolean)[0] ?? rest;
+  const [city, town] = firstToken.split("・").map((s) => s.trim());
+
+  return {
+    prefecture: prefecture || undefined,
+    city: city || undefined,
+    town: town || undefined,
+  };
+}
+
+function slotParts(s: SlotEx) {
+  const p = (s.prefecture ?? "").trim();
+  const c = (s.city ?? "").trim();
+  const t = (s.town ?? "").trim();
+
+  if (p || c || t) return { prefecture: p || undefined, city: c || undefined, town: t || undefined };
+  return guessPartsFromAreaText(s.area ?? "");
 }
 
 /** ===== Page ===== */
@@ -63,9 +103,11 @@ export default function MatchCalendarPage() {
 
   const [meId, setMeId] = useState<string>("");
 
-  // ===== 検索フィルター（チェックボックス複数）=====
+  // ✅ 検索フィルター：カテゴリ複数 + エリア（都県→市区町村→町名）
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
-  const [areaFilter, setAreaFilter] = useState<string[]>([]);
+  const [prefectureFilter, setPrefectureFilter] = useState<string>(""); // "" = すべて
+  const [cityFilter, setCityFilter] = useState<string>("");
+  const [townFilter, setTownFilter] = useState<string>("");
 
   // month state
   const [monthDate, setMonthDate] = useState<Date>(() => startOfMonth(new Date()));
@@ -76,7 +118,7 @@ export default function MatchCalendarPage() {
   const [venues, setVenues] = useState<DbVenue[]>([]);
 
   // month data
-  const [slotsInMonth, setSlotsInMonth] = useState<DbSlot[]>([]);
+  const [slotsInMonth, setSlotsInMonth] = useState<SlotEx[]>([]);
   const [requestsForMonth, setRequestsForMonth] = useState<DbRequest[]>([]);
 
   // selection
@@ -128,7 +170,7 @@ export default function MatchCalendarPage() {
       const { data: teamRows, error: teamErr } = await supabase
         .from("teams")
         .select(
-          "id,name,area,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at,owner_id"
+          "id,name,area,category,categories,prefecture,city,town,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at,owner_id"
         )
         .eq("owner_id", uid)
         .order("updated_at", { ascending: false });
@@ -144,8 +186,8 @@ export default function MatchCalendarPage() {
         // defaults
         if (!hostTeamId && ts[0]?.id) setHostTeamId(ts[0].id);
         if (!requestTeamId && ts[0]?.id) setRequestTeamId(ts[0].id);
-        if (!slotArea && ts[0]?.area) setSlotArea(ts[0].area || "");
-        if (ts[0]?.category) setSlotCategory(ts[0].category || "U-12");
+        if (!slotArea && (ts[0] as any)?.area) setSlotArea(((ts[0] as any).area as string) || "");
+        if ((ts[0] as any)?.category) setSlotCategory(((ts[0] as any).category as string) || "U-12");
       }
 
       const { data: venueRows, error: venueErr } = await supabase
@@ -181,9 +223,12 @@ export default function MatchCalendarPage() {
       const start = formatYmd(startOfMonth(monthDate));
       const end = formatYmd(endOfMonth(monthDate));
 
+      // ✅ prefecture/city/town を取得
       const { data: slotRows, error: slotErr } = await supabase
         .from("match_slots")
-        .select("id,owner_id,host_team_id,date,start_time,end_time,venue_id,area,category,created_at")
+        .select(
+          "id,owner_id,host_team_id,date,start_time,end_time,venue_id,area,category,prefecture,city,town,created_at"
+        )
         .gte("date", start)
         .lte("date", end)
         .order("date", { ascending: true })
@@ -197,7 +242,7 @@ export default function MatchCalendarPage() {
         return;
       }
 
-      const slots = (slotRows ?? []) as DbSlot[];
+      const slots = (slotRows ?? []) as SlotEx[];
       setSlotsInMonth(slots);
 
       const slotIds = slots.map((s) => s.id).filter(Boolean);
@@ -230,35 +275,32 @@ export default function MatchCalendarPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monthKey]);
 
-  /** ===== フィルタ候補（エリア）=====
-   * CheckboxGroup は Option[] が必要なので {value,label} に変換する
-   */
-  const areaOptions: Option[] = useMemo(() => {
-    const fromSlots = slotsInMonth.map((s) => (s.area ?? "").trim()).filter(Boolean);
-    const areas = uniq(fromSlots).sort((a, b) => a.localeCompare(b, "ja"));
-    return areas.map((a) => ({ value: a, label: a }));
-  }, [slotsInMonth]);
-
   /** ===== フィルタ適用（month全体に適用） ===== */
   const filteredSlotsInMonth = useMemo(() => {
     return slotsInMonth.filter((s) => {
       // カテゴリ（複数）
       if (categoryFilter.length > 0) {
-        const c = (s.category ?? "").trim();
-        if (!c) return false;
-        if (!categoryFilter.includes(c)) return false;
+        const cat = (s.category ?? "").trim();
+        if (!cat) return false;
+        if (!categoryFilter.includes(cat)) return false;
       }
 
-      // エリア（複数）
-      if (areaFilter.length > 0) {
-        const a = (s.area ?? "").trim();
-        if (!a) return false;
-        if (!areaFilter.includes(a)) return false;
+      // エリア（prefecture/city/town 優先、なければ area から推定）
+      const parts = slotParts(s);
+
+      if (prefectureFilter) {
+        if ((parts.prefecture ?? "") !== prefectureFilter) return false;
+      }
+      if (cityFilter) {
+        if ((parts.city ?? "") !== cityFilter) return false;
+      }
+      if (townFilter) {
+        if ((parts.town ?? "") !== townFilter) return false;
       }
 
       return true;
     });
-  }, [slotsInMonth, categoryFilter, areaFilter]);
+  }, [slotsInMonth, categoryFilter, prefectureFilter, cityFilter, townFilter]);
 
   /** ===== Calendar countByDate ===== */
   const countByDate = useMemo(() => {
@@ -286,13 +328,13 @@ export default function MatchCalendarPage() {
 
   const isMineSlot = useMemo(() => {
     if (!selectedSlot) return false;
-    return !!meId && selectedSlot.owner_id === meId;
+    return !!meId && (selectedSlot as any).owner_id === meId;
   }, [selectedSlot, meId]);
 
   /** ===== actions ===== */
   const openCreateForDate = (ymd: string) => {
     setSlotDate(ymd);
-    const t0 = myTeams[0];
+    const t0 = myTeams[0] as any;
     if (t0?.id) setHostTeamId(t0.id);
     if (t0?.area) setSlotArea(t0.area || "");
     if (t0?.category) setSlotCategory(t0.category || "U-12");
@@ -302,6 +344,7 @@ export default function MatchCalendarPage() {
     setOpenCreate(true);
   };
 
+  // ✅ ここが今回の本丸：match_slots に prefecture/city/town を保存
   const createSlot = async () => {
     if (!slotDate) return setToast({ type: "error", text: "日付が必要です" });
     if (!hostTeamId) return setToast({ type: "error", text: "ホストチームを選んでください" });
@@ -313,14 +356,35 @@ export default function MatchCalendarPage() {
     const uid = u?.user?.id;
     if (!uid) return setToast({ type: "error", text: "ログインが必要です" });
 
-    const payload = {
+    // ✅ ホストチームから都県/市区町村/町名を引く
+    const host = (myTeams.find((t: any) => t.id === hostTeamId) ?? null) as any;
+    const hostPrefecture = (host?.prefecture ?? "").trim();
+    const hostCity = (host?.city ?? "").trim();
+    const hostTown = (host?.town ?? "").trim();
+
+    // ✅ 互換 area は必ず残す（host の area があればそれ優先）
+    const areaText =
+      (host?.area ?? "").trim() ||
+      `${hostPrefecture || ""} ${hostCity || ""}${hostTown ? "・" + hostTown : ""}`.trim() ||
+      (slotArea ?? "").trim() ||
+      null;
+
+    const payload: any = {
       owner_id: uid,
       host_team_id: hostTeamId,
       date: slotDate,
       start_time: startTime,
       end_time: endTime,
       venue_id: venueId || null,
-      area: slotArea?.trim() || null,
+
+      // ✅ 互換
+      area: areaText,
+
+      // ✅ 現行（検索の主軸）
+      prefecture: hostPrefecture || null,
+      city: hostCity || null,
+      town: hostTown || null,
+
       category: slotCategory?.trim() || null,
     };
 
@@ -391,7 +455,7 @@ export default function MatchCalendarPage() {
     if (ok) await loadMonth();
   };
 
-  // ★自分の申込みキャンセル
+  // 自分の申込みキャンセル
   const cancelMyRequest = async (requestId: string) => {
     if (!requestId) return;
 
@@ -399,11 +463,7 @@ export default function MatchCalendarPage() {
     setToast({ type: "info", text: "キャンセル中…" });
 
     try {
-      const { error } = await supabase
-        .from("match_requests")
-        .update({ status: "cancelled" })
-        .eq("id", requestId);
-
+      const { error } = await supabase.from("match_requests").update({ status: "cancelled" }).eq("id", requestId);
       if (error) {
         console.error(error);
         setToast({ type: "error", text: `キャンセル失敗: ${error.message}` });
@@ -419,7 +479,9 @@ export default function MatchCalendarPage() {
 
   const clearFilters = () => {
     setCategoryFilter([]);
-    setAreaFilter([]);
+    setPrefectureFilter("");
+    setCityFilter("");
+    setTownFilter("");
   };
 
   /** ===== Calendar cells ===== */
@@ -432,18 +494,15 @@ export default function MatchCalendarPage() {
 
     const cells: Array<{ ymd: string; dayNum: number; inMonth: boolean }> = [];
 
-    // prefix
     for (let i = 0; i < prefix; i++) {
       const d = new Date(first);
       d.setDate(1 - (prefix - i));
       cells.push({ ymd: formatYmd(d), dayNum: d.getDate(), inMonth: false });
     }
-    // this month
     for (let day = 1; day <= daysInMonth; day++) {
       const d = new Date(first.getFullYear(), first.getMonth(), day);
       cells.push({ ymd: formatYmd(d), dayNum: day, inMonth: true });
     }
-    // suffix
     while (cells.length % 7 !== 0) {
       const lastYmd = cells[cells.length - 1]!.ymd;
       const dd = new Date(lastYmd + "T00:00:00");
@@ -461,11 +520,7 @@ export default function MatchCalendarPage() {
         <div
           style={{
             ...toastBox,
-            ...(toast.type === "success"
-              ? toastSuccess
-              : toast.type === "error"
-              ? toastError
-              : toastInfo),
+            ...(toast.type === "success" ? toastSuccess : toast.type === "error" ? toastError : toastInfo),
           }}
           role="status"
           aria-live="polite"
@@ -500,36 +555,49 @@ export default function MatchCalendarPage() {
         </div>
       </header>
 
-      {/* ===== 検索フィルター（チェックボックス）===== */}
+      {/* ===== 検索フィルター（統一UI）===== */}
       <section style={filterWrap}>
-        <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ display: "grid", gap: 12 }}>
+          {/* ✅ エリア（関東：都県→市区町村→町名） */}
+          <AreaPickerKanto
+            title="エリアで絞り込み（関東）"
+            allowAll={true}
+            allLabel="関東（すべて）"
+            disabled={loading}
+            prefecture={prefectureFilter}
+            setPrefecture={setPrefectureFilter}
+            city={cityFilter}
+            setCity={setCityFilter}
+            town={townFilter}
+            setTown={setTownFilter}
+            townOptional={true}
+          />
+
+          {/* ✅ カテゴリ（複数） */}
           <CheckboxGroup
-            title="カテゴリ"
+            title="カテゴリで絞り込み（複数）"
             options={CATEGORY_OPTIONS}
             values={categoryFilter}
             onChange={setCategoryFilter}
             columns={3}
+            disabled={loading}
           />
 
-          <CheckboxGroup
-            title="エリア"
-            options={areaOptions}
-            values={areaFilter}
-            onChange={setAreaFilter}
-            columns={4}
-          />
-
-          {categoryFilter.length > 0 || areaFilter.length > 0 ? (
+          {(categoryFilter.length > 0 || prefectureFilter || cityFilter || townFilter) ? (
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="sh-btn" type="button" onClick={clearFilters}>
+              <button className="sh-btn" type="button" onClick={clearFilters} disabled={loading}>
                 条件クリア
               </button>
               <span style={{ color: "#666", fontSize: 12 }}>
-                絞り込み中：カテゴリ {categoryFilter.length} / エリア {areaFilter.length}
+                絞り込み中：
+                {prefectureFilter ? ` ${prefectureFilter}` : "（都県なし）"} /
+                {cityFilter ? ` ${cityFilter}` : "（市区町村なし）"} /
+                {townFilter ? ` ${townFilter}` : "（町名なし）"} /
+                カテゴリ {categoryFilter.length}
               </span>
             </div>
           ) : (
-            <div style={{ color: "#777", fontSize: 12 }}>※ カテゴリとエリアで絞り込みできます</div>
+            <div style={{ color: "#777", fontSize: 12 }}>※ エリア（都県→市区町村→町名）とカテゴリで絞り込みできます</div>
           )}
         </div>
       </section>
@@ -552,7 +620,7 @@ export default function MatchCalendarPage() {
 
       <DaySlotList
         selectedYmd={selectedYmd}
-        slots={slotsOnSelectedDate}
+        slots={slotsOnSelectedDate as any}
         venues={venues}
         myTeams={myTeams}
         meId={meId}
@@ -562,7 +630,7 @@ export default function MatchCalendarPage() {
         requestTeamId={requestTeamId}
         onChangeRequestTeamId={setRequestTeamId}
         onRequestSlot={requestSlot}
-        selectedSlot={selectedSlot}
+        selectedSlot={selectedSlot as any}
         selectedSlotRequests={selectedSlotRequests as DbRequest[]}
         isMineSlot={isMineSlot}
         onAccept={accept}

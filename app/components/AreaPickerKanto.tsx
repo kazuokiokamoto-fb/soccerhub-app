@@ -19,7 +19,7 @@ const KANTO_PREFS = [
 export function AreaPickerKanto(props: {
   disabled?: boolean;
 
-  prefecture: string;
+  prefecture: string; // "" も許容（allowAll=true のとき）
   setPrefecture: (v: string) => void;
 
   city: string;
@@ -28,11 +28,12 @@ export function AreaPickerKanto(props: {
   town: string;
   setTown: (v: string) => void;
 
-  // 表示名（チーム登録/検索で文言変えたい時用）
   title?: string;
-
-  // 町名を必須にするか（チーム登録は任意、検索は任意が多い）
   townOptional?: boolean;
+
+  // ✅ 追加：検索UI向け「すべて（未選択）」を許容
+  allowAll?: boolean;
+  allLabel?: string; // "関東（すべて）" など
 }) {
   const {
     disabled,
@@ -44,6 +45,8 @@ export function AreaPickerKanto(props: {
     setTown,
     title = "エリア（関東）",
     townOptional = true,
+    allowAll = false,
+    allLabel = "関東（すべて）",
   } = props;
 
   const [cityOptions, setCityOptions] = useState<string[]>([]);
@@ -60,6 +63,12 @@ export function AreaPickerKanto(props: {
       setCityQuery("");
       setTownQuery("");
       setTownOptions([]);
+
+      // ✅ allowAll で prefecture="" の時は候補を出さない（＝絞り込みなし）
+      if (allowAll && !prefecture) {
+        setCityOptions([]);
+        return;
+      }
 
       const { data, error } = await supabase
         .from("jp_municipalities")
@@ -119,31 +128,39 @@ export function AreaPickerKanto(props: {
     return townOptions.filter((x) => x.includes(q)).slice(0, 250);
   }, [townOptions, townQuery]);
 
+  const prefectureOptions = allowAll ? ["", ...KANTO_PREFS] : KANTO_PREFS;
+
   return (
     <div style={{ ...card, background: "#fafafa" }}>
       <div style={{ fontWeight: 900, marginBottom: 10 }}>{title}</div>
 
       {/* 都県 */}
       <label style={label}>
-        <span>都県（必須）</span>
+        <span>都県（{allowAll ? "任意" : "必須"}）</span>
         <select
           value={prefecture}
           onChange={(e) => setPrefecture(e.target.value)}
           style={input}
           disabled={disabled}
         >
-          {KANTO_PREFS.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
+          {prefectureOptions.map((p) =>
+            p === "" ? (
+              <option key="__all__" value="">
+                {allLabel}
+              </option>
+            ) : (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            )
+          )}
         </select>
       </label>
 
       {/* 市区町村 */}
       <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-          <div style={{ fontWeight: 800 }}>市区町村（必須）</div>
+          <div style={{ fontWeight: 800 }}>市区町村（{allowAll ? "任意" : "必須"}）</div>
           <div style={{ fontSize: 12, color: "#777" }}>候補 {cityOptions.length} 件</div>
         </div>
 
@@ -151,12 +168,14 @@ export function AreaPickerKanto(props: {
           value={cityQuery}
           onChange={(e) => setCityQuery(e.target.value)}
           style={input}
-          placeholder="検索（例：世田谷、横浜、さいたま…）"
-          disabled={disabled}
+          placeholder={allowAll && !prefecture ? "先に都県を選ぶと市区町村が出ます" : "検索（例：世田谷、横浜…）"}
+          disabled={disabled || (allowAll && !prefecture)}
         />
 
         <div style={pickerBox}>
-          {filteredCityOptions.length === 0 ? (
+          {allowAll && !prefecture ? (
+            <div style={{ color: "#777", fontSize: 12 }}>都県を選ぶと市区町村候補が出ます</div>
+          ) : filteredCityOptions.length === 0 ? (
             <div style={{ color: "#777", fontSize: 12 }}>
               候補がありません（jp_municipalities のデータを確認）
             </div>
@@ -183,6 +202,23 @@ export function AreaPickerKanto(props: {
         <div style={{ fontSize: 12, color: "#777" }}>
           選択中：<b>{city || "（未選択）"}</b>
         </div>
+
+        {city ? (
+          <button
+            type="button"
+            className="sh-btn"
+            style={{ width: "fit-content" }}
+            onClick={() => {
+              setCity("");
+              setTown("");
+              setCityQuery("");
+              setTownQuery("");
+            }}
+            disabled={disabled}
+          >
+            市区町村をクリア
+          </button>
+        ) : null}
       </div>
 
       {/* 町名 */}
@@ -196,7 +232,7 @@ export function AreaPickerKanto(props: {
           value={townQuery}
           onChange={(e) => setTownQuery(e.target.value)}
           style={input}
-          placeholder={city ? "検索（例：三宿 / 南青山 / 青葉台…）" : "先に市区町村を選択してください"}
+          placeholder={city ? "検索（例：三宿 / 南青山…）" : "先に市区町村を選択してください"}
           disabled={disabled || !city}
         />
 
@@ -204,9 +240,7 @@ export function AreaPickerKanto(props: {
           {!city ? (
             <div style={{ color: "#777", fontSize: 12 }}>先に市区町村を選択してください</div>
           ) : townOptions.length === 0 ? (
-            <div style={{ color: "#777", fontSize: 12 }}>
-              町名候補がありません（jp_towns のデータを確認）
-            </div>
+            <div style={{ color: "#777", fontSize: 12 }}>町名候補がありません（jp_towns を確認）</div>
           ) : (
             filteredTownOptions.map((t) => (
               <button
@@ -224,8 +258,23 @@ export function AreaPickerKanto(props: {
         </div>
 
         <div style={{ fontSize: 12, color: "#777" }}>
-          表示例：<b>{`${prefecture} ${city || "（市区町村未選択）"}${town ? "・" + town : ""}`}</b>
+          表示例：<b>{`${prefecture || "（都県未選択）"} ${city || "（市区町村未選択）"}${town ? "・" + town : ""}`}</b>
         </div>
+
+        {town ? (
+          <button
+            type="button"
+            className="sh-btn"
+            style={{ width: "fit-content" }}
+            onClick={() => {
+              setTown("");
+              setTownQuery("");
+            }}
+            disabled={disabled}
+          >
+            町名をクリア
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -247,7 +296,7 @@ const input: React.CSSProperties = {
   background: "white",
 };
 
-// “候補を押すだけ”UI（iPad向け）
+// iPad向け：候補を“押すだけ”
 const pickerBox: React.CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
