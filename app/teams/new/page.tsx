@@ -22,15 +22,7 @@ function makeDefaultRoster11(): Record<GradeKey, string> {
 }
 
 // 関東7都県（UI固定）
-const KANTO_PREFS = [
-  "東京都",
-  "神奈川県",
-  "千葉県",
-  "埼玉県",
-  "茨城県",
-  "栃木県",
-  "群馬県",
-];
+const KANTO_PREFS = ["東京都", "神奈川県", "千葉県", "埼玉県", "茨城県", "栃木県", "群馬県"];
 
 export default function TeamNewPage() {
   const router = useRouter();
@@ -55,24 +47,20 @@ export default function TeamNewPage() {
   const [cityOptions, setCityOptions] = useState<string[]>([]);
   const [townOptions, setTownOptions] = useState<string[]>([]);
 
+  // 検索入力（表示している入力欄の中身）
   const [cityQuery, setCityQuery] = useState("");
   const [townQuery, setTownQuery] = useState("");
 
-  const [rosterByGradeText, setRosterByGradeText] =
-    useState<Record<GradeKey, string>>(makeDefaultRoster11());
+  const [rosterByGradeText, setRosterByGradeText] = useState<Record<GradeKey, string>>(
+    makeDefaultRoster11()
+  );
 
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
 
   const canSave = useMemo(() => {
-    return (
-      !!name.trim() &&
-      !!prefecture &&
-      !!city &&
-      categories.length > 0 &&
-      !saving
-    );
+    return !!name.trim() && !!prefecture && !!city && categories.length > 0 && !saving;
   }, [name, prefecture, city, categories, saving]);
 
   // toast auto close
@@ -91,11 +79,17 @@ export default function TeamNewPage() {
       setTownQuery("");
       setTownOptions([]);
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("jp_municipalities")
         .select("prefecture,city")
         .eq("prefecture", prefecture)
         .order("city");
+
+      if (error) {
+        console.error(error);
+        setCityOptions([]);
+        return;
+      }
 
       const rows = (data ?? []) as MunRow[];
       setCityOptions(rows.map((r) => r.city).filter(Boolean));
@@ -111,12 +105,18 @@ export default function TeamNewPage() {
 
       if (!prefecture || !city) return;
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("jp_towns")
         .select("prefecture,city,town")
         .eq("prefecture", prefecture)
         .eq("city", city)
         .order("town");
+
+      if (error) {
+        console.error(error);
+        setTownOptions([]);
+        return;
+      }
 
       const rows = (data ?? []) as TownRow[];
       setTownOptions(rows.map((r) => r.town).filter(Boolean));
@@ -151,7 +151,9 @@ export default function TeamNewPage() {
       return acc;
     }, {} as Record<GradeKey, number>);
 
-    const { data: auth } = await supabase.auth.getUser();
+    const { data: auth, error: authErr } = await supabase.auth.getUser();
+    if (authErr) console.error(authErr);
+
     if (!auth?.user) {
       setToast({ type: "error", text: "ログインが必要です" });
       setSaving(false);
@@ -178,13 +180,10 @@ export default function TeamNewPage() {
       area: areaText,
     };
 
-    const { error, data } = await supabase
-      .from("teams")
-      .insert(payload)
-      .select("id")
-      .single();
+    const { error, data } = await supabase.from("teams").insert(payload).select("id").single();
 
     if (error) {
+      console.error(error);
       setToast({ type: "error", text: error.message });
       setSaving(false);
       return;
@@ -197,14 +196,29 @@ export default function TeamNewPage() {
   };
 
   const filteredCityOptions = useMemo(() => {
-    if (!cityQuery) return cityOptions.slice(0, 200);
-    return cityOptions.filter((c) => c.includes(cityQuery)).slice(0, 200);
+    const q = cityQuery.trim();
+    if (!q) return cityOptions.slice(0, 200);
+    return cityOptions.filter((c) => c.includes(q)).slice(0, 200);
   }, [cityOptions, cityQuery]);
 
   const filteredTownOptions = useMemo(() => {
-    if (!townQuery) return townOptions.slice(0, 200);
-    return townOptions.filter((t) => t.includes(townQuery)).slice(0, 200);
+    const q = townQuery.trim();
+    if (!q) return townOptions.slice(0, 200);
+    return townOptions.filter((t) => t.includes(q)).slice(0, 200);
   }, [townOptions, townQuery]);
+
+  // ✅ 追加：選択時に「検索ボックスにも反映」するハンドラ
+  const selectCity = (c: string) => {
+    setCity(c);
+    setCityQuery(c); // ★これでボタン押下→入力欄に表示される
+    setTown("");
+    setTownQuery("");
+  };
+
+  const selectTown = (t: string) => {
+    setTown(t);
+    setTownQuery(t); // ★これでボタン押下→入力欄に表示される
+  };
 
   return (
     <main style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
@@ -216,7 +230,7 @@ export default function TeamNewPage() {
 
       <h1>チーム登録</h1>
 
-      <label>
+      <label style={{ display: "grid", gap: 6, marginBottom: 12 }}>
         チーム名
         <input value={name} onChange={(e) => setName(e.target.value)} />
       </label>
@@ -229,47 +243,89 @@ export default function TeamNewPage() {
         ))}
       </select>
 
-      <input
-        placeholder="市区町村検索"
-        value={cityQuery}
-        onChange={(e) => setCityQuery(e.target.value)}
-      />
-      <div>
-        {filteredCityOptions.map((c) => (
-          <button key={c} onClick={() => setCity(c)}>
-            {c}
-          </button>
-        ))}
+      <div style={{ marginTop: 10 }}>
+        <input
+          placeholder="市区町村検索"
+          value={cityQuery}
+          onChange={(e) => setCityQuery(e.target.value)}
+          style={{ width: "100%", padding: 8 }}
+        />
+
+        {/* ✅ 選択中表示 */}
+        <div style={{ marginTop: 6, fontSize: 12, color: "#555" }}>
+          選択中：<b>{city || "（未選択）"}</b>
+        </div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+          {filteredCityOptions.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => selectCity(c)}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid #ddd",
+                background: city === c ? "#fff" : "#f5f5f5",
+                fontWeight: city === c ? 800 : 400,
+              }}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
       </div>
 
       {city && (
-        <>
+        <div style={{ marginTop: 14 }}>
           <input
             placeholder="町名検索"
             value={townQuery}
             onChange={(e) => setTownQuery(e.target.value)}
+            style={{ width: "100%", padding: 8 }}
           />
-          <div>
+
+          {/* ✅ 選択中表示 */}
+          <div style={{ marginTop: 6, fontSize: 12, color: "#555" }}>
+            町名：<b>{town || "（未選択）"}</b>
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
             {filteredTownOptions.map((t) => (
-              <button key={t} onClick={() => setTown(t)}>
+              <button
+                key={t}
+                type="button"
+                onClick={() => selectTown(t)}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: "1px solid #ddd",
+                  background: town === t ? "#fff" : "#f5f5f5",
+                  fontWeight: town === t ? 800 : 400,
+                }}
+              >
                 {t}
               </button>
             ))}
           </div>
-        </>
+        </div>
       )}
 
-      <CheckboxGroup
-        title="カテゴリ"
-        options={CATEGORY_OPTIONS}
-        values={categories}
-        onChange={setCategories}
-        columns={3}
-      />
+      <div style={{ marginTop: 16 }}>
+        <CheckboxGroup
+          title="カテゴリ"
+          options={CATEGORY_OPTIONS}
+          values={categories}
+          onChange={setCategories}
+          columns={3}
+        />
+      </div>
 
-      <button onClick={save} disabled={!canSave}>
-        保存
-      </button>
+      <div style={{ marginTop: 14 }}>
+        <button onClick={save} disabled={!canSave}>
+          保存
+        </button>
+      </div>
     </main>
   );
 }
