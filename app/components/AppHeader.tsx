@@ -6,9 +6,14 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/app/lib/auth";
 
 export default function AppHeader() {
-  const router = useRouter();
   const pathname = usePathname();
 
+  // ✅ 追加：not-found では AppHeader 自体を描画しない（= useAuth を呼ばない）
+  if (pathname === "/_not-found") return null;
+
+  const router = useRouter();
+
+  // ★ここから先で useAuth を呼ぶ（not-found ではここまで来ない）
   const { user, loading, signOut } = useAuth();
   const [busy, setBusy] = React.useState(false);
 
@@ -29,7 +34,6 @@ export default function AppHeader() {
   };
 
   // ✅ 追加：超目立つデバッグバー（return の直前）
-  // これが出ない＝AppHeader自体が読み込まれていない/別デプロイを見ている可能性が高い
   const debugText = `HEADER TEST | path=${pathname} | user=${
     loading ? "loading" : user ? "yes" : "no"
   }`;
