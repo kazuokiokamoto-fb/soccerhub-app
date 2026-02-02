@@ -1,6 +1,7 @@
 "use client";
 
-export const dynamic = "force-dynamic"; // ★ これが超重要（prerender 無効）
+// ✅ Route Segment Config：prerender を避ける（ビルド時評価を抑制）
+export const dynamic = "force-dynamic";
 
 import { useEffect } from "react";
 import Link from "next/link";
@@ -8,10 +9,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/lib/auth";
 
 export default function AdminPage() {
-  // ★ ビルド時（window がない）には何も描画しない
-  if (typeof window === "undefined") {
-    return null;
-  }
+  // ✅ 念のため：SSR/ビルド時に window が無い環境では描画しない
+  if (typeof window === "undefined") return null;
 
   const router = useRouter();
   const { user, loading, isAdmin, adminLoading } = useAuth();
