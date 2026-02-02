@@ -6,18 +6,18 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/app/lib/auth";
 
 export default function AppHeader() {
-  const pathname = usePathname();
-
-  // ✅ 追加：not-found では AppHeader 自体を描画しない（= useAuth を呼ばない）
-  if (pathname === "/_not-found") return null;
+  // ★★★ これが最重要：Server / prerender では即 return ★★★
+  if (typeof window === "undefined") {
+    return null;
+  }
 
   const router = useRouter();
+  const pathname = usePathname();
 
-  // ★ここから先で useAuth を呼ぶ（not-found ではここまで来ない）
   const { user, loading, signOut } = useAuth();
   const [busy, setBusy] = React.useState(false);
 
-  // ※ ここは好み：ログイン画面ではヘッダー不要なら true
+  // ログイン画面ではヘッダー非表示
   const hideOnLogin = true;
   if (hideOnLogin && pathname === "/login") return null;
 
@@ -33,7 +33,7 @@ export default function AppHeader() {
     }
   };
 
-  // ✅ 追加：超目立つデバッグバー（return の直前）
+  // 🔥 デバッグバー（これが出れば100% OK）
   const debugText = `HEADER TEST | path=${pathname} | user=${
     loading ? "loading" : user ? "yes" : "no"
   }`;
