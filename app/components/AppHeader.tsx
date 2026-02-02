@@ -40,20 +40,6 @@ export default function AppHeader() {
 
   return (
     <>
-      <div
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 9999,
-          background: "yellow",
-          padding: 8,
-          borderBottom: "1px solid #000",
-          fontWeight: 900,
-        }}
-      >
-        {debugText}
-      </div>
-
       <header style={styles.header}>
         <Link href="/" style={styles.brand}>
           SoccerHub
