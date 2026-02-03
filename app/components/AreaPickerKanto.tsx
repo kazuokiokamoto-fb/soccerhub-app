@@ -31,9 +31,8 @@ export function AreaPickerKanto(props: {
   title?: string;
   townOptional?: boolean;
 
-  // ✅ 検索UI向け「すべて（未選択）」を許容
   allowAll?: boolean;
-  allLabel?: string; // "関東（すべて）" など
+  allLabel?: string;
 }) {
   const {
     disabled,
@@ -52,20 +51,21 @@ export function AreaPickerKanto(props: {
   const [cityOptions, setCityOptions] = useState<string[]>([]);
   const [townOptions, setTownOptions] = useState<string[]>([]);
 
+  // 🔍 検索入力（ボタン選択でここにも反映させる）
   const [cityQuery, setCityQuery] = useState("");
   const [townQuery, setTownQuery] = useState("");
 
-  // ====== helpers（ここが今回の修正の肝）======
+  // ====== handlers（ここが本丸）======
   const applyCity = (c: string) => {
     setCity(c);
-    setCityQuery(c);          // ✅ ボタン選択→検索欄にも反映
+    setCityQuery(c);       // ✅ クリックした市区町村をボックスに表示
     setTown("");
     setTownQuery("");
   };
 
   const applyTown = (t: string) => {
     setTown(t);
-    setTownQuery(t);          // ✅ ボタン選択→検索欄にも反映
+    setTownQuery(t);       // ✅ クリックした町名をボックスに表示
   };
 
   const clearCity = () => {
@@ -84,10 +84,10 @@ export function AreaPickerKanto(props: {
   // ====== 都県 → 市区町村 ======
   useEffect(() => {
     (async () => {
-      // 都県が変わったら下流は全部リセット
+      // 都県変更時：下流全部クリア
       clearCity();
 
-      // ✅ allowAll で prefecture="" の時は候補を出さない（＝絞り込みなし）
+      // allowAll で prefecture="" の時は候補を出さない（＝絞り込み無し）
       if (allowAll && !prefecture) {
         setCityOptions([]);
         return;
@@ -114,7 +114,6 @@ export function AreaPickerKanto(props: {
   // ====== 市区町村 → 町名 ======
   useEffect(() => {
     (async () => {
-      // city が変わったら町名側はリセット
       setTown("");
       setTownQuery("");
       setTownOptions([]);
@@ -140,12 +139,13 @@ export function AreaPickerKanto(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefecture, city]);
 
-  // ====== 外部から city/town が入ってきた時の同期（編集画面などで効く）=====
+  // ✅ 外部（親）から city/town が入ってきたときも、検索欄を同期（編集UIなどで効く）
   useEffect(() => {
-    // 既に city が入ってるのに cityQuery が空（またはズレ）なら同期
     if (city && cityQuery !== city) setCityQuery(city);
-    // 既に town が入ってるのに townQuery が空（またはズレ）なら同期
+    if (!city && cityQuery) setCityQuery("");
+
     if (town && townQuery !== town) setTownQuery(town);
+    if (!town && townQuery) setTownQuery("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [city, town]);
 
@@ -170,12 +170,7 @@ export function AreaPickerKanto(props: {
       {/* 都県 */}
       <label style={label}>
         <span>都県（{allowAll ? "任意" : "必須"}）</span>
-        <select
-          value={prefecture}
-          onChange={(e) => setPrefecture(e.target.value)}
-          style={input}
-          disabled={disabled}
-        >
+        <select value={prefecture} onChange={(e) => setPrefecture(e.target.value)} style={input} disabled={disabled}>
           {prefectureOptions.map((p) =>
             p === "" ? (
               <option key="__all__" value="">
@@ -209,9 +204,7 @@ export function AreaPickerKanto(props: {
           {allowAll && !prefecture ? (
             <div style={{ color: "#777", fontSize: 12 }}>都県を選ぶと市区町村候補が出ます</div>
           ) : filteredCityOptions.length === 0 ? (
-            <div style={{ color: "#777", fontSize: 12 }}>
-              候補がありません（jp_municipalities のデータを確認）
-            </div>
+            <div style={{ color: "#777", fontSize: 12 }}>候補がありません（jp_municipalities を確認）</div>
           ) : (
             filteredCityOptions.map((c) => (
               <button
@@ -219,7 +212,7 @@ export function AreaPickerKanto(props: {
                 type="button"
                 className="sh-btn"
                 style={{ ...pill, ...(city === c ? pillActive : null) }}
-                onClick={() => applyCity(c)}     // ✅ ここで cityQuery も入る
+                onClick={() => applyCity(c)}   // ✅ ボタン→ボックスへ反映
                 disabled={disabled}
               >
                 {c}
@@ -233,13 +226,7 @@ export function AreaPickerKanto(props: {
         </div>
 
         {city ? (
-          <button
-            type="button"
-            className="sh-btn"
-            style={{ width: "fit-content" }}
-            onClick={clearCity}
-            disabled={disabled}
-          >
+          <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={clearCity} disabled={disabled}>
             市区町村をクリア
           </button>
         ) : null}
@@ -272,7 +259,7 @@ export function AreaPickerKanto(props: {
                 type="button"
                 className="sh-btn"
                 style={{ ...pill, ...(town === t ? pillActive : null) }}
-                onClick={() => applyTown(t)}     // ✅ ここで townQuery も入る
+                onClick={() => applyTown(t)}   // ✅ ボタン→ボックスへ反映
                 disabled={disabled}
               >
                 {t}
@@ -286,13 +273,7 @@ export function AreaPickerKanto(props: {
         </div>
 
         {town ? (
-          <button
-            type="button"
-            className="sh-btn"
-            style={{ width: "fit-content" }}
-            onClick={clearTown}
-            disabled={disabled}
-          >
+          <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={clearTown} disabled={disabled}>
             町名をクリア
           </button>
         ) : null}
@@ -317,7 +298,6 @@ const input: React.CSSProperties = {
   background: "white",
 };
 
-// iPad向け：候補を“押すだけ”
 const pickerBox: React.CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
