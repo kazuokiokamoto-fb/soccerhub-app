@@ -2,8 +2,10 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import type { DbSlot, DbTeam, DbVenue, DbRequest } from "../types";
 import { SlotDetail } from "./SlotDetail";
+import { supabase } from "@/app/lib/supabase";
 
 function hhmm(v: string) {
   if (!v) return "";
@@ -36,6 +38,17 @@ function statusBadgeStyle(status: DbRequest["status"]) {
   } as React.CSSProperties;
 }
 
+// ✅ DMスレッドを「必ず1本」にするRPCを叩く（あなたが作ったrpc_get_or_create_dm_thread前提）
+async function openDm(myTeamId: string, otherTeamId: string) {
+  const { data, error } = await supabase.rpc("rpc_get_or_create_dm_thread", {
+    my_team_id: myTeamId,
+    other_team_id: otherTeamId,
+  });
+  if (error) throw error;
+  // data は thread_id（uuid文字列）の想定
+  return data as string;
+}
+
 export function DaySlotList(props: {
   selectedYmd: string;
   slots: DbSlot[];
@@ -64,6 +77,8 @@ export function DaySlotList(props: {
 
   loading?: boolean;
 }) {
+  const router = useRouter();
+
   const {
     selectedYmd,
     slots,
@@ -84,6 +99,25 @@ export function DaySlotList(props: {
     onReject,
     loading,
   } = props;
+
+  // ✅ 募集枠（相手）からチャットを開く
+  const onClickChatFromSlot = async (slotHostTeamId: string) => {
+    // 自分の代表チーム（申込みチーム or 先頭）
+    const myTeamId = requestTeamId || myTeams[0]?.id;
+    if (!myTeamId) return;
+
+    // 自分自身の枠にはDM不要
+    if (myTeamId === slotHostTeamId) return;
+
+    try {
+      const threadId = await openDm(myTeamId, slotHostTeamId);
+      router.push(`/chat/${threadId}`);
+    } catch (e) {
+      console.error("openDm failed:", e);
+      // Toastは親で持ってるので、ここでは最低限consoleのみ（必要なら propsでonToastを渡す設計に拡張）
+      alert("チャットを開けませんでした（RLS / RPC / ログイン状態を確認）");
+    }
+  };
 
   return (
     <section style={{ ...card, marginTop: 14 }}>
@@ -116,6 +150,9 @@ export function DaySlotList(props: {
             // ★キャンセルできるのは「自分の申込みが pending」のときだけ（accepted/rejectedはキャンセル不可）
             const canCancel = !!myReq && myReq.status === "pending";
 
+            // ✅ チャットボタンを出す条件：相手の枠 かつ 自分のチームが1つ以上ある
+            const canChat = !isMine && myTeams.length > 0 && !!(requestTeamId || myTeams[0]?.id);
+
             return (
               <div
                 key={s.id}
@@ -136,9 +173,24 @@ export function DaySlotList(props: {
                     ) : null}
                   </div>
 
-                  <button className="sh-btn" type="button" onClick={() => onToggleDetail(s.id)}>
-                    {selectedSlotId === s.id ? "閉じる" : "詳細"}
-                  </button>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    {/* ✅ ここ（募集枠）からチャット（導線①） */}
+                    {canChat ? (
+                      <button
+                        className="sh-btn"
+                        type="button"
+                        onClick={() => onClickChatFromSlot(s.host_team_id)}
+                        disabled={!!loading}
+                        title="この募集を出している相手チームにチャットで連絡します"
+                      >
+                        💬 チャット
+                      </button>
+                    ) : null}
+
+                    <button className="sh-btn" type="button" onClick={() => onToggleDetail(s.id)}>
+                      {selectedSlotId === s.id ? "閉じる" : "詳細"}
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ marginTop: 6, color: "#666", lineHeight: 1.6 }}>
@@ -196,6 +248,20 @@ export function DaySlotList(props: {
                 {/* 詳細 */}
                 {selectedSlotId === s.id ? (
                   <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eaeaea" }}>
+                    {/* ✅ 詳細側にもチャットボタン（押しやすい導線①補強） */}
+                    {!isMine && canChat ? (
+                      <div style={{ marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button
+                          className="sh-btn"
+                          type="button"
+                          onClick={() => onClickChatFromSlot(s.host_team_id)}
+                          disabled={!!loading}
+                        >
+                          💬 この相手にチャット
+                        </button>
+                      </div>
+                    ) : null}
+
                     <SlotDetail
                       slot={selectedSlot}
                       isMine={isMineSlot}
