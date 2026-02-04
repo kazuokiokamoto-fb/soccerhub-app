@@ -139,14 +139,6 @@ export default function LoginClient() {
       <h1 style={{ fontSize: 34, fontWeight: 800, margin: 0 }}>ログイン / 登録</h1>
 
       <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <button className="sh-btn" onClick={testConnection} disabled={loading} type="button">
-          接続テスト
-        </button>
-
-        <button className="sh-btn" onClick={reset} disabled={loading} type="button">
-          リセット
-        </button>
-
         <a className="sh-btn" href="/" style={{ textDecoration: "none" }}>
           トップへ
         </a>
