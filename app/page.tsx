@@ -328,10 +328,10 @@ export default function HomePage() {
           <div style={cardCta}>開く →</div>
         </Link>
 
-        {/* 4) 自分のチーム */}
+        {/* 4) マイページ */}
         <Link href="/teams" style={{ ...card, textDecoration: "none" }} className="sh-card">
           <div style={cardIcon}>⚙️</div>
-          <div style={cardTitle}>自分のチーム</div>
+          <div style={cardTitle}>マイページ</div>
           <div style={cardDesc}>チーム情報・ユニフォーム・よく使うグラウンドを設定します。</div>
           <div style={cardCta}>開く →</div>
         </Link>
@@ -341,7 +341,7 @@ export default function HomePage() {
       <section style={noteBox}>
         <div style={noteTitle}>使い方（最短）</div>
         <ol style={noteList}>
-          <li>「自分のチーム」でチームを1つ作る（または編集）</li>
+          <li>「マイページ」でチームを1つ作る（または編集）</li>
           <li>「マッチング（探す / 募集する）」で募集枠を作る／相手の募集に申込みする</li>
           <li>承認後は「チャット」から連絡（/chat に一本化）</li>
         </ol>
