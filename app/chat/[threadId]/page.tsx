@@ -31,13 +31,18 @@ export default function ChatThreadPage() {
     );
   };
 
-  // ✅ 既読を付ける（last_read_at を now()）
+  // ✅ 既読を付ける（chat_members.last_read_at = now）
+  // ※ RPCは使わず、最小でUPDATE直書き（RLS: user_id = auth.uid() が必要）
   const markRead = async () => {
-    if (!threadId) return;
+    if (!threadId || !meId) return;
     try {
-      // rpc_mark_thread_read(p_thread_id uuid)
-      const { error } = await supabase.rpc("rpc_mark_thread_read", { p_thread_id: threadId });
-      if (error) console.error("markRead rpc error:", error);
+      const { error } = await supabase
+        .from("chat_members")
+        .update({ last_read_at: new Date().toISOString() })
+        .eq("thread_id", threadId)
+        .eq("user_id", meId);
+
+      if (error) console.error("markRead update error:", error);
     } catch (e) {
       console.error("markRead failed:", e);
     }
