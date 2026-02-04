@@ -10,6 +10,9 @@ type TeamMini = { id: string; name: string | null; category?: string | null };
 type LastMsgMini = { thread_id: string; body: string | null; created_at: string };
 
 type ThreadRow = ChatThread & {
+  // 👇 DBに無い可能性があるので「表示用の名前」を別で持つ
+  threadType?: string | null;
+
   memberTeamIds: string[];
   myLastReadAt?: string | null;
 
@@ -90,16 +93,29 @@ export default function ChatListPage() {
           return;
         }
 
-        // 3) thread 本体（✅ kind は使わない / 列が無いので select しない）
-        const { data: thRows, error: thErr } = await supabase
+        // 3) thread 本体（✅ kind は取らない）
+        // thread_type がある環境だけ使う。無い環境はフォールバック。
+        const thRes = await supabase
           .from("chat_threads")
-          .select("id, created_at, updated_at")
+          .select("id, created_at, updated_at, thread_type")
           .in("id", threadIds);
 
-        if (thErr) {
-          console.error(thErr);
-          setThreads([]);
-          return;
+        let thRows: any[] = [];
+        if (thRes.error) {
+          // thread_type 列も無い場合
+          const thRes2 = await supabase
+            .from("chat_threads")
+            .select("id, created_at, updated_at")
+            .in("id", threadIds);
+
+          if (thRes2.error) {
+            console.error(thRes2.error);
+            setThreads([]);
+            return;
+          }
+          thRows = (thRes2.data ?? []) as any[];
+        } else {
+          thRows = (thRes.data ?? []) as any[];
         }
 
         // 4) 各スレッドの参加チーム
@@ -145,7 +161,7 @@ export default function ChatListPage() {
           }
         }
 
-        // 6) 最後のメッセージ（多スレッドでも取りこぼしにくいように上限を拡張）
+        // 6) 最後のメッセージ
         const lastMsgByThread = new Map<string, LastMsgMini>();
         {
           const limit = Math.min(2000, Math.max(400, threadIds.length * 50));
@@ -170,11 +186,10 @@ export default function ChatListPage() {
         }
 
         // 7) 整形（相手チーム名 + 未読判定）
-        const merged: ThreadRow[] = ((thRows ?? []) as any[]).map((t) => {
+        const merged: ThreadRow[] = (thRows ?? []).map((t) => {
           const tid = t.id as string;
           const memberTeamIds = memberTeamsByThread.get(tid) ?? [];
 
-          // 相手チーム = 自分のチーム以外を優先
           const otherTeamId =
             memberTeamIds.find((id) => !myTeamIds.has(id)) ??
             memberTeamIds[0] ??
@@ -184,7 +199,6 @@ export default function ChatListPage() {
           const last = lastMsgByThread.get(tid);
           const myLastReadAt = myLastReadMap.get(tid) ?? null;
 
-          // 未読判定：lastMessageAt > last_read_at（last_read_at null なら「メッセージがあれば未読」）
           let isUnread = false;
           if (last?.created_at) {
             if (!myLastReadAt) isUnread = true;
@@ -194,7 +208,12 @@ export default function ChatListPage() {
           return {
             id: t.id,
             created_at: t.created_at,
-            updated_at: t.updated_at,
+            updated_at: t.updated_at ?? null,
+            // ChatThread の kind は使わないので null にしておく
+            kind: null,
+
+            // 表示用
+            threadType: (t as any).thread_type ?? null,
 
             memberTeamIds,
             myLastReadAt,
@@ -278,15 +297,11 @@ export default function ChatListPage() {
                 textAlign: "left",
               }}
             >
-              {/* タイトル（相手チーム名） */}
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 {t.isUnread ? <span style={dot} aria-label="未読">●</span> : <span style={{ width: 10 }} />}
-                <div style={{ fontWeight: t.isUnread ? 900 : 800, fontSize: 16 }}>
-                  {title}
-                </div>
+                <div style={{ fontWeight: t.isUnread ? 900 : 800, fontSize: 16 }}>{title}</div>
               </div>
 
-              {/* 最終メッセージ */}
               <div
                 style={{
                   marginTop: 6,
@@ -299,9 +314,9 @@ export default function ChatListPage() {
                 {lastLine}
               </div>
 
-              {/* フッター（✅ kind 表示は削除） */}
               <div style={{ marginTop: 6, fontSize: 12, color: "#6b7280", display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <span>{timeLine}</span>
+                <span>type: {t.threadType ?? "unknown"}</span>
               </div>
             </Link>
           );
