@@ -238,12 +238,7 @@ export default function ChatListPage() {
   return (
     <main style={{ padding: 16, maxWidth: 900, margin: "0 auto" }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900 }}>チャット</h1>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Link className="sh-btn" href="/">トップ</Link>
-          <Link className="sh-btn" href="/teams">チーム</Link>
-          <Link className="sh-btn" href="/match">マッチング</Link>
-        </div>
+        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900 }}>チャット一覧</h1>
       </header>
 
       {loading ? <p style={{ color: "#666" }}>読み込み中…</p> : null}
