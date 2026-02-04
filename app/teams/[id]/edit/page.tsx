@@ -1,3 +1,4 @@
+// app/teams/[id]/edit/page.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -12,7 +13,6 @@ import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
 
 const gradeKeys: GradeKey[] = ["G1", "G2", "G3", "G4", "G5", "G6"];
-
 type Toast = { type: "success" | "error" | "info"; text: string };
 
 function makeDefaultRoster11(): Record<GradeKey, string> {
@@ -30,7 +30,6 @@ export default function TeamEditPage() {
 
   // fields
   const [name, setName] = useState("");
-
   const [categories, setCategories] = useState<string[]>([]);
   const [level, setLevel] = useState(5);
   const [hasGround, setHasGround] = useState(false);
@@ -42,10 +41,13 @@ export default function TeamEditPage() {
   const [city, setCity] = useState("");
   const [town, setTown] = useState("");
 
-  const [rosterByGradeText, setRosterByGradeText] =
-    useState<Record<GradeKey, string>>(makeDefaultRoster11());
-
+  const [rosterByGradeText, setRosterByGradeText] = useState<Record<GradeKey, string>>(makeDefaultRoster11());
   const [note, setNote] = useState("");
+
+  // ✅ 連絡先
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [contactLineId, setContactLineId] = useState("");
 
   const canSave = useMemo(() => {
     return !!teamId && !!name.trim() && !!prefecture && !!city && categories.length > 0 && !saving;
@@ -56,6 +58,7 @@ export default function TeamEditPage() {
 
     (async () => {
       setLoading(true);
+
       const { data: auth } = await supabase.auth.getUser();
       if (!auth?.user) {
         router.replace("/login");
@@ -65,7 +68,26 @@ export default function TeamEditPage() {
       const { data, error } = await supabase
         .from("teams")
         .select(
-          "id,owner_id,name,categories,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,note,prefecture,city,town"
+          [
+            "id",
+            "owner_id",
+            "name",
+            "categories",
+            "category",
+            "level",
+            "has_ground",
+            "bike_parking",
+            "uniform_main",
+            "uniform_sub",
+            "roster_by_grade",
+            "note",
+            "prefecture",
+            "city",
+            "town",
+            "contact_email",
+            "contact_phone",
+            "contact_line_id",
+          ].join(",")
         )
         .eq("id", teamId)
         .single();
@@ -77,35 +99,35 @@ export default function TeamEditPage() {
         return;
       }
 
-      // owner guard（念のため）
-      if (data.owner_id !== auth.user.id) {
+      // owner guard
+      if ((data as any).owner_id !== auth.user.id) {
         setToast({ type: "error", text: "このチームは編集できません（owner違い）" });
         setLoading(false);
         return;
       }
 
-      setName(data.name ?? "");
+      setName((data as any).name ?? "");
 
       // categories（新）なければ category（旧）を入れる
       const cats: string[] =
-        Array.isArray(data.categories) && data.categories.length > 0
-          ? data.categories
-          : data.category
-          ? [data.category]
+        Array.isArray((data as any).categories) && (data as any).categories.length > 0
+          ? (data as any).categories
+          : (data as any).category
+          ? [(data as any).category]
           : [];
       setCategories(cats);
 
-      setLevel(Number(data.level ?? 5));
-      setHasGround(!!data.has_ground);
-      setBikeParking(data.bike_parking ?? "不明");
-      setUniformMain(data.uniform_main ?? "");
-      setUniformSub(data.uniform_sub ?? "");
+      setLevel(Number((data as any).level ?? 5));
+      setHasGround(!!(data as any).has_ground);
+      setBikeParking((data as any).bike_parking ?? "不明");
+      setUniformMain((data as any).uniform_main ?? "");
+      setUniformSub((data as any).uniform_sub ?? "");
 
-      setPrefecture(data.prefecture ?? "東京都");
-      setCity(data.city ?? "");
-      setTown(data.town ?? "");
+      setPrefecture((data as any).prefecture ?? "東京都");
+      setCity((data as any).city ?? "");
+      setTown((data as any).town ?? "");
 
-      const roster = (data.roster_by_grade ?? {}) as Record<string, number>;
+      const roster = ((data as any).roster_by_grade ?? {}) as Record<string, number>;
       setRosterByGradeText({
         G1: String(roster.G1 ?? 11),
         G2: String(roster.G2 ?? 11),
@@ -115,7 +137,13 @@ export default function TeamEditPage() {
         G6: String(roster.G6 ?? 11),
       });
 
-      setNote(data.note ?? "");
+      setNote((data as any).note ?? "");
+
+      // ✅ 連絡先
+      setContactEmail((data as any).contact_email ?? "");
+      setContactPhone((data as any).contact_phone ?? "");
+      setContactLineId((data as any).contact_line_id ?? "");
+
       setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -134,8 +162,6 @@ export default function TeamEditPage() {
     }, {} as Record<GradeKey, number>);
 
     const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
-
-    // 互換：category(単数) は先頭
     const primaryCategory = categories[0];
 
     const { error } = await supabase
@@ -155,6 +181,11 @@ export default function TeamEditPage() {
         city,
         town: town || null,
         area: areaText,
+
+        // ✅ 連絡先
+        contact_email: contactEmail.trim() || null,
+        contact_phone: contactPhone.trim() || null,
+        contact_line_id: contactLineId.trim() || null,
       })
       .eq("id", teamId);
 
@@ -180,12 +211,8 @@ export default function TeamEditPage() {
       <h1 style={{ margin: 0 }}>チーム編集</h1>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
-        <Link href="/teams" className="sh-btn">
-          一覧へ
-        </Link>
-        <Link href="/" className="sh-btn">
-          トップへ
-        </Link>
+        <Link href="/teams" className="sh-btn">一覧へ</Link>
+        <Link href="/" className="sh-btn">トップへ</Link>
       </div>
 
       <section style={{ ...card, marginTop: 16 }}>
@@ -264,12 +291,33 @@ export default function TeamEditPage() {
                     inputMode="numeric"
                     pattern="[0-9]*"
                     value={rosterByGradeText[g]}
-                    onChange={(e) => setRosterByGradeText({ ...rosterByGradeText, [g]: e.target.value.replace(/[^\d]/g, "") })}
+                    onChange={(e) =>
+                      setRosterByGradeText({ ...rosterByGradeText, [g]: e.target.value.replace(/[^\d]/g, "") })
+                    }
                     style={input}
                     disabled={saving}
                   />
                 </label>
               ))}
+            </div>
+          </div>
+
+          {/* ✅ 連絡先 */}
+          <div style={{ ...card, background: "#fafafa" }}>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>連絡先（任意）</div>
+            <div style={{ display: "grid", gap: 12 }}>
+              <label style={label}>
+                <span>メール</span>
+                <input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} style={input} disabled={saving} />
+              </label>
+              <label style={label}>
+                <span>電話番号</span>
+                <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} style={input} disabled={saving} />
+              </label>
+              <label style={label}>
+                <span>LINE ID</span>
+                <input value={contactLineId} onChange={(e) => setContactLineId(e.target.value)} style={input} disabled={saving} />
+              </label>
             </div>
           </div>
 

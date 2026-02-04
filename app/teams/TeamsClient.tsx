@@ -1,10 +1,10 @@
+// app/teams/TeamsClient.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-
-import { supabase } from "../lib/supabase";
-import { Team } from "../lib/types";
+import { supabase } from "@/app/lib/supabase";
+import { Team } from "@/app/lib/types";
 
 type DbTeam = {
   id: string;
@@ -17,9 +17,14 @@ type DbTeam = {
   uniform_main: string;
   uniform_sub: string;
   roster_by_grade: Record<string, number> | null;
-  desired_dates: string[] | null; // ← 曜日/時間帯の配列
+  desired_dates: string[] | null;
   note: string | null;
   updated_at: string;
+
+  // ✅ 連絡先（追加）
+  contact_email: string | null;
+  contact_phone: string | null;
+  contact_line_id: string | null;
 };
 
 function toTeam(row: DbTeam): Team {
@@ -33,17 +38,20 @@ function toTeam(row: DbTeam): Team {
     bikeParking: row.bike_parking ?? "不明",
     uniformMain: row.uniform_main ?? "不明",
     uniformSub: row.uniform_sub ?? "不明",
-    rosterByGrade:
-      (row.roster_by_grade ?? { G1: 0, G2: 0, G3: 0, G4: 0, G5: 0, G6: 0 }) as any,
+    rosterByGrade: (row.roster_by_grade ?? { G1: 0, G2: 0, G3: 0, G4: 0, G5: 0, G6: 0 }) as any,
     desiredDates: row.desired_dates ?? [],
     note: row.note ?? "",
     updatedAt: row.updated_at,
-  };
+
+    // Team型に無ければ無視される（型が厳しいなら Team 型側に追加推奨）
+    contactEmail: row.contact_email ?? "",
+    contactPhone: row.contact_phone ?? "",
+    contactLineId: row.contact_line_id ?? "",
+  } as any;
 }
 
 type Toast = { type: "success" | "error" | "info"; text: string };
 
-// ✅ desiredDates 表示を「土（時間帯問わず） / 祝日（午後）」にする
 function formatAvailability(desiredDates?: string[]) {
   const arr = Array.isArray(desiredDates) ? desiredDates.filter(Boolean) : [];
   if (arr.length === 0) return "未登録";
@@ -52,11 +60,7 @@ function formatAvailability(desiredDates?: string[]) {
     const t = String(s).trim();
     if (!t) return "";
     const parts = t.split(/\s+/).filter(Boolean);
-
-    // ["土"] → 土（時間帯問わず）
     if (parts.length === 1) return `${parts[0]}（時間帯問わず）`;
-
-    // ["祝日","午後"] → 祝日（午後）
     const day = parts[0];
     const slot = parts.slice(1).join(" ");
     return `${day}（${slot}）`;
@@ -72,7 +76,6 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
 
-  // 登録直後のトースト
   useEffect(() => {
     if (!created) return;
     setToast({ type: "success", text: "✅ チームを登録しました（一覧に反映）" });
@@ -82,11 +85,31 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
 
   const load = async () => {
     setLoading(true);
+
+    // ✅ 住所（area）を「あいうえお順」にしたい → area asc（同値なら updated_at desc）
     const { data, error } = await supabase
       .from("teams")
       .select(
-        "id,name,area,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at"
+        [
+          "id",
+          "name",
+          "area",
+          "category",
+          "level",
+          "has_ground",
+          "bike_parking",
+          "uniform_main",
+          "uniform_sub",
+          "roster_by_grade",
+          "desired_dates",
+          "note",
+          "updated_at",
+          "contact_email",
+          "contact_phone",
+          "contact_line_id",
+        ].join(",")
       )
+      .order("area", { ascending: true })
       .order("updated_at", { ascending: false });
 
     if (error) {
@@ -97,7 +120,7 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
       return;
     }
 
-    const rows = (data ?? []) as DbTeam[];
+    const rows = (data ?? []) as any as DbTeam[];
     setTeams(rows.map(toTeam));
     setLoading(false);
   };
@@ -124,52 +147,33 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
     setToast({ type: "success", text: "🗑 削除しました" });
   };
 
-  const createdTeam = useMemo(
-    () => teams.find((t) => t.id === created),
-    [teams, created]
-  );
+  const createdTeam = useMemo(() => teams.find((t) => t.id === created), [teams, created]);
 
   return (
     <main style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
-      {/* Toast */}
       {toast ? (
         <div
           style={{
             ...toastBox,
-            ...(toast.type === "success"
-              ? toastSuccess
-              : toast.type === "error"
-              ? toastError
-              : toastInfo),
+            ...(toast.type === "success" ? toastSuccess : toast.type === "error" ? toastError : toastInfo),
           }}
           role="status"
           aria-live="polite"
         >
           <div style={{ whiteSpace: "pre-wrap" }}>{toast.text}</div>
-          <button
-            type="button"
-            onClick={() => setToast(null)}
-            style={toastClose}
-            aria-label="閉じる"
-          >
+          <button type="button" onClick={() => setToast(null)} style={toastClose} aria-label="閉じる">
             ×
           </button>
         </div>
       ) : null}
 
       <h1 style={{ margin: 0 }}>チーム一覧</h1>
-      <p style={{ color: "#555", marginTop: 6 }}>Supabase（DB）から表示しています。</p>
+      <p style={{ color: "#555", marginTop: 6 }}>Supabase（DB）から表示しています。（住所：あいうえお順）</p>
 
       <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-        <Link href="/" className="sh-btn">
-          トップへ
-        </Link>
-        <Link href="/teams/new" className="sh-btn">
-          ＋ チーム登録へ
-        </Link>
-        <button className="sh-btn" type="button" onClick={load}>
-          再読み込み
-        </button>
+        <Link href="/" className="sh-btn">トップへ</Link>
+        <Link href="/teams/new" className="sh-btn">＋ チーム登録へ</Link>
+        <button className="sh-btn" type="button" onClick={load}>再読み込み</button>
       </div>
 
       {created && createdTeam ? (
@@ -185,7 +189,7 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
           {teams.length === 0 ? (
             <p style={{ color: "#777" }}>まだチームがありません。登録してみてください。</p>
           ) : (
-            teams.map((t) => {
+            teams.map((t: any) => {
               const isCreated = created && t.id === created;
               return (
                 <div
@@ -198,23 +202,21 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
                     boxShadow: isCreated ? "0 0 0 4px rgba(34,197,94,0.10)" : "none",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
                     <div style={{ fontWeight: 800 }}>
                       {t.name} {isCreated ? "✅" : ""}
                     </div>
 
-                    <button
-                      className="sh-btn sh-btn--danger"
-                      onClick={() => remove(t.id)}
-                      type="button"
-                    >
-                      削除
-                    </button>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <Link className="sh-btn" href={`/teams/${t.id}/edit`}>編集</Link>
+                      <button className="sh-btn sh-btn--danger" onClick={() => remove(t.id)} type="button">
+                        削除
+                      </button>
+                    </div>
                   </div>
 
                   <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
-                    {t.area} / {t.category} / 強さ {t.level} / グラウンド{" "}
-                    {t.hasGround ? "あり" : "なし"} / 🚲 {t.bikeParking}
+                    {t.area} / {t.category} / 強さ {t.level} / グラウンド {t.hasGround ? "あり" : "なし"} / 🚲 {t.bikeParking}
                   </div>
 
                   <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
@@ -222,15 +224,23 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
                   </div>
 
                   <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
-                    人数：G1 {t.rosterByGrade.G1} / G2 {t.rosterByGrade.G2} / G3{" "}
-                    {t.rosterByGrade.G3} / G4 {t.rosterByGrade.G4} / G5{" "}
-                    {t.rosterByGrade.G5} / G6 {t.rosterByGrade.G6}
+                    人数：G1 {t.rosterByGrade.G1} / G2 {t.rosterByGrade.G2} / G3 {t.rosterByGrade.G3} / G4{" "}
+                    {t.rosterByGrade.G4} / G5 {t.rosterByGrade.G5} / G6 {t.rosterByGrade.G6}
                   </div>
 
-                  {/* ✅ ここが希望枠 */}
                   <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
                     希望枠：{formatAvailability(t.desiredDates)}
                   </div>
+
+                  {/* ✅ 連絡先 */}
+                  {(t.contactEmail || t.contactPhone || t.contactLineId) ? (
+                    <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
+                      連絡先：
+                      {t.contactEmail ? ` ✉️ ${t.contactEmail}` : ""}
+                      {t.contactPhone ? ` / ☎️ ${t.contactPhone}` : ""}
+                      {t.contactLineId ? ` / LINE ${t.contactLineId}` : ""}
+                    </div>
+                  ) : null}
 
                   {t.note ? (
                     <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
@@ -255,7 +265,6 @@ const miniInfo: React.CSSProperties = {
   color: "#444",
 };
 
-// --- toast styles ---
 const toastBox: React.CSSProperties = {
   position: "sticky",
   top: 10,
@@ -270,23 +279,9 @@ const toastBox: React.CSSProperties = {
   marginBottom: 12,
 };
 
-const toastSuccess: React.CSSProperties = {
-  background: "#ecfdf3",
-  borderColor: "#bbf7d0",
-  color: "#166534",
-};
-
-const toastError: React.CSSProperties = {
-  background: "#fef2f2",
-  borderColor: "#fecaca",
-  color: "#991b1b",
-};
-
-const toastInfo: React.CSSProperties = {
-  background: "#eff6ff",
-  borderColor: "#bfdbfe",
-  color: "#1e3a8a",
-};
+const toastSuccess: React.CSSProperties = { background: "#ecfdf3", borderColor: "#bbf7d0", color: "#166534" };
+const toastError: React.CSSProperties = { background: "#fef2f2", borderColor: "#fecaca", color: "#991b1b" };
+const toastInfo: React.CSSProperties = { background: "#eff6ff", borderColor: "#bfdbfe", color: "#1e3a8a" };
 
 const toastClose: React.CSSProperties = {
   border: "none",
