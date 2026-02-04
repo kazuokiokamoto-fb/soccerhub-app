@@ -5,28 +5,46 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "./lib/supabase";
 
+/**
+ * ✅ いまのスキーマ前提
+ * - chat_threads: id, created_at, updated_at, kind
+ * - chat_members: thread_id, user_id, team_id, last_read_at, created_at ...
+ * - chat_messages: id, thread_id, sender_id, sender_team_id, body, created_at
+ *
+ * ※ chat_threads.last_message_at は使わない（存在しない）
+ */
+
 type ThreadRow = {
   id: string;
-  thread_type: "direct" | "slot";
-  team_a_id: string | null;
-  team_b_id: string | null;
-  slot_id: string | null;
+  created_at: string;
   updated_at: string | null;
-  last_message_at: string | null;
+  kind: string | null; // "direct" など
+};
+
+type MemberRow = {
+  thread_id: string;
+  last_read_at: string | null;
+  created_at: string;
 };
 
 type MessageRow = {
   id: string;
   thread_id: string;
-  sender_id: string;
-  body: string;
+  sender_id: string | null;
+  body: string | null;
   created_at: string;
 };
 
 type ThreadWithLast = ThreadRow & {
   last_message?: MessageRow | null;
-  unread_count?: number;
+  unread_count?: number; // TOPは簡易で 0/1
 };
+
+function clip(s?: string | null, n = 40) {
+  const v = (s ?? "").trim();
+  if (!v) return "";
+  return v.length > n ? v.slice(0, n) + "…" : v;
+}
 
 export default function HomePage() {
   const [meId, setMeId] = useState<string>("");
@@ -35,6 +53,7 @@ export default function HomePage() {
 
   // 直近のスレッド（最大5件）
   const [recentThreads, setRecentThreads] = useState<ThreadWithLast[]>([]);
+
   const unreadTotal = useMemo(() => {
     return recentThreads.reduce((sum, t) => sum + (t.unread_count ?? 0), 0);
   }, [recentThreads]);
@@ -53,110 +72,114 @@ export default function HomePage() {
       return;
     }
 
-    // TOPでは「チャット導線」が目的なので、最初は“軽く”出す（最大5件）
-    // - chat_threads（direct）だけ対象
-    // - 直近メッセージを取って表示
-    // - 未読は最低限（chat_reads があれば計算、なければ 0）
+    // TOPは「軽く」：最大5スレッド + 各スレッドの最新メッセージ + 未読(0/1)
     (async () => {
       setLoadingChat(true);
       setChatError("");
       try {
-        // 1) 自分が関係する direct スレッドの一覧（最新順）
-        //    ※ スキーマが違う場合はここが最初にコケるので、エラーメッセージを表示する
-        const { data: threads, error: tErr } = await supabase
-          .from("chat_threads")
-          .select("id,thread_type,team_a_id,team_b_id,slot_id,updated_at,last_message_at")
-          .eq("thread_type", "direct")
-          .or(`team_a_owner_id.eq.${meId},team_b_owner_id.eq.${meId}`) // ← もし無ければ下のフォールバックへ
-          .order("last_message_at", { ascending: false })
-          .limit(5);
+        // 1) 自分の chat_members（thread_id & last_read_at）
+        const { data: myMemberRows, error: cmErr } = await supabase
+          .from("chat_members")
+          .select("thread_id, last_read_at, created_at")
+          .eq("user_id", meId)
+          .order("created_at", { ascending: false })
+          .limit(40); // 念のため少し多めに拾う
 
-        // ↑この `team_a_owner_id / team_b_owner_id` はプロジェクトによって存在しない可能性があるため
-        // もしエラーになったら「最低限：thread_type=directだけ」取るフォールバックに落とします。
-        let threadRows: ThreadRow[] = [];
-        if (tErr) {
-          // フォールバック（RLSで自分の分しか返らない想定）
-          const { data: threads2, error: tErr2 } = await supabase
-            .from("chat_threads")
-            .select("id,thread_type,team_a_id,team_b_id,slot_id,updated_at,last_message_at")
-            .eq("thread_type", "direct")
-            .order("last_message_at", { ascending: false })
-            .limit(5);
-
-          if (tErr2) {
-            console.error(tErr2);
-            setChatError(`チャット一覧の取得に失敗: ${tErr2.message}`);
-            setRecentThreads([]);
-            setLoadingChat(false);
-            return;
-          }
-          threadRows = (threads2 ?? []) as ThreadRow[];
-        } else {
-          threadRows = (threads ?? []) as ThreadRow[];
-        }
-
-        if (threadRows.length === 0) {
+        if (cmErr) {
+          console.error(cmErr);
+          setChatError(`チャット一覧の取得に失敗: ${cmErr.message}`);
           setRecentThreads([]);
           setLoadingChat(false);
           return;
         }
 
-        const threadIds = threadRows.map((t) => t.id);
+        const threadIds = Array.from(
+          new Set((myMemberRows ?? []).map((r: any) => r.thread_id).filter(Boolean))
+        );
 
-        // 2) 各スレッドの最新メッセージ（まとめて取り、JS側で latest を作る）
-        const { data: msgs, error: mErr } = await supabase
+        // thread_id -> last_read_at
+        const myLastReadMap = new Map<string, string | null>();
+        for (const r of (myMemberRows ?? []) as any[]) {
+          if (!r.thread_id) continue;
+          if (!myLastReadMap.has(r.thread_id)) myLastReadMap.set(r.thread_id, r.last_read_at ?? null);
+        }
+
+        if (threadIds.length === 0) {
+          setRecentThreads([]);
+          setLoadingChat(false);
+          return;
+        }
+
+        // 2) thread 本体（kind等）
+        const { data: thRows, error: thErr } = await supabase
+          .from("chat_threads")
+          .select("id, created_at, updated_at, kind")
+          .in("id", threadIds);
+
+        if (thErr) {
+          console.error(thErr);
+          setChatError(`チャットスレッドの取得に失敗: ${thErr.message}`);
+          setRecentThreads([]);
+          setLoadingChat(false);
+          return;
+        }
+
+        const threadsBase = ((thRows ?? []) as any[]).map((t) => ({
+          id: t.id as string,
+          created_at: t.created_at as string,
+          updated_at: (t.updated_at as string | null) ?? null,
+          kind: (t.kind as string | null) ?? null,
+        })) as ThreadRow[];
+
+        // 3) 最新メッセージ（まとめて取ってJSで threadごとに先頭を採用）
+        const { data: msgRows, error: msgErr } = await supabase
           .from("chat_messages")
-          .select("id,thread_id,sender_id,body,created_at")
+          .select("id, thread_id, sender_id, body, created_at")
           .in("thread_id", threadIds)
-          .order("created_at", { ascending: false });
+          .order("created_at", { ascending: false })
+          .limit(400);
 
-        if (mErr) {
-          console.error(mErr);
-          // メッセージが取れなくてもTOPは動かしたいので、threadsのみで表示
+        if (msgErr) {
+          console.error(msgErr);
+          // TOPは壊したくないので messages無しでも継続
         }
 
-        const msgRows = (msgs ?? []) as MessageRow[];
         const lastByThread = new Map<string, MessageRow>();
-        for (const m of msgRows) {
-          if (!lastByThread.has(m.thread_id)) lastByThread.set(m.thread_id, m);
+        for (const m of (msgRows ?? []) as any[]) {
+          const tid = m.thread_id as string;
+          if (!tid) continue;
+          if (!lastByThread.has(tid)) {
+            lastByThread.set(tid, {
+              id: m.id,
+              thread_id: tid,
+              sender_id: m.sender_id ?? null,
+              body: m.body ?? null,
+              created_at: m.created_at,
+            });
+          }
         }
 
-        // 3) 未読（あれば）：
-        // chat_reads(thread_id, user_id, last_read_at) がある前提で計算。
-        // 無ければ 0 にする（“通知”は後で強化）
-        let readMap = new Map<string, string>(); // thread_id -> last_read_at
-        try {
-          const { data: reads, error: rErr } = await supabase
-            .from("chat_reads")
-            .select("thread_id,last_read_at")
-            .eq("user_id", meId)
-            .in("thread_id", threadIds);
+        // 4) 整形：未読判定（簡易0/1）
+        const enriched: ThreadWithLast[] = threadsBase
+          .map((t) => {
+            const last = lastByThread.get(t.id) ?? null;
+            const lastReadAt = myLastReadMap.get(t.id) ?? null;
 
-          if (!rErr) {
-            for (const r of reads ?? []) {
-              readMap.set((r as any).thread_id, (r as any).last_read_at);
+            let unread = 0;
+            if (last?.created_at) {
+              if (!lastReadAt) unread = 1;
+              else unread = new Date(last.created_at).getTime() > new Date(lastReadAt).getTime() ? 1 : 0;
             }
-          }
-        } catch {
-          // テーブルが無い/権限が無い場合は無視
-        }
 
-        const enriched: ThreadWithLast[] = threadRows.map((t) => {
-          const last = lastByThread.get(t.id) ?? null;
-          const lastReadAt = readMap.get(t.id) ?? null;
-
-          // 未読件数は厳密には count(*) すべきだが、TOPは「ある/なし」で十分。
-          // ここでは「最後のメッセージが last_read_at より新しいなら 1（未読あり）」程度にする。
-          let unread = 0;
-          if (last && lastReadAt) {
-            unread = new Date(last.created_at).getTime() > new Date(lastReadAt).getTime() ? 1 : 0;
-          } else if (last && !lastReadAt) {
-            // read行が無ければ未読扱い（最初だけ）
-            unread = 1;
-          }
-
-          return { ...t, last_message: last, unread_count: unread };
-        });
+            return { ...t, last_message: last, unread_count: unread };
+          })
+          // 5) 並び：最新メッセージ日時 or updated_at or created_at の降順
+          .sort((a, b) => {
+            const at = a.last_message?.created_at ?? a.updated_at ?? a.created_at ?? "";
+            const bt = b.last_message?.created_at ?? b.updated_at ?? b.created_at ?? "";
+            return at > bt ? -1 : 1;
+          })
+          .slice(0, 5);
 
         setRecentThreads(enriched);
       } catch (e: any) {
@@ -173,9 +196,7 @@ export default function HomePage() {
     <main style={wrap}>
       <header style={header}>
         <h1 style={title}>SoccerHub</h1>
-        <p style={subTitle}>
-          まずは「マッチング（探す/募集する）」へ。チーム設定はあとでOK。
-        </p>
+        <p style={subTitle}>まずは「マッチング（探す/募集する）」へ。チーム設定はあとでOK。</p>
       </header>
 
       <section style={grid}>
@@ -183,9 +204,7 @@ export default function HomePage() {
         <Link href="/match" style={{ ...card, textDecoration: "none" }} className="sh-card">
           <div style={cardIcon}>🗓️</div>
           <div style={cardTitle}>マッチング（探す / 募集する）</div>
-          <div style={cardDesc}>
-            カレンダーから募集を探して申込み／自分の募集も作れます（ここに集約）。
-          </div>
+          <div style={cardDesc}>カレンダーから募集を探して申込み／自分の募集も作れます（ここに集約）。</div>
           <div style={cardCta}>開く →</div>
         </Link>
 
@@ -200,6 +219,7 @@ export default function HomePage() {
               </span>
             ) : null}
           </div>
+
           <div style={cardDesc}>
             {meId ? "未読・過去の連絡先をまとめて確認できます。" : "ログインすると、未読・過去の連絡先が表示されます。"}
           </div>
@@ -217,10 +237,19 @@ export default function HomePage() {
                   <div key={t.id} style={threadRow}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <span style={{ fontSize: 12, fontWeight: 900 }}>#{t.id.slice(0, 6)}</span>
-                      {t.unread_count ? <span style={dot} /> : null}
+                      {t.unread_count ? <span style={dot} aria-label="未読" /> : null}
+                      <span style={{ fontSize: 12, color: "#6b7280" }}>{t.kind ?? "thread"}</span>
                     </div>
-                    <div style={{ fontSize: 12, color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {t.last_message?.body ?? "（メッセージなし）"}
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "#555",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {t.last_message?.body ? clip(t.last_message.body, 44) : "（メッセージなし）"}
                     </div>
                   </div>
                 ))}
@@ -355,7 +384,7 @@ const dot: React.CSSProperties = {
   width: 8,
   height: 8,
   borderRadius: 999,
-  background: "#111827",
+  background: "#16a34a",
   display: "inline-block",
 };
 
