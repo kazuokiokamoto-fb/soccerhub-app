@@ -13,7 +13,7 @@ export type ChatMember = {
   role: string | null;
   created_at: string;
 
-  // ✅ 未読管理：このスレッドを最後に読んだ時刻（NULLなら未読扱いにできる）
+  // ✅ 未読管理：このスレッドを最後に読んだ時刻
   last_read_at: string | null;
 };
 
@@ -21,10 +21,10 @@ export type ChatMessage = {
   id: string;
   thread_id: string;
 
-  // ✅ ここを DB に合わせて統一（sender_user_id -> sender_id）
+  // ✅ ここを DB に合わせて統一
   sender_id: string;
-
   sender_team_id: string | null;
+
   body: string;
   created_at: string;
 };
