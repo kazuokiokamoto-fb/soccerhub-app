@@ -29,7 +29,7 @@ type RecentThread = {
   last_message: MessageRow | null;
   unread: boolean;
 
-  // ✅ 追加：相手チーム表示用
+  // 相手チーム表示用
   other_team_id: string | null;
   other_team_name: string | null;
   other_team_category: string | null;
@@ -39,6 +39,11 @@ type TeamMini = { id: string; name: string | null; category?: string | null };
 
 export default function HomePage() {
   const [meId, setMeId] = useState<string>("");
+
+  // ✅ 自分のチーム（最新1件）→ edit へ直行するため
+  const [myTeamId, setMyTeamId] = useState<string>("");
+  const myTeamHref = myTeamId ? `/teams/${myTeamId}/edit` : "/teams/new";
+
   const [loadingChat, setLoadingChat] = useState<boolean>(true);
   const [chatError, setChatError] = useState<string>("");
 
@@ -48,6 +53,7 @@ export default function HomePage() {
     return recentThreads.reduce((sum, t) => sum + (t.unread ? 1 : 0), 0);
   }, [recentThreads]);
 
+  // auth
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getUser();
@@ -55,6 +61,32 @@ export default function HomePage() {
     })();
   }, []);
 
+  // ✅ 自分の最新チームを取得して、TOPの「自分のチーム」→ edit に飛ばす
+  useEffect(() => {
+    if (!meId) {
+      setMyTeamId("");
+      return;
+    }
+
+    (async () => {
+      const { data, error } = await supabase
+        .from("teams")
+        .select("id")
+        .eq("owner_id", meId)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error("load myTeamId error:", error);
+        setMyTeamId("");
+        return;
+      }
+      setMyTeamId((data as any)?.id ?? "");
+    })();
+  }, [meId]);
+
+  // チャット一覧（最近3件表示）
   useEffect(() => {
     if (!meId) {
       setLoadingChat(false);
@@ -69,14 +101,10 @@ export default function HomePage() {
 
       try {
         // 0) 自分のチームID（相手判定用）
-        const { data: myTeamsRows } = await supabase
-          .from("teams")
-          .select("id")
-          .eq("owner_id", meId);
-
+        const { data: myTeamsRows } = await supabase.from("teams").select("id").eq("owner_id", meId);
         const myTeamIds = new Set<string>((myTeamsRows ?? []).map((r: any) => r.id).filter(Boolean));
 
-        // 1) chat_members から thread_id を取得（RLS的にも安全）
+        // 1) chat_members から thread_id を取得
         const { data: myMembers, error: memErr } = await supabase
           .from("chat_members")
           .select("thread_id,last_read_at,created_at")
@@ -117,10 +145,7 @@ export default function HomePage() {
             .in("id", threadIds);
 
           if (threadsRes.error) {
-            const fallback = await supabase
-              .from("chat_threads")
-              .select("id,created_at,updated_at")
-              .in("id", threadIds);
+            const fallback = await supabase.from("chat_threads").select("id,created_at,updated_at").in("id", threadIds);
 
             if (fallback.error) {
               console.error(fallback.error);
@@ -158,14 +183,10 @@ export default function HomePage() {
         }
         const uniqTeamIds = Array.from(new Set(allTeamIds));
 
-        // 5) teams からチーム名
+        // 5) teams からチーム名（旧 category）
         const teamMap = new Map<string, TeamMini>();
         if (uniqTeamIds.length > 0) {
-          const { data: teamRows, error: teamErr } = await supabase
-            .from("teams")
-            .select("id,name,category")
-            .in("id", uniqTeamIds);
-
+          const { data: teamRows, error: teamErr } = await supabase.from("teams").select("id,name,category").in("id", uniqTeamIds);
           if (teamErr) console.error(teamErr);
           for (const t of (teamRows ?? []) as any[]) {
             teamMap.set(t.id, { id: t.id, name: t.name ?? null, category: t.category ?? null });
@@ -185,11 +206,7 @@ export default function HomePage() {
           }
 
           const memberTeamIds = memberTeamsByThread.get(tid) ?? [];
-          const otherTeamId =
-            memberTeamIds.find((id) => !myTeamIds.has(id)) ??
-            memberTeamIds[0] ??
-            null;
-
+          const otherTeamId = memberTeamIds.find((id) => !myTeamIds.has(id)) ?? memberTeamIds[0] ?? null;
           const other = otherTeamId ? teamMap.get(otherTeamId) : undefined;
 
           return {
@@ -230,9 +247,7 @@ export default function HomePage() {
         <Link href="/match" style={{ ...card, textDecoration: "none" }} className="sh-card">
           <div style={cardIcon}>🗓️</div>
           <div style={cardTitle}>マッチング（探す / 募集する）</div>
-          <div style={cardDesc}>
-            カレンダーから募集を探して申込み／自分の募集も作れます（ここに集約）。
-          </div>
+          <div style={cardDesc}>カレンダーから募集を探して申込み／自分の募集も作れます（ここに集約）。</div>
           <div style={cardCta}>開く →</div>
         </Link>
 
@@ -249,9 +264,7 @@ export default function HomePage() {
           </div>
 
           <div style={cardDesc}>
-            {meId
-              ? "未読・過去の連絡先をまとめて確認できます。"
-              : "ログインすると、未読・過去の連絡先が表示されます。"}
+            {meId ? "未読・過去の連絡先をまとめて確認できます。" : "ログインすると、未読・過去の連絡先が表示されます。"}
           </div>
 
           <div style={{ marginTop: 6 }}>
@@ -264,7 +277,7 @@ export default function HomePage() {
             ) : (
               <div style={{ display: "grid", gap: 6 }}>
                 {recentThreads.slice(0, 3).map((t) => {
-                  const title =
+                  const titleText =
                     t.other_team_name
                       ? `${t.other_team_name}${t.other_team_category ? `（${t.other_team_category}）` : ""}`
                       : `#${t.id.slice(0, 6)}`;
@@ -276,10 +289,14 @@ export default function HomePage() {
                       key={t.id}
                       href={`/chat/${t.id}`}
                       style={{ ...threadRow, textDecoration: "none", cursor: "pointer" }}
-                      aria-label={`チャットを開く: ${title}`}
+                      aria-label={`チャットを開く: ${titleText}`}
+                      onClick={(e) => {
+                        // ✅ カード全体リンク（/chat）との競合を避ける
+                        e.stopPropagation();
+                      }}
                     >
                       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <span style={{ fontSize: 12, fontWeight: 900, color: "#111827" }}>{title}</span>
+                        <span style={{ fontSize: 12, fontWeight: 900, color: "#111827" }}>{titleText}</span>
                         {t.unread ? <span style={dot} /> : null}
                       </div>
                       <div
@@ -303,11 +320,25 @@ export default function HomePage() {
           <div style={cardCta}>開く →</div>
         </Link>
 
-        {/* 3) チーム */}
-        <Link href="/teams" style={{ ...card, textDecoration: "none" }} className="sh-card">
+        {/* 3) 自分のチーム（✅ editへ直行 / なければ new） */}
+        <Link href={myTeamHref} style={{ ...card, textDecoration: "none" }} className="sh-card">
           <div style={cardIcon}>⚙️</div>
           <div style={cardTitle}>自分のチーム</div>
-          <div style={cardDesc}>チーム情報・ユニフォーム・よく使うグラウンドを設定します。</div>
+          <div style={cardDesc}>
+            {meId
+              ? myTeamId
+                ? "自分のチーム情報を編集します。"
+                : "まだチームがありません。まずはチーム登録へ。"
+              : "ログインするとチームを作成/編集できます。"}
+          </div>
+          <div style={cardCta}>{myTeamId ? "編集する →" : "登録する →"}</div>
+        </Link>
+
+        {/* 4) チーム検索（✅ 追加：他チームを探す導線） */}
+        <Link href="/teams" style={{ ...card, textDecoration: "none" }} className="sh-card">
+          <div style={cardIcon}>🔎</div>
+          <div style={cardTitle}>チーム検索</div>
+          <div style={cardDesc}>エリア・カテゴリ・キーワードでチームを検索できます。</div>
           <div style={cardCta}>開く →</div>
         </Link>
       </section>
@@ -315,7 +346,7 @@ export default function HomePage() {
       <section style={noteBox}>
         <div style={noteTitle}>使い方（最短）</div>
         <ol style={noteList}>
-          <li>「自分のチーム」でチームを1つ作る</li>
+          <li>「自分のチーム」でチームを1つ作る（または編集）</li>
           <li>「マッチング（探す / 募集する）」で募集枠を作る／相手の募集に申込みする</li>
           <li>承認後は「チャット」から連絡（/chat に一本化）</li>
         </ol>
