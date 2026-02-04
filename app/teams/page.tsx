@@ -172,9 +172,6 @@ function TeamsPageInner() {
         <Link href="/teams/new" className="sh-btn">
           ＋ チーム登録へ
         </Link>
-        <Link href="/teams/search" className="sh-btn">
-          チーム検索
-        </Link>
       </div>
 
       {!meId ? (
