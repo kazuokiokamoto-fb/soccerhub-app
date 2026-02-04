@@ -31,8 +31,7 @@ export default function ChatThreadPage() {
     );
   };
 
-  // ✅ 既読を付ける（chat_members.last_read_at = now）
-  // ※ RPCは使わず、最小でUPDATE直書き（RLS: user_id = auth.uid() が必要）
+  // ✅ 既読を付ける（chat_members.last_read_at を now）
   const markRead = async () => {
     if (!threadId || !meId) return;
     try {
@@ -83,7 +82,7 @@ export default function ChatThreadPage() {
 
       setIsMember(true);
 
-      // ✅ messages 取得（あなたのテーブル定義に合わせる：sender_id / sender_team_id）
+      // ✅ messages 取得（DBの実カラム：sender_id / sender_team_id）
       const { data, error } = await supabase
         .from("chat_messages")
         .select("id,thread_id,sender_id,sender_team_id,body,created_at")
@@ -97,10 +96,9 @@ export default function ChatThreadPage() {
         return;
       }
 
-      setMessages((data ?? []) as ChatMessage[]);
+      setMessages((data ?? []) as any);
       setLoading(false);
 
-      // 初回は一気に下へ（スムーズじゃなくてOK）
       scrollToBottom(false);
 
       // ✅ 開いたら即既読
@@ -118,18 +116,17 @@ export default function ChatThreadPage() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "chat_messages", filter: `thread_id=eq.${threadId}` },
         async (payload) => {
-          const row = payload.new as ChatMessage;
+          const row = payload.new as any;
 
           setMessages((prev) => {
-            if (prev.some((m) => m.id === row.id)) return prev; // 重複ガード
-            return [...prev, row];
+            if ((prev as any[]).some((m) => (m as any).id === row.id)) return prev;
+            return [...(prev as any[]), row] as any;
           });
 
           scrollToBottom(true);
 
-          // ✅ 相手から来た新着なら、ここで既読を付ける
-          // （自分が送った分は already read でOK）
-          if ((row as any).sender_id && (row as any).sender_id !== meId) {
+          // ✅ 相手から来た新着なら既読
+          if (row.sender_id && row.sender_id !== meId) {
             await markRead();
           }
         }
@@ -148,14 +145,13 @@ export default function ChatThreadPage() {
     if (!threadId) return alert("threadId がありません");
     if (!isMember) return alert("このスレッドに参加していません");
 
-    // UI lock
     setSending(true);
     setText("");
 
     const payload: any = {
       thread_id: threadId,
       sender_id: meId,
-      sender_team_id: null, // ←まずはnullでOK（ポリシーで許可されてる想定）
+      sender_team_id: null,
       body,
     };
 
@@ -163,21 +159,19 @@ export default function ChatThreadPage() {
 
     if (error) {
       console.error(error);
-      setText(body); // 戻す
+      setText(body);
       setSending(false);
       alert(`送信に失敗: ${error.message}`);
       return;
     }
 
-    // ✅ 自分が送った直後も既読を付けておく（last_read_at を最新に）
+    // ✅ 自分が送った直後も既読
     await markRead();
 
-    // Realtime で届くのでここでは messages に足さない（重複防止）
     setSending(false);
   };
 
   const onKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
-    // Enter送信（Shift+Enterは改行）
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (canSend) send();
@@ -216,13 +210,13 @@ export default function ChatThreadPage() {
             <p style={{ color: "#991b1b" }}>このスレッドに参加していません（権限/RLSを確認してください）</p>
           ) : null}
 
-          {!loading && isMember && messages.length === 0 ? (
+          {!loading && isMember && (messages as any[]).length === 0 ? (
             <p style={{ color: "#666" }}>メッセージはまだありません</p>
           ) : null}
 
           <div style={{ display: "grid", gap: 10 }}>
-            {messages.map((m) => {
-              const mine = (m as any).sender_id === meId;
+            {(messages as any[]).map((m: any) => {
+              const mine = m.sender_id === meId;
               return (
                 <div key={m.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start" }}>
                   <div
@@ -239,7 +233,7 @@ export default function ChatThreadPage() {
                     <div style={{ fontSize: 12, color: "#666", marginBottom: 4 }}>
                       {mine ? "あなた" : "相手"} ・ {new Date(m.created_at).toLocaleString()}
                     </div>
-                    {(m as any).body}
+                    {m.body}
                   </div>
                 </div>
               );
