@@ -3,6 +3,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import PageHeader from "@/app/components/PageHeader";
 import { supabase } from "../lib/supabase";
@@ -10,27 +11,54 @@ import { Team } from "../lib/types";
 
 type DbTeam = {
   id: string;
+  owner_id: string;
   name: string;
-  area: string;
-  category: string;
-  level: number;
-  has_ground: boolean;
-  bike_parking: string;
-  uniform_main: string;
-  uniform_sub: string;
+  area: string | null;
+  category: string | null;              // 旧
+  categories: string[] | null;          // 新
+  level: number | null;
+  has_ground: boolean | null;
+  bike_parking: string | null;
+  uniform_main: string | null;
+  uniform_sub: string | null;
   roster_by_grade: Record<string, number> | null;
   desired_dates: string[] | null;
   note: string | null;
   updated_at: string;
+
+  // 住所（新）
+  prefecture: string | null;
+  city: string | null;
+  town: string | null;
 };
 
 function toTeam(row: DbTeam): Team {
+  // categories（新）優先、無ければ category（旧）
+  const cats =
+    Array.isArray(row.categories) && row.categories.length > 0
+      ? row.categories
+      : row.category
+      ? [row.category]
+      : [];
+
+  // 表示カテゴリは先頭（マッチングの slot.category と合わせる）
+  const primaryCategory = (cats[0] ?? row.category ?? "").trim() || "未設定";
+
+  // area は表示用に、pref/city/town があれば組み立てる（空なら DB の area）
+  const p = (row.prefecture ?? "").trim();
+  const c = (row.city ?? "").trim();
+  const t = (row.town ?? "").trim();
+  const areaText =
+    (p || c || t)
+      ? `${p || ""}${p && c ? " " : p ? " " : ""}${c || ""}${t ? "・" + t : ""}`.trim()
+      : (row.area ?? "").trim();
+
   return {
     id: row.id,
     name: row.name,
-    area: row.area,
-    category: row.category,
-    level: row.level,
+    area: areaText || "（エリア未登録）",
+    category: primaryCategory,
+    level: Number(row.level ?? 5),
     hasGround: !!row.has_ground,
     bikeParking: row.bike_parking ?? "不明",
     uniformMain: row.uniform_main ?? "不明",
@@ -40,7 +68,10 @@ function toTeam(row: DbTeam): Team {
     desiredDates: row.desired_dates ?? [],
     note: row.note ?? "",
     updatedAt: row.updated_at,
-  };
+
+    // Team 型に fields が無いならここは捨てる（型が許すなら保持）
+    // categories: cats,
+  } as any;
 }
 
 type Toast = { type: "success" | "error" | "info"; text: string };
@@ -62,7 +93,12 @@ function formatAvailability(desiredDates?: string[]) {
   return pretty.filter(Boolean).join(" / ") || "未登録";
 }
 
+function jpSortKey(s?: string | null) {
+  return (s ?? "").trim();
+}
+
 export default function TeamsClient({ createdId }: { createdId?: string }) {
+  const router = useRouter();
   const created = createdId ?? "";
 
   const [teams, setTeams] = useState<Team[]>([]);
@@ -78,11 +114,25 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
 
   const load = async () => {
     setLoading(true);
+
+    // ✅ 自分のチームだけ表示（ここが重要）
+    const { data: auth, error: authErr } = await supabase.auth.getUser();
+    if (authErr) console.error(authErr);
+
+    const uid = auth?.user?.id;
+    if (!uid) {
+      setToast({ type: "error", text: "ログインが必要です" });
+      setTeams([]);
+      setLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("teams")
       .select(
-        "id,name,area,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at"
+        "id,owner_id,name,area,category,categories,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at,prefecture,city,town"
       )
+      .eq("owner_id", uid)
       .order("updated_at", { ascending: false });
 
     if (error) {
@@ -94,6 +144,30 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
     }
 
     const rows = (data ?? []) as DbTeam[];
+
+    // ✅ 住所あいうえお順：pref → city → town → area → name
+    rows.sort((a, b) => {
+      const ap = jpSortKey(a.prefecture);
+      const bp = jpSortKey(b.prefecture);
+      if (ap !== bp) return ap.localeCompare(bp, "ja");
+
+      const ac = jpSortKey(a.city);
+      const bc = jpSortKey(b.city);
+      if (ac !== bc) return ac.localeCompare(bc, "ja");
+
+      const at = jpSortKey(a.town);
+      const bt = jpSortKey(b.town);
+      if (at !== bt) return at.localeCompare(bt, "ja");
+
+      const aa = jpSortKey(a.area);
+      const ba = jpSortKey(b.area);
+      if (aa !== ba) return aa.localeCompare(ba, "ja");
+
+      const an = jpSortKey(a.name);
+      const bn = jpSortKey(b.name);
+      return an.localeCompare(bn, "ja");
+    });
+
     setTeams(rows.map(toTeam));
     setLoading(false);
   };
@@ -152,12 +226,12 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
       ) : null}
 
       <h1 style={{ margin: 0 }}>チーム一覧</h1>
-      <p style={{ color: "#555", marginTop: 6 }}>Supabase（DB）から表示しています。</p>
+      <p style={{ color: "#555", marginTop: 6 }}>あなたのチーム（ログインユーザー）だけ表示しています。</p>
 
-      {/* ✅ 再読み込みは「必要なら」残す（不要ならこのブロック自体消してOK） */}
+      {/* 再読み込み（残す） */}
       <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-        <button className="sh-btn" type="button" onClick={load}>
-          再読み込み
+        <button className="sh-btn" type="button" onClick={load} disabled={loading}>
+          {loading ? "読み込み中…" : "再読み込み"}
         </button>
       </div>
 
@@ -179,29 +253,54 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
               return (
                 <div
                   key={t.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => router.push(`/teams/${t.id}/edit`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      router.push(`/teams/${t.id}/edit`);
+                    }
+                  }}
                   style={{
                     padding: 12,
                     borderRadius: 12,
                     border: isCreated ? "2px solid #86efac" : "1px solid #eee",
                     background: isCreated ? "#f0fdf4" : "#fafafa",
                     boxShadow: isCreated ? "0 0 0 4px rgba(34,197,94,0.10)" : "none",
+                    cursor: "pointer",
                   }}
+                  aria-label={`チーム ${t.name} を編集`}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <div style={{ fontWeight: 800 }}>{t.name} {isCreated ? "✅" : ""}</div>
+                    <div style={{ fontWeight: 800 }}>
+                      {t.name} {isCreated ? "✅" : ""}
+                    </div>
 
                     <div style={{ display: "flex", gap: 8 }}>
-                      <Link className="sh-btn" href={`/teams/${t.id}/edit`}>
+                      <Link
+                        className="sh-btn"
+                        href={`/teams/${t.id}/edit`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         編集
                       </Link>
-                      <button className="sh-btn sh-btn--danger" onClick={() => remove(t.id)} type="button">
+                      <button
+                        className="sh-btn sh-btn--danger"
+                        onClick={(e) => {
+                          e.stopPropagation(); // ✅ カードクリック（編集）へ伝播させない
+                          remove(t.id);
+                        }}
+                        type="button"
+                      >
                         削除
                       </button>
                     </div>
                   </div>
 
                   <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
-                    {t.area} / {t.category} / 強さ {t.level} / グラウンド {t.hasGround ? "あり" : "なし"} / 🚲 {t.bikeParking}
+                    {t.area} / {t.category} / 強さ {t.level} / グラウンド {t.hasGround ? "あり" : "なし"} / 🚲{" "}
+                    {t.bikeParking}
                   </div>
 
                   <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
@@ -209,7 +308,8 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
                   </div>
 
                   <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
-                    人数：G1 {t.rosterByGrade.G1} / G2 {t.rosterByGrade.G2} / G3 {t.rosterByGrade.G3} / G4 {t.rosterByGrade.G4} / G5 {t.rosterByGrade.G5} / G6 {t.rosterByGrade.G6}
+                    人数：G1 {t.rosterByGrade.G1} / G2 {t.rosterByGrade.G2} / G3 {t.rosterByGrade.G3} / G4{" "}
+                    {t.rosterByGrade.G4} / G5 {t.rosterByGrade.G5} / G6 {t.rosterByGrade.G6}
                   </div>
 
                   <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
@@ -217,9 +317,7 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
                   </div>
 
                   {t.note ? (
-                    <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
-                      メモ：{t.note}
-                    </div>
+                    <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>メモ：{t.note}</div>
                   ) : null}
                 </div>
               );
