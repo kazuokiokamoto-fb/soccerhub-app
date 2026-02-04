@@ -242,7 +242,7 @@ export default function HomePage() {
         <p style={subTitle}>まずは「マッチング（探す/募集する）」へ。チーム設定はあとでOK。</p>
       </header>
 
-      <section style={grid}>
+      <section style={grid} className="sh-home-grid">
         {/* 1) マッチング */}
         <Link href="/match" style={{ ...card, textDecoration: "none" }} className="sh-card">
           <div style={cardIcon}>🗓️</div>
@@ -427,7 +427,7 @@ const grid: React.CSSProperties = {
   marginTop: 16,
   display: "grid",
   gap: 12,
-  gridTemplateColumns: "repeat(3, 1fr)",
+  //gridTemplateColumns: "repeat(3, 1fr)",
 };
 
 const card: React.CSSProperties = {
