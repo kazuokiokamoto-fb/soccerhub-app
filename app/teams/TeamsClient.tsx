@@ -3,8 +3,9 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { supabase } from "@/app/lib/supabase";
-import { Team } from "@/app/lib/types";
+
+import { supabase } from "../lib/supabase";
+import { Team } from "../lib/types";
 
 type DbTeam = {
   id: string;
@@ -21,13 +22,17 @@ type DbTeam = {
   note: string | null;
   updated_at: string;
 
-  // ✅ 連絡先（追加）
-  contact_email: string | null;
-  contact_phone: string | null;
-  contact_line_id: string | null;
+  // 連絡先（DBに追加した場合のみ）
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  contact_line_id?: string | null;
 };
 
-function toTeam(row: DbTeam): Team {
+function toTeam(row: DbTeam): Team & {
+  contactEmail?: string;
+  contactPhone?: string;
+  contactLineId?: string;
+} {
   return {
     id: row.id,
     name: row.name,
@@ -43,11 +48,10 @@ function toTeam(row: DbTeam): Team {
     note: row.note ?? "",
     updatedAt: row.updated_at,
 
-    // Team型に無ければ無視される（型が厳しいなら Team 型側に追加推奨）
-    contactEmail: row.contact_email ?? "",
-    contactPhone: row.contact_phone ?? "",
-    contactLineId: row.contact_line_id ?? "",
-  } as any;
+    contactEmail: (row as any).contact_email ?? "",
+    contactPhone: (row as any).contact_phone ?? "",
+    contactLineId: (row as any).contact_line_id ?? "",
+  };
 }
 
 type Toast = { type: "success" | "error" | "info"; text: string };
@@ -72,7 +76,7 @@ function formatAvailability(desiredDates?: string[]) {
 export default function TeamsClient({ createdId }: { createdId?: string }) {
   const created = createdId ?? "";
 
-  const [teams, setTeams] = useState<Team[]>([]);
+  const [teams, setTeams] = useState<(Team & any)[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
 
@@ -86,41 +90,31 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
   const load = async () => {
     setLoading(true);
 
-    // ✅ 住所（area）を「あいうえお順」にしたい → area asc（同値なら updated_at desc）
-    const { data, error } = await supabase
+    const res = await supabase
       .from("teams")
       .select(
-        [
-          "id",
-          "name",
-          "area",
-          "category",
-          "level",
-          "has_ground",
-          "bike_parking",
-          "uniform_main",
-          "uniform_sub",
-          "roster_by_grade",
-          "desired_dates",
-          "note",
-          "updated_at",
-          "contact_email",
-          "contact_phone",
-          "contact_line_id",
-        ].join(",")
-      )
-      .order("area", { ascending: true })
-      .order("updated_at", { ascending: false });
+        "id,name,area,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at,contact_email,contact_phone,contact_line_id"
+      );
 
-    if (error) {
-      console.error(error);
-      setToast({ type: "error", text: `読み込みに失敗しました: ${error.message}` });
+    if (res.error) {
+      console.error(res.error);
+      setToast({ type: "error", text: `読み込みに失敗しました: ${res.error.message}` });
       setTeams([]);
       setLoading(false);
       return;
     }
 
-    const rows = (data ?? []) as any as DbTeam[];
+    const rows = (res.data ?? []) as any as DbTeam[];
+
+    // ✅ 住所 “あいうえお順” に寄せる（DB依存を避ける）
+    rows.sort((a, b) => {
+      const aa = (a.area ?? "").toString();
+      const bb = (b.area ?? "").toString();
+      const byArea = aa.localeCompare(bb, "ja");
+      if (byArea !== 0) return byArea;
+      return (a.name ?? "").toString().localeCompare((b.name ?? "").toString(), "ja");
+    });
+
     setTeams(rows.map(toTeam));
     setLoading(false);
   };
@@ -134,12 +128,12 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
     const ok = confirm("削除しますか？（※権限設定次第で失敗する場合があります）");
     if (!ok) return;
 
-    const { error } = await supabase.from("teams").delete().eq("id", id);
-    if (error) {
-      console.error(error);
+    const res = await supabase.from("teams").delete().eq("id", id);
+    if (res.error) {
+      console.error(res.error);
       setToast({
         type: "error",
-        text: `削除に失敗しました: ${error.message}\n（RLSの権限設定が原因のことが多いです）`,
+        text: `削除に失敗しました: ${res.error.message}\n（RLSの権限設定が原因のことが多いです）`,
       });
       return;
     }
@@ -168,8 +162,9 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
       ) : null}
 
       <h1 style={{ margin: 0 }}>チーム一覧</h1>
-      <p style={{ color: "#555", marginTop: 6 }}>Supabase（DB）から表示しています。（住所：あいうえお順）</p>
+      <p style={{ color: "#555", marginTop: 6 }}>Supabase（DB）から表示しています。</p>
 
+      {/* ✅ ナビは最小に：トップ / ＋チーム登録 / 再読み込み */}
       <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
         <Link href="/" className="sh-btn">トップへ</Link>
         <Link href="/teams/new" className="sh-btn">＋ チーム登録へ</Link>
@@ -207,8 +202,10 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
                       {t.name} {isCreated ? "✅" : ""}
                     </div>
 
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <Link className="sh-btn" href={`/teams/${t.id}/edit`}>編集</Link>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <Link className="sh-btn" href={`/teams/${t.id}/edit`}>
+                        編集
+                      </Link>
                       <button className="sh-btn sh-btn--danger" onClick={() => remove(t.id)} type="button">
                         削除
                       </button>
@@ -224,15 +221,13 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
                   </div>
 
                   <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
-                    人数：G1 {t.rosterByGrade.G1} / G2 {t.rosterByGrade.G2} / G3 {t.rosterByGrade.G3} / G4{" "}
-                    {t.rosterByGrade.G4} / G5 {t.rosterByGrade.G5} / G6 {t.rosterByGrade.G6}
+                    人数：G1 {t.rosterByGrade.G1} / G2 {t.rosterByGrade.G2} / G3 {t.rosterByGrade.G3} / G4 {t.rosterByGrade.G4} / G5 {t.rosterByGrade.G5} / G6 {t.rosterByGrade.G6}
                   </div>
 
                   <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
                     希望枠：{formatAvailability(t.desiredDates)}
                   </div>
 
-                  {/* ✅ 連絡先 */}
                   {(t.contactEmail || t.contactPhone || t.contactLineId) ? (
                     <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
                       連絡先：
@@ -257,13 +252,7 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
   );
 }
 
-const miniInfo: React.CSSProperties = {
-  padding: "10px 12px",
-  border: "1px solid #eee",
-  borderRadius: 12,
-  background: "#fff",
-  color: "#444",
-};
+const miniInfo: React.CSSProperties = { padding: "10px 12px", border: "1px solid #eee", borderRadius: 12, background: "#fff", color: "#444" };
 
 const toastBox: React.CSSProperties = {
   position: "sticky",

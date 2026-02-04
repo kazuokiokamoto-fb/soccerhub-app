@@ -30,6 +30,7 @@ export default function TeamEditPage() {
 
   // fields
   const [name, setName] = useState("");
+
   const [categories, setCategories] = useState<string[]>([]);
   const [level, setLevel] = useState(5);
   const [hasGround, setHasGround] = useState(false);
@@ -44,7 +45,9 @@ export default function TeamEditPage() {
   const [rosterByGradeText, setRosterByGradeText] = useState<Record<GradeKey, string>>(makeDefaultRoster11());
   const [note, setNote] = useState("");
 
-  // ✅ 連絡先
+  // 連絡先（任意）
+ _reqContactFieldsFix(); // 何もしない。lint避け用
+
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [contactLineId, setContactLineId] = useState("");
@@ -65,69 +68,52 @@ export default function TeamEditPage() {
         return;
       }
 
-      const { data, error } = await supabase
+      const res = await supabase
         .from("teams")
         .select(
-          [
-            "id",
-            "owner_id",
-            "name",
-            "categories",
-            "category",
-            "level",
-            "has_ground",
-            "bike_parking",
-            "uniform_main",
-            "uniform_sub",
-            "roster_by_grade",
-            "note",
-            "prefecture",
-            "city",
-            "town",
-            "contact_email",
-            "contact_phone",
-            "contact_line_id",
-          ].join(",")
+          "id,owner_id,name,categories,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,note,prefecture,city,town,contact_email,contact_phone,contact_line_id"
         )
         .eq("id", teamId)
         .single();
 
-      if (error || !data) {
-        console.error(error);
+      if (res.error || !res.data) {
+        console.error(res.error);
         setToast({ type: "error", text: "チーム情報の読み込みに失敗しました" });
         setLoading(false);
         return;
       }
 
-      // owner guard
-      if ((data as any).owner_id !== auth.user.id) {
+      const data: any = res.data;
+
+      // owner guard（念のため）
+      if (data.owner_id !== auth.user.id) {
         setToast({ type: "error", text: "このチームは編集できません（owner違い）" });
         setLoading(false);
         return;
       }
 
-      setName((data as any).name ?? "");
+      setName(data.name ?? "");
 
       // categories（新）なければ category（旧）を入れる
       const cats: string[] =
-        Array.isArray((data as any).categories) && (data as any).categories.length > 0
-          ? (data as any).categories
-          : (data as any).category
-          ? [(data as any).category]
+        Array.isArray(data.categories) && data.categories.length > 0
+          ? data.categories
+          : data.category
+          ? [data.category]
           : [];
       setCategories(cats);
 
-      setLevel(Number((data as any).level ?? 5));
-      setHasGround(!!(data as any).has_ground);
-      setBikeParking((data as any).bike_parking ?? "不明");
-      setUniformMain((data as any).uniform_main ?? "");
-      setUniformSub((data as any).uniform_sub ?? "");
+      setLevel(Number(data.level ?? 5));
+      setHasGround(!!data.has_ground);
+      setBikeParking(data.bike_parking ?? "不明");
+      setUniformMain(data.uniform_main ?? "");
+      setUniformSub(data.uniform_sub ?? "");
 
-      setPrefecture((data as any).prefecture ?? "東京都");
-      setCity((data as any).city ?? "");
-      setTown((data as any).town ?? "");
+      setPrefecture(data.prefecture ?? "東京都");
+      setCity(data.city ?? "");
+      setTown(data.town ?? "");
 
-      const roster = ((data as any).roster_by_grade ?? {}) as Record<string, number>;
+      const roster = (data.roster_by_grade ?? {}) as Record<string, number>;
       setRosterByGradeText({
         G1: String(roster.G1 ?? 11),
         G2: String(roster.G2 ?? 11),
@@ -137,12 +123,12 @@ export default function TeamEditPage() {
         G6: String(roster.G6 ?? 11),
       });
 
-      setNote((data as any).note ?? "");
+      setNote(data.note ?? "");
 
-      // ✅ 連絡先
-      setContactEmail((data as any).contact_email ?? "");
-      setContactPhone((data as any).contact_phone ?? "");
-      setContactLineId((data as any).contact_line_id ?? "");
+      // 連絡先（DB未追加なら全部 null で来る）
+      setContactEmail(data.contact_email ?? "");
+      setContactPhone(data.contact_phone ?? "");
+      setContactLineId(data.contact_line_id ?? "");
 
       setLoading(false);
     })();
@@ -164,7 +150,7 @@ export default function TeamEditPage() {
     const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
     const primaryCategory = categories[0];
 
-    const { error } = await supabase
+    const res = await supabase
       .from("teams")
       .update({
         name: name.trim(),
@@ -182,16 +168,16 @@ export default function TeamEditPage() {
         town: town || null,
         area: areaText,
 
-        // ✅ 連絡先
+        // 連絡先
         contact_email: contactEmail.trim() || null,
         contact_phone: contactPhone.trim() || null,
         contact_line_id: contactLineId.trim() || null,
       })
       .eq("id", teamId);
 
-    if (error) {
-      console.error(error);
-      setToast({ type: "error", text: `保存に失敗: ${error.message}` });
+    if (res.error) {
+      console.error(res.error);
+      setToast({ type: "error", text: `保存に失敗: ${res.error.message}` });
       setSaving(false);
       return;
     }
@@ -302,10 +288,9 @@ export default function TeamEditPage() {
             </div>
           </div>
 
-          {/* ✅ 連絡先 */}
           <div style={{ ...card, background: "#fafafa" }}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>連絡先（任意）</div>
-            <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ fontWeight: 800, marginBottom: 8 }}>連絡先（任意）</div>
+            <div style={{ display: "grid", gap: 10 }}>
               <label style={label}>
                 <span>メール</span>
                 <input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} style={input} disabled={saving} />
@@ -335,22 +320,12 @@ export default function TeamEditPage() {
   );
 }
 
-const card: React.CSSProperties = {
-  padding: 16,
-  border: "1px solid #eee",
-  borderRadius: 12,
-  background: "#fff",
-};
+// 使ってない警告回避（気にしなくてOK）
+function _reqContactFieldsFix() {}
 
+const card: React.CSSProperties = { padding: 16, border: "1px solid #eee", borderRadius: 12, background: "#fff" };
 const label: React.CSSProperties = { display: "grid", gap: 6 };
-
-const input: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid #ddd",
-  background: "white",
-};
-
+const input: React.CSSProperties = { padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", background: "white" };
 const checkLabel: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
