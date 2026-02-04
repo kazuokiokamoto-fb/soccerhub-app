@@ -505,10 +505,12 @@ export default function MatchCalendarPage() {
             日付ごとに「募集中の枠数」→ クリックで詳細 → 募集/申込み/承認
           </p>
         </div>
+
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <Link href="/teams" className="sh-btn">
+          <Link href="/teams/search" className="sh-btn">
             チーム検索
           </Link>
+
           <button className="sh-btn" type="button" onClick={loadMonth} disabled={loading}>
             {loading ? "更新中…" : "更新"}
           </button>

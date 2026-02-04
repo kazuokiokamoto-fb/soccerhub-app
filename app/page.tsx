@@ -320,22 +320,16 @@ export default function HomePage() {
           <div style={cardCta}>開く →</div>
         </Link>
 
-        {/* 3) 自分のチーム（✅ editへ直行 / なければ new） */}
-        <Link href={myTeamHref} style={{ ...card, textDecoration: "none" }} className="sh-card">
+        {/* 3) 自分のチーム */}
+        <Link href="/teams" style={{ ...card, textDecoration: "none" }} className="sh-card">
           <div style={cardIcon}>⚙️</div>
           <div style={cardTitle}>自分のチーム</div>
-          <div style={cardDesc}>
-            {meId
-              ? myTeamId
-                ? "自分のチーム情報を編集します。"
-                : "まだチームがありません。まずはチーム登録へ。"
-              : "ログインするとチームを作成/編集できます。"}
-          </div>
-          <div style={cardCta}>{myTeamId ? "編集する →" : "登録する →"}</div>
+          <div style={cardDesc}>チーム情報・ユニフォーム・よく使うグラウンドを設定します。</div>
+          <div style={cardCta}>開く →</div>
         </Link>
 
-        {/* 4) チーム検索（✅ 追加：他チームを探す導線） */}
-        <Link href="/teams" style={{ ...card, textDecoration: "none" }} className="sh-card">
+        {/* 4) チーム検索（←追加済みならリンク先だけ直す） */}
+        <Link href="/teams/search" style={{ ...card, textDecoration: "none" }} className="sh-card">
           <div style={cardIcon}>🔎</div>
           <div style={cardTitle}>チーム検索</div>
           <div style={cardDesc}>エリア・カテゴリ・キーワードでチームを検索できます。</div>
