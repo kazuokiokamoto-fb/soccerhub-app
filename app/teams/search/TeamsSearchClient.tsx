@@ -128,12 +128,7 @@ export default function TeamsSearchClient() {
           <p style={{ margin: "6px 0 0", color: "#555" }}>エリアとカテゴリで絞り込めます。</p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Link href="/" className="sh-btn">トップ</Link>
           <Link href="/match" className="sh-btn">マッチング</Link>
-          <Link href="/teams" className="sh-btn">自分のチーム</Link>
-          <button className="sh-btn" type="button" onClick={load} disabled={loading}>
-            {loading ? "更新中…" : "更新"}
-          </button>
         </div>
       </header>
 
