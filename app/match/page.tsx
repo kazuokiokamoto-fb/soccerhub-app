@@ -510,10 +510,6 @@ export default function MatchCalendarPage() {
           <Link href="/teams/search" className="sh-btn">
             チーム検索
           </Link>
-
-          <button className="sh-btn" type="button" onClick={loadMonth} disabled={loading}>
-            {loading ? "更新中…" : "更新"}
-          </button>
         </div>
       </header>
 
