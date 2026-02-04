@@ -9,7 +9,6 @@ type MessageRow = {
   id: string;
   thread_id: string;
   sender_id: string | null;
-  sender_team_id?: string | null;
   body: string | null;
   created_at: string;
 };
@@ -18,7 +17,7 @@ type ThreadDbRow = {
   id: string;
   created_at: string;
   updated_at: string | null;
-  thread_type?: string | null;
+  thread_type?: string | null; // ある環境だけ
 };
 
 type RecentThread = {
@@ -26,12 +25,17 @@ type RecentThread = {
   created_at: string;
   updated_at: string | null;
   thread_type: string | null;
+
   last_message: MessageRow | null;
   unread: boolean;
 
-  // 追加：表示用
-  opponent_team_name?: string | null;
+  // ✅ 追加：相手チーム表示用
+  other_team_id: string | null;
+  other_team_name: string | null;
+  other_team_category: string | null;
 };
+
+type TeamMini = { id: string; name: string | null; category?: string | null };
 
 export default function HomePage() {
   const [meId, setMeId] = useState<string>("");
@@ -64,7 +68,15 @@ export default function HomePage() {
       setChatError("");
 
       try {
-        // 1) 自分が属する thread を chat_members 起点で取得
+        // 0) 自分のチームID（相手判定用）
+        const { data: myTeamsRows } = await supabase
+          .from("teams")
+          .select("id")
+          .eq("owner_id", meId);
+
+        const myTeamIds = new Set<string>((myTeamsRows ?? []).map((r: any) => r.id).filter(Boolean));
+
+        // 1) chat_members から thread_id を取得（RLS的にも安全）
         const { data: myMembers, error: memErr } = await supabase
           .from("chat_members")
           .select("thread_id,last_read_at,created_at")
@@ -96,40 +108,73 @@ export default function HomePage() {
           if (!lastReadMap.has(r.thread_id)) lastReadMap.set(r.thread_id, r.last_read_at ?? null);
         }
 
-        // 2) chat_threads を取得（thread_type が無い環境もあるのでフォールバック）
-        const threadsRes = await supabase
-          .from("chat_threads")
-          .select("id,created_at,updated_at,thread_type")
-          .in("id", threadIds);
-
+        // 2) chat_threads（thread_type あるなら使う、無ければフォールバック）
         let thRows: ThreadDbRow[] = [];
-        if (threadsRes.error) {
-          const fallback = await supabase
+        {
+          const threadsRes = await supabase
             .from("chat_threads")
-            .select("id,created_at,updated_at")
+            .select("id,created_at,updated_at,thread_type")
             .in("id", threadIds);
 
-          if (fallback.error) {
-            console.error(fallback.error);
-            setChatError(`チャットスレッドの取得に失敗: ${fallback.error.message}`);
-            setRecentThreads([]);
-            setLoadingChat(false);
-            return;
+          if (threadsRes.error) {
+            const fallback = await supabase
+              .from("chat_threads")
+              .select("id,created_at,updated_at")
+              .in("id", threadIds);
+
+            if (fallback.error) {
+              console.error(fallback.error);
+              setChatError(`チャットスレッドの取得に失敗: ${fallback.error.message}`);
+              setRecentThreads([]);
+              setLoadingChat(false);
+              return;
+            }
+            thRows = (fallback.data ?? []) as any;
+          } else {
+            thRows = (threadsRes.data ?? []) as any;
           }
-          thRows = (fallback.data ?? []) as any;
-        } else {
-          thRows = (threadsRes.data ?? []) as any;
         }
 
-        // 3) last message（各 thread の最新）
+        // 3) 最終メッセージ
         const last = await fetchLastMessages_(threadIds);
 
-        // 4) 相手チーム名（取れない環境でも落ちない）
-        const opponentNameMap = await fetchOpponentTeamNames_(threadIds, meId, last);
+        // 4) 参加チーム（相手チーム名表示用）
+        const { data: cmTeams, error: cmTeamsErr } = await supabase
+          .from("chat_members")
+          .select("thread_id,team_id")
+          .in("thread_id", threadIds);
 
-        // merge
-        const merged: RecentThread[] = thRows.map((t) => {
-          const tid = t.id;
+        if (cmTeamsErr) console.error(cmTeamsErr);
+
+        const memberTeamsByThread = new Map<string, string[]>();
+        const allTeamIds: string[] = [];
+        for (const r of (cmTeams ?? []) as any[]) {
+          const tid = r.thread_id as string;
+          const teamId = r.team_id as string;
+          if (!tid || !teamId) continue;
+          if (!memberTeamsByThread.has(tid)) memberTeamsByThread.set(tid, []);
+          memberTeamsByThread.get(tid)!.push(teamId);
+          allTeamIds.push(teamId);
+        }
+        const uniqTeamIds = Array.from(new Set(allTeamIds));
+
+        // 5) teams からチーム名
+        const teamMap = new Map<string, TeamMini>();
+        if (uniqTeamIds.length > 0) {
+          const { data: teamRows, error: teamErr } = await supabase
+            .from("teams")
+            .select("id,name,category")
+            .in("id", uniqTeamIds);
+
+          if (teamErr) console.error(teamErr);
+          for (const t of (teamRows ?? []) as any[]) {
+            teamMap.set(t.id, { id: t.id, name: t.name ?? null, category: t.category ?? null });
+          }
+        }
+
+        // 6) merge
+        const merged: RecentThread[] = (thRows ?? []).map((t: any) => {
+          const tid = t.id as string;
           const lm = last.get(tid) ?? null;
           const lr = lastReadMap.get(tid) ?? null;
 
@@ -139,14 +184,25 @@ export default function HomePage() {
             else unread = new Date(lm.created_at).getTime() > new Date(lr).getTime();
           }
 
+          const memberTeamIds = memberTeamsByThread.get(tid) ?? [];
+          const otherTeamId =
+            memberTeamIds.find((id) => !myTeamIds.has(id)) ??
+            memberTeamIds[0] ??
+            null;
+
+          const other = otherTeamId ? teamMap.get(otherTeamId) : undefined;
+
           return {
             id: tid,
             created_at: t.created_at,
             updated_at: t.updated_at ?? null,
-            thread_type: (t as any).thread_type ?? null,
+            thread_type: t.thread_type ?? null,
             last_message: lm,
             unread,
-            opponent_team_name: opponentNameMap.get(tid) ?? null,
+
+            other_team_id: otherTeamId,
+            other_team_name: other?.name ?? null,
+            other_team_category: other?.category ?? null,
           };
         });
 
@@ -174,7 +230,9 @@ export default function HomePage() {
         <Link href="/match" style={{ ...card, textDecoration: "none" }} className="sh-card">
           <div style={cardIcon}>🗓️</div>
           <div style={cardTitle}>マッチング（探す / 募集する）</div>
-          <div style={cardDesc}>カレンダーから募集を探して申込み／自分の募集も作れます（ここに集約）。</div>
+          <div style={cardDesc}>
+            カレンダーから募集を探して申込み／自分の募集も作れます（ここに集約）。
+          </div>
           <div style={cardCta}>開く →</div>
         </Link>
 
@@ -191,7 +249,9 @@ export default function HomePage() {
           </div>
 
           <div style={cardDesc}>
-            {meId ? "未読・過去の連絡先をまとめて確認できます。" : "ログインすると、未読・過去の連絡先が表示されます。"}
+            {meId
+              ? "未読・過去の連絡先をまとめて確認できます。"
+              : "ログインすると、未読・過去の連絡先が表示されます。"}
           </div>
 
           <div style={{ marginTop: 6 }}>
@@ -204,25 +264,24 @@ export default function HomePage() {
             ) : (
               <div style={{ display: "grid", gap: 6 }}>
                 {recentThreads.slice(0, 3).map((t) => {
-                  const label = t.opponent_team_name?.trim()
-                    ? t.opponent_team_name
-                    : `#${t.id.slice(0, 6)}`;
+                  const title =
+                    t.other_team_name
+                      ? `${t.other_team_name}${t.other_team_category ? `（${t.other_team_category}）` : ""}`
+                      : `#${t.id.slice(0, 6)}`;
+
+                  const body = t.last_message?.body ?? "（メッセージなし）";
+
                   return (
                     <Link
                       key={t.id}
                       href={`/chat/${t.id}`}
-                      style={{ ...threadRow, textDecoration: "none", color: "inherit" }}
+                      style={{ ...threadRow, textDecoration: "none", cursor: "pointer" }}
+                      aria-label={`チャットを開く: ${title}`}
                     >
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <span style={{ fontSize: 12, fontWeight: 900 }}>{label}</span>
-                          {t.unread ? <span style={dot} /> : null}
-                        </div>
-                        <span style={{ fontSize: 11, color: "#666" }}>
-                          {t.last_message?.created_at ? new Date(t.last_message.created_at).toLocaleString() : ""}
-                        </span>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span style={{ fontSize: 12, fontWeight: 900, color: "#111827" }}>{title}</span>
+                        {t.unread ? <span style={dot} /> : null}
                       </div>
-
                       <div
                         style={{
                           fontSize: 12,
@@ -232,7 +291,7 @@ export default function HomePage() {
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {t.last_message?.body ?? "（メッセージなし）"}
+                        {body}
                       </div>
                     </Link>
                   );
@@ -272,7 +331,7 @@ async function fetchLastMessages_(threadIds: string[]) {
 
   const { data, error } = await supabase
     .from("chat_messages")
-    .select("id,thread_id,sender_id,sender_team_id,body,created_at")
+    .select("id,thread_id,sender_id,body,created_at")
     .in("thread_id", threadIds)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -290,96 +349,12 @@ async function fetchLastMessages_(threadIds: string[]) {
         id: m.id,
         thread_id: tid,
         sender_id: m.sender_id ?? null,
-        sender_team_id: m.sender_team_id ?? null,
         body: m.body ?? null,
         created_at: m.created_at,
       });
     }
   }
   return lastByThread;
-}
-
-/**
- * 相手チーム名を引く（環境差で列が無い/NULLでも落とさない）
- * 優先:
- * 1) chat_members.team_id があれば「自分以外の member の team」
- * 2) last_message.sender_team_id があればそれ
- * 3) 取れなければ空
- */
-async function fetchOpponentTeamNames_(threadIds: string[], meId: string, last: Map<string, MessageRow>) {
-  const map = new Map<string, string>();
-
-  // 1) chat_members.team_id から
-  try {
-    const memRes = await supabase
-      .from("chat_members")
-      .select("thread_id,user_id,team_id")
-      .in("thread_id", threadIds);
-
-    if (!memRes.error) {
-      const rows = (memRes.data ?? []) as any[];
-      const threadToTeamId = new Map<string, string>();
-
-      for (const r of rows) {
-        if (!r.thread_id) continue;
-        if (r.user_id === meId) continue;
-        if (r.team_id) {
-          // 1 thread 1相手想定：先勝ち
-          if (!threadToTeamId.has(r.thread_id)) threadToTeamId.set(r.thread_id, r.team_id);
-        }
-      }
-
-      const teamIds = Array.from(new Set(Array.from(threadToTeamId.values())));
-      if (teamIds.length > 0) {
-        const teamRes = await supabase.from("teams").select("id,name").in("id", teamIds);
-        if (!teamRes.error) {
-          const nameById = new Map<string, string>();
-          for (const t of (teamRes.data ?? []) as any[]) nameById.set(t.id, t.name);
-          for (const [tid, teamId] of threadToTeamId.entries()) {
-            const nm = nameById.get(teamId);
-            if (nm) map.set(tid, nm);
-          }
-        }
-      }
-    }
-  } catch (e) {
-    // 何もしない（列が無い等）
-  }
-
-  // 2) last_message.sender_team_id で埋める（未埋めのものだけ）
-  const missingThreadIds: string[] = [];
-  const needTeamIds: string[] = [];
-
-  for (const tid of threadIds) {
-    if (map.has(tid)) continue;
-    const lm = last.get(tid);
-    const stid = (lm as any)?.sender_team_id as string | null | undefined;
-    if (stid) {
-      missingThreadIds.push(tid);
-      needTeamIds.push(stid);
-    }
-  }
-
-  const uniqNeed = Array.from(new Set(needTeamIds));
-  if (uniqNeed.length > 0) {
-    try {
-      const teamRes2 = await supabase.from("teams").select("id,name").in("id", uniqNeed);
-      if (!teamRes2.error) {
-        const nameById2 = new Map<string, string>();
-        for (const t of (teamRes2.data ?? []) as any[]) nameById2.set(t.id, t.name);
-
-        for (const tid of missingThreadIds) {
-          const lm = last.get(tid);
-          const stid = (lm as any)?.sender_team_id as string | null | undefined;
-          if (!stid) continue;
-          const nm = nameById2.get(stid);
-          if (nm) map.set(tid, nm);
-        }
-      }
-    } catch (e) {}
-  }
-
-  return map;
 }
 
 /** 未読優先→新しい順 */
@@ -396,11 +371,34 @@ function sortRecent_(rows: RecentThread[]) {
 }
 
 /** ===== styles ===== */
-const wrap: React.CSSProperties = { padding: 16, maxWidth: 980, margin: "0 auto" };
+const wrap: React.CSSProperties = {
+  padding: 16,
+  maxWidth: 980,
+  margin: "0 auto",
+};
+
 const header: React.CSSProperties = { marginTop: 10 };
-const title: React.CSSProperties = { margin: 0, fontSize: 28, fontWeight: 900, letterSpacing: 0.2 };
-const subTitle: React.CSSProperties = { margin: "8px 0 0", color: "#555", lineHeight: 1.6 };
-const grid: React.CSSProperties = { marginTop: 16, display: "grid", gap: 12, gridTemplateColumns: "repeat(3, 1fr)" };
+
+const title: React.CSSProperties = {
+  margin: 0,
+  fontSize: 28,
+  fontWeight: 900,
+  letterSpacing: 0.2,
+};
+
+const subTitle: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "#555",
+  lineHeight: 1.6,
+};
+
+const grid: React.CSSProperties = {
+  marginTop: 16,
+  display: "grid",
+  gap: 12,
+  gridTemplateColumns: "repeat(3, 1fr)",
+};
+
 const card: React.CSSProperties = {
   border: "1px solid #eee",
   borderRadius: 16,
@@ -412,7 +410,9 @@ const card: React.CSSProperties = {
   alignContent: "start",
   cursor: "pointer",
 };
+
 const cardIcon: React.CSSProperties = { fontSize: 26, lineHeight: 1 };
+
 const cardTitle: React.CSSProperties = {
   fontSize: 18,
   fontWeight: 900,
@@ -421,11 +421,23 @@ const cardTitle: React.CSSProperties = {
   alignItems: "center",
   gap: 10,
 };
+
 const cardDesc: React.CSSProperties = { fontSize: 13, color: "#555", lineHeight: 1.6 };
+
 const cardCta: React.CSSProperties = { marginTop: 4, fontSize: 13, fontWeight: 800, color: "#111827" };
-const noteBox: React.CSSProperties = { marginTop: 14, border: "1px solid #eee", borderRadius: 16, background: "#fafafa", padding: 14 };
+
+const noteBox: React.CSSProperties = {
+  marginTop: 14,
+  border: "1px solid #eee",
+  borderRadius: 16,
+  background: "#fafafa",
+  padding: 14,
+};
+
 const noteTitle: React.CSSProperties = { fontWeight: 900, marginBottom: 6 };
+
 const noteList: React.CSSProperties = { margin: 0, paddingLeft: 18, color: "#555", lineHeight: 1.8 };
+
 const threadRow: React.CSSProperties = {
   border: "1px solid #f3f4f6",
   borderRadius: 10,
@@ -434,7 +446,14 @@ const threadRow: React.CSSProperties = {
   display: "grid",
   gap: 4,
 };
-const dot: React.CSSProperties = { width: 8, height: 8, borderRadius: 999, background: "#111827", display: "inline-block" };
+
+const dot: React.CSSProperties = {
+  width: 8,
+  height: 8,
+  borderRadius: 999,
+  background: "#111827",
+  display: "inline-block",
+};
 
 function badge(unreadTotal: number): React.CSSProperties {
   return {
