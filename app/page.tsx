@@ -251,7 +251,15 @@ export default function HomePage() {
           <div style={cardCta}>開く →</div>
         </Link>
 
-        {/* 2) チャット */}
+        {/* 2) チーム検索（←追加済みならリンク先だけ直す） */}
+        <Link href="/teams/search" style={{ ...card, textDecoration: "none" }} className="sh-card">
+          <div style={cardIcon}>🔎</div>
+          <div style={cardTitle}>チーム検索</div>
+          <div style={cardDesc}>エリア・カテゴリ・キーワードでチームを検索できます。</div>
+          <div style={cardCta}>開く →</div>
+        </Link>
+
+        {/* 3) チャット */}
         <Link href="/chat" style={{ ...card, textDecoration: "none" }} className="sh-card">
           <div style={cardIcon}>💬</div>
           <div style={cardTitle}>
@@ -320,22 +328,15 @@ export default function HomePage() {
           <div style={cardCta}>開く →</div>
         </Link>
 
-        {/* 3) 自分のチーム */}
+        {/* 4) 自分のチーム */}
         <Link href="/teams" style={{ ...card, textDecoration: "none" }} className="sh-card">
           <div style={cardIcon}>⚙️</div>
           <div style={cardTitle}>自分のチーム</div>
           <div style={cardDesc}>チーム情報・ユニフォーム・よく使うグラウンドを設定します。</div>
           <div style={cardCta}>開く →</div>
         </Link>
+        </section>
 
-        {/* 4) チーム検索（←追加済みならリンク先だけ直す） */}
-        <Link href="/teams/search" style={{ ...card, textDecoration: "none" }} className="sh-card">
-          <div style={cardIcon}>🔎</div>
-          <div style={cardTitle}>チーム検索</div>
-          <div style={cardDesc}>エリア・カテゴリ・キーワードでチームを検索できます。</div>
-          <div style={cardCta}>開く →</div>
-        </Link>
-      </section>
 
       <section style={noteBox}>
         <div style={noteTitle}>使い方（最短）</div>
