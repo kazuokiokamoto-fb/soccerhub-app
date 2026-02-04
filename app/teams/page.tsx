@@ -172,7 +172,7 @@ function TeamsPageInner() {
         </div>
       ) : null}
 
-      <h1 style={{ margin: 0 }}>チーム一覧</h1>
+      <h1 style={{ margin: 0 }}>チーム検索</h1>
       <p style={{ color: "#555", marginTop: 6 }}>Supabase（DB）から表示しています。</p>
 
       <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
@@ -182,9 +182,6 @@ function TeamsPageInner() {
         <Link href="/teams/new" className="sh-btn">
           ＋ チーム登録へ
         </Link>
-        <button className="sh-btn" type="button" onClick={load}>
-          再読み込み
-        </button>
       </div>
 
       {createdId && createdTeam ? (
