@@ -4,7 +4,6 @@ export type ChatThread = {
   id: string;
   created_at: string;
   updated_at: string | null;
-  kind: string | null; // "direct" | "slot" など
 };
 
 export type ChatMember = {
