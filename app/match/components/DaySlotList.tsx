@@ -36,16 +36,13 @@ function statusBadgeStyle(status: DbRequest["status"]) {
   } as React.CSSProperties;
 }
 
-type SlotWithHost = DbSlot & { host_team_id: string };
-
 export function DaySlotList(props: {
   selectedYmd: string;
-  slots: DbSlot[]; // ※実体は host_team_id を含む前提（match_slotsからselectしてるのでOK）
+  slots: DbSlot[];
   venues: DbVenue[];
   myTeams: DbTeam[];
   meId: string;
 
-  // ★月内のrequests全部（この中から「自分の申込み済み」を探す）
   requestsForMonth: DbRequest[];
 
   selectedSlotId: string;
@@ -55,11 +52,10 @@ export function DaySlotList(props: {
   onChangeRequestTeamId: (teamId: string) => void;
   onRequestSlot: (slotId: string) => void;
 
-  // ★追加：自分の申込みキャンセル
   onCancelMyRequest: (requestId: string) => void;
 
-  // ✅追加：募集枠（相手）からチャットを開く（親でRPC→router.pushまでやる）
-  onClickChatFromSlot: (slotHostTeamId: string) => void | Promise<void>;
+  // ✅ 追加：相手チームIDを渡すだけ。親がRPC→router.push(/chat/[threadId])
+  onOpenChatWithTeam: (otherTeamId: string) => void | Promise<void>;
 
   selectedSlot: DbSlot | null;
   selectedSlotRequests: DbRequest[];
@@ -82,7 +78,7 @@ export function DaySlotList(props: {
     onChangeRequestTeamId,
     onRequestSlot,
     onCancelMyRequest,
-    onClickChatFromSlot,
+    onOpenChatWithTeam,
     selectedSlot,
     selectedSlotRequests,
     isMineSlot,
@@ -99,18 +95,14 @@ export function DaySlotList(props: {
         <p style={{ margin: "10px 0 0", color: "#777" }}>この日はまだ募集がありません。</p>
       ) : (
         <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-          {slots.map((raw) => {
-            const s = raw as SlotWithHost;
-
+          {slots.map((s) => {
             const isMine = !!meId && s.owner_id === meId;
             const venue = venues.find((v) => v.id === s.venue_id) || null;
 
-            // ★自分がこの枠に申込み済みか？（cancelled は除外）
             const myReq = requestsForMonth.find(
               (r) => r.slot_id === s.id && r.requester_user_id === meId && r.status !== "cancelled"
             );
 
-            // 申込みボタン無効条件
             const disableRequest = !!loading || myTeams.length === 0 || isMine || !!myReq;
 
             const requestBtnTitle = isMine
@@ -121,11 +113,10 @@ export function DaySlotList(props: {
               ? "先に自分のチームを作ってください"
               : "";
 
-            // ★キャンセルできるのは pending のみ
             const canCancel = !!myReq && myReq.status === "pending";
 
-            // ✅ チャットボタン：相手の枠 かつ 自分のチームがある
-            const canChat = !isMine && myTeams.length > 0;
+            // ✅ 相手の枠からチャット（常設DM）
+            const canChatFromList = !isMine && myTeams.length > 0;
 
             return (
               <div
@@ -145,12 +136,11 @@ export function DaySlotList(props: {
                   </div>
 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    {/* ✅ ここ（募集枠）からチャット（導線①） */}
-                    {canChat ? (
+                    {canChatFromList ? (
                       <button
                         className="sh-btn"
                         type="button"
-                        onClick={() => onClickChatFromSlot(s.host_team_id)}
+                        onClick={() => onOpenChatWithTeam((s as any).host_team_id)}
                         disabled={!!loading}
                         title="この募集を出している相手チームにチャットで連絡します"
                       >
@@ -169,7 +159,6 @@ export function DaySlotList(props: {
                   {venue ? `${venue.name}${venue.area ? `（${venue.area}）` : ""}` : "未設定"}
                 </div>
 
-                {/* 申込みUI（自分の枠じゃない時だけ） */}
                 {!isMine ? (
                   <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
                     <label style={{ display: "grid", gap: 6, flex: "1 1 220px" }}>
@@ -215,23 +204,8 @@ export function DaySlotList(props: {
                   </div>
                 ) : null}
 
-                {/* 詳細 */}
                 {selectedSlotId === s.id ? (
                   <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eaeaea" }}>
-                    {/* ✅ 詳細側にもチャットボタン（導線①補強） */}
-                    {!isMine && canChat ? (
-                      <div style={{ marginBottom: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <button
-                          className="sh-btn"
-                          type="button"
-                          onClick={() => onClickChatFromSlot(s.host_team_id)}
-                          disabled={!!loading}
-                        >
-                          💬 この相手にチャット
-                        </button>
-                      </div>
-                    ) : null}
-
                     <SlotDetail
                       slot={selectedSlot}
                       isMine={isMineSlot}
@@ -240,8 +214,7 @@ export function DaySlotList(props: {
                       requests={selectedSlotRequests}
                       onAccept={onAccept}
                       onReject={onReject}
-                      myTeams={myTeams}
-                      requestTeamId={requestTeamId}
+                      onOpenChat={onOpenChatWithTeam}
                     />
                   </div>
                 ) : null}

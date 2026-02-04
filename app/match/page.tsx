@@ -195,9 +195,7 @@ export default function MatchCalendarPage() {
 
       const { data: slotRows, error: slotErr } = await supabase
         .from("match_slots")
-        .select(
-          "id,owner_id,host_team_id,date,start_time,end_time,venue_id,area,category,prefecture,city,town,created_at"
-        )
+        .select("id,owner_id,host_team_id,date,start_time,end_time,venue_id,area,category,prefecture,city,town,created_at")
         .gte("date", start)
         .lte("date", end)
         .order("date", { ascending: true })
@@ -297,21 +295,37 @@ export default function MatchCalendarPage() {
     setOpenCreate(true);
   };
 
-  const openDm = async (myTeamId: string, otherTeamId: string) => {
-    const { data, error } = await supabase.rpc("rpc_get_or_create_dm_thread", {
-      my_team_id: myTeamId,
-      other_team_id: otherTeamId,
-    });
-    if (error) throw error;
-    return data as string;
-  };
-
-  const onClickChatFromSlot = async (slotHostTeamId: string) => {
+  /**
+   * ✅ DMを開く：rpc_get_or_create_dm_thread → /chat/[threadId]
+   * - ここは「コンポーネント内」に置く（requestTeamId / myTeams が参照できる）
+   * - DaySlotList / SlotDetail からは「相手チームID」だけ渡してもらう
+   */
+  const openDmAndGo = async (otherTeamId: string) => {
     try {
       const myTeamId = requestTeamId || myTeams[0]?.id;
-      if (!myTeamId) return setToast({ type: "error", text: "先に自分のチームを選択してください" });
-      if (!slotHostTeamId) return setToast({ type: "error", text: "相手チーム情報がありません" });
-      const threadId = await openDm(myTeamId, slotHostTeamId);
+
+      if (!myTeamId) return setToast({ type: "error", text: "自分のチームがありません（先にチーム作成/選択）" });
+      if (!otherTeamId) return setToast({ type: "error", text: "相手チーム情報がありません" });
+      if (myTeamId === otherTeamId) return; // 自分自身はスルー
+
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u?.user?.id;
+      if (!uid) return setToast({ type: "error", text: "ログインできていません" });
+
+      const { data, error } = await supabase.rpc("rpc_get_or_create_dm_thread", {
+        my_team_id: myTeamId,
+        other_team_id: otherTeamId,
+      });
+
+      if (error) {
+        console.error(error);
+        setToast({ type: "error", text: `チャット開始に失敗: ${error.message}` });
+        return;
+      }
+
+      const threadId = data as string;
+      if (!threadId) return setToast({ type: "error", text: "threadId がありません" });
+
       router.push(`/chat/${threadId}`);
     } catch (e: any) {
       console.error(e);
@@ -380,7 +394,12 @@ export default function MatchCalendarPage() {
     );
     if (already) return setToast({ type: "info", text: "すでに申込み済みです" });
 
-    const payload = { slot_id: slotId, requester_team_id: requestTeamId, requester_user_id: uid, status: "pending" as const };
+    const payload = {
+      slot_id: slotId,
+      requester_team_id: requestTeamId,
+      requester_user_id: uid,
+      status: "pending" as const,
+    };
     const { error } = await supabase.from("match_requests").insert(payload);
     if (error) {
       console.error(error);
@@ -485,12 +504,20 @@ export default function MatchCalendarPage() {
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900 }}>マッチング（カレンダー）</h1>
-          <p style={{ margin: "6px 0 0", color: "#555" }}>日付ごとに「募集中の枠数」→ クリックで詳細 → 募集/申込み/承認</p>
+          <p style={{ margin: "6px 0 0", color: "#555" }}>
+            日付ごとに「募集中の枠数」→ クリックで詳細 → 募集/申込み/承認
+          </p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Link href="/" className="sh-btn">トップ</Link>
-          <Link href="/teams" className="sh-btn">チーム</Link>
-          <Link href="/venues" className="sh-btn">グラウンド</Link>
+          <Link href="/" className="sh-btn">
+            トップ
+          </Link>
+          <Link href="/teams" className="sh-btn">
+            チーム
+          </Link>
+          <Link href="/venues" className="sh-btn">
+            グラウンド
+          </Link>
           <button className="sh-btn" type="button" onClick={loadMonth} disabled={loading}>
             {loading ? "更新中…" : "再読み込み"}
           </button>
@@ -524,7 +551,9 @@ export default function MatchCalendarPage() {
 
           {categoryFilter.length > 0 || prefectureFilter || cityFilter || townFilter ? (
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="sh-btn" type="button" onClick={clearFilters} disabled={loading}>条件クリア</button>
+              <button className="sh-btn" type="button" onClick={clearFilters} disabled={loading}>
+                条件クリア
+              </button>
               <span style={{ color: "#666", fontSize: 12 }}>
                 絞り込み中：
                 {prefectureFilter ? ` ${prefectureFilter}` : "（都県なし）"} /
@@ -566,13 +595,14 @@ export default function MatchCalendarPage() {
         requestTeamId={requestTeamId}
         onChangeRequestTeamId={setRequestTeamId}
         onRequestSlot={requestSlot}
+        onCancelMyRequest={cancelMyRequest}
         selectedSlot={selectedSlot as any}
         selectedSlotRequests={selectedSlotRequests as DbRequest[]}
         isMineSlot={isMineSlot}
         onAccept={accept}
         onReject={reject}
-        onCancelMyRequest={cancelMyRequest}
-        onClickChatFromSlot={onClickChatFromSlot}
+        // ✅ ここだけでOK：チャットは /chat/[threadId] に一本化
+        onOpenChatWithTeam={openDmAndGo}
         loading={loading}
       />
 
