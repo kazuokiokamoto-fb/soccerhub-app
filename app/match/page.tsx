@@ -80,7 +80,7 @@ function slotParts(s: SlotEx) {
   const c = (s.city ?? "").trim();
   const t = (s.town ?? "").trim();
   if (p || c || t) return { prefecture: p || undefined, city: c || undefined, town: t || undefined };
-  return guessPartsFromAreaText(s.area ?? "");
+  return guessPartsFromAreaText((s as any).area ?? "");
 }
 
 export default function MatchCalendarPage() {
@@ -130,6 +130,18 @@ export default function MatchCalendarPage() {
     supabase.auth.getUser().then(({ data }) => setMeId(data?.user?.id || ""));
   }, []);
 
+  /**
+   * ✅ 重要：
+   * 「カテゴリ全選択」は “絞り込みなし” と同じ扱いにする
+   * → これで「全選択すると全部消える」事故を防ぐ
+   */
+  const effectiveCategoryFilter = useMemo(() => {
+    const all = CATEGORY_OPTIONS.length;
+    const picked = categoryFilter.length;
+    if (picked >= all) return []; // 全選択(または超過)はフィルタOFF
+    return categoryFilter;
+  }, [categoryFilter]);
+
   const loadBase = async () => {
     setLoadingBase(true);
     setToast({ type: "info", text: "読み込み中…" });
@@ -158,8 +170,8 @@ export default function MatchCalendarPage() {
         setMyTeams(ts);
         if (!hostTeamId && ts[0]?.id) setHostTeamId(ts[0].id);
         if (!requestTeamId && ts[0]?.id) setRequestTeamId(ts[0].id);
-        if (!slotArea && (ts[0] as any)?.area) setSlotArea(((ts[0] as any).area as string) || "");
-        if ((ts[0] as any)?.category) setSlotCategory(((ts[0] as any).category as string) || "U-12");
+        if (!slotArea && (ts[0] as any)?.area) setSlotArea((((ts[0] as any).area as string) || "").trim());
+        if ((ts[0] as any)?.category) setSlotCategory((((ts[0] as any).category as string) || "U-12").trim());
       }
 
       const { data: venueRows, error: venueErr } = await supabase
@@ -243,30 +255,34 @@ export default function MatchCalendarPage() {
 
   const filteredSlotsInMonth = useMemo(() => {
     return slotsInMonth.filter((s) => {
-      if (categoryFilter.length > 0) {
+      // ✅ カテゴリ絞り込み（全選択はフィルタOFF）
+      if (effectiveCategoryFilter.length > 0) {
         const cat = (s.category ?? "").trim();
         if (!cat) return false;
-        if (!categoryFilter.includes(cat)) return false;
+        if (!effectiveCategoryFilter.includes(cat)) return false;
       }
+
       const parts = slotParts(s);
       if (prefectureFilter && (parts.prefecture ?? "") !== prefectureFilter) return false;
       if (cityFilter && (parts.city ?? "") !== cityFilter) return false;
       if (townFilter && (parts.town ?? "") !== townFilter) return false;
+
       return true;
     });
-  }, [slotsInMonth, categoryFilter, prefectureFilter, cityFilter, townFilter]);
+  }, [slotsInMonth, effectiveCategoryFilter, prefectureFilter, cityFilter, townFilter]);
 
   const countByDate = useMemo(() => {
     const m = new Map<string, number>();
     for (const s of filteredSlotsInMonth) {
-      const k = s.date;
+      const k = (s as any).date;
+      if (!k) continue;
       m.set(k, (m.get(k) ?? 0) + 1);
     }
     return m;
   }, [filteredSlotsInMonth]);
 
   const slotsOnSelectedDate = useMemo(() => {
-    return filteredSlotsInMonth.filter((s) => s.date === selectedYmd);
+    return filteredSlotsInMonth.filter((s) => (s as any).date === selectedYmd);
   }, [filteredSlotsInMonth, selectedYmd]);
 
   const selectedSlot = useMemo(() => {
@@ -287,8 +303,8 @@ export default function MatchCalendarPage() {
     setSlotDate(ymd);
     const t0 = myTeams[0] as any;
     if (t0?.id) setHostTeamId(t0.id);
-    if (t0?.area) setSlotArea(t0.area || "");
-    if (t0?.category) setSlotCategory(t0.category || "U-12");
+    if (t0?.area) setSlotArea((t0.area || "").trim());
+    if (t0?.category) setSlotCategory((t0.category || "U-12").trim());
     setStartTime("13:00");
     setEndTime("15:00");
     setVenueId("");
@@ -297,8 +313,6 @@ export default function MatchCalendarPage() {
 
   /**
    * ✅ DMを開く：rpc_get_or_create_dm_thread → /chat/[threadId]
-   * - ここは「コンポーネント内」に置く（requestTeamId / myTeams が参照できる）
-   * - DaySlotList / SlotDetail からは「相手チームID」だけ渡してもらう
    */
   const openDmAndGo = async (otherTeamId: string) => {
     try {
@@ -306,7 +320,7 @@ export default function MatchCalendarPage() {
 
       if (!myTeamId) return setToast({ type: "error", text: "自分のチームがありません（先にチーム作成/選択）" });
       if (!otherTeamId) return setToast({ type: "error", text: "相手チーム情報がありません" });
-      if (myTeamId === otherTeamId) return; // 自分自身はスルー
+      if (myTeamId === otherTeamId) return;
 
       const { data: u } = await supabase.auth.getUser();
       const uid = u?.user?.id;
@@ -483,6 +497,12 @@ export default function MatchCalendarPage() {
     return cells;
   }, [monthDate]);
 
+  const isFiltering = useMemo(() => {
+    const hasArea = !!prefectureFilter || !!cityFilter || !!townFilter;
+    const hasCat = effectiveCategoryFilter.length > 0; // 全選択はOFF扱い
+    return hasArea || hasCat;
+  }, [prefectureFilter, cityFilter, townFilter, effectiveCategoryFilter.length]);
+
   return (
     <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
       {toast ? (
@@ -501,25 +521,21 @@ export default function MatchCalendarPage() {
         </div>
       ) : null}
 
-      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+      {/* ✅ 上部ボタン整理：基本は「＋チーム登録へ」だけ */}
+      <header style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900 }}>マッチング（カレンダー）</h1>
           <p style={{ margin: "6px 0 0", color: "#555" }}>
             日付ごとに「募集中の枠数」→ クリックで詳細 → 募集/申込み/承認
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Link href="/" className="sh-btn">
-            トップ
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <Link href="/teams/new" className="sh-btn">
+            ＋ チーム登録へ
           </Link>
-          <Link href="/teams" className="sh-btn">
-            チーム
-          </Link>
-          <Link href="/venues" className="sh-btn">
-            グラウンド
-          </Link>
+          {/* ※必要なら残す。不要ならこのボタンごと削除OK */}
           <button className="sh-btn" type="button" onClick={loadMonth} disabled={loading}>
-            {loading ? "更新中…" : "再読み込み"}
+            {loading ? "更新中…" : "更新"}
           </button>
         </div>
       </header>
@@ -549,7 +565,7 @@ export default function MatchCalendarPage() {
             disabled={loading}
           />
 
-          {categoryFilter.length > 0 || prefectureFilter || cityFilter || townFilter ? (
+          {isFiltering ? (
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <button className="sh-btn" type="button" onClick={clearFilters} disabled={loading}>
                 条件クリア
@@ -558,7 +574,11 @@ export default function MatchCalendarPage() {
                 絞り込み中：
                 {prefectureFilter ? ` ${prefectureFilter}` : "（都県なし）"} /
                 {cityFilter ? ` ${cityFilter}` : "（市区町村なし）"} /
-                {townFilter ? ` ${townFilter}` : "（町名なし）"} / カテゴリ {categoryFilter.length}
+                {townFilter ? ` ${townFilter}` : "（町名なし）"} /
+                カテゴリ{" "}
+                {categoryFilter.length >= CATEGORY_OPTIONS.length
+                  ? "（全選択＝絞り込みなし）"
+                  : effectiveCategoryFilter.length}
               </span>
             </div>
           ) : (
@@ -601,7 +621,6 @@ export default function MatchCalendarPage() {
         isMineSlot={isMineSlot}
         onAccept={accept}
         onReject={reject}
-        // ✅ ここだけでOK：チャットは /chat/[threadId] に一本化
         onOpenChatWithTeam={openDmAndGo}
         loading={loading}
       />

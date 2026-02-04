@@ -4,6 +4,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
+import PageHeader from "@/app/components/PageHeader";
 import { supabase } from "../lib/supabase";
 import { Team } from "../lib/types";
 
@@ -21,18 +22,9 @@ type DbTeam = {
   desired_dates: string[] | null;
   note: string | null;
   updated_at: string;
-
-  // 連絡先（DBに追加した場合のみ）
-  contact_email?: string | null;
-  contact_phone?: string | null;
-  contact_line_id?: string | null;
 };
 
-function toTeam(row: DbTeam): Team & {
-  contactEmail?: string;
-  contactPhone?: string;
-  contactLineId?: string;
-} {
+function toTeam(row: DbTeam): Team {
   return {
     id: row.id,
     name: row.name,
@@ -43,14 +35,11 @@ function toTeam(row: DbTeam): Team & {
     bikeParking: row.bike_parking ?? "不明",
     uniformMain: row.uniform_main ?? "不明",
     uniformSub: row.uniform_sub ?? "不明",
-    rosterByGrade: (row.roster_by_grade ?? { G1: 0, G2: 0, G3: 0, G4: 0, G5: 0, G6: 0 }) as any,
+    rosterByGrade:
+      (row.roster_by_grade ?? { G1: 0, G2: 0, G3: 0, G4: 0, G5: 0, G6: 0 }) as any,
     desiredDates: row.desired_dates ?? [],
     note: row.note ?? "",
     updatedAt: row.updated_at,
-
-    contactEmail: (row as any).contact_email ?? "",
-    contactPhone: (row as any).contact_phone ?? "",
-    contactLineId: (row as any).contact_line_id ?? "",
   };
 }
 
@@ -76,7 +65,7 @@ function formatAvailability(desiredDates?: string[]) {
 export default function TeamsClient({ createdId }: { createdId?: string }) {
   const created = createdId ?? "";
 
-  const [teams, setTeams] = useState<(Team & any)[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
 
@@ -89,32 +78,22 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
 
   const load = async () => {
     setLoading(true);
-
-    const res = await supabase
+    const { data, error } = await supabase
       .from("teams")
       .select(
-        "id,name,area,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at,contact_email,contact_phone,contact_line_id"
-      );
+        "id,name,area,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at"
+      )
+      .order("updated_at", { ascending: false });
 
-    if (res.error) {
-      console.error(res.error);
-      setToast({ type: "error", text: `読み込みに失敗しました: ${res.error.message}` });
+    if (error) {
+      console.error(error);
+      setToast({ type: "error", text: `読み込みに失敗しました: ${error.message}` });
       setTeams([]);
       setLoading(false);
       return;
     }
 
-    const rows = (res.data ?? []) as any as DbTeam[];
-
-    // ✅ 住所 “あいうえお順” に寄せる（DB依存を避ける）
-    rows.sort((a, b) => {
-      const aa = (a.area ?? "").toString();
-      const bb = (b.area ?? "").toString();
-      const byArea = aa.localeCompare(bb, "ja");
-      if (byArea !== 0) return byArea;
-      return (a.name ?? "").toString().localeCompare((b.name ?? "").toString(), "ja");
-    });
-
+    const rows = (data ?? []) as DbTeam[];
     setTeams(rows.map(toTeam));
     setLoading(false);
   };
@@ -128,12 +107,12 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
     const ok = confirm("削除しますか？（※権限設定次第で失敗する場合があります）");
     if (!ok) return;
 
-    const res = await supabase.from("teams").delete().eq("id", id);
-    if (res.error) {
-      console.error(res.error);
+    const { error } = await supabase.from("teams").delete().eq("id", id);
+    if (error) {
+      console.error(error);
       setToast({
         type: "error",
-        text: `削除に失敗しました: ${res.error.message}\n（RLSの権限設定が原因のことが多いです）`,
+        text: `削除に失敗しました: ${error.message}\n（RLSの権限設定が原因のことが多いです）`,
       });
       return;
     }
@@ -145,6 +124,17 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
 
   return (
     <main style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
+      <PageHeader
+        actions={
+          <>
+            <Link href="/teams/new" className="sh-btn">
+              ＋ チーム登録へ
+            </Link>
+          </>
+        }
+      />
+
+      {/* Toast */}
       {toast ? (
         <div
           style={{
@@ -164,11 +154,11 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
       <h1 style={{ margin: 0 }}>チーム一覧</h1>
       <p style={{ color: "#555", marginTop: 6 }}>Supabase（DB）から表示しています。</p>
 
-      {/* ✅ ナビは最小に：トップ / ＋チーム登録 / 再読み込み */}
+      {/* ✅ 再読み込みは「必要なら」残す（不要ならこのブロック自体消してOK） */}
       <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-        <Link href="/" className="sh-btn">トップへ</Link>
-        <Link href="/teams/new" className="sh-btn">＋ チーム登録へ</Link>
-        <button className="sh-btn" type="button" onClick={load}>再読み込み</button>
+        <button className="sh-btn" type="button" onClick={load}>
+          再読み込み
+        </button>
       </div>
 
       {created && createdTeam ? (
@@ -184,7 +174,7 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
           {teams.length === 0 ? (
             <p style={{ color: "#777" }}>まだチームがありません。登録してみてください。</p>
           ) : (
-            teams.map((t: any) => {
+            teams.map((t) => {
               const isCreated = created && t.id === created;
               return (
                 <div
@@ -197,10 +187,8 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
                     boxShadow: isCreated ? "0 0 0 4px rgba(34,197,94,0.10)" : "none",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-                    <div style={{ fontWeight: 800 }}>
-                      {t.name} {isCreated ? "✅" : ""}
-                    </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                    <div style={{ fontWeight: 800 }}>{t.name} {isCreated ? "✅" : ""}</div>
 
                     <div style={{ display: "flex", gap: 8 }}>
                       <Link className="sh-btn" href={`/teams/${t.id}/edit`}>
@@ -228,15 +216,6 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
                     希望枠：{formatAvailability(t.desiredDates)}
                   </div>
 
-                  {(t.contactEmail || t.contactPhone || t.contactLineId) ? (
-                    <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
-                      連絡先：
-                      {t.contactEmail ? ` ✉️ ${t.contactEmail}` : ""}
-                      {t.contactPhone ? ` / ☎️ ${t.contactPhone}` : ""}
-                      {t.contactLineId ? ` / LINE ${t.contactLineId}` : ""}
-                    </div>
-                  ) : null}
-
                   {t.note ? (
                     <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
                       メモ：{t.note}
@@ -252,7 +231,13 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
   );
 }
 
-const miniInfo: React.CSSProperties = { padding: "10px 12px", border: "1px solid #eee", borderRadius: 12, background: "#fff", color: "#444" };
+const miniInfo: React.CSSProperties = {
+  padding: "10px 12px",
+  border: "1px solid #eee",
+  borderRadius: 12,
+  background: "#fff",
+  color: "#444",
+};
 
 const toastBox: React.CSSProperties = {
   position: "sticky",
@@ -268,9 +253,23 @@ const toastBox: React.CSSProperties = {
   marginBottom: 12,
 };
 
-const toastSuccess: React.CSSProperties = { background: "#ecfdf3", borderColor: "#bbf7d0", color: "#166534" };
-const toastError: React.CSSProperties = { background: "#fef2f2", borderColor: "#fecaca", color: "#991b1b" };
-const toastInfo: React.CSSProperties = { background: "#eff6ff", borderColor: "#bfdbfe", color: "#1e3a8a" };
+const toastSuccess: React.CSSProperties = {
+  background: "#ecfdf3",
+  borderColor: "#bbf7d0",
+  color: "#166534",
+};
+
+const toastError: React.CSSProperties = {
+  background: "#fef2f2",
+  borderColor: "#fecaca",
+  color: "#991b1b",
+};
+
+const toastInfo: React.CSSProperties = {
+  background: "#eff6ff",
+  borderColor: "#bfdbfe",
+  color: "#1e3a8a",
+};
 
 const toastClose: React.CSSProperties = {
   border: "none",

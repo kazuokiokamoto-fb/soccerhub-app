@@ -7,6 +7,19 @@ import { useParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import type { ChatMessage } from "../types";
 
+type Msg = {
+  id: string;
+  thread_id: string;
+  sender_id: string | null;
+  sender_team_id: string | null;
+  body: string | null;
+  created_at: string;
+};
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
 export default function ChatThreadPage() {
   const params = useParams<{ threadId: string }>();
   const threadId = params.threadId;
@@ -15,9 +28,10 @@ export default function ChatThreadPage() {
   const [loading, setLoading] = useState(true);
   const [isMember, setIsMember] = useState<boolean>(false);
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<Msg[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string>("");
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -37,7 +51,7 @@ export default function ChatThreadPage() {
     try {
       const { error } = await supabase
         .from("chat_members")
-        .update({ last_read_at: new Date().toISOString() })
+        .update({ last_read_at: nowIso() })
         .eq("thread_id", threadId)
         .eq("user_id", meId);
 
@@ -82,7 +96,7 @@ export default function ChatThreadPage() {
 
       setIsMember(true);
 
-      // ✅ messages 取得（DBの実カラム：sender_id / sender_team_id）
+      // ✅ messages 取得
       const { data, error } = await supabase
         .from("chat_messages")
         .select("id,thread_id,sender_id,sender_team_id,body,created_at")
@@ -96,7 +110,7 @@ export default function ChatThreadPage() {
         return;
       }
 
-      setMessages((data ?? []) as any);
+      setMessages(((data ?? []) as any[]).filter(Boolean) as Msg[]);
       setLoading(false);
 
       scrollToBottom(false);
@@ -114,13 +128,18 @@ export default function ChatThreadPage() {
       .channel(`chat:${threadId}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "chat_messages", filter: `thread_id=eq.${threadId}` },
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "chat_messages",
+          filter: `thread_id=eq.${threadId}`,
+        },
         async (payload) => {
-          const row = payload.new as any;
+          const row = payload.new as Msg;
 
           setMessages((prev) => {
-            if ((prev as any[]).some((m) => (m as any).id === row.id)) return prev;
-            return [...(prev as any[]), row] as any;
+            if (prev.some((m) => m.id === row.id)) return prev; // 重複ガード
+            return [...prev, row];
           });
 
           scrollToBottom(true);
@@ -140,6 +159,8 @@ export default function ChatThreadPage() {
 
   // ✅ 送信：insert 成功した瞬間に messages に追加して「送れた感」を出す
   const send = async () => {
+    setSendError("");
+
     const body = text.trim();
     if (!body) return;
     if (!meId) return alert("ログインが必要です");
@@ -150,6 +171,20 @@ export default function ChatThreadPage() {
     setSending(true);
     setText("");
 
+    // ✅ 楽観表示（仮メッセージ）
+    const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const optimistic: Msg = {
+      id: optimisticId,
+      thread_id: threadId,
+      sender_id: meId,
+      sender_team_id: null,
+      body,
+      created_at: nowIso(),
+    };
+
+    setMessages((prev) => [...prev, optimistic]);
+    scrollToBottom(true);
+
     const payload: any = {
       thread_id: threadId,
       sender_id: meId,
@@ -157,7 +192,6 @@ export default function ChatThreadPage() {
       body,
     };
 
-    // ✅ 返ってきた行を受け取り、即表示に使う
     const { data, error } = await supabase
       .from("chat_messages")
       .insert(payload)
@@ -166,16 +200,21 @@ export default function ChatThreadPage() {
 
     if (error) {
       console.error(error);
+
+      // ✅ 仮メッセージを消して、入力を戻す
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setText(body);
+      setSendError(error.message || "送信に失敗しました");
       setSending(false);
-      alert(`送信に失敗: ${error.message}`);
       return;
     }
 
-    // ✅ 即反映（Realtimeを待たない）
+    // ✅ 仮メッセージを「本物」に差し替え（Realtime待たない）
     setMessages((prev) => {
-      if ((prev as any[]).some((m) => (m as any).id === (data as any).id)) return prev;
-      return [...(prev as any[]), data as any] as any;
+      const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
+      const real = data as any as Msg;
+      if (withoutOptimistic.some((m) => m.id === real.id)) return withoutOptimistic;
+      return [...withoutOptimistic, real].sort((a, b) => (a.created_at > b.created_at ? 1 : -1));
     });
 
     scrollToBottom(true);
@@ -200,9 +239,12 @@ export default function ChatThreadPage() {
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>チャット</h1>
           <div style={{ fontSize: 12, color: "#666" }}>thread: {threadId}</div>
         </div>
+
+        {/* ✅ 上部ボタン整理：ここは「一覧へ」だけでOK */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Link className="sh-btn" href="/chat">一覧</Link>
-          <Link className="sh-btn" href="/match">マッチング</Link>
+          <Link className="sh-btn" href="/chat">
+            一覧へ
+          </Link>
         </div>
       </header>
 
@@ -225,13 +267,15 @@ export default function ChatThreadPage() {
             <p style={{ color: "#991b1b" }}>このスレッドに参加していません（権限/RLSを確認してください）</p>
           ) : null}
 
-          {!loading && isMember && (messages as any[]).length === 0 ? (
+          {!loading && isMember && messages.length === 0 ? (
             <p style={{ color: "#666" }}>メッセージはまだありません</p>
           ) : null}
 
           <div style={{ display: "grid", gap: 10 }}>
-            {(messages as any[]).map((m: any) => {
+            {messages.map((m) => {
               const mine = m.sender_id === meId;
+              const optimistic = String(m.id).startsWith("optimistic-");
+
               return (
                 <div key={m.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start" }}>
                   <div
@@ -243,10 +287,16 @@ export default function ChatThreadPage() {
                       background: mine ? "#eff6ff" : "#fafafa",
                       whiteSpace: "pre-wrap",
                       lineHeight: 1.4,
+                      opacity: optimistic ? 0.65 : 1,
                     }}
                   >
-                    <div style={{ fontSize: 12, color: "#666", marginBottom: 4 }}>
-                      {mine ? "あなた" : "相手"} ・ {new Date(m.created_at).toLocaleString()}
+                    <div style={{ fontSize: 12, color: "#666", marginBottom: 4, display: "flex", gap: 8, alignItems: "center" }}>
+                      <span>
+                        {mine ? "あなた" : "相手"} ・ {new Date(m.created_at).toLocaleString()}
+                      </span>
+                      {optimistic ? (
+                        <span style={{ fontSize: 11, color: "#6b7280" }}>送信中…</span>
+                      ) : null}
                     </div>
                     {m.body}
                   </div>
@@ -258,6 +308,12 @@ export default function ChatThreadPage() {
         </div>
 
         <div style={{ borderTop: "1px solid #eee", paddingTop: 10, display: "grid", gap: 8 }}>
+          {sendError ? (
+            <div style={{ color: "#991b1b", fontSize: 12, whiteSpace: "pre-wrap" }}>
+              送信エラー: {sendError}
+            </div>
+          ) : null}
+
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -273,10 +329,12 @@ export default function ChatThreadPage() {
             }}
             disabled={!meId || !isMember || sending}
           />
+
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 12, color: "#666" }}>
               {!meId ? "ログインが必要です" : !isMember ? "参加していません" : sending ? "送信中…" : ""}
             </span>
+
             <button className="sh-btn" type="button" onClick={send} disabled={!canSend}>
               送信
             </button>

@@ -19,6 +19,17 @@ function makeDefaultRoster11(): Record<GradeKey, string> {
   return { G1: "11", G2: "11", G3: "11", G4: "11", G5: "11", G6: "11" };
 }
 
+// contact_* カラムが無い環境でも落ちないようにする（列差分の吸収）
+function isMissingColumnError(err: any) {
+  const msg = String(err?.message ?? "");
+  return (
+    msg.includes("does not exist") ||
+    msg.includes("Could not find") ||
+    msg.includes("schema cache") ||
+    (msg.includes("column") && msg.includes("contact_"))
+  );
+}
+
 export default function TeamEditPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -42,12 +53,12 @@ export default function TeamEditPage() {
   const [city, setCity] = useState("");
   const [town, setTown] = useState("");
 
-  const [rosterByGradeText, setRosterByGradeText] = useState<Record<GradeKey, string>>(makeDefaultRoster11());
+  const [rosterByGradeText, setRosterByGradeText] =
+    useState<Record<GradeKey, string>>(makeDefaultRoster11());
+
   const [note, setNote] = useState("");
 
   // 連絡先（任意）
- _reqContactFieldsFix(); // 何もしない。lint避け用
-
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [contactLineId, setContactLineId] = useState("");
@@ -55,6 +66,13 @@ export default function TeamEditPage() {
   const canSave = useMemo(() => {
     return !!teamId && !!name.trim() && !!prefecture && !!city && categories.length > 0 && !saving;
   }, [teamId, name, prefecture, city, categories, saving]);
+
+  // toast auto close
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   useEffect(() => {
     if (!teamId) return;
@@ -68,13 +86,24 @@ export default function TeamEditPage() {
         return;
       }
 
-      const res = await supabase
+      // まず contact_* 込みで取得を試す（無ければフォールバック）
+      let res = await supabase
         .from("teams")
         .select(
           "id,owner_id,name,categories,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,note,prefecture,city,town,contact_email,contact_phone,contact_line_id"
         )
         .eq("id", teamId)
         .single();
+
+      if (res.error && isMissingColumnError(res.error)) {
+        res = await supabase
+          .from("teams")
+          .select(
+            "id,owner_id,name,categories,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,note,prefecture,city,town"
+          )
+          .eq("id", teamId)
+          .single();
+      }
 
       if (res.error || !res.data) {
         console.error(res.error);
@@ -125,7 +154,7 @@ export default function TeamEditPage() {
 
       setNote(data.note ?? "");
 
-      // 連絡先（DB未追加なら全部 null で来る）
+      // 連絡先（DB未追加なら undefined → ""）
       setContactEmail(data.contact_email ?? "");
       setContactPhone(data.contact_phone ?? "");
       setContactLineId(data.contact_line_id ?? "");
@@ -141,18 +170,17 @@ export default function TeamEditPage() {
     setSaving(true);
     setToast({ type: "info", text: "保存中…" });
 
-    const roster_by_grade = gradeKeys.reduce((acc, g) => {
-      const v = (rosterByGradeText[g] ?? "").trim();
-      acc[g] = v === "" ? 0 : Math.max(0, Number(v) || 0);
-      return acc;
-    }, {} as Record<GradeKey, number>);
+    try {
+      const roster_by_grade = gradeKeys.reduce((acc, g) => {
+        const v = (rosterByGradeText[g] ?? "").trim();
+        acc[g] = v === "" ? 0 : Math.max(0, Number(v) || 0);
+        return acc;
+      }, {} as Record<GradeKey, number>);
 
-    const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
-    const primaryCategory = categories[0];
+      const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
+      const primaryCategory = categories[0];
 
-    const res = await supabase
-      .from("teams")
-      .update({
+      const baseUpdate: any = {
         name: name.trim(),
         categories,
         category: primaryCategory,
@@ -167,25 +195,40 @@ export default function TeamEditPage() {
         city,
         town: town || null,
         area: areaText,
+      };
 
-        // 連絡先
-        contact_email: contactEmail.trim() || null,
-        contact_phone: contactPhone.trim() || null,
-        contact_line_id: contactLineId.trim() || null,
-      })
-      .eq("id", teamId);
+      // まず contact_* 付きで更新を試す（無ければフォールバック）
+      let res = await supabase
+        .from("teams")
+        .update({
+          ...baseUpdate,
+          contact_email: contactEmail.trim() || null,
+          contact_phone: contactPhone.trim() || null,
+          contact_line_id: contactLineId.trim() || null,
+        })
+        .eq("id", teamId);
 
-    if (res.error) {
-      console.error(res.error);
-      setToast({ type: "error", text: `保存に失敗: ${res.error.message}` });
+      if (res.error && isMissingColumnError(res.error)) {
+        console.warn("contact_* columns not found. retry without contact fields:", res.error.message);
+        res = await supabase.from("teams").update(baseUpdate).eq("id", teamId);
+      }
+
+      if (res.error) {
+        console.error(res.error);
+        setToast({ type: "error", text: `保存に失敗: ${res.error.message}` });
+        setSaving(false);
+        return;
+      }
+
+      setToast({ type: "success", text: "✅ 更新しました" });
       setSaving(false);
-      return;
+      router.push("/teams");
+      router.refresh();
+    } catch (e: any) {
+      console.error(e);
+      setToast({ type: "error", text: e?.message ?? "保存に失敗しました" });
+      setSaving(false);
     }
-
-    setToast({ type: "success", text: "✅ 更新しました" });
-    setSaving(false);
-    router.push("/teams");
-    router.refresh();
   };
 
   if (loading) return <main style={{ padding: 24 }}>読み込み中…</main>;
@@ -194,11 +237,15 @@ export default function TeamEditPage() {
     <main style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
       {toast ? <div style={{ marginBottom: 12, fontWeight: 800 }}>{toast.text}</div> : null}
 
-      <h1 style={{ margin: 0 }}>チーム編集</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+        <h1 style={{ margin: 0 }}>チーム編集</h1>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
-        <Link href="/teams" className="sh-btn">一覧へ</Link>
-        <Link href="/" className="sh-btn">トップへ</Link>
+        {/* ✅ 上部ボタン整理：この画面は「一覧へ」だけでOK */}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link href="/teams" className="sh-btn">
+            一覧へ
+          </Link>
+        </div>
       </div>
 
       <section style={{ ...card, marginTop: 16 }}>
@@ -243,7 +290,12 @@ export default function TeamEditPage() {
           </label>
 
           <label style={{ ...checkLabel, opacity: saving ? 0.7 : 1 }}>
-            <input type="checkbox" checked={hasGround} onChange={(e) => setHasGround(e.target.checked)} disabled={saving} />
+            <input
+              type="checkbox"
+              checked={hasGround}
+              onChange={(e) => setHasGround(e.target.checked)}
+              disabled={saving}
+            />
             自チームでグラウンド提供できる
           </label>
 
@@ -304,11 +356,20 @@ export default function TeamEditPage() {
                 <input value={contactLineId} onChange={(e) => setContactLineId(e.target.value)} style={input} disabled={saving} />
               </label>
             </div>
+
+            <div style={{ marginTop: 8, fontSize: 12, color: "#666", lineHeight: 1.6 }}>
+              ※ DBに contact_email / contact_phone / contact_line_id が無い環境でも更新できるようにしています（自動フォールバック）。
+            </div>
           </div>
 
           <label style={label}>
             <span>メモ（任意）</span>
-            <textarea value={note} onChange={(e) => setNote(e.target.value)} style={{ ...input, minHeight: 90 }} disabled={saving} />
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              style={{ ...input, minHeight: 90 }}
+              disabled={saving}
+            />
           </label>
 
           <button className="sh-btn" onClick={save} type="button" disabled={!canSave}>
@@ -320,12 +381,22 @@ export default function TeamEditPage() {
   );
 }
 
-// 使ってない警告回避（気にしなくてOK）
-function _reqContactFieldsFix() {}
+const card: React.CSSProperties = {
+  padding: 16,
+  border: "1px solid #eee",
+  borderRadius: 12,
+  background: "#fff",
+};
 
-const card: React.CSSProperties = { padding: 16, border: "1px solid #eee", borderRadius: 12, background: "#fff" };
 const label: React.CSSProperties = { display: "grid", gap: 6 };
-const input: React.CSSProperties = { padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", background: "white" };
+
+const input: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1px solid #ddd",
+  background: "white",
+};
+
 const checkLabel: React.CSSProperties = {
   display: "flex",
   alignItems: "center",

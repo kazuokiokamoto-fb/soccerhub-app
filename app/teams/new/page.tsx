@@ -20,6 +20,17 @@ function makeDefaultRoster11(): Record<GradeKey, string> {
   return { G1: "11", G2: "11", G3: "11", G4: "11", G5: "11", G6: "11" };
 }
 
+// contact_* カラムが無い環境でも落ちないようにする（列差分の吸収）
+function isMissingColumnError(err: any) {
+  const msg = String(err?.message ?? "");
+  return (
+    msg.includes("does not exist") ||
+    msg.includes("Could not find") ||
+    msg.includes("schema cache") ||
+    (msg.includes("column") && msg.includes("contact_"))
+  );
+}
+
 export default function TeamNewPage() {
   const router = useRouter();
 
@@ -40,7 +51,9 @@ export default function TeamNewPage() {
   const [city, setCity] = useState("");
   const [town, setTown] = useState("");
 
-  const [rosterByGradeText, setRosterByGradeText] = useState<Record<GradeKey, string>>(makeDefaultRoster11());
+  const [rosterByGradeText, setRosterByGradeText] = useState<Record<GradeKey, string>>(
+    makeDefaultRoster11()
+  );
   const [note, setNote] = useState("");
 
   // 連絡先（任意）
@@ -83,71 +96,90 @@ export default function TeamNewPage() {
     setSaving(true);
     setToast({ type: "info", text: "保存中…" });
 
-    const roster_by_grade = gradeKeys.reduce((acc, g) => {
-      const v = (rosterByGradeText[g] ?? "").trim();
-      acc[g] = v === "" ? 0 : Math.max(0, Number(v) || 0);
-      return acc;
-    }, {} as Record<GradeKey, number>);
+    try {
+      const roster_by_grade = gradeKeys.reduce((acc, g) => {
+        const v = (rosterByGradeText[g] ?? "").trim();
+        acc[g] = v === "" ? 0 : Math.max(0, Number(v) || 0);
+        return acc;
+      }, {} as Record<GradeKey, number>);
 
-    const { data: auth, error: authErr } = await supabase.auth.getUser();
-    if (authErr) console.error(authErr);
+      const { data: auth, error: authErr } = await supabase.auth.getUser();
+      if (authErr) console.error(authErr);
 
-    if (!auth?.user) {
-      setToast({ type: "error", text: "ログインが必要です" });
+      if (!auth?.user) {
+        setToast({ type: "error", text: "ログインが必要です" });
+        setSaving(false);
+        return;
+      }
+
+      const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
+      const primaryCategory = categories[0];
+
+      const basePayload: any = {
+        owner_id: auth.user.id,
+        name: name.trim(),
+        categories,
+        category: primaryCategory,
+        level,
+        has_ground: hasGround,
+        bike_parking: bikeParking,
+        uniform_main: uniformMain.trim() || "不明",
+        uniform_sub: uniformSub.trim() || "不明",
+        roster_by_grade,
+        note: note || "",
+        prefecture,
+        city,
+        town: town || null,
+        area: areaText,
+      };
+
+      // まず contact_* 付きで試す（DBにあれば保存される）
+      const withContact: any = {
+        ...basePayload,
+        contact_email: contactEmail.trim() || null,
+        contact_phone: contactPhone.trim() || null,
+        contact_line_id: contactLineId.trim() || null,
+      };
+
+      let res = await supabase.from("teams").insert(withContact).select("id").single();
+
+      // contact_* が無い環境なら、外して再試行（落とさない）
+      if (res.error && isMissingColumnError(res.error)) {
+        console.warn("contact_* columns not found. retry without contact fields:", res.error.message);
+        res = await supabase.from("teams").insert(basePayload).select("id").single();
+      }
+
+      if (res.error) {
+        console.error(res.error);
+        setToast({ type: "error", text: res.error.message });
+        setSaving(false);
+        return;
+      }
+
+      setToast({ type: "success", text: "✅ 登録しました" });
+      const newId = (res.data as any)?.id;
+      router.push(`/teams?created=${newId}`);
+      resetForm();
       setSaving(false);
-      return;
-    }
-
-    const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
-    const primaryCategory = categories[0];
-
-    const payload: any = {
-      owner_id: auth.user.id,
-      name: name.trim(),
-      categories,
-      category: primaryCategory,
-      level,
-      has_ground: hasGround,
-      bike_parking: bikeParking,
-      uniform_main: uniformMain.trim() || "不明",
-      uniform_sub: uniformSub.trim() || "不明",
-      roster_by_grade,
-      note: note || "",
-      prefecture,
-      city,
-      town: town || null,
-      area: areaText,
-
-      // 連絡先（DBにカラム追加した場合だけ有効）
-      contact_email: contactEmail.trim() || null,
-      contact_phone: contactPhone.trim() || null,
-      contact_line_id: contactLineId.trim() || null,
-    };
-
-    const res = await supabase.from("teams").insert(payload).select("id").single();
-    if (res.error) {
-      console.error(res.error);
-      setToast({ type: "error", text: res.error.message });
+    } catch (e: any) {
+      console.error(e);
+      setToast({ type: "error", text: e?.message ?? "保存に失敗しました" });
       setSaving(false);
-      return;
     }
-
-    setToast({ type: "success", text: "✅ 登録しました" });
-    const newId = (res.data as any)?.id;
-    router.push(`/teams?created=${newId}`);
-    resetForm();
-    setSaving(false);
   };
 
   return (
     <main style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
       {toast ? <div style={{ marginBottom: 12, fontWeight: 800 }}>{toast.text}</div> : null}
 
-      <h1 style={{ margin: 0 }}>チーム登録</h1>
-
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
-        <Link href="/teams" className="sh-btn">一覧へ</Link>
-        <Link href="/" className="sh-btn">トップへ</Link>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+        <h1 style={{ margin: 0 }}>チーム登録</h1>
+        {/* ✅ 上部ボタン整理：この画面は「一覧へ」だけでOK */}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link href="/teams" className="sh-btn">
+            一覧へ
+          </Link>
+        </div>
       </div>
 
       <section style={{ ...card, marginTop: 16 }}>
@@ -192,13 +224,23 @@ export default function TeamNewPage() {
           </label>
 
           <label style={{ ...checkLabel, opacity: saving ? 0.7 : 1 }}>
-            <input type="checkbox" checked={hasGround} onChange={(e) => setHasGround(e.target.checked)} disabled={saving} />
+            <input
+              type="checkbox"
+              checked={hasGround}
+              onChange={(e) => setHasGround(e.target.checked)}
+              disabled={saving}
+            />
             自チームでグラウンド提供できる
           </label>
 
           <label style={label}>
             <span>🚲 駐輪場（チーム側）</span>
-            <select value={bikeParking} onChange={(e) => setBikeParking(e.target.value)} style={input} disabled={saving}>
+            <select
+              value={bikeParking}
+              onChange={(e) => setBikeParking(e.target.value)}
+              style={input}
+              disabled={saving}
+            >
               <option value="あり">あり</option>
               <option value="なし">なし</option>
               <option value="不明">不明</option>
@@ -227,7 +269,10 @@ export default function TeamNewPage() {
                     pattern="[0-9]*"
                     value={rosterByGradeText[g]}
                     onChange={(e) =>
-                      setRosterByGradeText({ ...rosterByGradeText, [g]: e.target.value.replace(/[^\d]/g, "") })
+                      setRosterByGradeText({
+                        ...rosterByGradeText,
+                        [g]: e.target.value.replace(/[^\d]/g, ""),
+                      })
                     }
                     style={input}
                     disabled={saving}
@@ -253,11 +298,20 @@ export default function TeamNewPage() {
                 <input value={contactLineId} onChange={(e) => setContactLineId(e.target.value)} style={input} disabled={saving} />
               </label>
             </div>
+
+            <div style={{ marginTop: 8, fontSize: 12, color: "#666", lineHeight: 1.6 }}>
+              ※ DBに contact_email / contact_phone / contact_line_id が無い環境でも保存できるようにしています（自動フォールバック）。
+            </div>
           </div>
 
           <label style={label}>
             <span>メモ（任意）</span>
-            <textarea value={note} onChange={(e) => setNote(e.target.value)} style={{ ...input, minHeight: 90 }} disabled={saving} />
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              style={{ ...input, minHeight: 90 }}
+              disabled={saving}
+            />
           </label>
 
           <button className="sh-btn" onClick={save} type="button" disabled={!canSave}>
@@ -269,9 +323,22 @@ export default function TeamNewPage() {
   );
 }
 
-const card: React.CSSProperties = { padding: 16, border: "1px solid #eee", borderRadius: 12, background: "#fff" };
+const card: React.CSSProperties = {
+  padding: 16,
+  border: "1px solid #eee",
+  borderRadius: 12,
+  background: "#fff",
+};
+
 const label: React.CSSProperties = { display: "grid", gap: 6 };
-const input: React.CSSProperties = { padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", background: "white" };
+
+const input: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1px solid #ddd",
+  background: "white",
+};
+
 const checkLabel: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
