@@ -1,9 +1,10 @@
 // app/match/components/SlotDetail.tsx
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { DbRequest, DbSlot, DbVenue } from "../types";
-import { ChatPanel } from "./ChatPanel";
+import { supabase } from "@/app/lib/supabase";
 
 function hhmm(v: string) {
   if (!v) return "";
@@ -36,27 +37,69 @@ function badgeStyle(status: DbRequest["status"]): React.CSSProperties {
   };
 }
 
+// ✅ 常設DM（direct）を開く：thread_type='direct' のRPCを使う前提
+async function openDm(myTeamId: string, otherTeamId: string) {
+  const { data, error } = await supabase.rpc("rpc_get_or_create_dm_thread", {
+    my_team_id: myTeamId,
+    other_team_id: otherTeamId,
+  });
+  if (error) throw error;
+  return data as string; // thread_id(uuid文字列)
+}
+
 export function SlotDetail(props: {
   slot: DbSlot | null;
   isMine: boolean;
-  meId: string; // ★必須：accepted後チャット表示に使う
+  meId: string;
   venues: DbVenue[];
   requests: DbRequest[];
   onAccept: (requestId: string) => void;
   onReject: (requestId: string) => void;
+
+  // ✅ 追加：自分のチーム一覧（DMで送信チームを決める）
+  myTeams: { id: string; name: string }[];
+
+  // ✅ 追加：申込み側で選択中のチームID（なければ先頭）
+  requestTeamId: string;
 }) {
-  const { slot, isMine, meId, venues, requests, onAccept, onReject } = props;
+  const router = useRouter();
+  const { slot, isMine, meId, venues, requests, onAccept, onReject, myTeams, requestTeamId } = props;
   if (!slot) return null;
 
   const venue = venues.find((v) => v.id === slot.venue_id) || null;
 
-  // ★ accepted な request（基本1件想定。複数あっても最新を拾う）
+  // accepted な request（最新）
   const acceptedReq = useMemo(() => {
     const accepted = requests.filter((r) => r.status === "accepted");
     if (accepted.length === 0) return null;
-    // created_at が新しいものを優先
     return accepted.sort((a, b) => (a.created_at > b.created_at ? -1 : 1))[0] || null;
   }, [requests]);
+
+  // ✅ チャット相手 = この募集枠のホストチーム
+  const otherTeamId = slot.host_team_id;
+
+  // ✅ 自分の送信チーム（申込みで選んだチームがあればそれ、なければ先頭）
+  const myTeamId = requestTeamId || myTeams?.[0]?.id || "";
+
+  const [opening, setOpening] = useState(false);
+
+  const onOpenChat = async () => {
+    if (!meId) return alert("ログインが必要です");
+    if (!myTeamId) return alert("自分のチームがありません");
+    if (!otherTeamId) return alert("相手チームが不明です");
+    if (myTeamId === otherTeamId) return;
+
+    setOpening(true);
+    try {
+      const threadId = await openDm(myTeamId, otherTeamId);
+      router.push(`/chat/${threadId}`);
+    } catch (e: any) {
+      console.error(e);
+      alert(`チャット開始に失敗: ${e?.message ?? "unknown error"}`);
+    } finally {
+      setOpening(false);
+    }
+  };
 
   return (
     <div>
@@ -72,6 +115,18 @@ export function SlotDetail(props: {
         グラウンド：
         {venue ? `${venue.name}${venue.address ? ` / ${venue.address}` : ""}` : "未設定"}
       </div>
+
+      {/* ✅ SlotDetailは「ボタンだけ」：入力欄は一切出さない */}
+      {!isMine ? (
+        <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <button className="sh-btn" type="button" onClick={onOpenChat} disabled={opening}>
+            {opening ? "チャットを開いています…" : "💬 チャットを開く"}
+          </button>
+          <span style={{ color: "#777", fontSize: 12 }}>
+            ※ チャットは /chat 画面に一本化（ここでは入力しません）
+          </span>
+        </div>
+      ) : null}
 
       {/* ===== 申込み一覧 ===== */}
       <div style={{ marginTop: 14 }}>
@@ -98,9 +153,7 @@ export function SlotDetail(props: {
                     status:
                     <span style={badgeStyle(r.status)}>{r.status}</span>
                   </div>
-                  <div style={{ color: "#777", fontSize: 12 }}>
-                    {new Date(r.created_at).toLocaleString()}
-                  </div>
+                  <div style={{ color: "#777", fontSize: 12 }}>{new Date(r.created_at).toLocaleString()}</div>
                 </div>
 
                 <div style={{ marginTop: 6, color: "#555", fontSize: 13 }}>
@@ -129,9 +182,7 @@ export function SlotDetail(props: {
                     </button>
                   </div>
                 ) : (
-                  <div style={{ marginTop: 8, color: "#777", fontSize: 12 }}>
-                    ※ 承認/却下はホストだけができます
-                  </div>
+                  <div style={{ marginTop: 8, color: "#777", fontSize: 12 }}>※ 承認/却下はホストだけができます</div>
                 )}
               </div>
             ))}
@@ -139,25 +190,9 @@ export function SlotDetail(props: {
         )}
       </div>
 
-      {/* ===== accepted後：チャット ===== */}
       {acceptedReq ? (
-        <div style={{ marginTop: 18 }}>
-          <div style={{ fontWeight: 900, marginBottom: 6 }}>💬 連絡・チャット</div>
-
-          <ChatPanel
-            request={acceptedReq}
-            slotOwnerId={slot.owner_id}
-            meId={meId}
-            hostTeamId={slot.host_team_id}
-            requesterTeamId={acceptedReq.requester_team_id}
-            onToast={(t) => t && console.log(t)}
-          />
-        </div>
-      ) : (
-        <p style={{ margin: "12px 0 0", color: "#777", fontSize: 12 }}>
-          ※ accepted になると、ここにチャットが表示されます。
-        </p>
-      )}
+        <div style={{ marginTop: 10, color: "#166534", fontSize: 12 }}>✅ accepted です（チャットは上のボタンから）</div>
+      ) : null}
     </div>
   );
 }

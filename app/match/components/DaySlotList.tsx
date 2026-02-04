@@ -36,9 +36,11 @@ function statusBadgeStyle(status: DbRequest["status"]) {
   } as React.CSSProperties;
 }
 
+type SlotWithHost = DbSlot & { host_team_id: string };
+
 export function DaySlotList(props: {
   selectedYmd: string;
-  slots: DbSlot[];
+  slots: DbSlot[]; // ※実体は host_team_id を含む前提（match_slotsからselectしてるのでOK）
   venues: DbVenue[];
   myTeams: DbTeam[];
   meId: string;
@@ -97,14 +99,18 @@ export function DaySlotList(props: {
         <p style={{ margin: "10px 0 0", color: "#777" }}>この日はまだ募集がありません。</p>
       ) : (
         <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-          {slots.map((s) => {
+          {slots.map((raw) => {
+            const s = raw as SlotWithHost;
+
             const isMine = !!meId && s.owner_id === meId;
             const venue = venues.find((v) => v.id === s.venue_id) || null;
 
+            // ★自分がこの枠に申込み済みか？（cancelled は除外）
             const myReq = requestsForMonth.find(
               (r) => r.slot_id === s.id && r.requester_user_id === meId && r.status !== "cancelled"
             );
 
+            // 申込みボタン無効条件
             const disableRequest = !!loading || myTeams.length === 0 || isMine || !!myReq;
 
             const requestBtnTitle = isMine
@@ -115,6 +121,7 @@ export function DaySlotList(props: {
               ? "先に自分のチームを作ってください"
               : "";
 
+            // ★キャンセルできるのは pending のみ
             const canCancel = !!myReq && myReq.status === "pending";
 
             // ✅ チャットボタン：相手の枠 かつ 自分のチームがある
@@ -143,7 +150,7 @@ export function DaySlotList(props: {
                       <button
                         className="sh-btn"
                         type="button"
-                        onClick={() => onClickChatFromSlot((s as any).host_team_id)}
+                        onClick={() => onClickChatFromSlot(s.host_team_id)}
                         disabled={!!loading}
                         title="この募集を出している相手チームにチャットで連絡します"
                       >
@@ -217,7 +224,7 @@ export function DaySlotList(props: {
                         <button
                           className="sh-btn"
                           type="button"
-                          onClick={() => onClickChatFromSlot((s as any).host_team_id)}
+                          onClick={() => onClickChatFromSlot(s.host_team_id)}
                           disabled={!!loading}
                         >
                           💬 この相手にチャット
@@ -233,6 +240,8 @@ export function DaySlotList(props: {
                       requests={selectedSlotRequests}
                       onAccept={onAccept}
                       onReject={onReject}
+                      myTeams={myTeams}
+                      requestTeamId={requestTeamId}
                     />
                   </div>
                 ) : null}
