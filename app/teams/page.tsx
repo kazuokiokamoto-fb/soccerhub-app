@@ -165,22 +165,16 @@ function TeamsPageInner() {
         </div>
       ) : null}
 
-      <h1 style={{ margin: 0 }}>自分のチーム</h1>
+      <h1 style={{ margin: 0 }}>マイページ</h1>
       <p style={{ color: "#555", marginTop: 6 }}>自分が登録したチームの編集・削除ができます。</p>
 
       <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-        <Link href="/" className="sh-btn">
-          トップへ
-        </Link>
         <Link href="/teams/new" className="sh-btn">
           ＋ チーム登録へ
         </Link>
         <Link href="/teams/search" className="sh-btn">
           チーム検索
         </Link>
-        <button className="sh-btn" type="button" onClick={load} disabled={loading}>
-          再読み込み
-        </button>
       </div>
 
       {!meId ? (
