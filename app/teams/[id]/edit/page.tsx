@@ -19,14 +19,14 @@ function makeDefaultRoster11(): Record<GradeKey, string> {
   return { G1: "11", G2: "11", G3: "11", G4: "11", G5: "11", G6: "11" };
 }
 
-// contact_* カラムが無い環境でも落ちないようにする（列差分の吸収）
+// contact_* / address_detail カラムが無い環境でも落ちないようにする（列差分の吸収）
 function isMissingColumnError(err: any) {
   const msg = String(err?.message ?? "");
   return (
     msg.includes("does not exist") ||
     msg.includes("Could not find") ||
     msg.includes("schema cache") ||
-    (msg.includes("column") && msg.includes("contact_"))
+    (msg.includes("column") && (msg.includes("contact_") || msg.includes("address_detail")))
   );
 }
 
@@ -52,6 +52,9 @@ export default function TeamEditPage() {
   const [prefecture, setPrefecture] = useState("東京都");
   const [city, setCity] = useState("");
   const [town, setTown] = useState("");
+
+  // ✅ NEW: 丁目・番地・号（例: "1-2-3"）
+  const [addressDetail, setAddressDetail] = useState("");
 
   const [rosterByGradeText, setRosterByGradeText] =
     useState<Record<GradeKey, string>>(makeDefaultRoster11());
@@ -86,11 +89,11 @@ export default function TeamEditPage() {
         return;
       }
 
-      // まず contact_* 込みで取得を試す（無ければフォールバック）
+      // ✅ まず optional列（contact_* / address_detail）込みで取得 → 無ければフォールバック
       let res = await supabase
         .from("teams")
         .select(
-          "id,owner_id,name,categories,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,note,prefecture,city,town,contact_email,contact_phone,contact_line_id"
+          "id,owner_id,name,categories,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,note,prefecture,city,town,address_detail,contact_email,contact_phone,contact_line_id"
         )
         .eq("id", teamId)
         .single();
@@ -142,6 +145,9 @@ export default function TeamEditPage() {
       setCity(data.city ?? "");
       setTown(data.town ?? "");
 
+      // ✅ NEW
+      setAddressDetail(data.address_detail ?? "");
+
       const roster = (data.roster_by_grade ?? {}) as Record<string, number>;
       setRosterByGradeText({
         G1: String(roster.G1 ?? 11),
@@ -180,6 +186,10 @@ export default function TeamEditPage() {
       const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
       const primaryCategory = categories[0];
 
+      const addrDetail = addressDetail.trim();
+      // 地図リンク等で使うなら、ここで fullAddressText を作れる（DB保存は任意）
+      // const fullAddressText = `${prefecture}${city}${town}${addrDetail ? addrDetail : ""}`.trim();
+
       const baseUpdate: any = {
         name: name.trim(),
         categories,
@@ -195,9 +205,12 @@ export default function TeamEditPage() {
         city,
         town: town || null,
         area: areaText,
+
+        // ✅ NEW（列があれば保存）
+        address_detail: addrDetail || null,
       };
 
-      // まず contact_* 付きで更新を試す（無ければフォールバック）
+      // ✅ まず optional列（contact_*）込みで更新 → 無ければフォールバック
       let res = await supabase
         .from("teams")
         .update({
@@ -208,9 +221,14 @@ export default function TeamEditPage() {
         })
         .eq("id", teamId);
 
+      // contact_* / address_detail が無い環境なら、外して再試行（落とさない）
       if (res.error && isMissingColumnError(res.error)) {
-        console.warn("contact_* columns not found. retry without contact fields:", res.error.message);
-        res = await supabase.from("teams").update(baseUpdate).eq("id", teamId);
+        console.warn("missing columns. retry without optional fields:", res.error.message);
+
+        const fallbackUpdate: any = { ...baseUpdate };
+        delete fallbackUpdate.address_detail;
+
+        res = await supabase.from("teams").update(fallbackUpdate).eq("id", teamId);
       }
 
       if (res.error) {
@@ -266,6 +284,23 @@ export default function TeamEditPage() {
             title="エリア（関東）"
             townOptional={true}
           />
+
+          {/* ✅ NEW: 住所詳細（丁目・番地・号） */}
+          <label style={label}>
+            <span>住所（丁目・番地・号）（任意）</span>
+            <input
+              value={addressDetail}
+              onChange={(e) => setAddressDetail(e.target.value)}
+              style={input}
+              disabled={saving}
+              placeholder="例：1-2-3（丁目・番地・号）"
+              inputMode="text"
+              autoComplete="street-address"
+            />
+            <span style={{ fontSize: 12, color: "#666", lineHeight: 1.5 }}>
+              ※ 地図リンクの精度を上げるための入力欄です（未入力でもOK）。
+            </span>
+          </label>
 
           <CheckboxGroup
             title="カテゴリ（複数選択）"
