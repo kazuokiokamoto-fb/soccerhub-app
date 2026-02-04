@@ -1,9 +1,10 @@
 // app/chat/types.ts
+
 export type ChatThread = {
   id: string;
   created_at: string;
   updated_at: string | null;
-  kind: string | null; // "direct" など
+  kind: string | null; // "direct" | "slot" など
 };
 
 export type ChatMember = {
@@ -12,12 +13,18 @@ export type ChatMember = {
   user_id: string;
   role: string | null;
   created_at: string;
+
+  // ✅ 未読管理：このスレッドを最後に読んだ時刻（NULLなら未読扱いにできる）
+  last_read_at: string | null;
 };
 
 export type ChatMessage = {
   id: string;
   thread_id: string;
-  sender_user_id: string;
+
+  // ✅ ここを DB に合わせて統一（sender_user_id -> sender_id）
+  sender_id: string;
+
   sender_team_id: string | null;
   body: string;
   created_at: string;
