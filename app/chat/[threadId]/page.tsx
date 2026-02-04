@@ -138,12 +138,14 @@ export default function ChatThreadPage() {
     };
   }, [meId, threadId, isMember]);
 
+  // ✅ 送信：insert 成功した瞬間に messages に追加して「送れた感」を出す
   const send = async () => {
     const body = text.trim();
     if (!body) return;
     if (!meId) return alert("ログインが必要です");
     if (!threadId) return alert("threadId がありません");
     if (!isMember) return alert("このスレッドに参加していません");
+    if (sending) return;
 
     setSending(true);
     setText("");
@@ -155,7 +157,12 @@ export default function ChatThreadPage() {
       body,
     };
 
-    const { error } = await supabase.from("chat_messages").insert(payload);
+    // ✅ 返ってきた行を受け取り、即表示に使う
+    const { data, error } = await supabase
+      .from("chat_messages")
+      .insert(payload)
+      .select("id,thread_id,sender_id,sender_team_id,body,created_at")
+      .single();
 
     if (error) {
       console.error(error);
@@ -164,6 +171,14 @@ export default function ChatThreadPage() {
       alert(`送信に失敗: ${error.message}`);
       return;
     }
+
+    // ✅ 即反映（Realtimeを待たない）
+    setMessages((prev) => {
+      if ((prev as any[]).some((m) => (m as any).id === (data as any).id)) return prev;
+      return [...(prev as any[]), data as any] as any;
+    });
+
+    scrollToBottom(true);
 
     // ✅ 自分が送った直後も既読
     await markRead();

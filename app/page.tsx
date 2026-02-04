@@ -18,8 +18,9 @@ type ThreadDbRow = {
   created_at: string;
   updated_at: string | null;
   thread_type?: string | null; // ある環境だけ
-  // kind / last_message_at は触らない（存在しないDBがある）
 };
+
+type TeamMini = { id: string; name: string | null; category?: string | null };
 
 type RecentThread = {
   id: string;
@@ -29,7 +30,17 @@ type RecentThread = {
 
   last_message: MessageRow | null;
   unread: boolean;
+
+  // ✅ 表示用（追加）
+  other_team_name: string | null;
+  other_team_category: string | null;
 };
+
+function clip(s?: string | null, n = 40) {
+  const v = (s ?? "").trim();
+  if (!v) return "";
+  return v.length > n ? v.slice(0, n) + "…" : v;
+}
 
 export default function HomePage() {
   const [meId, setMeId] = useState<string>("");
@@ -62,14 +73,13 @@ export default function HomePage() {
       setChatError("");
 
       try {
-        // ✅ TOPは「自分のスレッド」だけを軽く出す：
-        // chat_members を起点に thread_id を取得（RLS的にも安全）
+        // ✅ 1) 自分のスレッド（chat_members 起点）
         const { data: myMembers, error: memErr } = await supabase
           .from("chat_members")
           .select("thread_id,last_read_at,created_at")
           .eq("user_id", meId)
           .order("created_at", { ascending: false })
-          .limit(50);
+          .limit(80);
 
         if (memErr) {
           console.error(memErr);
@@ -95,14 +105,61 @@ export default function HomePage() {
           if (!lastReadMap.has(r.thread_id)) lastReadMap.set(r.thread_id, r.last_read_at ?? null);
         }
 
-        // ✅ chat_threads は kind を触らずに取得（thread_type があれば使う）
+        // ✅ 2) 自分の所属チーム（相手判定に使う）
+        const { data: myTeamsRows } = await supabase.from("teams").select("id").eq("owner_id", meId);
+        const myTeamIds = new Set<string>((myTeamsRows ?? []).map((r: any) => r.id).filter(Boolean));
+
+        // ✅ 3) スレッド参加チーム一覧（thread_id -> team_ids）
+        const { data: membersAll, error: mem2Err } = await supabase
+          .from("chat_members")
+          .select("thread_id,team_id")
+          .in("thread_id", threadIds);
+
+        if (mem2Err) {
+          console.error(mem2Err);
+          setChatError(`チャット参加情報の取得に失敗: ${mem2Err.message}`);
+          setRecentThreads([]);
+          setLoadingChat(false);
+          return;
+        }
+
+        const memberTeamsByThread = new Map<string, string[]>();
+        const allTeamIds: string[] = [];
+        for (const r of (membersAll ?? []) as any[]) {
+          const tid = r.thread_id as string;
+          const teamId = r.team_id as string;
+          if (!tid || !teamId) continue;
+          if (!memberTeamsByThread.has(tid)) memberTeamsByThread.set(tid, []);
+          memberTeamsByThread.get(tid)!.push(teamId);
+          allTeamIds.push(teamId);
+        }
+        const uniqTeamIds = Array.from(new Set(allTeamIds));
+
+        // ✅ 4) チーム名マップ
+        const teamMap = new Map<string, TeamMini>();
+        if (uniqTeamIds.length > 0) {
+          const { data: teamRows, error: teamErr } = await supabase
+            .from("teams")
+            .select("id,name,category")
+            .in("id", uniqTeamIds);
+
+          if (teamErr) {
+            console.error(teamErr);
+          } else {
+            for (const t of (teamRows ?? []) as any[]) {
+              teamMap.set(t.id, { id: t.id, name: t.name ?? null, category: t.category ?? null });
+            }
+          }
+        }
+
+        // ✅ 5) chat_threads（thread_type が無い環境もあるのでフォールバック）
         const threadsRes = await supabase
           .from("chat_threads")
           .select("id,created_at,updated_at,thread_type")
           .in("id", threadIds);
 
+        let thRows: ThreadDbRow[] = [];
         if (threadsRes.error) {
-          // thread_type 列すら無い場合は更にフォールバック
           const fallback = await supabase
             .from("chat_threads")
             .select("id,created_at,updated_at")
@@ -115,41 +172,15 @@ export default function HomePage() {
             setLoadingChat(false);
             return;
           }
-
-          const th = (fallback.data ?? []) as any[];
-          // last message 取得
-          const last = await fetchLastMessages_(threadIds);
-
-          const merged = th.map((t: any) => {
-            const tid = t.id as string;
-            const lm = last.get(tid) ?? null;
-            const lr = lastReadMap.get(tid) ?? null;
-
-            let unread = false;
-            if (lm?.created_at) {
-              if (!lr) unread = true;
-              else unread = new Date(lm.created_at).getTime() > new Date(lr).getTime();
-            }
-
-            return {
-              id: tid,
-              created_at: t.created_at,
-              updated_at: t.updated_at ?? null,
-              thread_type: null,
-              last_message: lm,
-              unread,
-            } as RecentThread;
-          });
-
-          const sorted = sortRecent_(merged).slice(0, 5);
-          setRecentThreads(sorted);
-          setLoadingChat(false);
-          return;
+          thRows = (fallback.data ?? []) as any;
+        } else {
+          thRows = (threadsRes.data ?? []) as any;
         }
 
-        const thRows = (threadsRes.data ?? []) as ThreadDbRow[];
+        // ✅ 6) 最新メッセージ（JSで thread_id ごとに先頭を採用）
         const last = await fetchLastMessages_(threadIds);
 
+        // ✅ 7) まとめ：未読 + 相手チーム名
         const merged: RecentThread[] = thRows.map((t) => {
           const tid = t.id;
           const lm = last.get(tid) ?? null;
@@ -161,13 +192,21 @@ export default function HomePage() {
             else unread = new Date(lm.created_at).getTime() > new Date(lr).getTime();
           }
 
+          const memberTeamIds = memberTeamsByThread.get(tid) ?? [];
+          const otherTeamId =
+            memberTeamIds.find((id) => !myTeamIds.has(id)) ?? memberTeamIds[0] ?? null;
+          const otherTeam = otherTeamId ? teamMap.get(otherTeamId) : undefined;
+
           return {
             id: tid,
             created_at: t.created_at,
             updated_at: t.updated_at ?? null,
-            thread_type: t.thread_type ?? null,
+            thread_type: (t as any).thread_type ?? null,
             last_message: lm,
             unread,
+
+            other_team_name: otherTeam?.name ?? null,
+            other_team_category: otherTeam?.category ?? null,
           };
         });
 
@@ -228,25 +267,41 @@ export default function HomePage() {
               <div style={{ color: "#777", fontSize: 12 }}>最近のチャットはまだありません。</div>
             ) : (
               <div style={{ display: "grid", gap: 6 }}>
-                {recentThreads.slice(0, 3).map((t) => (
-                  <div key={t.id} style={threadRow}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <span style={{ fontSize: 12, fontWeight: 900 }}>#{t.id.slice(0, 6)}</span>
-                      {t.unread ? <span style={dot} /> : null}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: "#555",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
+                {/* ✅ ここを「クリックで /chat/[threadId]」にする */}
+                {recentThreads.slice(0, 3).map((t) => {
+                  const name =
+                    t.other_team_name
+                      ? `${t.other_team_name}${t.other_team_category ? `（${t.other_team_category}）` : ""}`
+                      : `スレッド #${t.id.slice(0, 6)}`;
+
+                  const lastLine = clip(t.last_message?.body ?? "（メッセージなし）", 46);
+
+                  return (
+                    <Link
+                      key={t.id}
+                      href={`/chat/${t.id}`}
+                      style={{ ...threadRow, textDecoration: "none", color: "inherit" }}
+                      className="sh-btn"
+                      onClick={(e) => e.stopPropagation()} // 親<Link href="/chat">への意図しない遷移を防ぐ
                     >
-                      {t.last_message?.body ?? "（メッセージなし）"}
-                    </div>
-                  </div>
-                ))}
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span style={{ fontSize: 12, fontWeight: 900 }}>{name}</span>
+                        {t.unread ? <span style={dot} /> : null}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: "#555",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {lastLine}
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
             )}
           </div>
