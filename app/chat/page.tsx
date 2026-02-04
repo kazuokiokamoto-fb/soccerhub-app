@@ -90,10 +90,10 @@ export default function ChatListPage() {
           return;
         }
 
-        // 3) thread 本体
+        // 3) thread 本体（✅ kind は使わない / 列が無いので select しない）
         const { data: thRows, error: thErr } = await supabase
           .from("chat_threads")
-          .select("id, created_at, updated_at, kind")
+          .select("id, created_at, updated_at")
           .in("id", threadIds);
 
         if (thErr) {
@@ -146,7 +146,6 @@ export default function ChatListPage() {
         }
 
         // 6) 最後のメッセージ（多スレッドでも取りこぼしにくいように上限を拡張）
-        // ※ 本来は SQL で distinct on(thread_id) がベストだけど、MVPはこれでOK
         const lastMsgByThread = new Map<string, LastMsgMini>();
         {
           const limit = Math.min(2000, Math.max(400, threadIds.length * 50));
@@ -196,7 +195,6 @@ export default function ChatListPage() {
             id: t.id,
             created_at: t.created_at,
             updated_at: t.updated_at,
-            kind: t.kind,
 
             memberTeamIds,
             myLastReadAt,
@@ -301,10 +299,9 @@ export default function ChatListPage() {
                 {lastLine}
               </div>
 
-              {/* フッター */}
+              {/* フッター（✅ kind 表示は削除） */}
               <div style={{ marginTop: 6, fontSize: 12, color: "#6b7280", display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <span>{timeLine}</span>
-                <span>kind: {t.kind ?? "unknown"}</span>
               </div>
             </Link>
           );
