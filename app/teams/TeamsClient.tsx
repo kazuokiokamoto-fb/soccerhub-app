@@ -7,19 +7,21 @@ import Link from "next/link";
 import PageHeader from "@/app/components/PageHeader";
 import { supabase } from "../lib/supabase";
 import { Team } from "../lib/types";
+
 import { CATEGORY_OPTIONS } from "@/app/lib/categories";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
 
 type DbTeam = {
   id: string;
-  owner_id: string;
-  name: string | null;
+  name: string;
   area: string | null;
-
-  // 旧: category / 新: categories どちらも来る可能性
   category: string | null;
   categories: string[] | null;
+
+  prefecture: string | null;
+  city: string | null;
+  town: string | null;
 
   level: number | null;
   has_ground: boolean | null;
@@ -30,28 +32,15 @@ type DbTeam = {
   desired_dates: string[] | null;
   note: string | null;
   updated_at: string;
-
-  // 並び替え・検索に使う
-  prefecture: string | null;
-  city: string | null;
-  town: string | null;
+  owner_id: string | null;
 };
 
-type Toast = { type: "success" | "error" | "info"; text: string };
-
 function toTeam(row: DbTeam): Team {
-  const cats =
-    Array.isArray(row.categories) && row.categories.length > 0
-      ? row.categories
-      : row.category
-      ? [row.category]
-      : [];
-
   return {
     id: row.id,
-    name: (row.name ?? "").trim() || "（名称未設定）",
-    area: (row.area ?? "").trim() || "（エリア未設定）",
-    category: cats[0] ?? (row.category ?? "（カテゴリ未設定）"),
+    name: row.name,
+    area: row.area ?? "",
+    category: row.category ?? "",
     level: Number(row.level ?? 5),
     hasGround: !!row.has_ground,
     bikeParking: row.bike_parking ?? "不明",
@@ -61,42 +50,46 @@ function toTeam(row: DbTeam): Team {
     desiredDates: row.desired_dates ?? [],
     note: row.note ?? "",
     updatedAt: row.updated_at,
-    // 追加プロパティは Team 型に無いので UI 内で row を別保持して使う
   };
 }
+
+type Toast = { type: "success" | "error" | "info"; text: string };
 
 function formatAvailability(desiredDates?: string[]) {
   const arr = Array.isArray(desiredDates) ? desiredDates.filter(Boolean) : [];
   if (arr.length === 0) return "未登録";
-  const pretty = arr
-    .map((s) => {
-      const t = String(s).trim();
-      if (!t) return "";
-      const parts = t.split(/\s+/).filter(Boolean);
-      if (parts.length === 1) return `${parts[0]}（時間帯問わず）`;
-      const day = parts[0];
-      const slot = parts.slice(1).join(" ");
-      return `${day}（${slot}）`;
-    })
-    .filter(Boolean);
-  return pretty.join(" / ") || "未登録";
+
+  const pretty = arr.map((s) => {
+    const t = String(s).trim();
+    if (!t) return "";
+    const parts = t.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return `${parts[0]}（時間帯問わず）`;
+    const day = parts[0];
+    const slot = parts.slice(1).join(" ");
+    return `${day}（${slot}）`;
+  });
+
+  return pretty.filter(Boolean).join(" / ") || "未登録";
 }
 
-function jaSort(a: string, b: string) {
-  return (a ?? "").localeCompare(b ?? "", "ja");
+function norm(s?: string | null) {
+  return (s ?? "").trim();
+}
+
+function compareStr(a: string, b: string) {
+  // 日本語の並びをそれっぽく（完全な“あいうえお順”は別途辞書が必要）
+  return a.localeCompare(b, "ja");
 }
 
 export default function TeamsClient({ createdId }: { createdId?: string }) {
   const created = createdId ?? "";
 
-  const [meId, setMeId] = useState<string>("");
-
-  const [rows, setRows] = useState<DbTeam[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [dbTeams, setDbTeams] = useState<DbTeam[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
 
-  // 検索条件
-  const [q, setQ] = useState("");
+  // ✅ 検索条件（カレンダーと同じ）
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [prefectureFilter, setPrefectureFilter] = useState<string>("");
   const [cityFilter, setCityFilter] = useState<string>("");
@@ -104,59 +97,56 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
 
   useEffect(() => {
     if (!created) return;
-    setToast({ type: "success", text: "✅ チームを登録しました（一覧に反映）" });
-    const t = setTimeout(() => setToast(null), 2800);
+    setToast({ type: "success", text: "✅ チームを登録しました（検索結果に反映）" });
+    const t = setTimeout(() => setToast(null), 3000);
     return () => clearTimeout(t);
   }, [created]);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setMeId(data?.user?.id ?? ""));
-  }, []);
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2800);
+    return () => clearTimeout(t);
+  }, [toast]);
 
-  // ✅ /teams は「検索」なので 全チームを読む（RLSで見える範囲に限られる）
   const load = async () => {
     setLoading(true);
 
     const { data, error } = await supabase
       .from("teams")
       .select(
-        "id,owner_id,name,area,category,categories,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at,prefecture,city,town"
-      )
-      // 住所順（prefecture/city/town が入ってる前提。nullは後ろに回るのでクライアントでも整列）
-      .order("prefecture", { ascending: true })
-      .order("city", { ascending: true })
-      .order("town", { ascending: true })
-      .order("updated_at", { ascending: false });
+        "id,name,area,category,categories,prefecture,city,town,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at,owner_id"
+      );
 
     if (error) {
       console.error(error);
       setToast({ type: "error", text: `読み込みに失敗しました: ${error.message}` });
-      setRows([]);
+      setDbTeams([]);
+      setTeams([]);
       setLoading(false);
       return;
     }
 
-    const r = (data ?? []) as DbTeam[];
+    const rows = (data ?? []) as DbTeam[];
 
-    // DBのorderが効かない/NULL混在でも綺麗にするため、クライアントで最終整列（あいうえお順）
-    r.sort((a, b) => {
-      const pa = a.prefecture ?? "";
-      const pb = b.prefecture ?? "";
-      const ca = a.city ?? "";
-      const cb = b.city ?? "";
-      const ta = a.town ?? "";
-      const tb = b.town ?? "";
-      const s1 = jaSort(pa, pb);
-      if (s1 !== 0) return s1;
-      const s2 = jaSort(ca, cb);
-      if (s2 !== 0) return s2;
-      const s3 = jaSort(ta, tb);
-      if (s3 !== 0) return s3;
-      // 同住所は新しい順
-      return (b.updated_at ?? "").localeCompare(a.updated_at ?? "");
+    // ✅ 住所順（都県→市→町→チーム名）で並べる
+    const sorted = [...rows].sort((a, b) => {
+      const ap = norm(a.prefecture) || norm(a.area);
+      const bp = norm(b.prefecture) || norm(b.area);
+      if (ap !== bp) return compareStr(ap, bp);
+
+      const ac = norm(a.city);
+      const bc = norm(b.city);
+      if (ac !== bc) return compareStr(ac, bc);
+
+      const at = norm(a.town);
+      const bt = norm(b.town);
+      if (at !== bt) return compareStr(at, bt);
+
+      return compareStr(norm(a.name), norm(b.name));
     });
 
-    setRows(r);
+    setDbTeams(sorted);
+    setTeams(sorted.map(toTeam));
     setLoading(false);
   };
 
@@ -166,84 +156,41 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
   }, []);
 
   const clearFilters = () => {
-    setQ("");
     setCategoryFilter([]);
     setPrefectureFilter("");
     setCityFilter("");
     setTownFilter("");
   };
 
-  const filteredRows = useMemo(() => {
-    const qq = q.trim().toLowerCase();
-
-    return rows.filter((row) => {
-      // エリア
-      if (prefectureFilter && (row.prefecture ?? "") !== prefectureFilter) return false;
-      if (cityFilter && (row.city ?? "") !== cityFilter) return false;
-      if (townFilter && (row.town ?? "") !== townFilter) return false;
-
-      // カテゴリ（複数）
-      const cats =
-        Array.isArray(row.categories) && row.categories.length > 0
-          ? row.categories
-          : row.category
-          ? [row.category]
-          : [];
+  const filteredDbTeams = useMemo(() => {
+    return dbTeams.filter((t) => {
+      // カテゴリ（複数）: categories があればそれ、無ければ category で判定
       if (categoryFilter.length > 0) {
-        // どれか1つでも一致でOK
-        const hit = cats.some((c) => categoryFilter.includes((c ?? "").trim()));
-        if (!hit) return false;
+        const cats = Array.isArray(t.categories) && t.categories.length > 0 ? t.categories : t.category ? [t.category] : [];
+        const ok = cats.some((c) => c && categoryFilter.includes(String(c).trim()));
+        if (!ok) return false;
       }
 
-      // キーワード（チーム名 or エリア or city/town）
-      if (qq) {
-        const blob = [
-          row.name ?? "",
-          row.area ?? "",
-          row.prefecture ?? "",
-          row.city ?? "",
-          row.town ?? "",
-        ]
-          .join(" ")
-          .toLowerCase();
-        if (!blob.includes(qq)) return false;
-      }
+      if (prefectureFilter && norm(t.prefecture) !== prefectureFilter) return false;
+      if (cityFilter && norm(t.city) !== cityFilter) return false;
+      if (townFilter && norm(t.town) !== townFilter) return false;
 
       return true;
     });
-  }, [rows, q, categoryFilter, prefectureFilter, cityFilter, townFilter]);
+  }, [dbTeams, categoryFilter, prefectureFilter, cityFilter, townFilter]);
 
-  const myRows = useMemo(() => filteredRows.filter((r) => !!meId && r.owner_id === meId), [filteredRows, meId]);
-  const otherRows = useMemo(() => filteredRows.filter((r) => !(!!meId && r.owner_id === meId)), [filteredRows, meId]);
+  const filteredTeams = useMemo(() => filteredDbTeams.map(toTeam), [filteredDbTeams]);
 
-  const remove = async (id: string) => {
-    const ok = confirm("削除しますか？（※自分のチームのみ削除できます）");
-    if (!ok) return;
-
-    const { error } = await supabase.from("teams").delete().eq("id", id);
-    if (error) {
-      console.error(error);
-      setToast({
-        type: "error",
-        text: `削除に失敗しました: ${error.message}\n（RLSの権限設定が原因のことが多いです）`,
-      });
-      return;
-    }
-    setRows((prev) => prev.filter((t) => t.id !== id));
-    setToast({ type: "success", text: "🗑 削除しました" });
-  };
+  const createdTeam = useMemo(() => filteredTeams.find((t) => t.id === created), [filteredTeams, created]);
 
   return (
-    <main style={{ padding: 24, maxWidth: 980, margin: "0 auto" }}>
+    <main style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
       <PageHeader
         actions={
           <>
             <Link href="/teams/new" className="sh-btn">
               ＋ チーム登録へ
             </Link>
-            <button className="sh-btn" type="button" onClick={load} disabled={loading}>
-              {loading ? "更新中…" : "更新"}
-            </button>
           </>
         }
       />
@@ -265,24 +212,13 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
         </div>
       ) : null}
 
+      {/* ✅ タイトルを「チーム検索」に変更 */}
       <h1 style={{ margin: 0 }}>チーム検索</h1>
-      <p style={{ color: "#555", marginTop: 6 }}>
-        条件で絞り込みできます（自分のチームは編集できます）。
-      </p>
+      <p style={{ color: "#555", marginTop: 6 }}>エリア（都県→市区町村→町名）とカテゴリで絞り込みできます。</p>
 
-      {/* 検索UI */}
+      {/* ✅ 検索条件（カレンダーと同じ） */}
       <section style={filterWrap}>
         <div style={{ display: "grid", gap: 12 }}>
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontWeight: 800 }}>キーワード</span>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="例：三宿 / 世田谷 / U-12 など"
-              style={input}
-            />
-          </label>
-
           <AreaPickerKanto
             title="エリアで絞り込み（関東）"
             allowAll={true}
@@ -306,114 +242,109 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
             disabled={loading}
           />
 
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <button className="sh-btn" type="button" onClick={clearFilters} disabled={loading}>
-              条件クリア
+          {categoryFilter.length > 0 || prefectureFilter || cityFilter || townFilter ? (
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <button className="sh-btn" type="button" onClick={clearFilters} disabled={loading}>
+                条件クリア
+              </button>
+              <span style={{ color: "#666", fontSize: 12 }}>
+                絞り込み中：
+                {prefectureFilter ? ` ${prefectureFilter}` : "（都県なし）"} /
+                {cityFilter ? ` ${cityFilter}` : "（市区町村なし）"} /
+                {townFilter ? ` ${townFilter}` : "（町名なし）"} / カテゴリ {categoryFilter.length}
+              </span>
+            </div>
+          ) : (
+            <div style={{ color: "#777", fontSize: 12 }}>※ エリア（都県→市区町村→町名）とカテゴリで絞り込みできます</div>
+          )}
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button className="sh-btn" type="button" onClick={load} disabled={loading}>
+              {loading ? "更新中…" : "再読み込み"}
             </button>
-            <span style={{ color: "#666", fontSize: 12 }}>
-              ヒット：{filteredRows.length} 件（自分 {myRows.length} / 他 {otherRows.length}）
-            </span>
+            <div style={{ color: "#666", fontSize: 12, alignSelf: "center" }}>
+              ヒット件数：{filteredTeams.length}
+            </div>
           </div>
         </div>
       </section>
 
-      {loading ? <p style={{ color: "#777", marginTop: 16 }}>読み込み中...</p> : null}
+      {created && createdTeam ? (
+        <div style={{ ...miniInfo, marginTop: 12 }}>
+          ✨ さっき登録したチーム： <b>{createdTeam.name}</b>（検索結果内でハイライト）
+        </div>
+      ) : null}
 
-      {/* 自分のチーム */}
-      <section style={{ marginTop: 16 }}>
-        <h2 style={{ margin: "0 0 8px", fontSize: 18 }}>自分のチーム</h2>
-        {meId ? null : <p style={{ color: "#777" }}>※ログインすると「自分のチーム」の編集ができます。</p>}
-        {myRows.length === 0 ? (
-          <p style={{ color: "#777" }}>まだありません。まずは「＋チーム登録へ」から作成してください。</p>
-        ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {myRows.map((row) => {
-              const t = toTeam(row);
-              const cats =
-                Array.isArray(row.categories) && row.categories.length > 0
-                  ? row.categories
-                  : row.category
-                  ? [row.category]
-                  : [];
-              const catsText = cats.filter(Boolean).join(" / ") || "（カテゴリ未設定）";
-
+      {loading ? (
+        <p style={{ color: "#777", marginTop: 16 }}>読み込み中...</p>
+      ) : (
+        <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
+          {filteredTeams.length === 0 ? (
+            <p style={{ color: "#777" }}>条件に一致するチームがありません。</p>
+          ) : (
+            filteredTeams.map((t) => {
+              const isCreated = created && t.id === created;
               return (
-                <div key={t.id} style={cardMine}>
+                <div
+                  key={t.id}
+                  style={{
+                    padding: 12,
+                    borderRadius: 12,
+                    border: isCreated ? "2px solid #86efac" : "1px solid #eee",
+                    background: isCreated ? "#f0fdf4" : "#fafafa",
+                    boxShadow: isCreated ? "0 0 0 4px rgba(34,197,94,0.10)" : "none",
+                  }}
+                >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <div style={{ fontWeight: 900 }}>{t.name}</div>
+                    <div style={{ fontWeight: 800 }}>{t.name} {isCreated ? "✅" : ""}</div>
 
+                    {/* ✅ ここは“検索結果”なので、編集/削除は出さない方が自然。
+                        （自分のチーム編集はTOP→自分のチームで別導線にする想定） */}
                     <div style={{ display: "flex", gap: 8 }}>
                       <Link className="sh-btn" href={`/teams/${t.id}/edit`}>
-                        編集
+                        編集（仮）
                       </Link>
-                      <button className="sh-btn sh-btn--danger" onClick={() => remove(t.id)} type="button">
-                        削除
-                      </button>
                     </div>
                   </div>
 
-                  <div style={line}>
-                    {(row.prefecture ?? "").trim() || "—"} {(row.city ?? "").trim() || ""}{row.town ? `・${row.town}` : ""} / {catsText} / 強さ {t.level} / グラウンド{" "}
-                    {t.hasGround ? "あり" : "なし"} / 🚲 {t.bikeParking}
+                  <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
+                    {t.area} / {t.category} / 強さ {t.level} / グラウンド {t.hasGround ? "あり" : "なし"} / 🚲 {t.bikeParking}
                   </div>
 
-                  <div style={line}>ユニ：{t.uniformMain}（メイン） / {t.uniformSub}（サブ）</div>
-                  <div style={line}>
+                  <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
+                    ユニ：{t.uniformMain}（メイン） / {t.uniformSub}（サブ）
+                  </div>
+
+                  <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
                     人数：G1 {t.rosterByGrade.G1} / G2 {t.rosterByGrade.G2} / G3 {t.rosterByGrade.G3} / G4 {t.rosterByGrade.G4} / G5 {t.rosterByGrade.G5} / G6 {t.rosterByGrade.G6}
                   </div>
-                  <div style={line}>希望枠：{formatAvailability(t.desiredDates)}</div>
-                  {t.note ? <div style={line}>メモ：{t.note}</div> : null}
+
+                  <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
+                    希望枠：{formatAvailability(t.desiredDates)}
+                  </div>
+
+                  {t.note ? (
+                    <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
+                      メモ：{t.note}
+                    </div>
+                  ) : null}
                 </div>
               );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* 他のチーム */}
-      <section style={{ marginTop: 20 }}>
-        <h2 style={{ margin: "0 0 8px", fontSize: 18 }}>他のチーム（検索結果）</h2>
-        {otherRows.length === 0 ? (
-          <p style={{ color: "#777" }}>該当なし</p>
-        ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {otherRows.map((row) => {
-              const t = toTeam(row);
-              const cats =
-                Array.isArray(row.categories) && row.categories.length > 0
-                  ? row.categories
-                  : row.category
-                  ? [row.category]
-                  : [];
-              const catsText = cats.filter(Boolean).join(" / ") || "（カテゴリ未設定）";
-
-              return (
-                <div key={t.id} style={cardOther}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                    <div style={{ fontWeight: 900 }}>{t.name}</div>
-                    {/* 他チームは編集/削除なし */}
-                  </div>
-
-                  <div style={line}>
-                    {(row.prefecture ?? "").trim() || "—"} {(row.city ?? "").trim() || ""}{row.town ? `・${row.town}` : ""} / {catsText} / 強さ {t.level} / グラウンド{" "}
-                    {t.hasGround ? "あり" : "なし"} / 🚲 {t.bikeParking}
-                  </div>
-
-                  <div style={line}>ユニ：{t.uniformMain}（メイン） / {t.uniformSub}（サブ）</div>
-                  <div style={line}>
-                    人数：G1 {t.rosterByGrade.G1} / G2 {t.rosterByGrade.G2} / G3 {t.rosterByGrade.G3} / G4 {t.rosterByGrade.G4} / G5 {t.rosterByGrade.G5} / G6 {t.rosterByGrade.G6}
-                  </div>
-                  <div style={line}>希望枠：{formatAvailability(t.desiredDates)}</div>
-                  {t.note ? <div style={line}>メモ：{t.note}</div> : null}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+            })
+          )}
+        </div>
+      )}
     </main>
   );
 }
+
+const miniInfo: React.CSSProperties = {
+  padding: "10px 12px",
+  border: "1px solid #eee",
+  borderRadius: 12,
+  background: "#fff",
+  color: "#444",
+};
 
 const filterWrap: React.CSSProperties = {
   marginTop: 12,
@@ -422,29 +353,6 @@ const filterWrap: React.CSSProperties = {
   borderRadius: 14,
   border: "1px solid #eee",
   background: "#fff",
-};
-
-const input: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid #ddd",
-  background: "white",
-};
-
-const line: React.CSSProperties = { color: "#666", marginTop: 6, lineHeight: 1.7 };
-
-const cardMine: React.CSSProperties = {
-  padding: 12,
-  borderRadius: 12,
-  border: "1px solid #dbeafe",
-  background: "#eff6ff",
-};
-
-const cardOther: React.CSSProperties = {
-  padding: 12,
-  borderRadius: 12,
-  border: "1px solid #eee",
-  background: "#fafafa",
 };
 
 const toastBox: React.CSSProperties = {
