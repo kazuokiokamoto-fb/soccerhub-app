@@ -239,6 +239,12 @@ export default function ChatThreadPage() {
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>チャット</h1>
           <div style={{ fontSize: 12, color: "#666" }}>thread: {threadId}</div>
         </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Link className="sh-btn" href="/chat">
+            チャット一覧へ
+          </Link>
+        </div>
       </header>
 
       <section
