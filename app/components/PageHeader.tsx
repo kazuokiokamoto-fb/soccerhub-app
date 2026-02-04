@@ -3,7 +3,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 
 type Props = {
@@ -11,10 +11,21 @@ type Props = {
   actions?: React.ReactNode;
   /** 右端のログアウトを出すか（デフォルト true） */
   showLogout?: boolean;
+
+  /** ✅ 追加：/chat 配下では actions を隠す（デフォルト true） */
+  hideActionsOnChat?: boolean;
 };
 
-export default function PageHeader({ actions, showLogout = true }: Props) {
+export default function PageHeader({
+  actions,
+  showLogout = true,
+  hideActionsOnChat = true,
+}: Props) {
   const router = useRouter();
+  const pathname = usePathname();
+
+  const isChat = pathname?.startsWith("/chat");
+  const shouldHideActions = hideActionsOnChat && isChat;
 
   const logout = async () => {
     try {
@@ -51,7 +62,10 @@ export default function PageHeader({ actions, showLogout = true }: Props) {
       </Link>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        {actions ? <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div> : null}
+        {/* ✅ /chat 配下では actions を出さない */}
+        {!shouldHideActions && actions ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div>
+        ) : null}
 
         {showLogout ? (
           <button className="sh-btn" type="button" onClick={logout}>
