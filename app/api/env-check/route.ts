@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
+  const v = process.env.YAHOO_APP_ID || "";
   return NextResponse.json({
-    hasYahooAppId: !!process.env.YAHOO_APP_ID,
-    head: (process.env.YAHOO_APP_ID ?? "").slice(0, 6),
+    hasYahooAppId: !!v,
+    head: v ? v.slice(0, 6) : "",
   });
 }
