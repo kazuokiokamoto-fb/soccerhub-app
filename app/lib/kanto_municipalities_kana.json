@@ -1,0 +1,2138 @@
+[
+  {
+    "pref": "prefecture",
+    "city": "city",
+    "prefKana": "prefecture",
+    "cityKana": "city"
+  },
+  {
+    "pref": "千葉県",
+    "city": "いすみ市",
+    "prefKana": "ちばけん",
+    "cityKana": "いすみし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "佐倉市",
+    "prefKana": "ちばけん",
+    "cityKana": "さくらし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "八千代市",
+    "prefKana": "ちばけん",
+    "cityKana": "やちよし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "八街市",
+    "prefKana": "ちばけん",
+    "cityKana": "やちまたし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "勝浦市",
+    "prefKana": "ちばけん",
+    "cityKana": "かつうらし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "匝瑳市",
+    "prefKana": "ちばけん",
+    "cityKana": "そうさし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "千葉市中央区",
+    "prefKana": "ちばけん",
+    "cityKana": "ちばしちゅうおうく"
+  },
+  {
+    "pref": "千葉県",
+    "city": "千葉市稲毛区",
+    "prefKana": "ちばけん",
+    "cityKana": "ちばしいなげく"
+  },
+  {
+    "pref": "千葉県",
+    "city": "千葉市緑区",
+    "prefKana": "ちばけん",
+    "cityKana": "ちばしみどりく"
+  },
+  {
+    "pref": "千葉県",
+    "city": "千葉市美浜区",
+    "prefKana": "ちばけん",
+    "cityKana": "ちばしみはまく"
+  },
+  {
+    "pref": "千葉県",
+    "city": "千葉市花見川区",
+    "prefKana": "ちばけん",
+    "cityKana": "ちばしはなみがわく"
+  },
+  {
+    "pref": "千葉県",
+    "city": "千葉市若葉区",
+    "prefKana": "ちばけん",
+    "cityKana": "ちばしわかばく"
+  },
+  {
+    "pref": "千葉県",
+    "city": "南房総市",
+    "prefKana": "ちばけん",
+    "cityKana": "みなみぼうそうし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "印旛郡栄町",
+    "prefKana": "ちばけん",
+    "cityKana": "いんばぐんさかえまち"
+  },
+  {
+    "pref": "千葉県",
+    "city": "印旛郡酒々井町",
+    "prefKana": "ちばけん",
+    "cityKana": "いんばぐんしすいまち"
+  },
+  {
+    "pref": "千葉県",
+    "city": "印西市",
+    "prefKana": "ちばけん",
+    "cityKana": "いんざいし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "君津市",
+    "prefKana": "ちばけん",
+    "cityKana": "きみつし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "四街道市",
+    "prefKana": "ちばけん",
+    "cityKana": "よつかいどうし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "大網白里市",
+    "prefKana": "ちばけん",
+    "cityKana": "おおあみしらさとし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "夷隅郡大多喜町",
+    "prefKana": "ちばけん",
+    "cityKana": "いすみぐんおおたきまち"
+  },
+  {
+    "pref": "千葉県",
+    "city": "夷隅郡御宿町",
+    "prefKana": "ちばけん",
+    "cityKana": "いすみぐんおんじゅくまち"
+  },
+  {
+    "pref": "千葉県",
+    "city": "安房郡鋸南町",
+    "prefKana": "ちばけん",
+    "cityKana": "あわぐんきょなんまち"
+  },
+  {
+    "pref": "千葉県",
+    "city": "富津市",
+    "prefKana": "ちばけん",
+    "cityKana": "ふっつし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "富里市",
+    "prefKana": "ちばけん",
+    "cityKana": "とみさとし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "山武市",
+    "prefKana": "ちばけん",
+    "cityKana": "さんむし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "山武郡九十九里町",
+    "prefKana": "ちばけん",
+    "cityKana": "さんぶぐんくじゅうくりまち"
+  },
+  {
+    "pref": "千葉県",
+    "city": "山武郡横芝光町",
+    "prefKana": "ちばけん",
+    "cityKana": "さんぶぐんよこしばひかりまち"
+  },
+  {
+    "pref": "千葉県",
+    "city": "山武郡芝山町",
+    "prefKana": "ちばけん",
+    "cityKana": "さんぶぐんしばやままち"
+  },
+  {
+    "pref": "千葉県",
+    "city": "市原市",
+    "prefKana": "ちばけん",
+    "cityKana": "いちはらし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "市川市",
+    "prefKana": "ちばけん",
+    "cityKana": "いちかわし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "成田市",
+    "prefKana": "ちばけん",
+    "cityKana": "なりたし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "我孫子市",
+    "prefKana": "ちばけん",
+    "cityKana": "あびこし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "旭市",
+    "prefKana": "ちばけん",
+    "cityKana": "あさひし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "木更津市",
+    "prefKana": "ちばけん",
+    "cityKana": "きさらづし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "東金市",
+    "prefKana": "ちばけん",
+    "cityKana": "とうがねし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "松戸市",
+    "prefKana": "ちばけん",
+    "cityKana": "まつどし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "柏市",
+    "prefKana": "ちばけん",
+    "cityKana": "かしわし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "流山市",
+    "prefKana": "ちばけん",
+    "cityKana": "ながれやまし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "浦安市",
+    "prefKana": "ちばけん",
+    "cityKana": "うらやすし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "白井市",
+    "prefKana": "ちばけん",
+    "cityKana": "しろいし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "習志野市",
+    "prefKana": "ちばけん",
+    "cityKana": "ならしのし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "船橋市",
+    "prefKana": "ちばけん",
+    "cityKana": "ふなばしし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "茂原市",
+    "prefKana": "ちばけん",
+    "cityKana": "もばらし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "袖ケ浦市",
+    "prefKana": "ちばけん",
+    "cityKana": "そでがうらし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "野田市",
+    "prefKana": "ちばけん",
+    "cityKana": "のだし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "銚子市",
+    "prefKana": "ちばけん",
+    "cityKana": "ちょうしし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "鎌ケ谷市",
+    "prefKana": "ちばけん",
+    "cityKana": "かまがやし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "長生郡一宮町",
+    "prefKana": "ちばけん",
+    "cityKana": "ちょうせいぐんいちのみやちょう"
+  },
+  {
+    "pref": "千葉県",
+    "city": "長生郡白子町",
+    "prefKana": "ちばけん",
+    "cityKana": "ちょうせいぐんしらこまち"
+  },
+  {
+    "pref": "千葉県",
+    "city": "長生郡睦沢町",
+    "prefKana": "ちばけん",
+    "cityKana": "ちょうせいぐんむつざわまち"
+  },
+  {
+    "pref": "千葉県",
+    "city": "長生郡長南町",
+    "prefKana": "ちばけん",
+    "cityKana": "ちょうせいぐんちょうなんまち"
+  },
+  {
+    "pref": "千葉県",
+    "city": "長生郡長柄町",
+    "prefKana": "ちばけん",
+    "cityKana": "ちょうせいぐんながらまち"
+  },
+  {
+    "pref": "千葉県",
+    "city": "長生郡長生村",
+    "prefKana": "ちばけん",
+    "cityKana": "ちょうせいぐんちょうせいむら"
+  },
+  {
+    "pref": "千葉県",
+    "city": "館山市",
+    "prefKana": "ちばけん",
+    "cityKana": "たてやまし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "香取市",
+    "prefKana": "ちばけん",
+    "cityKana": "かとりし"
+  },
+  {
+    "pref": "千葉県",
+    "city": "香取郡多古町",
+    "prefKana": "ちばけん",
+    "cityKana": "かとりぐんたこまち"
+  },
+  {
+    "pref": "千葉県",
+    "city": "香取郡東庄町",
+    "prefKana": "ちばけん",
+    "cityKana": "かとりぐんとうのしょうまち"
+  },
+  {
+    "pref": "千葉県",
+    "city": "香取郡神崎町",
+    "prefKana": "ちばけん",
+    "cityKana": "かとりぐんかんざきちょう"
+  },
+  {
+    "pref": "千葉県",
+    "city": "鴨川市",
+    "prefKana": "ちばけん",
+    "cityKana": "かもがわし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "さいたま市中央区",
+    "prefKana": "さいたまけん",
+    "cityKana": "さいたましちゅうおうく"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "さいたま市北区",
+    "prefKana": "さいたまけん",
+    "cityKana": "さいたましきたく"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "さいたま市南区",
+    "prefKana": "さいたまけん",
+    "cityKana": "さいたましみなみく"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "さいたま市大宮区",
+    "prefKana": "さいたまけん",
+    "cityKana": "さいたましおおみやく"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "さいたま市岩槻区",
+    "prefKana": "さいたまけん",
+    "cityKana": "さいたましいわつきく"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "さいたま市桜区",
+    "prefKana": "さいたまけん",
+    "cityKana": "さいたましさくらく"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "さいたま市浦和区",
+    "prefKana": "さいたまけん",
+    "cityKana": "さいたましうらわく"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "さいたま市緑区",
+    "prefKana": "さいたまけん",
+    "cityKana": "さいたましみどりく"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "さいたま市西区",
+    "prefKana": "さいたまけん",
+    "cityKana": "さいたましにしく"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "さいたま市見沼区",
+    "prefKana": "さいたまけん",
+    "cityKana": "さいたましみぬまく"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "ふじみ野市",
+    "prefKana": "さいたまけん",
+    "cityKana": "ふじみのし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "三郷市",
+    "prefKana": "さいたまけん",
+    "cityKana": "みさとし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "上尾市",
+    "prefKana": "さいたまけん",
+    "cityKana": "あげおし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "久喜市",
+    "prefKana": "さいたまけん",
+    "cityKana": "くきし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "児玉郡上里町",
+    "prefKana": "さいたまけん",
+    "cityKana": "こだまぐんかみさとまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "児玉郡神川町",
+    "prefKana": "さいたまけん",
+    "cityKana": "こだまぐんかみかわまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "児玉郡美里町",
+    "prefKana": "さいたまけん",
+    "cityKana": "こだまぐんみさとちょう"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "入間市",
+    "prefKana": "さいたまけん",
+    "cityKana": "いるまし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "入間郡三芳町",
+    "prefKana": "さいたまけん",
+    "cityKana": "いるまぐんみよしまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "入間郡毛呂山町",
+    "prefKana": "さいたまけん",
+    "cityKana": "いるまぐんもろやままち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "入間郡越生町",
+    "prefKana": "さいたまけん",
+    "cityKana": "いるまぐんおごせまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "八潮市",
+    "prefKana": "さいたまけん",
+    "cityKana": "やしおし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "加須市",
+    "prefKana": "さいたまけん",
+    "cityKana": "かぞし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "北本市",
+    "prefKana": "さいたまけん",
+    "cityKana": "きたもとし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "北葛飾郡杉戸町",
+    "prefKana": "さいたまけん",
+    "cityKana": "きたかつしかぐんすぎとまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "北葛飾郡松伏町",
+    "prefKana": "さいたまけん",
+    "cityKana": "きたかつしかぐんまつぶしまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "北足立郡伊奈町",
+    "prefKana": "さいたまけん",
+    "cityKana": "きたあだちぐんいなまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "南埼玉郡宮代町",
+    "prefKana": "さいたまけん",
+    "cityKana": "みなみさいたまぐんみやしろまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "吉川市",
+    "prefKana": "さいたまけん",
+    "cityKana": "よしかわし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "和光市",
+    "prefKana": "さいたまけん",
+    "cityKana": "わこうし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "坂戸市",
+    "prefKana": "さいたまけん",
+    "cityKana": "さかどし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "大里郡寄居町",
+    "prefKana": "さいたまけん",
+    "cityKana": "おおさとぐんよりいまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "富士見市",
+    "prefKana": "さいたまけん",
+    "cityKana": "ふじみし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "川口市",
+    "prefKana": "さいたまけん",
+    "cityKana": "かわぐちし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "川越市",
+    "prefKana": "さいたまけん",
+    "cityKana": "かわごえし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "幸手市",
+    "prefKana": "さいたまけん",
+    "cityKana": "さってし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "志木市",
+    "prefKana": "さいたまけん",
+    "cityKana": "しきし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "戸田市",
+    "prefKana": "さいたまけん",
+    "cityKana": "とだし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "所沢市",
+    "prefKana": "さいたまけん",
+    "cityKana": "ところざわし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "新座市",
+    "prefKana": "さいたまけん",
+    "cityKana": "にいざし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "日高市",
+    "prefKana": "さいたまけん",
+    "cityKana": "ひだかし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "春日部市",
+    "prefKana": "さいたまけん",
+    "cityKana": "かすかべし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "朝霞市",
+    "prefKana": "さいたまけん",
+    "cityKana": "あさかし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "本庄市",
+    "prefKana": "さいたまけん",
+    "cityKana": "ほんじょうし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "東松山市",
+    "prefKana": "さいたまけん",
+    "cityKana": "ひがしまつやまし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "桶川市",
+    "prefKana": "さいたまけん",
+    "cityKana": "おけがわし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "比企郡ときがわ町",
+    "prefKana": "さいたまけん",
+    "cityKana": "ひきぐんときがわまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "比企郡吉見町",
+    "prefKana": "さいたまけん",
+    "cityKana": "ひきぐんよしみまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "比企郡小川町",
+    "prefKana": "さいたまけん",
+    "cityKana": "ひきぐんおがわまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "比企郡嵐山町",
+    "prefKana": "さいたまけん",
+    "cityKana": "ひきぐんらんざんまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "比企郡川島町",
+    "prefKana": "さいたまけん",
+    "cityKana": "ひきぐんかわしまちょう"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "比企郡滑川町",
+    "prefKana": "さいたまけん",
+    "cityKana": "ひきぐんなめがわまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "比企郡鳩山町",
+    "prefKana": "さいたまけん",
+    "cityKana": "ひきぐんはとやままち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "深谷市",
+    "prefKana": "さいたまけん",
+    "cityKana": "ふかやし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "熊谷市",
+    "prefKana": "さいたまけん",
+    "cityKana": "くまがやし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "狭山市",
+    "prefKana": "さいたまけん",
+    "cityKana": "さやまし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "白岡市",
+    "prefKana": "さいたまけん",
+    "cityKana": "しらおかし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "秩父市",
+    "prefKana": "さいたまけん",
+    "cityKana": "ちちぶし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "秩父郡小鹿野町",
+    "prefKana": "さいたまけん",
+    "cityKana": "ちちぶぐんおがのまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "秩父郡東秩父村",
+    "prefKana": "さいたまけん",
+    "cityKana": "ちちぶぐんひがしちちぶむら"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "秩父郡横瀬町",
+    "prefKana": "さいたまけん",
+    "cityKana": "ちちぶぐんよこぜまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "秩父郡皆野町",
+    "prefKana": "さいたまけん",
+    "cityKana": "ちちぶぐんみなのまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "秩父郡長瀞町",
+    "prefKana": "さいたまけん",
+    "cityKana": "ちちぶぐんながとろまち"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "羽生市",
+    "prefKana": "さいたまけん",
+    "cityKana": "はにゅうし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "草加市",
+    "prefKana": "さいたまけん",
+    "cityKana": "そうかし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "蓮田市",
+    "prefKana": "さいたまけん",
+    "cityKana": "はすだし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "蕨市",
+    "prefKana": "さいたまけん",
+    "cityKana": "わらびし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "行田市",
+    "prefKana": "さいたまけん",
+    "cityKana": "ぎょうだし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "越谷市",
+    "prefKana": "さいたまけん",
+    "cityKana": "こしがやし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "飯能市",
+    "prefKana": "さいたまけん",
+    "cityKana": "はんのうし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "鴻巣市",
+    "prefKana": "さいたまけん",
+    "cityKana": "こうのすし"
+  },
+  {
+    "pref": "埼玉県",
+    "city": "鶴ヶ島市",
+    "prefKana": "さいたまけん",
+    "cityKana": "つるがしまし"
+  },
+  {
+    "pref": "東京都",
+    "city": "あきる野市",
+    "prefKana": "とうきょうと",
+    "cityKana": "あきるのし"
+  },
+  {
+    "pref": "東京都",
+    "city": "三宅島三宅村",
+    "prefKana": "とうきょうと",
+    "cityKana": "みやけじまみやけむら"
+  },
+  {
+    "pref": "東京都",
+    "city": "三鷹市",
+    "prefKana": "とうきょうと",
+    "cityKana": "みたかし"
+  },
+  {
+    "pref": "東京都",
+    "city": "世田谷区",
+    "prefKana": "とうきょうと",
+    "cityKana": "せたがやく"
+  },
+  {
+    "pref": "東京都",
+    "city": "中央区",
+    "prefKana": "とうきょうと",
+    "cityKana": "ちゅうおうく"
+  },
+  {
+    "pref": "東京都",
+    "city": "中野区",
+    "prefKana": "とうきょうと",
+    "cityKana": "なかのく"
+  },
+  {
+    "pref": "東京都",
+    "city": "八丈島八丈町",
+    "prefKana": "とうきょうと",
+    "cityKana": "はちじょうじまはちじょうまち"
+  },
+  {
+    "pref": "東京都",
+    "city": "八王子市",
+    "prefKana": "とうきょうと",
+    "cityKana": "はちおうじし"
+  },
+  {
+    "pref": "東京都",
+    "city": "利島村",
+    "prefKana": "とうきょうと",
+    "cityKana": "としまむら"
+  },
+  {
+    "pref": "東京都",
+    "city": "北区",
+    "prefKana": "とうきょうと",
+    "cityKana": "きたく"
+  },
+  {
+    "pref": "東京都",
+    "city": "千代田区",
+    "prefKana": "とうきょうと",
+    "cityKana": "ちよだく"
+  },
+  {
+    "pref": "東京都",
+    "city": "台東区",
+    "prefKana": "とうきょうと",
+    "cityKana": "たいとうく"
+  },
+  {
+    "pref": "東京都",
+    "city": "品川区",
+    "prefKana": "とうきょうと",
+    "cityKana": "しながわく"
+  },
+  {
+    "pref": "東京都",
+    "city": "国分寺市",
+    "prefKana": "とうきょうと",
+    "cityKana": "こくぶんじし"
+  },
+  {
+    "pref": "東京都",
+    "city": "国立市",
+    "prefKana": "とうきょうと",
+    "cityKana": "くにたちし"
+  },
+  {
+    "pref": "東京都",
+    "city": "墨田区",
+    "prefKana": "とうきょうと",
+    "cityKana": "すみだく"
+  },
+  {
+    "pref": "東京都",
+    "city": "多摩市",
+    "prefKana": "とうきょうと",
+    "cityKana": "たまし"
+  },
+  {
+    "pref": "東京都",
+    "city": "大島町",
+    "prefKana": "とうきょうと",
+    "cityKana": "おおしまちょう"
+  },
+  {
+    "pref": "東京都",
+    "city": "大田区",
+    "prefKana": "とうきょうと",
+    "cityKana": "おおたく"
+  },
+  {
+    "pref": "東京都",
+    "city": "小平市",
+    "prefKana": "とうきょうと",
+    "cityKana": "こだいらし"
+  },
+  {
+    "pref": "東京都",
+    "city": "小笠原村",
+    "prefKana": "とうきょうと",
+    "cityKana": "おがさわらむら"
+  },
+  {
+    "pref": "東京都",
+    "city": "小金井市",
+    "prefKana": "とうきょうと",
+    "cityKana": "こがねいし"
+  },
+  {
+    "pref": "東京都",
+    "city": "府中市",
+    "prefKana": "とうきょうと",
+    "cityKana": "ふちゅうし"
+  },
+  {
+    "pref": "東京都",
+    "city": "御蔵島村",
+    "prefKana": "",
+    "cityKana": "とうきょうとみくらじまむら"
+  },
+  {
+    "pref": "東京都",
+    "city": "文京区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "新宿区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "新島村",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "日野市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "昭島市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "杉並区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "東久留米市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "東大和市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "東村山市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "板橋区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "武蔵村山市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "武蔵野市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "江戸川区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "江東区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "清瀬市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "渋谷区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "港区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "狛江市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "町田市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "目黒区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "神津島村",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "福生市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "稲城市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "立川市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "練馬区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "羽村市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "荒川区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "葛飾区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "西多摩郡奥多摩町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "西多摩郡日の出町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "西多摩郡檜原村",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "西多摩郡瑞穂町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "西東京市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "調布市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "豊島区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "足立区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "青ヶ島村",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "東京都",
+    "city": "青梅市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "さくら市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "下都賀郡壬生町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "下都賀郡野木町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "下野市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "佐野市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "塩谷郡塩谷町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "塩谷郡高根沢町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "大田原市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "宇都宮市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "小山市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "日光市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "栃木市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "河内郡上三川町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "真岡市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "矢板市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "芳賀郡市貝町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "芳賀郡益子町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "芳賀郡芳賀町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "芳賀郡茂木町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "足利市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "那須塩原市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "那須烏山市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "那須郡那珂川町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "那須郡那須町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "栃木県",
+    "city": "鹿沼市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "三浦市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "三浦郡葉山町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "中郡二宮町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "中郡大磯町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "伊勢原市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "南足柄市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "厚木市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "大和市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "小田原市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "川崎市中原区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "川崎市多摩区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "川崎市宮前区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "川崎市川崎区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "川崎市幸区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "川崎市高津区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "川崎市麻生区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "平塚市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "座間市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "愛甲郡愛川町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "愛甲郡清川村",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市中区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市保土ケ谷区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市南区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市戸塚区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市旭区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市栄区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市泉区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市港北区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市港南区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市瀬谷区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市磯子区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市神奈川区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市緑区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市西区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市都筑区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市金沢区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市青葉区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横浜市鶴見区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "横須賀市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "海老名市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "相模原市中央区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "相模原市南区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "相模原市緑区",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "秦野市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "綾瀬市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "茅ヶ崎市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "藤沢市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "足柄上郡中井町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "足柄上郡大井町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "足柄上郡山北町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "足柄上郡松田町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "足柄上郡開成町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "足柄下郡湯河原町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "足柄下郡真鶴町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "足柄下郡箱根町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "逗子市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "鎌倉市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "神奈川県",
+    "city": "高座郡寒川町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "みどり市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "伊勢崎市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "佐波郡玉村町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "利根郡みなかみ町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "利根郡川場村",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "利根郡昭和村",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "利根郡片品村",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "前橋市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "北群馬郡吉岡町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "北群馬郡榛東村",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "吾妻郡中之条町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "吾妻郡嬬恋村",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "吾妻郡東吾妻町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "吾妻郡草津町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "吾妻郡長野原町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "吾妻郡高山村",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "多野郡上野村",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "多野郡神流町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "太田市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "安中市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "富岡市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "桐生市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "沼田市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "渋川市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "甘楽郡下仁田町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "甘楽郡南牧村",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "甘楽郡甘楽町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "藤岡市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "邑楽郡千代田町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "邑楽郡大泉町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "邑楽郡明和町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "邑楽郡板倉町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "邑楽郡邑楽町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "館林市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "群馬県",
+    "city": "高崎市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "かすみがうら市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "つくばみらい市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "つくば市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "ひたちなか市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "下妻市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "久慈郡大子町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "北相馬郡利根町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "北茨城市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "取手市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "古河市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "土浦市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "坂東市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "守谷市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "小美玉市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "常総市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "常陸大宮市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "常陸太田市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "日立市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "東茨城郡城里町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "東茨城郡大洗町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "東茨城郡茨城町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "桜川市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "水戸市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "潮来市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "牛久市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "猿島郡五霞町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "猿島郡境町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "石岡市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "神栖市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "稲敷市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "稲敷郡河内町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "稲敷郡美浦村",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "稲敷郡阿見町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "笠間市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "筑西市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "結城市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "結城郡八千代町",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "行方市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "那珂市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "那珂郡東海村",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "鉾田市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "高萩市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "鹿嶋市",
+    "prefKana": "",
+    "cityKana": ""
+  },
+  {
+    "pref": "茨城県",
+    "city": "龍ケ崎市",
+    "prefKana": "",
+    "cityKana": ""
+  }
+]
