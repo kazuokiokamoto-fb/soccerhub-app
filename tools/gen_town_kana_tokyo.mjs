@@ -1,5 +1,5 @@
 // tools/gen_town_kana_tokyo.mjs
-// 目的：kanto_towns.csv の「東京都」だけ town_kana を Yahoo の furigana API で生成し、
+// 目的：kanto_towns.csv の「東京都」だけ town_kana を Yahoo の Furigana API V2 で生成し、
 //      Supabase に貼る用の SQL（select public.import_town_kana(...);）を分割出力する
 
 import fs from "node:fs";
@@ -8,18 +8,21 @@ import path from "node:path";
 const ROOT = process.cwd();
 const ENV_PATH = path.join(ROOT, ".env.local");
 
-// ====== .env.local を雑に読む（コメントや日本語行は無視）======
+// ====== .env.local を雑に読む（コメント行は無視 / "..." や '...' も剥がす）======
 function loadEnv(filePath) {
   if (!fs.existsSync(filePath)) return;
   const text = fs.readFileSync(filePath, "utf8");
   for (const lineRaw of text.split(/\r?\n/)) {
     const line = lineRaw.trim();
     if (!line || line.startsWith("#")) continue;
+
     const i = line.indexOf("=");
     if (i <= 0) continue;
+
     const k = line.slice(0, i).trim();
     let v = line.slice(i + 1).trim();
     v = v.replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
+
     if (k && v && !process.env[k]) process.env[k] = v;
   }
 }
@@ -34,8 +37,9 @@ if (!YAHOO_APP_ID) {
 // ====== CSV読み込み（簡易）======
 function parseCsv(text) {
   const lines = text.split(/\r?\n/).filter(Boolean);
-  const header = lines.shift().split(",").map((s) => s.trim());
+  const header = (lines.shift() ?? "").split(",").map((s) => s.trim());
   const idx = Object.fromEntries(header.map((h, i) => [h, i]));
+
   const rows = [];
   for (const ln of lines) {
     const cols = ln.split(",").map((s) => s.trim());
@@ -48,7 +52,7 @@ function parseCsv(text) {
   return rows;
 }
 
-// ====== Yahoo Furigana API ======
+// ====== Yahoo Furigana API V2 ======
 // かな化したいのは「町名」だけ（例：三宿→みしゅく）
 async function toKana(text) {
   const body = {
@@ -62,8 +66,8 @@ async function toKana(text) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "User-Agent": "soccerhub-kana-gen",
-      "X-Yahoo-App-Id": YAHOO_APP_ID,
+      // ✅ 重要：V2は Bearer
+      Authorization: `Bearer ${YAHOO_APP_ID}`,
     },
     body: JSON.stringify(body),
   });
@@ -75,6 +79,7 @@ async function toKana(text) {
 
   const json = await res.json();
   const words = json?.result?.word ?? [];
+
   // word の furigana を連結（なければ surface）
   const kana = words
     .map((w) => (w?.furigana ? String(w.furigana) : String(w?.surface ?? "")))
@@ -115,30 +120,41 @@ fs.mkdirSync(outDir, { recursive: true });
 // ここを調整：1ファイルあたりの件数（Supabase SQL Editorで貼りやすい）
 const CHUNK = 300;
 
+async function sleep(ms) {
+  await new Promise((s) => setTimeout(s, ms));
+}
+
 async function main() {
   const enriched = [];
+
   for (let i = 0; i < uniq.length; i++) {
     const r = uniq[i];
+
     try {
       const townKana = await toKana(r.town);
+
       enriched.push({
         prefecture: r.prefecture,
         city: r.city,
         town: r.town,
         townKana,
       });
+
       if (i % 25 === 0) console.log(`...${i}/${uniq.length} ${r.city} ${r.town} -> ${townKana}`);
+
       // 叩きすぎ防止（軽く間隔）
-      await new Promise((s) => setTimeout(s, 120));
+      await sleep(120);
     } catch (e) {
       console.error(`❌ 失敗: ${r.city} ${r.town}`, e?.message ?? e);
+
       enriched.push({
         prefecture: r.prefecture,
         city: r.city,
         town: r.town,
         townKana: "",
       });
-      await new Promise((s) => setTimeout(s, 250));
+
+      await sleep(250);
     }
   }
 
@@ -149,12 +165,15 @@ async function main() {
   let fileNo = 1;
   for (let i = 0; i < enriched.length; i += CHUNK) {
     const chunk = enriched.slice(i, i + CHUNK);
+    const jsonStr = JSON.stringify(chunk, null, 2);
+
+    // ✅ テンプレ文字列に直接埋め込むと壊れる事故があるので、安全に連結
     const sql =
-`select public.import_town_kana(
-$$
-${JSON.stringify(chunk, null, 2)}
-$$::jsonb
-);`;
+      "select public.import_town_kana(\n" +
+      "$$\n" +
+      jsonStr +
+      "\n$$::jsonb\n" +
+      ");\n";
 
     const p = path.join(outDir, `import_tokyo_town_kana_${String(fileNo).padStart(3, "0")}.sql`);
     fs.writeFileSync(p, sql, "utf8");
