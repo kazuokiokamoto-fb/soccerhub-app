@@ -13,6 +13,7 @@ type DbTeam = {
   owner_id: string;
   name: string;
   area: string;
+  area_kana: string | null; // ✅ 追加（あいうえお順用）
   category: string;
   level: number;
   has_ground: boolean;
@@ -101,13 +102,16 @@ function TeamsPageInner() {
       return;
     }
 
+    // ✅ area_kana（あいうえお順）で並べる
+    // 同じ area_kana の中は name で並べる（任意）
     const { data, error } = await supabase
       .from("teams")
       .select(
-        "id,owner_id,name,area,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at"
+        "id,owner_id,name,area,area_kana,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at"
       )
       .eq("owner_id", meId)
-      .order("updated_at", { ascending: false });
+      .order("area_kana", { ascending: true })
+      .order("name", { ascending: true });
 
     if (error) {
       console.error(error);
@@ -174,9 +178,7 @@ function TeamsPageInner() {
         </Link>
       </div>
 
-      {!meId ? (
-        <div style={{ marginTop: 16, color: "#991b1b" }}>ログインが必要です。</div>
-      ) : null}
+      {!meId ? <div style={{ marginTop: 16, color: "#991b1b" }}>ログインが必要です。</div> : null}
 
       {createdId && createdTeam ? (
         <div style={{ ...miniInfo, marginTop: 12 }}>
