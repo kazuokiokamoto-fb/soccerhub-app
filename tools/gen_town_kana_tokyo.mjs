@@ -1,6 +1,4 @@
 // tools/gen_town_kana_tokyo.mjs
-// 目的：kanto_towns.csv の「東京都」だけ town_kana を Yahoo の Furigana API V2 で生成し、
-//      Supabase に貼る用の SQL（select public.import_town_kana(...);）を分割出力する
 
 import fs from "node:fs";
 import path from "node:path";
@@ -8,29 +6,39 @@ import path from "node:path";
 const ROOT = process.cwd();
 const ENV_PATH = path.join(ROOT, ".env.local");
 
-// ====== .env.local を雑に読む（コメント行は無視 / "..." や '...' も剥がす）======
+// ====== .env.local を読む（#コメント以外でも "=" が無い行は無視）======
 function loadEnv(filePath) {
   if (!fs.existsSync(filePath)) return;
   const text = fs.readFileSync(filePath, "utf8");
   for (const lineRaw of text.split(/\r?\n/)) {
     const line = lineRaw.trim();
-    if (!line || line.startsWith("#")) continue;
+    if (!line) continue;
+    if (line.startsWith("#")) continue;
 
     const i = line.indexOf("=");
     if (i <= 0) continue;
 
     const k = line.slice(0, i).trim();
     let v = line.slice(i + 1).trim();
+
+    // "..." '...' を剥がす
     v = v.replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
 
-    if (k && v && !process.env[k]) process.env[k] = v;
+    if (!k) continue;
+    if (process.env[k]) continue; // 既に入ってたら上書きしない
+    process.env[k] = v;
   }
 }
 loadEnv(ENV_PATH);
 
-const YAHOO_APP_ID = process.env.YAHOO_APP_ID;
-if (!YAHOO_APP_ID) {
-  console.error("❌ YAHOO_APP_ID が見つかりません。.env.local に入っているか確認してください。");
+const YAHOO_APP_ID = (process.env.YAHOO_APP_ID ?? "").trim();
+
+// ✅ ここで長さを必ず表示（空なら原因確定）
+console.log(`[env] YAHOO_APP_ID length=${YAHOO_APP_ID.length} head=${YAHOO_APP_ID.slice(0, 6)}`);
+
+if (!YAHOO_APP_ID || YAHOO_APP_ID.length < 10) {
+  console.error("❌ YAHOO_APP_ID が空、または短すぎます。.env.local の YAHOO_APP_ID=... を確認してください。");
+  console.error("   例: YAHOO_APP_ID=dj00aiZpPU...（dj00 で始まる長い文字列のはず）");
   process.exit(1);
 }
 
@@ -53,7 +61,6 @@ function parseCsv(text) {
 }
 
 // ====== Yahoo Furigana API V2 ======
-// かな化したいのは「町名」だけ（例：三宿→みしゅく）
 async function toKana(text) {
   const body = {
     id: "1",
@@ -66,21 +73,23 @@ async function toKana(text) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      // ✅ 重要：V2は Bearer
+      // ✅ どっちでも通るように両方入れる（環境差・仕様差の吸収）
       Authorization: `Bearer ${YAHOO_APP_ID}`,
+      "X-Yahoo-App-Id": YAHOO_APP_ID,
+      "User-Agent": "soccerhub-kana-gen",
     },
     body: JSON.stringify(body),
   });
 
+  const txt = await res.text().catch(() => "");
+
   if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`Yahoo API failed: ${res.status} ${res.statusText} ${t}`);
+    throw new Error(`Yahoo API failed: ${res.status} ${res.statusText} ${txt}`);
   }
 
-  const json = await res.json();
+  const json = txt ? JSON.parse(txt) : {};
   const words = json?.result?.word ?? [];
 
-  // word の furigana を連結（なければ surface）
   const kana = words
     .map((w) => (w?.furigana ? String(w.furigana) : String(w?.surface ?? "")))
     .join("")
@@ -117,7 +126,6 @@ console.log(`東京都 town 件数: ${uniq.length}`);
 const outDir = path.join(ROOT, "tools", "out");
 fs.mkdirSync(outDir, { recursive: true });
 
-// ここを調整：1ファイルあたりの件数（Supabase SQL Editorで貼りやすい）
 const CHUNK = 300;
 
 async function sleep(ms) {
@@ -125,6 +133,10 @@ async function sleep(ms) {
 }
 
 async function main() {
+  // ✅ まず1件だけAPI疎通テスト（ここで401ならキー問題）
+  const testKana = await toKana("三宿");
+  console.log(`[test] 三宿 -> ${testKana}`);
+
   const enriched = [];
 
   for (let i = 0; i < uniq.length; i++) {
@@ -141,8 +153,6 @@ async function main() {
       });
 
       if (i % 25 === 0) console.log(`...${i}/${uniq.length} ${r.city} ${r.town} -> ${townKana}`);
-
-      // 叩きすぎ防止（軽く間隔）
       await sleep(120);
     } catch (e) {
       console.error(`❌ 失敗: ${r.city} ${r.town}`, e?.message ?? e);
@@ -158,16 +168,13 @@ async function main() {
     }
   }
 
-  // JSON保存（確認用）
   fs.writeFileSync(path.join(outDir, "tokyo_towns_kana.json"), JSON.stringify(enriched, null, 2), "utf8");
 
-  // Supabase貼り付け用 SQL を分割出力
   let fileNo = 1;
   for (let i = 0; i < enriched.length; i += CHUNK) {
     const chunk = enriched.slice(i, i + CHUNK);
     const jsonStr = JSON.stringify(chunk, null, 2);
 
-    // ✅ テンプレ文字列に直接埋め込むと壊れる事故があるので、安全に連結
     const sql =
       "select public.import_town_kana(\n" +
       "$$\n" +
