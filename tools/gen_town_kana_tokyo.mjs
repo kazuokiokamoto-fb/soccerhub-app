@@ -1,4 +1,6 @@
 // tools/gen_town_kana_tokyo.mjs
+// 目的：kanto_towns.csv の「東京都」だけ town_kana を Yahoo Furigana API で生成し、
+//      Supabase に貼る用の SQL（select public.import_town_kana(...);）を分割出力する
 
 import fs from "node:fs";
 import path from "node:path";
@@ -33,12 +35,10 @@ loadEnv(ENV_PATH);
 
 const YAHOO_APP_ID = (process.env.YAHOO_APP_ID ?? "").trim();
 
-// ✅ ここで長さを必ず表示（空なら原因確定）
 console.log(`[env] YAHOO_APP_ID length=${YAHOO_APP_ID.length} head=${YAHOO_APP_ID.slice(0, 6)}`);
 
 if (!YAHOO_APP_ID || YAHOO_APP_ID.length < 10) {
   console.error("❌ YAHOO_APP_ID が空、または短すぎます。.env.local の YAHOO_APP_ID=... を確認してください。");
-  console.error("   例: YAHOO_APP_ID=dj00aiZpPU...（dj00 で始まる長い文字列のはず）");
   process.exit(1);
 }
 
@@ -60,7 +60,8 @@ function parseCsv(text) {
   return rows;
 }
 
-// ====== Yahoo Furigana API V2 ======
+// ====== Yahoo Furigana API ======
+// ✅ 認証は「appid をクエリに付ける」方式に統一（これで 401 を潰す）
 async function toKana(text) {
   const body = {
     id: "1",
@@ -69,13 +70,15 @@ async function toKana(text) {
     params: { q: text, grade: 1 },
   };
 
-  const res = await fetch("https://jlp.yahooapis.jp/FuriganaService/V2/furigana", {
+  const url =
+    "https://jlp.yahooapis.jp/FuriganaService/V2/furigana" +
+    `?appid=${encodeURIComponent(YAHOO_APP_ID)}`;
+
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      // ✅ どっちでも通るように両方入れる（環境差・仕様差の吸収）
-      Authorization: `Bearer ${YAHOO_APP_ID}`,
-      "X-Yahoo-App-Id": YAHOO_APP_ID,
+      // User-Agent は念のため（無くても通ることが多い）
       "User-Agent": "soccerhub-kana-gen",
     },
     body: JSON.stringify(body),
@@ -126,6 +129,7 @@ console.log(`東京都 town 件数: ${uniq.length}`);
 const outDir = path.join(ROOT, "tools", "out");
 fs.mkdirSync(outDir, { recursive: true });
 
+// ここを調整：1ファイルあたりの件数（Supabase SQL Editorで貼りやすい）
 const CHUNK = 300;
 
 async function sleep(ms) {
@@ -133,52 +137,46 @@ async function sleep(ms) {
 }
 
 async function main() {
-  // ✅ まず1件だけAPI疎通テスト（ここで401ならキー問題）
+  // ✅ まず1件だけ疎通テスト（ここが通ればOK）
   const testKana = await toKana("三宿");
   console.log(`[test] 三宿 -> ${testKana}`);
 
   const enriched = [];
-
   for (let i = 0; i < uniq.length; i++) {
     const r = uniq[i];
-
     try {
       const townKana = await toKana(r.town);
-
       enriched.push({
         prefecture: r.prefecture,
         city: r.city,
         town: r.town,
         townKana,
       });
-
       if (i % 25 === 0) console.log(`...${i}/${uniq.length} ${r.city} ${r.town} -> ${townKana}`);
       await sleep(120);
     } catch (e) {
       console.error(`❌ 失敗: ${r.city} ${r.town}`, e?.message ?? e);
-
       enriched.push({
         prefecture: r.prefecture,
         city: r.city,
         town: r.town,
         townKana: "",
       });
-
       await sleep(250);
     }
   }
 
+  // JSON保存（確認用）
   fs.writeFileSync(path.join(outDir, "tokyo_towns_kana.json"), JSON.stringify(enriched, null, 2), "utf8");
 
+  // Supabase貼り付け用 SQL を分割出力
   let fileNo = 1;
   for (let i = 0; i < enriched.length; i += CHUNK) {
     const chunk = enriched.slice(i, i + CHUNK);
-    const jsonStr = JSON.stringify(chunk, null, 2);
-
     const sql =
       "select public.import_town_kana(\n" +
       "$$\n" +
-      jsonStr +
+      JSON.stringify(chunk, null, 2) +
       "\n$$::jsonb\n" +
       ");\n";
 
