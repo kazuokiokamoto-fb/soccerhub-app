@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
         return r.city.includes(q) || r.cityKana.includes(q);
       })
       .sort((a, b) => a.cityKana.localeCompare(b.cityKana, "ja"))
-      .slice(0, 100)
+      .slice(0, 300)
       .map((r) => ({
         prefecture: r.pref,
         city: r.city,

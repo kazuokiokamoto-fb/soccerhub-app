@@ -8,7 +8,11 @@ export async function GET(req: NextRequest) {
     const prefecture = (searchParams.get("prefecture") || "").trim();
     const city = (searchParams.get("city") || "").trim();
     const q = (searchParams.get("q") || "").trim();
-    const limit = Math.min(Number(searchParams.get("limit") || 20), 50);
+
+    const rawLimit = Number(searchParams.get("limit") || 20);
+    const limit = Number.isFinite(rawLimit)
+      ? Math.min(Math.max(rawLimit, 1), 300)
+      : 20;
 
     if (!prefecture || !city) {
       return NextResponse.json(
@@ -23,6 +27,7 @@ export async function GET(req: NextRequest) {
       .eq("prefecture", prefecture)
       .eq("city", city)
       .order("town_kana", { ascending: true })
+      .order("town", { ascending: true })
       .limit(limit);
 
     if (q) {
@@ -44,7 +49,7 @@ export async function GET(req: NextRequest) {
         prefecture: row.prefecture,
         city: row.city,
         town: row.town,
-        townKana: row.town_kana,
+        townKana: row.town_kana ?? "",
       })),
     });
   } catch (e) {
