@@ -10,14 +10,15 @@ const csv = fs.readFileSync("utf_ken_all.csv","utf8").split("\n");
 
 const rows = [];
 
-for (const line of csv) {
+for (const line of csv){
 
-  const cols = line.split(",");
+  const cols = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
+  if (!cols || cols.length < 9) continue;
 
-  const prefName = cols[6];
-  const city = cols[7];
-  const town = cols[8];
-  const kana = cols[5];
+  const prefName = cols[6].replace(/"/g,"");
+  const city = cols[7].replace(/"/g,"");
+  const town = cols[8].replace(/"/g,"");
+  const kana = cols[5].replace(/"/g,"");
 
   if (prefName !== pref) continue;
   if (!town) continue;
