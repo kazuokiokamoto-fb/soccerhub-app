@@ -1,18 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
-import kantoKana from "@/app/lib/kanto_municipalities_kana.json";
+import { supabase } from "@/app/lib/supabase";
 
-type KantoKanaRow = {
-  pref: string;
+const collator = new Intl.Collator("ja", { sensitivity: "base" });
+
+function normalizeJa(text: string) {
+  return (text || "")
+    .trim()
+    .replace(/\s+/g, "")
+    .normalize("NFKC")
+    .replace(/[ァ-ヶ]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0x60));
+}
+
+type MunicipalityRow = {
+  prefecture: string;
   city: string;
-  prefKana?: string;
-  cityKana: string;
+  city_kana?: string | null;
 };
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const prefecture = (searchParams.get("prefecture") || "").trim();
-    const q = (searchParams.get("q") || "").trim();
+    const qRaw = (searchParams.get("q") || "").trim();
+    const q = normalizeJa(qRaw);
 
     if (!prefecture) {
       return NextResponse.json(
@@ -21,16 +31,48 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const rows = (kantoKana as KantoKanaRow[])
-      .filter((r) => r.pref === prefecture)
+    const { data, error } = await supabase
+      .from("jp_municipalities")
+      .select("prefecture, city, city_kana")
+      .eq("prefecture", prefecture)
+      .order("city_kana", { ascending: true })
+      .order("city", { ascending: true });
+
+    if (error) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 }
+      );
+    }
+
+    const rows = ((data ?? []) as MunicipalityRow[])
+      .map((r) => {
+        const city = (r.city || "").trim();
+        const cityKana = (r.city_kana || "").trim();
+
+        return {
+          prefecture: r.prefecture,
+          city,
+          cityKana,
+          cityNorm: normalizeJa(city),
+          cityKanaNorm: normalizeJa(cityKana),
+        };
+      })
+      .filter((r) => r.city)
       .filter((r) => {
         if (!q) return true;
-        return r.city.includes(q) || r.cityKana.includes(q);
+        return r.cityNorm.includes(q) || r.cityKanaNorm.includes(q);
       })
-      .sort((a, b) => a.cityKana.localeCompare(b.cityKana, "ja"))
+      .sort((a, b) => {
+        const ak = a.cityKanaNorm || a.cityNorm || a.city;
+        const bk = b.cityKanaNorm || b.cityNorm || b.city;
+        const c1 = collator.compare(ak, bk);
+        if (c1 !== 0) return c1;
+        return collator.compare(a.city, b.city);
+      })
       .slice(0, 300)
       .map((r) => ({
-        prefecture: r.pref,
+        prefecture: r.prefecture,
         city: r.city,
         cityKana: r.cityKana,
       }));
