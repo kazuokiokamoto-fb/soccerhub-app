@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 
 const collator = new Intl.Collator("ja", { sensitivity: "base" });
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 function normalizeJa(text: string) {
   return (text || "")
@@ -33,34 +27,38 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const { data, error } = await supabase
-      .from("jp_municipalities")
-      .select("prefecture, city, city_kana")
-      .eq("prefecture", prefecture);
+    const url =
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/jp_municipalities` +
+      `?prefecture=eq.${encodeURIComponent(prefecture)}` +
+      `&select=prefecture,city,city_kana`;
 
-    if (error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
-    }
+    const res = await fetch(url, {
+      headers: {
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        Authorization:
+          `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+      },
+      cache: "no-store",
+    });
+
+    const data = await res.json();
 
     const rows = (data ?? [])
-      .map((r) => ({
+      .map((r: any) => ({
         prefecture: r.prefecture,
         city: r.city,
         cityKana: r.city_kana || "",
         cityNorm: normalizeJa(r.city),
         cityKanaNorm: normalizeJa(r.city_kana || ""),
       }))
-      .filter((r) => {
+      .filter((r: any) => {
         if (!q) return true;
         return (
           r.cityNorm.includes(q) ||
           r.cityKanaNorm.includes(q)
         );
       })
-      .sort((a, b) => {
+      .sort((a: any, b: any) => {
         const ak = a.cityKanaNorm || a.cityNorm || a.city;
         const bk = b.cityKanaNorm || b.cityNorm || b.city;
 
@@ -70,7 +68,7 @@ export async function GET(req: NextRequest) {
         return collator.compare(a.city, b.city);
       })
       .slice(0, 300)
-      .map((r) => ({
+      .map((r: any) => ({
         prefecture: r.prefecture,
         city: r.city,
         cityKana: r.cityKana,
