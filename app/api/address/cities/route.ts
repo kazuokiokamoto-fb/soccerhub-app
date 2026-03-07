@@ -1,32 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/app/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 
 const collator = new Intl.Collator("ja", { sensitivity: "base" });
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 function normalizeJa(text: string) {
   return (text || "")
     .trim()
     .replace(/\s+/g, "")
     .normalize("NFKC")
-    .replace(/[ァ-ヶ]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0x60));
+    .replace(/[ァ-ヶ]/g, (s) =>
+      String.fromCharCode(s.charCodeAt(0) - 0x60)
+    );
 }
-
-type MunicipalityRow = {
-  prefecture: string;
-  city: string;
-  city_kana?: string | null;
-};
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
+
     const prefecture = (searchParams.get("prefecture") || "").trim();
     const qRaw = (searchParams.get("q") || "").trim();
     const q = normalizeJa(qRaw);
 
     if (!prefecture) {
       return NextResponse.json(
-        { error: "prefecture は必須です" },
+        { error: "prefecture required" },
         { status: 400 }
       );
     }
@@ -34,9 +36,7 @@ export async function GET(req: NextRequest) {
     const { data, error } = await supabase
       .from("jp_municipalities")
       .select("prefecture, city, city_kana")
-      .eq("prefecture", prefecture)
-      .order("city_kana", { ascending: true })
-      .order("city", { ascending: true });
+      .eq("prefecture", prefecture);
 
     if (error) {
       return NextResponse.json(
@@ -45,29 +45,28 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const rows = ((data ?? []) as MunicipalityRow[])
-      .map((r) => {
-        const city = (r.city || "").trim();
-        const cityKana = (r.city_kana || "").trim();
-
-        return {
-          prefecture: r.prefecture,
-          city,
-          cityKana,
-          cityNorm: normalizeJa(city),
-          cityKanaNorm: normalizeJa(cityKana),
-        };
-      })
-      .filter((r) => r.city)
+    const rows = (data ?? [])
+      .map((r) => ({
+        prefecture: r.prefecture,
+        city: r.city,
+        cityKana: r.city_kana || "",
+        cityNorm: normalizeJa(r.city),
+        cityKanaNorm: normalizeJa(r.city_kana || ""),
+      }))
       .filter((r) => {
         if (!q) return true;
-        return r.cityNorm.includes(q) || r.cityKanaNorm.includes(q);
+        return (
+          r.cityNorm.includes(q) ||
+          r.cityKanaNorm.includes(q)
+        );
       })
       .sort((a, b) => {
         const ak = a.cityKanaNorm || a.cityNorm || a.city;
         const bk = b.cityKanaNorm || b.cityNorm || b.city;
+
         const c1 = collator.compare(ak, bk);
         if (c1 !== 0) return c1;
+
         return collator.compare(a.city, b.city);
       })
       .slice(0, 300)
