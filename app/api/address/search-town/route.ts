@@ -1,5 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/app/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
+
+type TownRow = {
+  prefecture: string;
+  city: string;
+  town: string;
+  town_kana: string | null;
+};
+
+const collator = new Intl.Collator("ja", { sensitivity: "base" });
+
+function normalizeJa(text: string) {
+  return (text || "")
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/　+/g, "")
+    .normalize("NFKC")
+    .replace(/[ァ-ヶ]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0x60));
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -7,7 +25,7 @@ export async function GET(req: NextRequest) {
 
     const prefecture = (searchParams.get("prefecture") || "").trim();
     const city = (searchParams.get("city") || "").trim();
-    const q = (searchParams.get("q") || "").trim();
+    const q = normalizeJa(searchParams.get("q") || "");
 
     const rawLimit = Number(searchParams.get("limit") || 20);
     const limit = Number.isFinite(rawLimit)
@@ -21,21 +39,24 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    let query = supabase
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json(
+        { error: "supabase env missing" },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+    const { data, error } = await supabase
       .from("jp_towns")
       .select("prefecture, city, town, town_kana")
       .eq("prefecture", prefecture)
       .eq("city", city)
-      .order("town_kana", { ascending: true })
-      .order("town", { ascending: true })
-      .limit(limit);
-
-    if (q) {
-      const q2 = q.replace(/\s+/g, "");
-      query = query.or(`town.ilike.%${q2}%,town_kana.ilike.%${q2}%`);
-    }
-
-    const { data, error } = await query;
+      .limit(300);
 
     if (error) {
       return NextResponse.json(
@@ -44,14 +65,39 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({
-      items: (data || []).map((row) => ({
-        prefecture: row.prefecture,
-        city: row.city,
-        town: row.town,
-        townKana: row.town_kana ?? "",
-      })),
-    });
+    const rows = ((data ?? []) as TownRow[])
+      .map((r) => {
+        const town = r.town ?? "";
+        const townKana = r.town_kana ?? "";
+        return {
+          prefecture: r.prefecture,
+          city: r.city,
+          town,
+          townKana,
+          townNorm: normalizeJa(town),
+          townKanaNorm: normalizeJa(townKana),
+        };
+      })
+      .filter((r) => {
+        if (!q) return true;
+        return r.townNorm.includes(q) || r.townKanaNorm.includes(q);
+      })
+      .sort((a, b) => {
+        const ak = a.townKanaNorm || a.townNorm || a.town;
+        const bk = b.townKanaNorm || b.townNorm || b.town;
+        const c1 = collator.compare(ak, bk);
+        if (c1 !== 0) return c1;
+        return collator.compare(a.town, b.town);
+      })
+      .slice(0, limit)
+      .map((r) => ({
+        prefecture: r.prefecture,
+        city: r.city,
+        town: r.town,
+        townKana: r.townKana,
+      }));
+
+    return NextResponse.json({ items: rows });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "unknown error" },
