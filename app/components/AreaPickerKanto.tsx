@@ -636,7 +636,7 @@ const listBoxCompact: React.CSSProperties = {
   border: "1px solid #eee",
   borderRadius: 12,
   background: "#fff",
-  maxHeight: 210, // 3.5件くらい見える高さ
+  maxHeight: 170, // 3.5件くらい見える高さ
   overflow: "auto",
 };
 
