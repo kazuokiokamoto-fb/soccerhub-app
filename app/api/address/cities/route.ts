@@ -19,10 +19,7 @@ export async function GET(req: NextRequest) {
     const q = normalizeJa(qRaw);
 
     if (!prefecture) {
-      return NextResponse.json(
-        { error: "prefecture required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ items: [] }, { status: 400 });
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
