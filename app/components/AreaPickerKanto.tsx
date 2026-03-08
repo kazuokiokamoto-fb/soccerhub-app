@@ -63,6 +63,10 @@ export function AreaPickerKanto(props: {
   const [loadingCities, setLoadingCities] = useState(false);
   const [loadingTowns, setLoadingTowns] = useState(false);
 
+  const [showPrefList, setShowPrefList] = useState(true);
+  const [showCityList, setShowCityList] = useState(true);
+  const [showTownList, setShowTownList] = useState(true);
+
   const collator = useMemo(() => new Intl.Collator("ja", { sensitivity: "base" }), []);
 
   const applyPrefecture = (p: string) => {
@@ -74,6 +78,9 @@ export function AreaPickerKanto(props: {
     setTownQuery("");
     setCityOptions([]);
     setTownOptions([]);
+    setShowPrefList(false);
+    setShowCityList(true);
+    setShowTownList(false);
   };
 
   const applyCity = (c: string) => {
@@ -82,11 +89,14 @@ export function AreaPickerKanto(props: {
     setTown("");
     setTownQuery("");
     setTownOptions([]);
+    setShowCityList(false);
+    setShowTownList(true);
   };
 
   const applyTown = (t: string) => {
     setTown(t);
     setTownQuery(t);
+    setShowTownList(false);
   };
 
   const clearPrefecture = () => {
@@ -98,6 +108,9 @@ export function AreaPickerKanto(props: {
     setTownQuery("");
     setCityOptions([]);
     setTownOptions([]);
+    setShowPrefList(true);
+    setShowCityList(false);
+    setShowTownList(false);
   };
 
   const clearCity = () => {
@@ -106,24 +119,42 @@ export function AreaPickerKanto(props: {
     setCityQuery("");
     setTownQuery("");
     setTownOptions([]);
+    setShowCityList(true);
+    setShowTownList(false);
   };
 
   const clearTown = () => {
     setTown("");
     setTownQuery("");
+    setShowTownList(true);
+  };
+
+  const reopenPref = () => {
+    setShowPrefList(true);
+    if (prefecture) setPrefQuery(prefecture);
+  };
+
+  const reopenCity = () => {
+    setShowCityList(true);
+    if (city) setCityQuery(city);
+  };
+
+  const reopenTown = () => {
+    setShowTownList(true);
+    if (town) setTownQuery(town);
   };
 
   useEffect(() => {
-    if (prefecture && prefQuery !== prefecture) setPrefQuery(prefecture);
-    if (!prefecture && prefQuery) setPrefQuery("");
+    if (prefecture && prefQuery !== prefecture && !showPrefList) setPrefQuery(prefecture);
+    if (!prefecture && prefQuery && !showPrefList) setPrefQuery("");
 
-    if (city && cityQuery !== city) setCityQuery(city);
-    if (!city && cityQuery) setCityQuery("");
+    if (city && cityQuery !== city && !showCityList) setCityQuery(city);
+    if (!city && cityQuery && !showCityList) setCityQuery("");
 
-    if (town && townQuery !== town) setTownQuery(town);
-    if (!town && townQuery) setTownQuery("");
+    if (town && townQuery !== town && !showTownList) setTownQuery(town);
+    if (!town && townQuery && !showTownList) setTownQuery("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefecture, city, town]);
+  }, [prefecture, city, town, showPrefList, showCityList, showTownList]);
 
   // 都道府県取得
   useEffect(() => {
@@ -174,7 +205,7 @@ export function AreaPickerKanto(props: {
     };
   }, [prefQuery, collator]);
 
-  // 都道府県変更時：市区町村全件取得
+  // 都道府県変更時：市区町村取得
   useEffect(() => {
     let cancelled = false;
 
@@ -288,7 +319,7 @@ export function AreaPickerKanto(props: {
     };
   }, [cityQuery, city, prefecture, collator]);
 
-  // 市区町村変更時：町名全件取得
+  // 市区町村変更時：町名取得
   useEffect(() => {
     let cancelled = false;
 
@@ -409,10 +440,6 @@ export function AreaPickerKanto(props: {
   const filteredCityOptions = useMemo(() => cityOptions, [cityOptions]);
   const filteredTownOptions = useMemo(() => townOptions, [townOptions]);
 
-  const showPrefList = !disabled;
-  const showCityList = !!prefecture;
-  const showTownList = !!prefecture && !!city;
-
   return (
     <div style={{ ...card, background: "#fafafa" }}>
       <div style={{ fontWeight: 900, marginBottom: 10 }}>{title}</div>
@@ -440,8 +467,10 @@ export function AreaPickerKanto(props: {
 
         <input
           value={prefQuery}
+          onFocus={() => setShowPrefList(true)}
           onChange={(e) => {
             setPrefQuery(e.target.value);
+            setShowPrefList(true);
             if (prefecture && e.target.value !== prefecture) {
               setPrefecture("");
               setCity("");
@@ -450,6 +479,8 @@ export function AreaPickerKanto(props: {
               setTownQuery("");
               setCityOptions([]);
               setTownOptions([]);
+              setShowCityList(false);
+              setShowTownList(false);
             }
           }}
           style={input}
@@ -457,41 +488,51 @@ export function AreaPickerKanto(props: {
           disabled={disabled}
         />
 
-        <div style={listBox}>
-          {!showPrefList ? (
-            <div style={{ color: "#777", fontSize: 12 }}>都道府県候補はありません</div>
-          ) : loadingPrefs ? (
-            <div style={{ color: "#777", fontSize: 12 }}>都道府県を読み込み中です...</div>
-          ) : filteredPrefectureOptions.length === 0 ? (
-            <div style={{ color: "#777", fontSize: 12 }}>一致する都道府県候補がありません</div>
-          ) : (
-            filteredPrefectureOptions.map((x) => {
-              const active = prefecture === x.prefecture;
-              return (
-                <button
-                  key={x.prefecture}
-                  type="button"
-                  onClick={() => applyPrefecture(x.prefecture)}
-                  disabled={disabled}
-                  style={{ ...rowBtn, ...(active ? rowBtnActive : null) }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-                    <div style={{ fontWeight: 800 }}>{x.prefecture}</div>
-                    {x.prefectureKana ? (
-                      <div style={{ fontSize: 12, color: active ? "#111" : "#777", whiteSpace: "nowrap" }}>
-                        {x.prefectureKana}
-                      </div>
-                    ) : null}
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
+        {prefecture ? (
+          <div style={selectedBox}>
+            <div style={{ fontSize: 12, color: "#777" }}>選択中：<b>{prefecture}</b></div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={reopenPref} disabled={disabled}>
+                都道府県を変更
+              </button>
+              <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={clearPrefecture} disabled={disabled}>
+                クリア
+              </button>
+            </div>
+          </div>
+        ) : null}
 
-        <div style={{ fontSize: 12, color: "#777" }}>
-          選択中：<b>{prefecture || "（未選択）"}</b>
-        </div>
+        {showPrefList ? (
+          <div style={listBoxCompact}>
+            {loadingPrefs ? (
+              <div style={{ color: "#777", fontSize: 12 }}>都道府県を読み込み中です...</div>
+            ) : filteredPrefectureOptions.length === 0 ? (
+              <div style={{ color: "#777", fontSize: 12 }}>一致する都道府県候補がありません</div>
+            ) : (
+              filteredPrefectureOptions.map((x) => {
+                const active = prefecture === x.prefecture;
+                return (
+                  <button
+                    key={x.prefecture}
+                    type="button"
+                    onClick={() => applyPrefecture(x.prefecture)}
+                    disabled={disabled}
+                    style={{ ...rowBtn, ...(active ? rowBtnActive : null) }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                      <div style={{ fontWeight: 800 }}>{x.prefecture}</div>
+                      {x.prefectureKana ? (
+                        <div style={{ fontSize: 12, color: active ? "#111" : "#777", whiteSpace: "nowrap" }}>
+                          {x.prefectureKana}
+                        </div>
+                      ) : null}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        ) : null}
       </div>
 
       {/* 市区町村 */}
@@ -505,13 +546,18 @@ export function AreaPickerKanto(props: {
 
         <input
           value={cityQuery}
+          onFocus={() => {
+            if (prefecture) setShowCityList(true);
+          }}
           onChange={(e) => {
             setCityQuery(e.target.value);
+            if (prefecture) setShowCityList(true);
             if (city && e.target.value !== city) {
               setCity("");
               setTown("");
               setTownQuery("");
               setTownOptions([]);
+              setShowTownList(false);
             }
           }}
           style={input}
@@ -527,46 +573,50 @@ export function AreaPickerKanto(props: {
             : "市区町村はあいうえお順で表示します。漢字・ひらがな、どちらでも検索できます。"}
         </div>
 
-        <div style={listBoxTall}>
-          {!showCityList ? (
-            <div style={{ color: "#777", fontSize: 12 }}>先に都道府県を選択してください</div>
-          ) : loadingCities ? (
-            <div style={{ color: "#777", fontSize: 12 }}>市区町村を読み込み中です...</div>
-          ) : filteredCityOptions.length === 0 ? (
-            <div style={{ color: "#777", fontSize: 12 }}>一致する市区町村候補がありません</div>
-          ) : (
-            filteredCityOptions.map((x) => {
-              const active = city === x.city;
-              return (
-                <button
-                  key={x.city}
-                  type="button"
-                  onClick={() => applyCity(x.city)}
-                  disabled={disabled}
-                  style={{ ...rowBtn, ...(active ? rowBtnActive : null) }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-                    <div style={{ fontWeight: 800 }}>{x.city}</div>
-                    {x.cityKana ? (
-                      <div style={{ fontSize: 12, color: active ? "#111" : "#777", whiteSpace: "nowrap" }}>
-                        {x.cityKana}
-                      </div>
-                    ) : null}
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        <div style={{ fontSize: 12, color: "#777" }}>
-          選択中：<b>{city || "（未選択）"}</b>
-        </div>
-
         {city ? (
-          <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={clearCity} disabled={disabled}>
-            市区町村をクリア
-          </button>
+          <div style={selectedBox}>
+            <div style={{ fontSize: 12, color: "#777" }}>選択中：<b>{city}</b></div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={reopenCity} disabled={disabled}>
+                市区町村を変更
+              </button>
+              <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={clearCity} disabled={disabled}>
+                市区町村をクリア
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {showCityList && prefecture ? (
+          <div style={listBoxCompact}>
+            {loadingCities ? (
+              <div style={{ color: "#777", fontSize: 12 }}>市区町村を読み込み中です...</div>
+            ) : filteredCityOptions.length === 0 ? (
+              <div style={{ color: "#777", fontSize: 12 }}>一致する市区町村候補がありません</div>
+            ) : (
+              filteredCityOptions.map((x) => {
+                const active = city === x.city;
+                return (
+                  <button
+                    key={x.city}
+                    type="button"
+                    onClick={() => applyCity(x.city)}
+                    disabled={disabled}
+                    style={{ ...rowBtn, ...(active ? rowBtnActive : null) }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                      <div style={{ fontWeight: 800 }}>{x.city}</div>
+                      {x.cityKana ? (
+                        <div style={{ fontSize: 12, color: active ? "#111" : "#777", whiteSpace: "nowrap" }}>
+                          {x.cityKana}
+                        </div>
+                      ) : null}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
         ) : null}
       </div>
 
@@ -581,8 +631,12 @@ export function AreaPickerKanto(props: {
 
         <input
           value={townQuery}
+          onFocus={() => {
+            if (city) setShowTownList(true);
+          }}
           onChange={(e) => {
             setTownQuery(e.target.value);
+            if (city) setShowTownList(true);
             if (town && e.target.value !== town) {
               setTown("");
             }
@@ -598,47 +652,55 @@ export function AreaPickerKanto(props: {
             : "町名はあいうえお順で表示します。漢字・ひらがな、どちらでも検索できます。"}
         </div>
 
-        <div style={listBoxTall}>
-          {!showTownList ? (
-            <div style={{ color: "#777", fontSize: 12 }}>先に市区町村を選択してください</div>
-          ) : loadingTowns ? (
-            <div style={{ color: "#777", fontSize: 12 }}>町名候補を読み込み中です...</div>
-          ) : filteredTownOptions.length === 0 ? (
-            <div style={{ color: "#777", fontSize: 12 }}>一致する町名候補がありません</div>
-          ) : (
-            filteredTownOptions.map((x) => {
-              const active = town === x.town;
-              return (
-                <button
-                  key={`${x.town}__${x.townKana ?? ""}`}
-                  type="button"
-                  onClick={() => applyTown(x.town)}
-                  disabled={disabled}
-                  style={{ ...rowBtn, ...(active ? rowBtnActive : null) }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-                    <div style={{ fontWeight: 800 }}>{x.town}</div>
-                    {x.townKana ? (
-                      <div style={{ fontSize: 12, color: active ? "#111" : "#777", whiteSpace: "nowrap" }}>
-                        {x.townKana}
-                      </div>
-                    ) : null}
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
+        {town ? (
+          <div style={selectedBox}>
+            <div style={{ fontSize: 12, color: "#777" }}>選択中：<b>{town}</b></div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={reopenTown} disabled={disabled}>
+                町名を変更
+              </button>
+              <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={clearTown} disabled={disabled}>
+                町名をクリア
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {showTownList && city ? (
+          <div style={listBoxCompact}>
+            {loadingTowns ? (
+              <div style={{ color: "#777", fontSize: 12 }}>町名候補を読み込み中です...</div>
+            ) : filteredTownOptions.length === 0 ? (
+              <div style={{ color: "#777", fontSize: 12 }}>一致する町名候補がありません</div>
+            ) : (
+              filteredTownOptions.map((x) => {
+                const active = town === x.town;
+                return (
+                  <button
+                    key={`${x.town}__${x.townKana ?? ""}`}
+                    type="button"
+                    onClick={() => applyTown(x.town)}
+                    disabled={disabled}
+                    style={{ ...rowBtn, ...(active ? rowBtnActive : null) }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                      <div style={{ fontWeight: 800 }}>{x.town}</div>
+                      {x.townKana ? (
+                        <div style={{ fontSize: 12, color: active ? "#111" : "#777", whiteSpace: "nowrap" }}>
+                          {x.townKana}
+                        </div>
+                      ) : null}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        ) : null}
 
         <div style={{ fontSize: 12, color: "#777" }}>
           表示例：<b>{`${prefecture || "（都道府県未選択）"} ${city || "（市区町村未選択）"}${town ? "・" + town : ""}`}</b>
         </div>
-
-        {town ? (
-          <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={clearTown} disabled={disabled}>
-            町名をクリア
-          </button>
-        ) : null}
       </div>
     </div>
   );
@@ -658,7 +720,16 @@ const input: React.CSSProperties = {
   background: "white",
 };
 
-const listBox: React.CSSProperties = {
+const selectedBox: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+  padding: 10,
+  border: "1px solid #eee",
+  borderRadius: 12,
+  background: "#fff",
+};
+
+const listBoxCompact: React.CSSProperties = {
   display: "grid",
   gap: 6,
   padding: 10,
@@ -666,17 +737,6 @@ const listBox: React.CSSProperties = {
   borderRadius: 12,
   background: "#fff",
   maxHeight: 220,
-  overflow: "auto",
-};
-
-const listBoxTall: React.CSSProperties = {
-  display: "grid",
-  gap: 6,
-  padding: 10,
-  border: "1px solid #eee",
-  borderRadius: 12,
-  background: "#fff",
-  maxHeight: 360,
   overflow: "auto",
 };
 
