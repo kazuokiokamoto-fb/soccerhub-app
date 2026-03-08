@@ -11,6 +11,11 @@ import { GradeKey } from "@/app/lib/types";
 import { CATEGORY_OPTIONS } from "@/app/lib/categories";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
+import {
+  StrengthRankPicker,
+  StrengthRank,
+  strengthRankToLegacyLevel,
+} from "@/app/components/StrengthRankPicker";
 
 const gradeKeys: GradeKey[] = ["G1", "G2", "G3", "G4", "G5", "G6"];
 
@@ -20,14 +25,15 @@ function makeDefaultRoster11(): Record<GradeKey, string> {
   return { G1: "11", G2: "11", G3: "11", G4: "11", G5: "11", G6: "11" };
 }
 
-// contact_* や address_detail カラムが無い環境でも落ちないようにする（列差分の吸収）
+// contact_* / address_detail / strength_rank が無い環境でも落ちないようにする
 function isMissingColumnError(err: any) {
   const msg = String(err?.message ?? "");
   return (
     msg.includes("does not exist") ||
     msg.includes("Could not find") ||
     msg.includes("schema cache") ||
-    (msg.includes("column") && (msg.includes("contact_") || msg.includes("address_detail")))
+    (msg.includes("column") &&
+      (msg.includes("contact_") || msg.includes("address_detail") || msg.includes("strength_rank")))
   );
 }
 
@@ -41,7 +47,7 @@ export default function TeamNewPage() {
   const [name, setName] = useState("");
 
   const [categories, setCategories] = useState<string[]>([]);
-  const [level, setLevel] = useState(5);
+  const [strengthRank, setStrengthRank] = useState<StrengthRank>("A");
   const [hasGround, setHasGround] = useState(false);
   const [bikeParking, setBikeParking] = useState("不明");
   const [uniformMain, setUniformMain] = useState("");
@@ -51,7 +57,6 @@ export default function TeamNewPage() {
   const [city, setCity] = useState("");
   const [town, setTown] = useState("");
 
-  // ✅ NEW: 丁目・番地・号（例: "1-2-3"）
   const [addressDetail, setAddressDetail] = useState("");
 
   const [rosterByGradeText, setRosterByGradeText] = useState<Record<GradeKey, string>>(
@@ -65,11 +70,9 @@ export default function TeamNewPage() {
   const [contactLineId, setContactLineId] = useState("");
 
   const canSave = useMemo(() => {
-    // ※ 住所詳細は任意（地図リンクを綺麗にしたい場合だけ入力）
     return !!name.trim() && !!prefecture && !!city && categories.length > 0 && !saving;
   }, [name, prefecture, city, categories, saving]);
 
-  // toast auto close
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3000);
@@ -79,7 +82,7 @@ export default function TeamNewPage() {
   const resetForm = () => {
     setName("");
     setCategories([]);
-    setLevel(5);
+    setStrengthRank("A");
     setHasGround(false);
     setBikeParking("不明");
     setUniformMain("");
@@ -118,11 +121,7 @@ export default function TeamNewPage() {
       }
 
       const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
-
-      // ✅ 地図リンク用途：より詳細な住所文字列（DB保存は任意）
       const addrDetail = addressDetail.trim();
-      const fullAddressText = `${prefecture}${city}${town}${addrDetail ? addrDetail : ""}`.trim();
-
       const primaryCategory = categories[0];
 
       const basePayload: any = {
@@ -130,7 +129,8 @@ export default function TeamNewPage() {
         name: name.trim(),
         categories,
         category: primaryCategory,
-        level,
+        level: strengthRankToLegacyLevel(strengthRank),
+        strength_rank: strengthRank,
         has_ground: hasGround,
         bike_parking: bikeParking,
         uniform_main: uniformMain.trim() || "不明",
@@ -141,15 +141,9 @@ export default function TeamNewPage() {
         city,
         town: town || null,
         area: areaText,
-
-        // ✅ NEW: DBに列がある場合だけ保存される想定（無ければフォールバックで落ちない）
         address_detail: addrDetail || null,
-
-        // （任意）将来的に full_address などに保存したくなったらここに追加可能
-        // full_address: fullAddressText || null,
       };
 
-      // まず contact_* 付きで試す（DBにあれば保存される）
       const withContact: any = {
         ...basePayload,
         contact_email: contactEmail.trim() || null,
@@ -159,15 +153,15 @@ export default function TeamNewPage() {
 
       let res = await supabase.from("teams").insert(withContact).select("id").single();
 
-      // contact_* / address_detail が無い環境なら、外して再試行（落とさない）
       if (res.error && isMissingColumnError(res.error)) {
         console.warn("missing columns. retry without optional fields:", res.error.message);
 
         const fallbackPayload: any = {
           ...basePayload,
         };
-        // 念のため、address_detail も外す（列が無い環境向け）
+
         delete fallbackPayload.address_detail;
+        delete fallbackPayload.strength_rank;
 
         res = await supabase.from("teams").insert(fallbackPayload).select("id").single();
       }
@@ -182,7 +176,6 @@ export default function TeamNewPage() {
       setToast({ type: "success", text: "✅ 登録しました" });
       const newId = (res.data as any)?.id;
 
-      // ここはあなたの方針どおり：/teams は自分管理（後で /teams/search に分離する想定でもOK）
       router.push(`/teams?created=${newId}`);
 
       resetForm();
@@ -200,7 +193,6 @@ export default function TeamNewPage() {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
         <h1 style={{ margin: 0 }}>チーム登録</h1>
-        {/* ✅ 上部ボタン整理：この画面は「一覧へ」だけでOK */}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <Link href="/teams" className="sh-btn">
             一覧へ
@@ -225,9 +217,9 @@ export default function TeamNewPage() {
             setTown={setTown}
             title="エリア（関東）"
             townOptional={true}
+            allowAll={false}
           />
 
-          {/* ✅ NEW: 住所詳細（丁目・番地・号） */}
           <label style={label}>
             <span>住所（丁目・番地・号）（任意）</span>
             <input
@@ -253,18 +245,12 @@ export default function TeamNewPage() {
             disabled={saving}
           />
 
-          <label style={label}>
-            <span>強さ（自己申告 1〜10）：{level}</span>
-            <input
-              type="range"
-              min={1}
-              max={10}
-              value={level}
-              onChange={(e) => setLevel(Number(e.target.value))}
-              style={{ width: "100%" }}
-              disabled={saving}
-            />
-          </label>
+          <StrengthRankPicker
+            value={strengthRank}
+            onChange={setStrengthRank}
+            disabled={saving}
+            title="強さ（ランク選択）"
+          />
 
           <label style={{ ...checkLabel, opacity: saving ? 0.7 : 1 }}>
             <input
