@@ -13,7 +13,7 @@ type DbTeam = {
   owner_id: string;
   name: string;
   area: string;
-  area_kana: string | null; // ✅ 追加（あいうえお順用）
+  area_kana: string | null;
   category: string;
   level: number;
   has_ground: boolean;
@@ -63,6 +63,14 @@ function formatAvailability(desiredDates?: string[]) {
   return pretty.filter(Boolean).join(" / ") || "未登録";
 }
 
+function levelLabel(level: number) {
+  if (level >= 9) return "SS";
+  if (level >= 7) return "S";
+  if (level >= 5) return "A";
+  if (level >= 3) return "B";
+  return "C";
+}
+
 export default function TeamsPage() {
   return (
     <Suspense fallback={<p style={{ padding: 24, color: "#777" }}>読み込み中...</p>}>
@@ -80,12 +88,10 @@ function TeamsPageInner() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
 
-  // auth
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setMeId(data?.user?.id ?? ""));
   }, []);
 
-  // 登録直後のトースト
   useEffect(() => {
     if (!createdId) return;
     setToast({ type: "success", text: "✅ チームを登録しました（一覧に反映）" });
@@ -102,8 +108,6 @@ function TeamsPageInner() {
       return;
     }
 
-    // ✅ area_kana（あいうえお順）で並べる
-    // 同じ area_kana の中は name で並べる（任意）
     const { data, error } = await supabase
       .from("teams")
       .select(
@@ -151,8 +155,7 @@ function TeamsPageInner() {
   const createdTeam = useMemo(() => teams.find((t) => t.id === createdId), [teams, createdId]);
 
   return (
-    <main style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
-      {/* Toast */}
+    <main style={wrap}>
       {toast ? (
         <div
           style={{
@@ -169,14 +172,17 @@ function TeamsPageInner() {
         </div>
       ) : null}
 
-      <h1 style={{ margin: 0 }}>マイページ</h1>
-      <p style={{ color: "#555", marginTop: 6 }}>自分が登録したチームの編集・削除ができます。</p>
+      <section style={heroBox}>
+        <div style={heroBadge}>⚽ サカまち</div>
+        <h1 style={title}>マイチーム</h1>
+        <p style={desc}>自分が登録したチームの編集・削除ができます。</p>
 
-      <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-        <Link href="/teams/new" className="sh-btn">
-          ＋ チーム登録へ
-        </Link>
-      </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+          <Link href="/teams/new" className="sh-btn sh-btn--primary">
+            ＋ チーム登録へ
+          </Link>
+        </div>
+      </section>
 
       {!meId ? <div style={{ marginTop: 16, color: "#991b1b" }}>ログインが必要です。</div> : null}
 
@@ -189,26 +195,49 @@ function TeamsPageInner() {
       {loading ? (
         <p style={{ color: "#777", marginTop: 16 }}>読み込み中...</p>
       ) : (
-        <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
+        <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
           {meId && teams.length === 0 ? (
             <p style={{ color: "#777" }}>まだチームがありません。登録してみてください。</p>
           ) : (
             teams.map((t) => {
               const isCreated = createdId && t.id === createdId;
+              const rank = levelLabel(t.level);
+
               return (
                 <div
                   key={t.id}
                   style={{
-                    padding: 12,
-                    borderRadius: 12,
-                    border: isCreated ? "2px solid #86efac" : "1px solid #eee",
-                    background: isCreated ? "#f0fdf4" : "#fafafa",
-                    boxShadow: isCreated ? "0 0 0 4px rgba(34,197,94,0.10)" : "none",
+                    padding: 16,
+                    borderRadius: 18,
+                    border: isCreated ? "2px solid #86efac" : "1px solid #e5e7eb",
+                    background: isCreated ? "#f0fdf4" : "#ffffff",
+                    boxShadow: isCreated ? "0 0 0 4px rgba(34,197,94,0.10)" : "0 4px 12px rgba(0,0,0,0.04)",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-                    <div style={{ fontWeight: 800 }}>
-                      {t.name} {isCreated ? "✅" : ""}
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      alignItems: "flex-start",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ fontWeight: 900, fontSize: 20, color: "#16391f" }}>
+                          {t.name} {isCreated ? "✅" : ""}
+                        </div>
+
+                        <span style={rankBadge}>{rank}</span>
+                        <span style={categoryBadge}>{t.category}</span>
+                      </div>
+
+                      <div style={{ color: "#666", marginTop: 8, lineHeight: 1.8 }}>
+                        📍 {t.area}
+                        <br />
+                        💪 強さ {t.level} / 🏟 グラウンド {t.hasGround ? "あり" : "なし"} / 🚲 {t.bikeParking}
+                      </div>
                     </div>
 
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -221,29 +250,34 @@ function TeamsPageInner() {
                     </div>
                   </div>
 
-                  <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
-                    {t.area} / {t.category} / 強さ {t.level} / グラウンド {t.hasGround ? "あり" : "なし"} / 🚲{" "}
-                    {t.bikeParking}
-                  </div>
-
-                  <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
-                    ユニ：{t.uniformMain}（メイン） / {t.uniformSub}（サブ）
-                  </div>
-
-                  <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
-                    人数：G1 {t.rosterByGrade.G1} / G2 {t.rosterByGrade.G2} / G3 {t.rosterByGrade.G3} / G4{" "}
-                    {t.rosterByGrade.G4} / G5 {t.rosterByGrade.G5} / G6 {t.rosterByGrade.G6}
-                  </div>
-
-                  <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
-                    希望枠：{formatAvailability(t.desiredDates)}
-                  </div>
-
-                  {t.note ? (
-                    <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
-                      メモ：{t.note}
+                  <div style={infoGrid}>
+                    <div style={infoBox}>
+                      <div style={infoLabel}>ユニフォーム</div>
+                      <div style={infoValue}>
+                        {t.uniformMain}（メイン） / {t.uniformSub}（サブ）
+                      </div>
                     </div>
-                  ) : null}
+
+                    <div style={infoBox}>
+                      <div style={infoLabel}>人数</div>
+                      <div style={infoValue}>
+                        G1 {t.rosterByGrade.G1} / G2 {t.rosterByGrade.G2} / G3 {t.rosterByGrade.G3} / G4{" "}
+                        {t.rosterByGrade.G4} / G5 {t.rosterByGrade.G5} / G6 {t.rosterByGrade.G6}
+                      </div>
+                    </div>
+
+                    <div style={infoBox}>
+                      <div style={infoLabel}>希望枠</div>
+                      <div style={infoValue}>{formatAvailability(t.desiredDates)}</div>
+                    </div>
+
+                    {t.note ? (
+                      <div style={infoBoxWide}>
+                        <div style={infoLabel}>メモ</div>
+                        <div style={infoValue}>{t.note}</div>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               );
             })
@@ -254,15 +288,110 @@ function TeamsPageInner() {
   );
 }
 
-const miniInfo: React.CSSProperties = {
-  padding: "10px 12px",
-  border: "1px solid #eee",
-  borderRadius: 12,
-  background: "#fff",
-  color: "#444",
+const wrap: React.CSSProperties = {
+  padding: 24,
+  maxWidth: 960,
+  margin: "0 auto",
 };
 
-// --- toast styles ---
+const heroBox: React.CSSProperties = {
+  borderRadius: 20,
+  background: "linear-gradient(135deg, #1e7f3c 0%, #145c2a 100%)",
+  color: "#fff",
+  padding: 20,
+  boxShadow: "0 10px 28px rgba(20,92,42,0.20)",
+};
+
+const heroBadge: React.CSSProperties = {
+  display: "inline-flex",
+  padding: "6px 12px",
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.14)",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const title: React.CSSProperties = {
+  margin: "10px 0 0",
+  fontSize: 30,
+  fontWeight: 900,
+};
+
+const desc: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "rgba(255,255,255,0.92)",
+  lineHeight: 1.7,
+};
+
+const miniInfo: React.CSSProperties = {
+  padding: "10px 12px",
+  border: "1px solid #d6eadb",
+  borderRadius: 12,
+  background: "#fff",
+  color: "#295233",
+};
+
+const rankBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minWidth: 36,
+  height: 28,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#f5c542",
+  color: "#3a2b00",
+  fontWeight: 900,
+  fontSize: 12,
+};
+
+const categoryBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  height: 28,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#eef7f0",
+  color: "#1f5d30",
+  fontWeight: 800,
+  fontSize: 12,
+  border: "1px solid #d6eadb",
+};
+
+const infoGrid: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+  marginTop: 14,
+};
+
+const infoBox: React.CSSProperties = {
+  border: "1px solid #edf1ee",
+  borderRadius: 12,
+  background: "#fafcfb",
+  padding: "10px 12px",
+};
+
+const infoBoxWide: React.CSSProperties = {
+  border: "1px solid #edf1ee",
+  borderRadius: 12,
+  background: "#fafcfb",
+  padding: "10px 12px",
+};
+
+const infoLabel: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#5b6d61",
+  marginBottom: 4,
+};
+
+const infoValue: React.CSSProperties = {
+  fontSize: 14,
+  color: "#2d3b31",
+  lineHeight: 1.7,
+};
+
 const toastBox: React.CSSProperties = {
   position: "sticky",
   top: 10,

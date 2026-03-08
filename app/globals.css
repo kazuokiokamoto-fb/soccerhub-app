@@ -1,48 +1,53 @@
-/* ===== SoccerHub 共通ボタン ===== */
+/* ===== サカまち 共通ボタン ===== */
 .sh-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
 
+  min-height: 44px;
   padding: 12px 16px;
-  border-radius: 12px;
-  border: 1px solid #ddd;
+  border-radius: 14px;
+  border: 1px solid #cfe3d4;
   background: #ffffff;
-  color: #111;
+  color: #16391f;
 
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.2px;
+  line-height: 1;
 
   cursor: pointer;
   text-decoration: none;
+  white-space: nowrap;
 
   transition:
     transform 0.15s ease,
     box-shadow 0.15s ease,
     background-color 0.15s ease,
-    border-color 0.15s ease;
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
-/* hover：浮く */
+/* hover：少し浮く */
 .sh-btn:hover {
-  background: #f9fafb;
-  border-color: #ccc;
+  background: #f7fbf8;
+  border-color: #9fc9aa;
+  color: #145c2a;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 6px 16px rgba(20, 92, 42, 0.10);
 }
 
-/* active：押し込まれる */
+/* active：押し込み */
 .sh-btn:active {
   transform: translateY(0);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12) inset;
+  box-shadow: 0 2px 6px rgba(20, 92, 42, 0.12) inset;
 }
 
-/* focus：キーボード操作対応 */
+/* focus：キーボード操作 */
 .sh-btn:focus-visible {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+  border-color: #1e7f3c;
+  box-shadow: 0 0 0 3px rgba(30, 127, 60, 0.22);
 }
 
 /* disabled */
@@ -53,38 +58,199 @@
   transform: none;
 }
 
-/* Danger variant */
+/* プライマリ */
+.sh-btn--primary {
+  background: linear-gradient(135deg, #1e7f3c 0%, #145c2a 100%);
+  border-color: #145c2a;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(20, 92, 42, 0.18);
+}
+
+.sh-btn--primary:hover {
+  background: linear-gradient(135deg, #239246 0%, #176c31 100%);
+  border-color: #176c31;
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(20, 92, 42, 0.22);
+}
+
+/* Danger */
 .sh-btn--danger {
-  border-color: #f0caca;
+  border-color: #efcaca;
+  background: #fffafa;
   color: #b10000;
 }
 
-/* globals.css */
-@media (max-width: 820px) {
-  .sh-card {
-    min-height: 120px;
-  }
-  main > section[style*="grid-template-columns: repeat(3"] {
-    display: grid !important;
-    grid-template-columns: 1fr !important;
-  }
+.sh-btn--danger:hover {
+  background: #fff3f3;
+  border-color: #e4a9a9;
+  color: #980000;
+  box-shadow: 0 6px 14px rgba(177, 0, 0, 0.08);
 }
 
-/* ===== SoccerHub: Home grid responsive ===== */
+/* サブトーン */
+.sh-btn--ghost {
+  background: #eef7f0;
+  border-color: #d6eadb;
+  color: #1f5d30;
+}
+
+.sh-btn--ghost:hover {
+  background: #e6f3e9;
+  border-color: #bfdcc7;
+  color: #174a25;
+}
+
+/* ===== 共通カード ===== */
+.sh-card {
+  border: 1px solid #e4ebe6;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.04);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.sh-card:hover {
+  transform: translateY(-2px);
+  border-color: #cfe3d4;
+  box-shadow: 0 12px 28px rgba(20, 92, 42, 0.08);
+}
+
+/* ===== ホームグリッド ===== */
 .sh-home-grid {
+  display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
-/* iPad縦〜タブレット */
+/* ===== ラッパー系 ===== */
+.sh-page-wrap {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.sh-section {
+  border: 1px solid #e5ece7;
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 16px;
+}
+
+.sh-hero {
+  border-radius: 22px;
+  background: linear-gradient(135deg, #1e7f3c 0%, #145c2a 100%);
+  color: #ffffff;
+  box-shadow: 0 12px 28px rgba(20, 92, 42, 0.18);
+}
+
+/* ===== ラベル・バッジ ===== */
+.sh-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid #d6eadb;
+  background: #eef7f0;
+  color: #1f5d30;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sh-badge--gold {
+  border-color: #e7d08a;
+  background: #f7e7a8;
+  color: #574100;
+}
+
+.sh-badge--danger {
+  border-color: #efcaca;
+  background: #fff3f3;
+  color: #a40000;
+}
+
+/* ===== 入力系 ===== */
+.sh-input,
+.sh-select,
+.sh-textarea {
+  width: 100%;
+  border: 1px solid #d9e3dc;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 15px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.sh-input::placeholder,
+.sh-textarea::placeholder {
+  color: #9aa4a0;
+}
+
+.sh-input:focus,
+.sh-select:focus,
+.sh-textarea:focus {
+  outline: none;
+  border-color: #1e7f3c;
+  box-shadow: 0 0 0 3px rgba(30, 127, 60, 0.16);
+  background: #ffffff;
+}
+
+/* ===== テキスト色補助 ===== */
+.sh-text-muted {
+  color: #66756d;
+}
+
+.sh-text-soft {
+  color: #7d8a84;
+}
+
+.sh-title-green {
+  color: #145c2a;
+}
+
+/* ===== iPad縦〜タブレット ===== */
 @media (max-width: 1024px) {
   .sh-home-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-/* スマホ */
+/* ===== スマホ ===== */
 @media (max-width: 640px) {
   .sh-home-grid {
     grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .sh-card {
+    min-height: 120px;
+  }
+
+  .sh-section {
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .sh-btn {
+    min-height: 42px;
+    padding: 11px 14px;
+    font-size: 14px;
+  }
+}
+
+/* ===== 旧style依存の保険 ===== */
+@media (max-width: 820px) {
+  main > section[style*="grid-template-columns: repeat(3"] {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
   }
 }

@@ -10,6 +10,7 @@ type StrengthDef = {
   title: string;
   bullets: string[];
   note: string;
+  stars: string;
 };
 
 const STRENGTH_DEFS: StrengthDef[] = [
@@ -24,6 +25,7 @@ const STRENGTH_DEFS: StrengthDef[] = [
       "公式戦同等レベルの緊張感ある試合を希望",
     ],
     note: "⭐︎ 「強度の高い実戦形式」を求めるチーム向け",
+    stars: "★★★★★",
   },
   {
     rank: "S",
@@ -36,6 +38,7 @@ const STRENGTH_DEFS: StrengthDef[] = [
       "上位リーグ昇格を目指すレベル",
     ],
     note: "⭐︎ 「しっかり競り合える相手」を求めるチーム向け",
+    stars: "★★★★☆",
   },
   {
     rank: "A",
@@ -48,6 +51,7 @@ const STRENGTH_DEFS: StrengthDef[] = [
       "チャレンジマッチにも適したレベル",
     ],
     note: "⭐︎ 「公式戦を想定しつつ育成も重視」するチーム向け",
+    stars: "★★★☆☆",
   },
   {
     rank: "B",
@@ -60,6 +64,7 @@ const STRENGTH_DEFS: StrengthDef[] = [
       "バランスの良いマッチング向き",
     ],
     note: "⭐︎ 「経験を積みたい」「自信をつけたい」チーム向け",
+    stars: "★★☆☆☆",
   },
   {
     rank: "C",
@@ -72,6 +77,7 @@ const STRENGTH_DEFS: StrengthDef[] = [
       "勝敗よりも経験や交流を重視",
     ],
     note: "⭐︎ 「楽しく真剣に」「幅広い交流」を希望するチーム向け",
+    stars: "★☆☆☆☆",
   },
 ];
 
@@ -113,25 +119,40 @@ export function StrengthRankPicker(props: {
 
   return (
     <div style={wrap}>
-      <div style={{ fontWeight: 800 }}>{title}</div>
+      <div style={head}>
+        <div>
+          <div style={titleStyle}>{title}</div>
+          <div style={subText}>ランクを押すと説明が切り替わります</div>
+        </div>
+      </div>
 
       <div style={rankGrid}>
         {STRENGTH_DEFS.map((item) => {
           const active = item.rank === value;
+
           return (
             <button
               key={item.rank}
               type="button"
               onClick={() => onChange(item.rank)}
               disabled={disabled}
+              aria-pressed={active}
               style={{
                 ...rankBtn,
                 ...(active ? rankBtnActive : null),
                 ...(disabled ? disabledStyle : null),
               }}
             >
-              <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.1 }}>{item.rank}</div>
-              <div style={{ fontSize: 12, marginTop: 6, color: active ? "#111" : "#666" }}>
+              <div style={rankTopRow}>
+                <div style={rankMain}>{item.rank}</div>
+                {active ? <span style={selectedBadge}>選択中</span> : null}
+              </div>
+
+              <div style={{ ...starsText, color: active ? "#7a5a00" : "#7b7b7b" }}>
+                {item.stars}
+              </div>
+
+              <div style={{ ...shortLabelText, color: active ? "#145c2a" : "#4e5a53" }}>
                 {item.shortLabel}
               </div>
             </button>
@@ -140,23 +161,27 @@ export function StrengthRankPicker(props: {
       </div>
 
       <div style={detailCard}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 24, fontWeight: 900 }}>{selected.rank}</div>
-          <div style={{ fontWeight: 800 }}>{selected.shortLabel}</div>
+        <div style={detailTop}>
+          <div style={rankPill}>{selected.rank}</div>
+
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={detailShortLabel}>{selected.shortLabel}</div>
+            <div style={detailStars}>{selected.stars}</div>
+          </div>
         </div>
 
-        <div style={{ marginTop: 8, fontWeight: 700 }}>{selected.title}</div>
+        <div style={detailTitle}>{selected.title}</div>
 
-        <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+        <div style={bulletList}>
           {selected.bullets.map((b) => (
             <div key={b} style={bulletRow}>
-              <span style={{ fontWeight: 900 }}>•</span>
+              <span style={bulletMark}>•</span>
               <span>{b}</span>
             </div>
           ))}
         </div>
 
-        <div style={{ marginTop: 12, fontWeight: 700 }}>{selected.note}</div>
+        <div style={noteBox}>{selected.note}</div>
       </div>
     </div>
   );
@@ -167,6 +192,25 @@ const wrap: React.CSSProperties = {
   gap: 12,
 };
 
+const head: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+};
+
+const titleStyle: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 16,
+  color: "#1f5d30",
+};
+
+const subText: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 12,
+  color: "#66756d",
+};
+
 const rankGrid: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
@@ -175,24 +219,115 @@ const rankGrid: React.CSSProperties = {
 
 const rankBtn: React.CSSProperties = {
   padding: "12px 10px",
-  borderRadius: 12,
-  border: "1px solid #ddd",
-  background: "#fff",
+  borderRadius: 14,
+  border: "1px solid #dfe7e2",
+  background: "#ffffff",
   cursor: "pointer",
-  textAlign: "center",
+  textAlign: "left",
+  transition: "all 0.15s ease",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
 };
 
 const rankBtnActive: React.CSSProperties = {
-  borderColor: "#111",
-  background: "#f7f7f7",
+  borderColor: "#bfdcc7",
+  background: "#eef7f0",
+  boxShadow: "0 6px 14px rgba(20,92,42,0.08)",
+};
+
+const rankTopRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 8,
+};
+
+const rankMain: React.CSSProperties = {
+  fontSize: 24,
+  fontWeight: 900,
+  lineHeight: 1,
+  color: "#16391f",
+};
+
+const selectedBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "2px 8px",
+  minHeight: 22,
+  borderRadius: 999,
+  background: "#f5c542",
+  color: "#3a2b00",
+  fontSize: 11,
+  fontWeight: 900,
+  whiteSpace: "nowrap",
+};
+
+const starsText: React.CSSProperties = {
+  marginTop: 8,
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: 0.2,
+};
+
+const shortLabelText: React.CSSProperties = {
+  marginTop: 6,
+  fontSize: 12,
+  lineHeight: 1.45,
+  fontWeight: 700,
 };
 
 const detailCard: React.CSSProperties = {
-  padding: 14,
-  borderRadius: 12,
-  border: "1px solid #eee",
-  background: "#fff",
-  lineHeight: 1.7,
+  padding: 16,
+  borderRadius: 16,
+  border: "1px solid #e5ece7",
+  background: "#ffffff",
+  lineHeight: 1.75,
+  boxShadow: "0 4px 12px rgba(0,0,0,0.03)",
+};
+
+const detailTop: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const rankPill: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minWidth: 52,
+  height: 36,
+  padding: "0 14px",
+  borderRadius: 999,
+  background: "#145c2a",
+  color: "#fff",
+  fontWeight: 900,
+  fontSize: 18,
+};
+
+const detailShortLabel: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 16,
+  color: "#16391f",
+};
+
+const detailStars: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 800,
+  color: "#7a5a00",
+};
+
+const detailTitle: React.CSSProperties = {
+  marginTop: 12,
+  fontWeight: 800,
+  color: "#21342a",
+};
+
+const bulletList: React.CSSProperties = {
+  marginTop: 12,
+  display: "grid",
+  gap: 8,
 };
 
 const bulletRow: React.CSSProperties = {
@@ -200,6 +335,22 @@ const bulletRow: React.CSSProperties = {
   gridTemplateColumns: "12px 1fr",
   gap: 8,
   alignItems: "start",
+  color: "#314137",
+};
+
+const bulletMark: React.CSSProperties = {
+  fontWeight: 900,
+  color: "#1f5d30",
+};
+
+const noteBox: React.CSSProperties = {
+  marginTop: 14,
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid #e7d08a",
+  background: "#fff8dd",
+  color: "#4d3a00",
+  fontWeight: 800,
 };
 
 const disabledStyle: React.CSSProperties = {

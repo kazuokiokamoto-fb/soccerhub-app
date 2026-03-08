@@ -16,7 +16,7 @@ type TownApiRow = {
 };
 
 const SEARCH_DEBOUNCE_MS = 250;
-const LIST_MAX_HEIGHT = 170; // 3.5件くらい見える高さ
+const LIST_MAX_HEIGHT = 170;
 
 const KANTO_PREFS = [
   "東京都",
@@ -182,7 +182,6 @@ export function AreaPickerKanto(props: {
     }
   };
 
-  // 都県変更時に市区町村一覧取得
   useEffect(() => {
     let cancelled = false;
 
@@ -247,7 +246,6 @@ export function AreaPickerKanto(props: {
     };
   }, [prefecture, collator, setCity, setTown]);
 
-  // 市区町村検索
   useEffect(() => {
     let cancelled = false;
 
@@ -303,7 +301,6 @@ export function AreaPickerKanto(props: {
     };
   }, [cityQuery, city, prefecture, collator]);
 
-  // 市区町村変更時に町名一覧取得
   useEffect(() => {
     let cancelled = false;
 
@@ -366,7 +363,6 @@ export function AreaPickerKanto(props: {
     };
   }, [prefecture, city, collator, setTown]);
 
-  // 町名検索
   useEffect(() => {
     let cancelled = false;
 
@@ -428,13 +424,13 @@ export function AreaPickerKanto(props: {
   const filteredTownOptions = useMemo(() => townOptions, [townOptions]);
 
   return (
-    <div style={{ ...card, background: "#fafafa" }}>
-      <div style={{ fontWeight: 900, marginBottom: 10 }}>{title}</div>
+    <div style={wrap}>
+      <div style={titleStyle}>{title}</div>
 
       {/* 都県 */}
-      <div style={{ display: "grid", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-          <div style={{ fontWeight: 800 }}>都県（{allowAll ? "任意" : "必須"}）</div>
+      <div style={block}>
+        <div style={rowHead}>
+          <div style={sectionTitle}>都県（{allowAll ? "任意" : "必須"}）</div>
         </div>
 
         <div style={prefButtonsWrap}>
@@ -446,6 +442,7 @@ export function AreaPickerKanto(props: {
               style={{
                 ...prefBtn,
                 ...(!prefecture ? prefBtnActive : null),
+                ...(disabled ? disabledBtn : null),
               }}
             >
               {allLabel}
@@ -463,6 +460,7 @@ export function AreaPickerKanto(props: {
                 style={{
                   ...prefBtn,
                   ...(active ? prefBtnActive : null),
+                  ...(disabled ? disabledBtn : null),
                 }}
               >
                 {p}
@@ -471,18 +469,31 @@ export function AreaPickerKanto(props: {
           })}
         </div>
 
-        <div style={{ fontSize: 12, color: "#777", lineHeight: 1.6 }}>
+        <div style={helperText}>
           {!prefecture
             ? "関東全体のまま検索できます。都県で絞ると市区町村・町名を選びやすくなります。"
             : `選択中：${prefecture}`}
         </div>
+
+        {prefecture && allowAll ? (
+          <div style={{ marginTop: 8 }}>
+            <button
+              type="button"
+              className="sh-btn sh-btn--ghost"
+              onClick={clearPrefecture}
+              disabled={disabled}
+            >
+              都県をクリア
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {/* 市区町村 */}
-      <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-          <div style={{ fontWeight: 800 }}>市区町村（任意）</div>
-          <div style={{ fontSize: 12, color: "#777" }}>
+      <div style={block}>
+        <div style={rowHead}>
+          <div style={sectionTitle}>市区町村（任意）</div>
+          <div style={statusText}>
             {!prefecture ? "候補 0 件" : loadingCities ? "読み込み中..." : `候補 ${cityOptions.length} 件`}
           </div>
         </div>
@@ -494,16 +505,16 @@ export function AreaPickerKanto(props: {
           }}
           onChange={(e) => handleCityInputChange(e.target.value)}
           onKeyDown={handleCityKeyDown}
-          style={input}
+          className="sh-input"
           placeholder={
             prefecture
               ? "漢字・ひらがなで検索（例：世田谷 / せたがや / 横浜 / よこはま）"
-              : "先に都県を選ぶか、関東全体のまま使う場合はこのままでOK"
+              : "先に都県を選んでください"
           }
           disabled={disabled || !prefecture}
         />
 
-        <div style={{ fontSize: 12, color: "#777", lineHeight: 1.6 }}>
+        <div style={helperText}>
           {!prefecture
             ? "市区町村を使うときは、先に都県を選んでください。"
             : city
@@ -513,14 +524,26 @@ export function AreaPickerKanto(props: {
 
         {city ? (
           <div style={selectedBox}>
-            <div style={{ fontSize: 12, color: "#777" }}>
+            <div style={selectedText}>
               選択中：<b>{city}</b>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={reopenCity} disabled={disabled}>
+              <button
+                type="button"
+                className="sh-btn sh-btn--ghost"
+                style={{ width: "fit-content" }}
+                onClick={reopenCity}
+                disabled={disabled}
+              >
                 市区町村を変更
               </button>
-              <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={clearCity} disabled={disabled}>
+              <button
+                type="button"
+                className="sh-btn"
+                style={{ width: "fit-content" }}
+                onClick={clearCity}
+                disabled={disabled}
+              >
                 市区町村をクリア
               </button>
             </div>
@@ -542,10 +565,14 @@ export function AreaPickerKanto(props: {
                     type="button"
                     onClick={() => applyCity(x.city)}
                     disabled={disabled}
-                    style={{ ...rowBtn, ...(active ? rowBtnActive : null) }}
+                    style={{
+                      ...rowBtn,
+                      ...(active ? rowBtnActive : null),
+                      ...(disabled ? disabledBtn : null),
+                    }}
                   >
                     <div style={rowInner}>
-                      <div style={{ fontWeight: 800 }}>{x.city}</div>
+                      <div style={mainText}>{x.city}</div>
                       {x.cityKana ? <div style={kanaText(active)}>{x.cityKana}</div> : null}
                     </div>
                   </button>
@@ -557,10 +584,10 @@ export function AreaPickerKanto(props: {
       </div>
 
       {/* 町名 */}
-      <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-          <div style={{ fontWeight: 800 }}>町名（{townOptional ? "任意" : "必須"}）</div>
-          <div style={{ fontSize: 12, color: "#777" }}>
+      <div style={block}>
+        <div style={rowHead}>
+          <div style={sectionTitle}>町名（{townOptional ? "任意" : "必須"}）</div>
+          <div style={statusText}>
             {!city ? "候補 0 件" : loadingTowns ? "読み込み中..." : `候補 ${townOptions.length} 件`}
           </div>
         </div>
@@ -572,7 +599,7 @@ export function AreaPickerKanto(props: {
           }}
           onChange={(e) => handleTownInputChange(e.target.value)}
           onKeyDown={handleTownKeyDown}
-          style={input}
+          className="sh-input"
           placeholder={
             city
               ? "漢字・ひらがなで検索（例：三宿 / みしゅく / 南青山）"
@@ -581,7 +608,7 @@ export function AreaPickerKanto(props: {
           disabled={disabled || !city}
         />
 
-        <div style={{ fontSize: 12, color: "#777", lineHeight: 1.6 }}>
+        <div style={helperText}>
           {!city
             ? "先に市区町村を選択してください。"
             : town
@@ -591,14 +618,26 @@ export function AreaPickerKanto(props: {
 
         {town ? (
           <div style={selectedBox}>
-            <div style={{ fontSize: 12, color: "#777" }}>
+            <div style={selectedText}>
               選択中：<b>{town}</b>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={reopenTown} disabled={disabled}>
+              <button
+                type="button"
+                className="sh-btn sh-btn--ghost"
+                style={{ width: "fit-content" }}
+                onClick={reopenTown}
+                disabled={disabled}
+              >
                 町名を変更
               </button>
-              <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={clearTown} disabled={disabled}>
+              <button
+                type="button"
+                className="sh-btn"
+                style={{ width: "fit-content" }}
+                onClick={clearTown}
+                disabled={disabled}
+              >
                 町名をクリア
               </button>
             </div>
@@ -620,10 +659,14 @@ export function AreaPickerKanto(props: {
                     type="button"
                     onClick={() => applyTown(x.town)}
                     disabled={disabled}
-                    style={{ ...rowBtn, ...(active ? rowBtnActive : null) }}
+                    style={{
+                      ...rowBtn,
+                      ...(active ? rowBtnActive : null),
+                      ...(disabled ? disabledBtn : null),
+                    }}
                   >
                     <div style={rowInner}>
-                      <div style={{ fontWeight: 800 }}>{x.town}</div>
+                      <div style={mainText}>{x.town}</div>
                       {x.townKana ? <div style={kanaText(active)}>{x.townKana}</div> : null}
                     </div>
                   </button>
@@ -633,7 +676,7 @@ export function AreaPickerKanto(props: {
           </div>
         ) : null}
 
-        <div style={{ fontSize: 12, color: "#777" }}>
+        <div style={previewText}>
           表示例：
           <b>
             {prefecture
@@ -646,18 +689,48 @@ export function AreaPickerKanto(props: {
   );
 }
 
-const card: React.CSSProperties = {
+const wrap: React.CSSProperties = {
   padding: 16,
-  border: "1px solid #eee",
-  borderRadius: 12,
+  border: "1px solid #e5ece7",
+  borderRadius: 16,
   background: "#fff",
+  display: "grid",
+  gap: 14,
 };
 
-const input: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid #ddd",
-  background: "white",
+const titleStyle: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 16,
+  color: "#1f5d30",
+};
+
+const block: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+};
+
+const rowHead: React.CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const sectionTitle: React.CSSProperties = {
+  fontWeight: 800,
+  color: "#21342a",
+};
+
+const statusText: React.CSSProperties = {
+  fontSize: 12,
+  color: "#66756d",
+};
+
+const helperText: React.CSSProperties = {
+  fontSize: 12,
+  color: "#66756d",
+  lineHeight: 1.6,
 };
 
 const prefButtonsWrap: React.CSSProperties = {
@@ -669,33 +742,41 @@ const prefButtonsWrap: React.CSSProperties = {
 const prefBtn: React.CSSProperties = {
   padding: "10px 14px",
   borderRadius: 999,
-  border: "1px solid #ddd",
+  border: "1px solid #d6eadb",
   background: "#fff",
   cursor: "pointer",
-  fontWeight: 700,
+  fontWeight: 800,
+  color: "#23412c",
+  transition: "all 0.15s ease",
 };
 
 const prefBtnActive: React.CSSProperties = {
-  borderColor: "#111",
-  background: "#111",
+  borderColor: "#145c2a",
+  background: "#145c2a",
   color: "#fff",
+  boxShadow: "0 6px 14px rgba(20,92,42,0.14)",
 };
 
 const selectedBox: React.CSSProperties = {
   display: "grid",
   gap: 8,
-  padding: 10,
-  border: "1px solid #eee",
-  borderRadius: 12,
-  background: "#fff",
+  padding: 12,
+  border: "1px solid #e4ebe6",
+  borderRadius: 14,
+  background: "#fafcfb",
+};
+
+const selectedText: React.CSSProperties = {
+  fontSize: 12,
+  color: "#66756d",
 };
 
 const listBoxCompact: React.CSSProperties = {
   display: "grid",
   gap: 6,
   padding: 10,
-  border: "1px solid #eee",
-  borderRadius: 12,
+  border: "1px solid #e4ebe6",
+  borderRadius: 14,
   background: "#fff",
   maxHeight: LIST_MAX_HEIGHT,
   overflowY: "auto",
@@ -705,15 +786,17 @@ const rowBtn: React.CSSProperties = {
   width: "100%",
   textAlign: "left",
   padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid #eee",
-  background: "#fafafa",
+  borderRadius: 12,
+  border: "1px solid #edf1ee",
+  background: "#fafcfb",
   cursor: "pointer",
+  transition: "all 0.15s ease",
 };
 
 const rowBtnActive: React.CSSProperties = {
-  borderColor: "#111",
-  background: "#fff",
+  borderColor: "#bfdcc7",
+  background: "#eef7f0",
+  boxShadow: "0 2px 8px rgba(20,92,42,0.06)",
 };
 
 const rowInner: React.CSSProperties = {
@@ -723,13 +806,29 @@ const rowInner: React.CSSProperties = {
   alignItems: "baseline",
 };
 
+const mainText: React.CSSProperties = {
+  fontWeight: 800,
+  color: "#21342a",
+};
+
 const hintText: React.CSSProperties = {
-  color: "#777",
+  color: "#66756d",
   fontSize: 12,
+};
+
+const previewText: React.CSSProperties = {
+  fontSize: 12,
+  color: "#66756d",
+  lineHeight: 1.6,
+};
+
+const disabledBtn: React.CSSProperties = {
+  opacity: 0.6,
+  cursor: "not-allowed",
 };
 
 const kanaText = (active: boolean): React.CSSProperties => ({
   fontSize: 12,
-  color: active ? "#111" : "#777",
+  color: active ? "#145c2a" : "#7a867f",
   whiteSpace: "nowrap",
 });
