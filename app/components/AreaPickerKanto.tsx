@@ -16,8 +16,8 @@ type TownApiRow = {
 };
 
 const SEARCH_DEBOUNCE_MS = 250;
+const LIST_MAX_HEIGHT = 170; // 3.5件くらい見える高さ
 
-// 関東だけ
 const KANTO_PREFS = [
   "東京都",
   "神奈川県",
@@ -26,7 +26,7 @@ const KANTO_PREFS = [
   "茨城県",
   "栃木県",
   "群馬県",
-];
+] as const;
 
 export function AreaPickerKanto(props: {
   disabled?: boolean;
@@ -64,12 +64,22 @@ export function AreaPickerKanto(props: {
   const [loadingCities, setLoadingCities] = useState(false);
   const [loadingTowns, setLoadingTowns] = useState(false);
 
-  const [showCityList, setShowCityList] = useState(true);
-  const [showTownList, setShowTownList] = useState(true);
+  const [showCityList, setShowCityList] = useState(false);
+  const [showTownList, setShowTownList] = useState(false);
 
   const collator = useMemo(() => new Intl.Collator("ja", { sensitivity: "base" }), []);
 
-  const prefectureOptions = allowAll ? ["", ...KANTO_PREFS] : KANTO_PREFS;
+  const applyPrefecture = (value: string) => {
+    setPrefecture(value);
+    setCity("");
+    setTown("");
+    setCityQuery("");
+    setTownQuery("");
+    setCityOptions([]);
+    setTownOptions([]);
+    setShowCityList(!!value);
+    setShowTownList(false);
+  };
 
   const applyCity = (value: string) => {
     setCity(value);
@@ -84,6 +94,18 @@ export function AreaPickerKanto(props: {
   const applyTown = (value: string) => {
     setTown(value);
     setTownQuery(value);
+    setShowTownList(false);
+  };
+
+  const clearPrefecture = () => {
+    setPrefecture("");
+    setCity("");
+    setTown("");
+    setCityQuery("");
+    setTownQuery("");
+    setCityOptions([]);
+    setTownOptions([]);
+    setShowCityList(false);
     setShowTownList(false);
   };
 
@@ -104,26 +126,63 @@ export function AreaPickerKanto(props: {
   };
 
   const reopenCity = () => {
+    if (!prefecture) return;
     setShowCityList(true);
-    if (city) setCityQuery(city);
+    setShowTownList(false);
+    setCityQuery("");
   };
 
   const reopenTown = () => {
+    if (!city) return;
     setShowTownList(true);
-    if (town) setTownQuery(town);
+    setTownQuery("");
   };
 
-  // 外部 state と入力欄同期
-  useEffect(() => {
-    if (city && !showCityList && cityQuery !== city) setCityQuery(city);
-    if (!city && !showCityList && cityQuery) setCityQuery("");
+  const handleCityInputChange = (value: string) => {
+    setCityQuery(value);
 
-    if (town && !showTownList && townQuery !== town) setTownQuery(town);
-    if (!town && !showTownList && townQuery) setTownQuery("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [city, town, showCityList, showTownList]);
+    if (!prefecture) return;
 
-  // 都道府県変更時：下流クリア + 市区町村取得
+    if (city && value !== city) {
+      setCity("");
+      setTown("");
+      setTownQuery("");
+      setTownOptions([]);
+      setShowTownList(false);
+    }
+
+    setShowCityList(true);
+  };
+
+  const handleTownInputChange = (value: string) => {
+    setTownQuery(value);
+
+    if (!city) return;
+
+    if (town && value !== town) {
+      setTown("");
+    }
+
+    setShowTownList(true);
+  };
+
+  const handleCityKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") setShowCityList(false);
+    if (e.key === "Enter" && filteredCityOptions.length === 1) {
+      e.preventDefault();
+      applyCity(filteredCityOptions[0].city);
+    }
+  };
+
+  const handleTownKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") setShowTownList(false);
+    if (e.key === "Enter" && filteredTownOptions.length === 1) {
+      e.preventDefault();
+      applyTown(filteredTownOptions[0].town);
+    }
+  };
+
+  // 都県変更時に市区町村一覧取得
   useEffect(() => {
     let cancelled = false;
 
@@ -134,11 +193,12 @@ export function AreaPickerKanto(props: {
       setTownQuery("");
       setCityOptions([]);
       setTownOptions([]);
-      setShowCityList(true);
       setShowTownList(false);
 
-      // allowAll で空 = 関東全体のまま。市区町村は出さない
-      if (!prefecture) return;
+      if (!prefecture) {
+        setShowCityList(false);
+        return;
+      }
 
       setLoadingCities(true);
 
@@ -168,7 +228,10 @@ export function AreaPickerKanto(props: {
           return collator.compare(a.city, b.city);
         });
 
-        if (!cancelled) setCityOptions(rows);
+        if (!cancelled) {
+          setCityOptions(rows);
+          setShowCityList(true);
+        }
       } catch (e) {
         console.error("[cities api init] fetch error:", e);
         if (!cancelled) setCityOptions([]);
@@ -240,7 +303,7 @@ export function AreaPickerKanto(props: {
     };
   }, [cityQuery, city, prefecture, collator]);
 
-  // 市区町村変更時：町名取得
+  // 市区町村変更時に町名一覧取得
   useEffect(() => {
     let cancelled = false;
 
@@ -370,36 +433,57 @@ export function AreaPickerKanto(props: {
 
       {/* 都県 */}
       <div style={{ display: "grid", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
           <div style={{ fontWeight: 800 }}>都県（{allowAll ? "任意" : "必須"}）</div>
         </div>
 
-        <select
-          value={prefecture}
-          onChange={(e) => setPrefecture(e.target.value)}
-          style={input}
-          disabled={disabled}
-        >
-          {prefectureOptions.map((p) =>
-            p === "" ? (
-              <option key="__all__" value="">
-                {allLabel}
-              </option>
-            ) : (
-              <option key={p} value={p}>
+        <div style={prefButtonsWrap}>
+          {allowAll ? (
+            <button
+              type="button"
+              onClick={() => applyPrefecture("")}
+              disabled={disabled}
+              style={{
+                ...prefBtn,
+                ...(!prefecture ? prefBtnActive : null),
+              }}
+            >
+              {allLabel}
+            </button>
+          ) : null}
+
+          {KANTO_PREFS.map((p) => {
+            const active = prefecture === p;
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => applyPrefecture(p)}
+                disabled={disabled}
+                style={{
+                  ...prefBtn,
+                  ...(active ? prefBtnActive : null),
+                }}
+              >
                 {p}
-              </option>
-            )
-          )}
-        </select>
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ fontSize: 12, color: "#777", lineHeight: 1.6 }}>
+          {!prefecture
+            ? "関東全体のまま検索できます。都県で絞ると市区町村・町名を選びやすくなります。"
+            : `選択中：${prefecture}`}
+        </div>
       </div>
 
       {/* 市区町村 */}
       <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-          <div style={{ fontWeight: 800 }}>市区町村（{allowAll ? "任意" : "必須"}）</div>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ fontWeight: 800 }}>市区町村（任意）</div>
           <div style={{ fontSize: 12, color: "#777" }}>
-            {loadingCities ? "読み込み中..." : `候補 ${cityOptions.length} 件`}
+            {!prefecture ? "候補 0 件" : loadingCities ? "読み込み中..." : `候補 ${cityOptions.length} 件`}
           </div>
         </div>
 
@@ -408,31 +492,23 @@ export function AreaPickerKanto(props: {
           onFocus={() => {
             if (prefecture) setShowCityList(true);
           }}
-          onChange={(e) => {
-            setCityQuery(e.target.value);
-            if (prefecture) setShowCityList(true);
-
-            if (city && e.target.value !== city) {
-              setCity("");
-              setTown("");
-              setTownQuery("");
-              setTownOptions([]);
-              setShowTownList(false);
-            }
-          }}
+          onChange={(e) => handleCityInputChange(e.target.value)}
+          onKeyDown={handleCityKeyDown}
           style={input}
           placeholder={
             prefecture
               ? "漢字・ひらがなで検索（例：世田谷 / せたがや / 横浜 / よこはま）"
-              : "関東全体のままなら未選択でOK"
+              : "先に都県を選ぶか、関東全体のまま使う場合はこのままでOK"
           }
           disabled={disabled || !prefecture}
         />
 
         <div style={{ fontSize: 12, color: "#777", lineHeight: 1.6 }}>
           {!prefecture
-            ? "都県を絞る場合だけ選択してください。関東全体のままでも使えます。"
-            : "市区町村はあいうえお順で表示します。漢字・ひらがな、どちらでも検索できます。"}
+            ? "市区町村を使うときは、先に都県を選んでください。"
+            : city
+            ? "選択済みです。変更するときは下のボタンを押してください。"
+            : "市区町村はあいうえお順です。漢字・ひらがな、どちらでも検索できます。"}
         </div>
 
         {city ? (
@@ -441,22 +517,10 @@ export function AreaPickerKanto(props: {
               選択中：<b>{city}</b>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className="sh-btn"
-                style={{ width: "fit-content" }}
-                onClick={reopenCity}
-                disabled={disabled}
-              >
+              <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={reopenCity} disabled={disabled}>
                 市区町村を変更
               </button>
-              <button
-                type="button"
-                className="sh-btn"
-                style={{ width: "fit-content" }}
-                onClick={clearCity}
-                disabled={disabled}
-              >
+              <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={clearCity} disabled={disabled}>
                 市区町村をクリア
               </button>
             </div>
@@ -466,9 +530,9 @@ export function AreaPickerKanto(props: {
         {showCityList && prefecture ? (
           <div style={listBoxCompact}>
             {loadingCities ? (
-              <div style={{ color: "#777", fontSize: 12 }}>市区町村を読み込み中です...</div>
+              <div style={hintText}>市区町村を読み込み中です...</div>
             ) : filteredCityOptions.length === 0 ? (
-              <div style={{ color: "#777", fontSize: 12 }}>一致する市区町村候補がありません</div>
+              <div style={hintText}>一致する市区町村候補がありません</div>
             ) : (
               filteredCityOptions.map((x) => {
                 const active = city === x.city;
@@ -480,13 +544,9 @@ export function AreaPickerKanto(props: {
                     disabled={disabled}
                     style={{ ...rowBtn, ...(active ? rowBtnActive : null) }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                    <div style={rowInner}>
                       <div style={{ fontWeight: 800 }}>{x.city}</div>
-                      {x.cityKana ? (
-                        <div style={{ fontSize: 12, color: active ? "#111" : "#777", whiteSpace: "nowrap" }}>
-                          {x.cityKana}
-                        </div>
-                      ) : null}
+                      {x.cityKana ? <div style={kanaText(active)}>{x.cityKana}</div> : null}
                     </div>
                   </button>
                 );
@@ -498,10 +558,10 @@ export function AreaPickerKanto(props: {
 
       {/* 町名 */}
       <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
           <div style={{ fontWeight: 800 }}>町名（{townOptional ? "任意" : "必須"}）</div>
           <div style={{ fontSize: 12, color: "#777" }}>
-            {loadingTowns ? "読み込み中..." : `候補 ${townOptions.length} 件`}
+            {!city ? "候補 0 件" : loadingTowns ? "読み込み中..." : `候補 ${townOptions.length} 件`}
           </div>
         </div>
 
@@ -510,14 +570,8 @@ export function AreaPickerKanto(props: {
           onFocus={() => {
             if (city) setShowTownList(true);
           }}
-          onChange={(e) => {
-            setTownQuery(e.target.value);
-            if (city) setShowTownList(true);
-
-            if (town && e.target.value !== town) {
-              setTown("");
-            }
-          }}
+          onChange={(e) => handleTownInputChange(e.target.value)}
+          onKeyDown={handleTownKeyDown}
           style={input}
           placeholder={
             city
@@ -529,8 +583,10 @@ export function AreaPickerKanto(props: {
 
         <div style={{ fontSize: 12, color: "#777", lineHeight: 1.6 }}>
           {!city
-            ? "先に市区町村を選択してください"
-            : "町名はあいうえお順で表示します。漢字・ひらがな、どちらでも検索できます。"}
+            ? "先に市区町村を選択してください。"
+            : town
+            ? "選択済みです。変更するときは下のボタンを押してください。"
+            : "町名はあいうえお順です。漢字・ひらがな、どちらでも検索できます。"}
         </div>
 
         {town ? (
@@ -539,22 +595,10 @@ export function AreaPickerKanto(props: {
               選択中：<b>{town}</b>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                className="sh-btn"
-                style={{ width: "fit-content" }}
-                onClick={reopenTown}
-                disabled={disabled}
-              >
+              <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={reopenTown} disabled={disabled}>
                 町名を変更
               </button>
-              <button
-                type="button"
-                className="sh-btn"
-                style={{ width: "fit-content" }}
-                onClick={clearTown}
-                disabled={disabled}
-              >
+              <button type="button" className="sh-btn" style={{ width: "fit-content" }} onClick={clearTown} disabled={disabled}>
                 町名をクリア
               </button>
             </div>
@@ -564,9 +608,9 @@ export function AreaPickerKanto(props: {
         {showTownList && city ? (
           <div style={listBoxCompact}>
             {loadingTowns ? (
-              <div style={{ color: "#777", fontSize: 12 }}>町名候補を読み込み中です...</div>
+              <div style={hintText}>町名候補を読み込み中です...</div>
             ) : filteredTownOptions.length === 0 ? (
-              <div style={{ color: "#777", fontSize: 12 }}>一致する町名候補がありません</div>
+              <div style={hintText}>一致する町名候補がありません</div>
             ) : (
               filteredTownOptions.map((x) => {
                 const active = town === x.town;
@@ -578,13 +622,9 @@ export function AreaPickerKanto(props: {
                     disabled={disabled}
                     style={{ ...rowBtn, ...(active ? rowBtnActive : null) }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                    <div style={rowInner}>
                       <div style={{ fontWeight: 800 }}>{x.town}</div>
-                      {x.townKana ? (
-                        <div style={{ fontSize: 12, color: active ? "#111" : "#777", whiteSpace: "nowrap" }}>
-                          {x.townKana}
-                        </div>
-                      ) : null}
+                      {x.townKana ? <div style={kanaText(active)}>{x.townKana}</div> : null}
                     </div>
                   </button>
                 );
@@ -620,6 +660,27 @@ const input: React.CSSProperties = {
   background: "white",
 };
 
+const prefButtonsWrap: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+};
+
+const prefBtn: React.CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: 999,
+  border: "1px solid #ddd",
+  background: "#fff",
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const prefBtnActive: React.CSSProperties = {
+  borderColor: "#111",
+  background: "#111",
+  color: "#fff",
+};
+
 const selectedBox: React.CSSProperties = {
   display: "grid",
   gap: 8,
@@ -636,8 +697,8 @@ const listBoxCompact: React.CSSProperties = {
   border: "1px solid #eee",
   borderRadius: 12,
   background: "#fff",
-  maxHeight: 170, // 3.5件くらい見える高さ
-  overflow: "auto",
+  maxHeight: LIST_MAX_HEIGHT,
+  overflowY: "auto",
 };
 
 const rowBtn: React.CSSProperties = {
@@ -654,3 +715,21 @@ const rowBtnActive: React.CSSProperties = {
   borderColor: "#111",
   background: "#fff",
 };
+
+const rowInner: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  alignItems: "baseline",
+};
+
+const hintText: React.CSSProperties = {
+  color: "#777",
+  fontSize: 12,
+};
+
+const kanaText = (active: boolean): React.CSSProperties => ({
+  fontSize: 12,
+  color: active ? "#111" : "#777",
+  whiteSpace: "nowrap",
+});
