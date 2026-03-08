@@ -1,4 +1,3 @@
-// app/components/PageHeader.tsx
 "use client";
 
 import React from "react";
@@ -7,12 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 
 type Props = {
-  /** 右側に置くボタン群（1〜2個推奨） */
   actions?: React.ReactNode;
-  /** 右端のログアウトを出すか（デフォルト true） */
   showLogout?: boolean;
-
-  /** ✅ 追加：/chat 配下では actions を隠す（デフォルト true） */
   hideActionsOnChat?: boolean;
 };
 
@@ -37,38 +32,23 @@ export default function PageHeader({
   };
 
   return (
-    <header
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: 12,
-        padding: "10px 0",
-        borderBottom: "1px solid #eee",
-        marginBottom: 14,
-      }}
-    >
-      <Link
-        href="/"
-        style={{
-          fontWeight: 900,
-          fontSize: 18,
-          letterSpacing: 0.2,
-          textDecoration: "none",
-          color: "#111827",
-        }}
-      >
-        SoccerHub
+    <header style={styles.header}>
+      <Link href="/" style={styles.brandWrap}>
+        <div style={styles.logo}>⚽</div>
+
+        <div style={styles.brandTextWrap}>
+          <div style={styles.brandMain}>サカまち</div>
+          <div style={styles.brandSub}>Soccer Match Hub</div>
+        </div>
       </Link>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        {/* ✅ /chat 配下では actions を出さない */}
+      <div style={styles.right}>
         {!shouldHideActions && actions ? (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div>
+          <div style={styles.actions}>{actions}</div>
         ) : null}
 
         {showLogout ? (
-          <button className="sh-btn" type="button" onClick={logout}>
+          <button className="sh-btn" onClick={logout}>
             ログアウト
           </button>
         ) : null}
@@ -76,3 +56,63 @@ export default function PageHeader({
     </header>
   );
 }
+
+const styles: Record<string, React.CSSProperties> = {
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    padding: "10px 0",
+    borderBottom: "1px solid #e5e7eb",
+    marginBottom: 14,
+  },
+
+  brandWrap: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    textDecoration: "none",
+  },
+
+  logo: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    background: "linear-gradient(135deg,#1e7f3c,#145c2a)",
+    color: "#fff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 18,
+  },
+
+  brandTextWrap: {
+    display: "grid",
+    lineHeight: 1.1,
+  },
+
+  brandMain: {
+    fontWeight: 900,
+    fontSize: 18,
+    color: "#145c2a",
+    letterSpacing: 0.2,
+  },
+
+  brandSub: {
+    fontSize: 11,
+    color: "#6b7280",
+  },
+
+  right: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  actions: {
+    display: "flex",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+};
