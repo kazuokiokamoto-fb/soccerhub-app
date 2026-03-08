@@ -2,10 +2,15 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 
+type PrefApiRow = {
+  prefecture: string;
+  prefectureKana?: string;
+};
+
 type CityApiRow = {
   prefecture: string;
   city: string;
-  cityKana: string;
+  cityKana?: string;
 };
 
 type TownApiRow = {
@@ -15,13 +20,7 @@ type TownApiRow = {
   townKana?: string;
 };
 
-const KANTO_PREFS = ["東京都", "神奈川県", "千葉県", "埼玉県", "茨城県", "栃木県", "群馬県"];
-
-const INITIAL_CITY_PREVIEW_COUNT = 12;
-const INITIAL_TOWN_PREVIEW_COUNT = 12;
-
-const CITY_SEARCH_MIN_LENGTH = 1;
-const TOWN_SEARCH_MIN_LENGTH = 1;
+const SEARCH_DEBOUNCE_MS = 250;
 
 export function AreaPickerKanto(props: {
   disabled?: boolean;
@@ -44,22 +43,38 @@ export function AreaPickerKanto(props: {
     setCity,
     town,
     setTown,
-    title = "エリア（関東）",
+    title = "エリア",
     townOptional = true,
     allowAll = false,
-    allLabel = "関東（すべて）",
+    allLabel = "すべて",
   } = props;
 
-  const [cityOptions, setCityOptions] = useState<Array<{ city: string; cityKana: string }>>([]);
+  const [prefectureOptions, setPrefectureOptions] = useState<
+    Array<{ prefecture: string; prefectureKana?: string }>
+  >([]);
+  const [cityOptions, setCityOptions] = useState<Array<{ city: string; cityKana?: string }>>([]);
   const [townOptions, setTownOptions] = useState<Array<{ town: string; townKana?: string }>>([]);
 
+  const [prefQuery, setPrefQuery] = useState("");
   const [cityQuery, setCityQuery] = useState("");
   const [townQuery, setTownQuery] = useState("");
 
+  const [loadingPrefs, setLoadingPrefs] = useState(false);
   const [loadingCities, setLoadingCities] = useState(false);
   const [loadingTowns, setLoadingTowns] = useState(false);
 
   const collator = useMemo(() => new Intl.Collator("ja", { sensitivity: "base" }), []);
+
+  const applyPrefecture = (p: string) => {
+    setPrefecture(p);
+    setPrefQuery(p);
+    setCity("");
+    setTown("");
+    setCityQuery("");
+    setTownQuery("");
+    setCityOptions([]);
+    setTownOptions([]);
+  };
 
   const applyCity = (c: string) => {
     setCity(c);
@@ -72,6 +87,17 @@ export function AreaPickerKanto(props: {
   const applyTown = (t: string) => {
     setTown(t);
     setTownQuery(t);
+  };
+
+  const clearPrefecture = () => {
+    setPrefecture("");
+    setCity("");
+    setTown("");
+    setPrefQuery("");
+    setCityQuery("");
+    setTownQuery("");
+    setCityOptions([]);
+    setTownOptions([]);
   };
 
   const clearCity = () => {
@@ -88,30 +114,79 @@ export function AreaPickerKanto(props: {
   };
 
   useEffect(() => {
+    if (prefecture && prefQuery !== prefecture) setPrefQuery(prefecture);
+    if (!prefecture && prefQuery) setPrefQuery("");
+
     if (city && cityQuery !== city) setCityQuery(city);
     if (!city && cityQuery) setCityQuery("");
 
     if (town && townQuery !== town) setTownQuery(town);
     if (!town && townQuery) setTownQuery("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [city, town]);
+  }, [prefecture, city, town]);
 
-  // 都県変更時：市区町村の先頭候補だけ取得
+  // 都道府県取得
   useEffect(() => {
     let cancelled = false;
 
     const run = async () => {
-      clearCity();
+      setLoadingPrefs(true);
+      try {
+        const q = prefQuery.trim();
+        const url = `/api/address/prefectures${q ? `?q=${encodeURIComponent(q)}` : ""}`;
+        const res = await fetch(url, { cache: "no-store" });
+        const json = await res.json();
 
-      if (allowAll && !prefecture) {
-        setCityOptions([]);
-        return;
-      }
+        if (!res.ok) {
+          console.error("[prefectures api] error:", json);
+          if (!cancelled) setPrefectureOptions([]);
+          return;
+        }
 
-      if (!prefecture) {
-        setCityOptions([]);
-        return;
+        const rows = ((json?.items ?? []) as PrefApiRow[])
+          .map((r) => ({
+            prefecture: r.prefecture,
+            prefectureKana: r.prefectureKana ?? "",
+          }))
+          .filter((r) => r.prefecture);
+
+        rows.sort((a, b) => {
+          const ak = a.prefectureKana || a.prefecture;
+          const bk = b.prefectureKana || b.prefecture;
+          const c1 = collator.compare(ak, bk);
+          if (c1 !== 0) return c1;
+          return collator.compare(a.prefecture, b.prefecture);
+        });
+
+        if (!cancelled) setPrefectureOptions(rows);
+      } catch (e) {
+        console.error("[prefectures api] fetch error:", e);
+        if (!cancelled) setPrefectureOptions([]);
+      } finally {
+        if (!cancelled) setLoadingPrefs(false);
       }
+    };
+
+    const timer = setTimeout(run, SEARCH_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [prefQuery, collator]);
+
+  // 都道府県変更時：市区町村全件取得
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      setCity("");
+      setTown("");
+      setCityQuery("");
+      setTownQuery("");
+      setCityOptions([]);
+      setTownOptions([]);
+
+      if (!prefecture) return;
 
       setLoadingCities(true);
 
@@ -129,13 +204,19 @@ export function AreaPickerKanto(props: {
         const rows = ((json?.items ?? []) as CityApiRow[])
           .map((r) => ({
             city: r.city,
-            cityKana: r.cityKana,
+            cityKana: r.cityKana ?? "",
           }))
-          .filter((r) => r.city && r.cityKana);
+          .filter((r) => r.city);
 
-        rows.sort((a, b) => collator.compare(a.cityKana, b.cityKana));
+        rows.sort((a, b) => {
+          const ak = a.cityKana || a.city;
+          const bk = b.cityKana || b.city;
+          const c1 = collator.compare(ak, bk);
+          if (c1 !== 0) return c1;
+          return collator.compare(a.city, b.city);
+        });
 
-        if (!cancelled) setCityOptions(rows.slice(0, INITIAL_CITY_PREVIEW_COUNT));
+        if (!cancelled) setCityOptions(rows);
       } catch (e) {
         console.error("[cities api init] fetch error:", e);
         if (!cancelled) setCityOptions([]);
@@ -149,20 +230,16 @@ export function AreaPickerKanto(props: {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefecture]);
+  }, [prefecture, collator]);
 
-  // 市区町村入力時：検索API
+  // 市区町村検索
   useEffect(() => {
     let cancelled = false;
 
     if (!prefecture) return;
-    if (allowAll && !prefecture) return;
 
     const q = cityQuery.trim();
-
-    // 空欄なら初期候補のまま
-    if (!q) return;
+    if (!q || q === city) return;
 
     const timer = setTimeout(async () => {
       setLoadingCities(true);
@@ -184,36 +261,34 @@ export function AreaPickerKanto(props: {
         const rows = ((json?.items ?? []) as CityApiRow[])
           .map((r) => ({
             city: r.city,
-            cityKana: r.cityKana,
+            cityKana: r.cityKana ?? "",
           }))
-          .filter((r) => r.city && r.cityKana);
+          .filter((r) => r.city);
 
-        rows.sort((a, b) => collator.compare(a.cityKana, b.cityKana));
+        rows.sort((a, b) => {
+          const ak = a.cityKana || a.city;
+          const bk = b.cityKana || b.city;
+          const c1 = collator.compare(ak, bk);
+          if (c1 !== 0) return c1;
+          return collator.compare(a.city, b.city);
+        });
 
-        if (!cancelled) setCityOptions(rows.slice(0, 50));
+        if (!cancelled) setCityOptions(rows);
       } catch (e) {
         console.error("[cities api query] fetch error:", e);
         if (!cancelled) setCityOptions([]);
       } finally {
         if (!cancelled) setLoadingCities(false);
       }
-    }, 250);
+    }, SEARCH_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [cityQuery, prefecture, allowAll, collator]);
+  }, [cityQuery, city, prefecture, collator]);
 
-  const filteredCityOptions = useMemo(() => {
-    const q = cityQuery.trim();
-
-    if (!q) return cityOptions.slice(0, INITIAL_CITY_PREVIEW_COUNT);
-
-    return cityOptions.filter((x) => x.city.includes(q) || x.cityKana.includes(q)).slice(0, 50);
-  }, [cityOptions, cityQuery]);
-
-  // 市区町村変更時：町名の先頭候補だけ取得
+  // 市区町村変更時：町名全件取得
   useEffect(() => {
     let cancelled = false;
 
@@ -230,7 +305,7 @@ export function AreaPickerKanto(props: {
         const url =
           `/api/address/search-town?prefecture=${encodeURIComponent(prefecture)}` +
           `&city=${encodeURIComponent(city)}` +
-          `&limit=${INITIAL_TOWN_PREVIEW_COUNT}`;
+          `&limit=300`;
 
         const res = await fetch(url, { cache: "no-store" });
         const json = await res.json();
@@ -249,8 +324,8 @@ export function AreaPickerKanto(props: {
           .filter((r) => r.town);
 
         rows.sort((a, b) => {
-          const ak = (a.townKana || a.town).trim();
-          const bk = (b.townKana || b.town).trim();
+          const ak = a.townKana || a.town;
+          const bk = b.townKana || b.town;
           const c1 = collator.compare(ak, bk);
           if (c1 !== 0) return c1;
           return collator.compare(a.town, b.town);
@@ -270,17 +345,16 @@ export function AreaPickerKanto(props: {
     return () => {
       cancelled = true;
     };
-  }, [prefecture, city, collator, setTown]);
+  }, [prefecture, city, collator]);
 
-  // 町名入力時：検索API
+  // 町名検索
   useEffect(() => {
     let cancelled = false;
 
-    const q = townQuery.trim();
     if (!prefecture || !city) return;
 
-    // 空欄なら初期候補のまま
-    if (!q) return;
+    const q = townQuery.trim();
+    if (!q || q === town) return;
 
     const timer = setTimeout(async () => {
       setLoadingTowns(true);
@@ -290,7 +364,7 @@ export function AreaPickerKanto(props: {
           `/api/address/search-town?prefecture=${encodeURIComponent(prefecture)}` +
           `&city=${encodeURIComponent(city)}` +
           `&q=${encodeURIComponent(q)}` +
-          `&limit=50`;
+          `&limit=300`;
 
         const res = await fetch(url, { cache: "no-store" });
         const json = await res.json();
@@ -309,8 +383,8 @@ export function AreaPickerKanto(props: {
           .filter((r) => r.town);
 
         rows.sort((a, b) => {
-          const ak = (a.townKana || a.town).trim();
-          const bk = (b.townKana || b.town).trim();
+          const ak = a.townKana || a.town;
+          const bk = b.townKana || b.town;
           const c1 = collator.compare(ak, bk);
           if (c1 !== 0) return c1;
           return collator.compare(a.town, b.town);
@@ -323,86 +397,143 @@ export function AreaPickerKanto(props: {
       } finally {
         if (!cancelled) setLoadingTowns(false);
       }
-    }, 250);
+    }, SEARCH_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [townQuery, prefecture, city, collator]);
+  }, [townQuery, town, prefecture, city, collator]);
 
-  const filteredTownOptions = useMemo(() => {
-    const q = townQuery.trim();
+  const filteredPrefectureOptions = useMemo(() => prefectureOptions, [prefectureOptions]);
+  const filteredCityOptions = useMemo(() => cityOptions, [cityOptions]);
+  const filteredTownOptions = useMemo(() => townOptions, [townOptions]);
 
-    if (!q) return townOptions.slice(0, INITIAL_TOWN_PREVIEW_COUNT);
-
-    return townOptions.filter((x) => x.town.includes(q) || (x.townKana && x.townKana.includes(q))).slice(0, 50);
-  }, [townOptions, townQuery]);
-
-  const prefectureOptions = allowAll ? ["", ...KANTO_PREFS] : KANTO_PREFS;
-
-  const shouldShowCitySearchHint = !!prefecture && cityQuery.trim().length < CITY_SEARCH_MIN_LENGTH;
-  const hasCityQuery = cityQuery.trim().length >= CITY_SEARCH_MIN_LENGTH;
-
-  const shouldShowTownSearchHint = !!city && townQuery.trim().length < TOWN_SEARCH_MIN_LENGTH;
-  const hasTownQuery = townQuery.trim().length >= TOWN_SEARCH_MIN_LENGTH;
+  const showPrefList = !disabled;
+  const showCityList = !!prefecture;
+  const showTownList = !!prefecture && !!city;
 
   return (
     <div style={{ ...card, background: "#fafafa" }}>
       <div style={{ fontWeight: 900, marginBottom: 10 }}>{title}</div>
 
-      {/* 都県 */}
-      <label style={label}>
-        <span>都県（{allowAll ? "任意" : "必須"}）</span>
-        <select value={prefecture} onChange={(e) => setPrefecture(e.target.value)} style={input} disabled={disabled}>
-          {prefectureOptions.map((p) =>
-            p === "" ? (
-              <option key="__all__" value="">
-                {allLabel}
-              </option>
-            ) : (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            )
-          )}
-        </select>
-      </label>
+      {/* 都道府県 */}
+      <div style={{ display: "grid", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+          <div style={{ fontWeight: 800 }}>都道府県（{allowAll ? "任意" : "必須"}）</div>
+          <div style={{ fontSize: 12, color: "#777" }}>
+            {loadingPrefs ? "読み込み中..." : `候補 ${prefectureOptions.length} 件`}
+          </div>
+        </div>
 
-      {/* 市区町村：検索主役の縦リスト型 */}
-      <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+        {allowAll ? (
+          <button
+            type="button"
+            className="sh-btn"
+            style={{ width: "fit-content" }}
+            onClick={clearPrefecture}
+            disabled={disabled}
+          >
+            {allLabel}
+          </button>
+        ) : null}
+
+        <input
+          value={prefQuery}
+          onChange={(e) => {
+            setPrefQuery(e.target.value);
+            if (prefecture && e.target.value !== prefecture) {
+              setPrefecture("");
+              setCity("");
+              setTown("");
+              setCityQuery("");
+              setTownQuery("");
+              setCityOptions([]);
+              setTownOptions([]);
+            }
+          }}
+          style={input}
+          placeholder="検索（例：東京 / とうきょう / 神奈川）"
+          disabled={disabled}
+        />
+
+        <div style={listBox}>
+          {!showPrefList ? (
+            <div style={{ color: "#777", fontSize: 12 }}>都道府県候補はありません</div>
+          ) : loadingPrefs ? (
+            <div style={{ color: "#777", fontSize: 12 }}>都道府県を読み込み中です...</div>
+          ) : filteredPrefectureOptions.length === 0 ? (
+            <div style={{ color: "#777", fontSize: 12 }}>一致する都道府県候補がありません</div>
+          ) : (
+            filteredPrefectureOptions.map((x) => {
+              const active = prefecture === x.prefecture;
+              return (
+                <button
+                  key={x.prefecture}
+                  type="button"
+                  onClick={() => applyPrefecture(x.prefecture)}
+                  disabled={disabled}
+                  style={{ ...rowBtn, ...(active ? rowBtnActive : null) }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+                    <div style={{ fontWeight: 800 }}>{x.prefecture}</div>
+                    {x.prefectureKana ? (
+                      <div style={{ fontSize: 12, color: active ? "#111" : "#777", whiteSpace: "nowrap" }}>
+                        {x.prefectureKana}
+                      </div>
+                    ) : null}
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        <div style={{ fontSize: 12, color: "#777" }}>
+          選択中：<b>{prefecture || "（未選択）"}</b>
+        </div>
+      </div>
+
+      {/* 市区町村 */}
+      <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
           <div style={{ fontWeight: 800 }}>市区町村（{allowAll ? "任意" : "必須"}）</div>
           <div style={{ fontSize: 12, color: "#777" }}>
-            {loadingCities ? "読み込み中..." : hasCityQuery ? `候補 ${filteredCityOptions.length} 件` : `先頭候補 ${filteredCityOptions.length} 件`}
+            {loadingCities ? "読み込み中..." : `候補 ${cityOptions.length} 件`}
           </div>
         </div>
 
         <input
           value={cityQuery}
-          onChange={(e) => setCityQuery(e.target.value)}
+          onChange={(e) => {
+            setCityQuery(e.target.value);
+            if (city && e.target.value !== city) {
+              setCity("");
+              setTown("");
+              setTownQuery("");
+              setTownOptions([]);
+            }
+          }}
           style={input}
-          placeholder={allowAll && !prefecture ? "先に都県を選ぶと市区町村が出ます" : "漢字・ひらがなで検索（例：世田谷 / せたがや / 横浜 / よこはま）"}
-          disabled={disabled || (allowAll && !prefecture)}
+          placeholder={
+            prefecture ? "漢字・ひらがなで検索（例：世田谷 / せたがや / 横浜 / よこはま）" : "先に都道府県を選択してください"
+          }
+          disabled={disabled || !prefecture}
         />
 
         <div style={{ fontSize: 12, color: "#777", lineHeight: 1.6 }}>
-          {allowAll && !prefecture
-            ? "先に都県を選択してください。"
-            : shouldShowCitySearchHint
-            ? "市区町村は検索して選ぶ方式です。下には先頭の候補だけ表示しています。"
-            : "検索結果から市区町村を選択してください。"}
+          {!prefecture
+            ? "先に都道府県を選択してください"
+            : "市区町村はあいうえお順で表示します。漢字・ひらがな、どちらでも検索できます。"}
         </div>
 
-        <div style={listBox}>
-          {allowAll && !prefecture ? (
-            <div style={{ color: "#777", fontSize: 12 }}>都県を選ぶと市区町村候補が出ます</div>
+        <div style={listBoxTall}>
+          {!showCityList ? (
+            <div style={{ color: "#777", fontSize: 12 }}>先に都道府県を選択してください</div>
           ) : loadingCities ? (
             <div style={{ color: "#777", fontSize: 12 }}>市区町村を読み込み中です...</div>
           ) : filteredCityOptions.length === 0 ? (
-            <div style={{ color: "#777", fontSize: 12 }}>
-              {hasCityQuery ? "一致する市区町村候補がありません" : "市区町村候補がありません"}
-            </div>
+            <div style={{ color: "#777", fontSize: 12 }}>一致する市区町村候補がありません</div>
           ) : (
             filteredCityOptions.map((x) => {
               const active = city === x.city;
@@ -416,7 +547,11 @@ export function AreaPickerKanto(props: {
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
                     <div style={{ fontWeight: 800 }}>{x.city}</div>
-                    <div style={{ fontSize: 12, color: active ? "#111" : "#777", whiteSpace: "nowrap" }}>{x.cityKana}</div>
+                    {x.cityKana ? (
+                      <div style={{ fontSize: 12, color: active ? "#111" : "#777", whiteSpace: "nowrap" }}>
+                        {x.cityKana}
+                      </div>
+                    ) : null}
                   </div>
                 </button>
               );
@@ -435,40 +570,41 @@ export function AreaPickerKanto(props: {
         ) : null}
       </div>
 
-      {/* 町名：検索主役の縦リスト型 */}
+      {/* 町名 */}
       <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
           <div style={{ fontWeight: 800 }}>町名（{townOptional ? "任意" : "必須"}）</div>
           <div style={{ fontSize: 12, color: "#777" }}>
-            {loadingTowns ? "読み込み中..." : hasTownQuery ? `候補 ${filteredTownOptions.length} 件` : `先頭候補 ${filteredTownOptions.length} 件`}
+            {loadingTowns ? "読み込み中..." : `候補 ${townOptions.length} 件`}
           </div>
         </div>
 
         <input
           value={townQuery}
-          onChange={(e) => setTownQuery(e.target.value)}
+          onChange={(e) => {
+            setTownQuery(e.target.value);
+            if (town && e.target.value !== town) {
+              setTown("");
+            }
+          }}
           style={input}
-          placeholder={city ? "漢字・ひらがなで検索（例：三宿 / みしゅく）" : "先に市区町村を選択してください"}
+          placeholder={city ? "漢字・ひらがなで検索（例：三宿 / みしゅく / 南青山）" : "先に市区町村を選択してください"}
           disabled={disabled || !city}
         />
 
         <div style={{ fontSize: 12, color: "#777", lineHeight: 1.6 }}>
           {!city
-            ? "先に市区町村を選択してください。"
-            : shouldShowTownSearchHint
-            ? "町名は検索して選ぶ方式です。下には先頭の候補だけ表示しています。"
-            : "検索結果から町名を選択してください。"}
+            ? "先に市区町村を選択してください"
+            : "町名はあいうえお順で表示します。漢字・ひらがな、どちらでも検索できます。"}
         </div>
 
-        <div style={listBox}>
-          {!city ? (
+        <div style={listBoxTall}>
+          {!showTownList ? (
             <div style={{ color: "#777", fontSize: 12 }}>先に市区町村を選択してください</div>
           ) : loadingTowns ? (
             <div style={{ color: "#777", fontSize: 12 }}>町名候補を読み込み中です...</div>
           ) : filteredTownOptions.length === 0 ? (
-            <div style={{ color: "#777", fontSize: 12 }}>
-              {hasTownQuery ? "一致する町名候補がありません" : "町名候補がありません"}
-            </div>
+            <div style={{ color: "#777", fontSize: 12 }}>一致する町名候補がありません</div>
           ) : (
             filteredTownOptions.map((x) => {
               const active = town === x.town;
@@ -483,7 +619,9 @@ export function AreaPickerKanto(props: {
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
                     <div style={{ fontWeight: 800 }}>{x.town}</div>
                     {x.townKana ? (
-                      <div style={{ fontSize: 12, color: active ? "#111" : "#777", whiteSpace: "nowrap" }}>{x.townKana}</div>
+                      <div style={{ fontSize: 12, color: active ? "#111" : "#777", whiteSpace: "nowrap" }}>
+                        {x.townKana}
+                      </div>
                     ) : null}
                   </div>
                 </button>
@@ -493,7 +631,7 @@ export function AreaPickerKanto(props: {
         </div>
 
         <div style={{ fontSize: 12, color: "#777" }}>
-          表示例：<b>{`${prefecture || "（都県未選択）"} ${city || "（市区町村未選択）"}${town ? "・" + town : ""}`}</b>
+          表示例：<b>{`${prefecture || "（都道府県未選択）"} ${city || "（市区町村未選択）"}${town ? "・" + town : ""}`}</b>
         </div>
 
         {town ? (
@@ -513,8 +651,6 @@ const card: React.CSSProperties = {
   background: "#fff",
 };
 
-const label: React.CSSProperties = { display: "grid", gap: 6 };
-
 const input: React.CSSProperties = {
   padding: "10px 12px",
   borderRadius: 10,
@@ -529,7 +665,18 @@ const listBox: React.CSSProperties = {
   border: "1px solid #eee",
   borderRadius: 12,
   background: "#fff",
-  maxHeight: 260,
+  maxHeight: 220,
+  overflow: "auto",
+};
+
+const listBoxTall: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+  padding: 10,
+  border: "1px solid #eee",
+  borderRadius: 12,
+  background: "#fff",
+  maxHeight: 360,
   overflow: "auto",
 };
 
