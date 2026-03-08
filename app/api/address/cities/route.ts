@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 type MunicipalityRow = {
@@ -18,6 +18,16 @@ function normalizeJa(text: string) {
     .replace(/[ァ-ヶ]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0x60));
 }
 
+function jsonUtf8(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -25,20 +35,14 @@ export async function GET(req: NextRequest) {
     const q = normalizeJa(searchParams.get("q") || "");
 
     if (!prefecture) {
-      return NextResponse.json(
-        { error: "prefecture は必須です" },
-        { status: 400 }
-      );
+      return jsonUtf8({ error: "prefecture は必須です" }, 400);
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseAnonKey) {
-      return NextResponse.json(
-        { error: "supabase env missing" },
-        { status: 500 }
-      );
+      return jsonUtf8({ error: "supabase env missing" }, 500);
     }
 
     const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -49,7 +53,7 @@ export async function GET(req: NextRequest) {
       .eq("prefecture", prefecture);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return jsonUtf8({ error: error.message }, 500);
     }
 
     const rows = ((data ?? []) as MunicipalityRow[])
@@ -82,11 +86,11 @@ export async function GET(req: NextRequest) {
         cityKana: r.cityKana,
       }));
 
-    return NextResponse.json({ items: rows });
+    return jsonUtf8({ items: rows });
   } catch (e) {
-    return NextResponse.json(
+    return jsonUtf8(
       { error: e instanceof Error ? e.message : "unknown error" },
-      { status: 500 }
+      500
     );
   }
 }
