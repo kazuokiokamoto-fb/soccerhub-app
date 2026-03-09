@@ -1,4 +1,3 @@
-// app/teams/new/page.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -6,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { supabase } from "@/app/lib/supabase";
-import { GradeKey } from "@/app/lib/types";
 
 import { CATEGORY_OPTIONS } from "@/app/lib/categories";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
@@ -17,9 +15,7 @@ import {
 } from "@/app/components/StrengthRankPicker";
 import { CategorySinglePicker } from "@/app/components/CategorySinglePicker";
 import { BikeParkingField } from "@/app/components/BikeParkingField";
-import { RosterByGradeFields } from "@/app/components/RosterByGradeFields";
-
-const gradeKeys: GradeKey[] = ["G1", "G2", "G3", "G4", "G5", "G6"];
+import { MemberCountField } from "@/app/components/MemberCountField";
 
 const BIKE_CAPACITY_OPTIONS = [
   { value: "5", label: "5台" },
@@ -36,10 +32,6 @@ const BIKE_CAPACITY_OPTIONS = [
 ] as const;
 
 type Toast = { type: "success" | "error" | "info"; text: string };
-
-function makeDefaultRoster11(): Record<GradeKey, string> {
-  return { G1: "11", G2: "11", G3: "11", G4: "11", G5: "11", G6: "11" };
-}
 
 function isMissingColumnError(err: any) {
   const msg = String(err?.message ?? "");
@@ -67,16 +59,15 @@ export default function TeamNewPage() {
   const router = useRouter();
 
   const [saving, setSaving] = useState(false);
+  const [loadingDefaults, setLoadingDefaults] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
 
   const [name, setName] = useState("");
 
-  // 1チーム = 1カテゴリ
   const [category, setCategory] = useState("");
   const [strengthRank, setStrengthRank] = useState<StrengthRank>("A");
   const [hasGround, setHasGround] = useState(false);
 
-  // 駐輪場
   const [bikeParking, setBikeParking] = useState<"なし" | "あり">("なし");
   const [bikeParkingCapacity, setBikeParkingCapacity] = useState<string>("");
 
@@ -86,12 +77,9 @@ export default function TeamNewPage() {
   const [prefecture, setPrefecture] = useState("東京都");
   const [city, setCity] = useState("");
   const [town, setTown] = useState("");
-
   const [addressDetail, setAddressDetail] = useState("");
 
-  const [rosterByGradeText, setRosterByGradeText] = useState<Record<GradeKey, string>>(
-    makeDefaultRoster11()
-  );
+  const [memberCount, setMemberCount] = useState("");
   const [note, setNote] = useState("");
 
   const [contactEmail, setContactEmail] = useState("");
@@ -107,14 +95,68 @@ export default function TeamNewPage() {
     const bikeOk =
       bikeParking === "なし" || (bikeParking === "あり" && !!bikeParkingCapacity);
 
-    return !!name.trim() && !!prefecture && !!city && !!category && bikeOk && !saving;
-  }, [name, prefecture, city, category, bikeParking, bikeParkingCapacity, saving]);
+    return (
+      !!name.trim() &&
+      !!prefecture &&
+      !!city &&
+      !!category &&
+      bikeOk &&
+      !saving &&
+      !loadingDefaults
+    );
+  }, [name, prefecture, city, category, bikeParking, bikeParkingCapacity, saving, loadingDefaults]);
 
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3000);
     return () => clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    (async () => {
+      setLoadingDefaults(true);
+
+      try {
+        const { data: auth } = await supabase.auth.getUser();
+        if (!auth?.user) {
+          setLoadingDefaults(false);
+          return;
+        }
+
+        let res = await supabase
+          .from("teams")
+          .select("contact_email,contact_phone,contact_line_id,uniform_main,uniform_sub")
+          .eq("owner_id", auth.user.id)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (res.error && isMissingColumnError(res.error)) {
+          res = await supabase
+            .from("teams")
+            .select("uniform_main,uniform_sub")
+            .eq("owner_id", auth.user.id)
+            .order("updated_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        }
+
+        const row: any = res.data;
+
+        if (row) {
+          setContactEmail(row.contact_email ?? "");
+          setContactPhone(row.contact_phone ?? "");
+          setContactLineId(row.contact_line_id ?? "");
+          setUniformMain(row.uniform_main ?? "");
+          setUniformSub(row.uniform_sub ?? "");
+        }
+      } catch (e) {
+        console.error("load defaults error:", e);
+      } finally {
+        setLoadingDefaults(false);
+      }
+    })();
+  }, []);
 
   const resetForm = () => {
     setName("");
@@ -123,17 +165,12 @@ export default function TeamNewPage() {
     setHasGround(false);
     setBikeParking("なし");
     setBikeParkingCapacity("");
-    setUniformMain("");
-    setUniformSub("");
     setPrefecture("東京都");
     setCity("");
     setTown("");
     setAddressDetail("");
-    setRosterByGradeText(makeDefaultRoster11());
+    setMemberCount("");
     setNote("");
-    setContactEmail("");
-    setContactPhone("");
-    setContactLineId("");
   };
 
   const save = async () => {
@@ -143,12 +180,6 @@ export default function TeamNewPage() {
     setToast({ type: "info", text: "保存中…" });
 
     try {
-      const roster_by_grade = gradeKeys.reduce((acc, g) => {
-        const v = (rosterByGradeText[g] ?? "").trim();
-        acc[g] = v === "" ? 0 : Math.max(0, Number(v) || 0);
-        return acc;
-      }, {} as Record<GradeKey, number>);
-
       const { data: auth, error: authErr } = await supabase.auth.getUser();
       if (authErr) console.error(authErr);
 
@@ -160,11 +191,12 @@ export default function TeamNewPage() {
 
       const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
       const addrDetail = addressDetail.trim();
+      const memberCountNum = memberCount.trim() === "" ? 0 : Math.max(0, Number(memberCount) || 0);
 
       const basePayload: any = {
         owner_id: auth.user.id,
         name: name.trim(),
-        categories: [category], // 既存互換用
+        categories: [category],
         category,
         level: strengthRankToLegacyLevel(strengthRank),
         strength_rank: strengthRank,
@@ -173,7 +205,7 @@ export default function TeamNewPage() {
         bike_parking_capacity: bikeParking === "あり" ? bikeParkingCapacity || "不明" : null,
         uniform_main: uniformMain.trim() || "不明",
         uniform_sub: uniformSub.trim() || "不明",
-        roster_by_grade,
+        roster_by_grade: { TOTAL: memberCountNum },
         note: note || "",
         prefecture,
         city,
@@ -216,7 +248,6 @@ export default function TeamNewPage() {
       const newId = (res.data as any)?.id;
 
       router.push(`/teams?created=${newId}`);
-
       resetForm();
       setSaving(false);
     } catch (e: any) {
@@ -391,10 +422,9 @@ export default function TeamNewPage() {
             </label>
           </div>
 
-          <RosterByGradeFields
-            gradeKeys={gradeKeys}
-            roster={rosterByGradeText}
-            setRoster={setRosterByGradeText}
+          <MemberCountField
+            value={memberCount}
+            onChange={setMemberCount}
             disabled={saving}
           />
 
@@ -437,6 +467,7 @@ export default function TeamNewPage() {
             </div>
 
             <div style={{ marginTop: 8, ...helperText }}>
+              ※ 以前登録したチームの連絡先がある場合、自動で初期入力されます。<br />
               ※ DBに contact_email / contact_phone / contact_line_id が無い環境でも保存できるようにしています（自動フォールバック）。
             </div>
           </div>

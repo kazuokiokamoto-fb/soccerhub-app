@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 
 import { supabase } from "@/app/lib/supabase";
-import { GradeKey } from "@/app/lib/types";
 
 import { CATEGORY_OPTIONS } from "@/app/lib/categories";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
@@ -13,12 +12,11 @@ import {
   StrengthRankPicker,
   StrengthRank,
   strengthRankToLegacyLevel,
+  legacyLevelToStrengthRank,
 } from "@/app/components/StrengthRankPicker";
 import { CategorySinglePicker } from "@/app/components/CategorySinglePicker";
 import { BikeParkingField } from "@/app/components/BikeParkingField";
-import { RosterByGradeFields } from "@/app/components/RosterByGradeFields";
-
-const gradeKeys: GradeKey[] = ["G1", "G2", "G3", "G4", "G5", "G6"];
+import { MemberCountField } from "@/app/components/MemberCountField";
 
 const BIKE_CAPACITY_OPTIONS = [
   { value: "5", label: "5台" },
@@ -36,10 +34,6 @@ const BIKE_CAPACITY_OPTIONS = [
 
 type Toast = { type: "success" | "error" | "info"; text: string };
 
-function makeDefaultRoster11(): Record<GradeKey, string> {
-  return { G1: "11", G2: "11", G3: "11", G4: "11", G5: "11", G6: "11" };
-}
-
 function isMissingColumnError(err: any) {
   const msg = String(err?.message ?? "");
   return (
@@ -50,7 +44,8 @@ function isMissingColumnError(err: any) {
       (msg.includes("contact_") ||
         msg.includes("address_detail") ||
         msg.includes("strength_rank") ||
-        msg.includes("bike_parking_capacity")))
+        msg.includes("bike_parking_capacity") ||
+        msg.includes("member_count")))
   );
 }
 
@@ -88,9 +83,7 @@ export default function TeamEditPage() {
   const [town, setTown] = useState("");
 
   const [addressDetail, setAddressDetail] = useState("");
-
-  const [rosterByGradeText, setRosterByGradeText] =
-    useState<Record<GradeKey, string>>(makeDefaultRoster11());
+  const [memberCount, setMemberCount] = useState("");
 
   const [note, setNote] = useState("");
 
@@ -110,7 +103,15 @@ export default function TeamEditPage() {
     const bikeOk =
       bikeParking === "なし" || (bikeParking === "あり" && !!bikeParkingCapacity);
 
-    return !!teamId && !!name.trim() && !!prefecture && !!city && !!category && bikeOk && !saving;
+    return (
+      !!teamId &&
+      !!name.trim() &&
+      !!prefecture &&
+      !!city &&
+      !!category &&
+      bikeOk &&
+      !saving
+    );
   }, [teamId, name, prefecture, city, category, bikeParking, bikeParkingCapacity, saving]);
 
   useEffect(() => {
@@ -125,179 +126,560 @@ export default function TeamEditPage() {
     (async () => {
       setLoading(true);
 
-      const { data: auth } = await supabase.auth.getUser();
+      try {
+        const { data: auth } = await supabase.auth.getUser();
 
-      if (!auth?.user) {
-        router.replace("/login");
-        return;
-      }
+        if (!auth?.user) {
+          router.replace("/login");
+          return;
+        }
 
-      let res = await supabase
-        .from("teams")
-        .select("*")
-        .eq("id", teamId)
-        .single();
+        let res = await supabase
+          .from("teams")
+          .select(
+            "id,owner_id,name,category,categories,level,strength_rank,has_ground,bike_parking,bike_parking_capacity,uniform_main,uniform_sub,prefecture,city,town,area,address_detail,member_count,note,contact_email,contact_phone,contact_line_id"
+          )
+          .eq("id", teamId)
+          .single();
 
-      if (res.error || !res.data) {
+        if (res.error && isMissingColumnError(res.error)) {
+          res = await supabase
+            .from("teams")
+            .select(
+              "id,owner_id,name,category,categories,level,has_ground,bike_parking,uniform_main,uniform_sub,prefecture,city,town,area,note,contact_email,contact_phone,contact_line_id,roster_by_grade"
+            )
+            .eq("id", teamId)
+            .single();
+        }
+
+        if (res.error || !res.data) {
+          console.error(res.error);
+          setToast({ type: "error", text: "チーム情報の読み込みに失敗しました" });
+          setLoading(false);
+          return;
+        }
+
+        const data: any = res.data;
+
+        if (data.owner_id !== auth.user.id) {
+          setToast({ type: "error", text: "このチームは編集できません" });
+          setLoading(false);
+          return;
+        }
+
+        setName(data.name ?? "");
+        setCategory(
+          data.category ??
+            (Array.isArray(data.categories) && data.categories.length > 0
+              ? data.categories[0]
+              : "")
+        );
+
+        setStrengthRank(
+          data.strength_rank
+            ? data.strength_rank
+            : legacyLevelToStrengthRank(data.level ?? 5)
+        );
+
+        setHasGround(!!data.has_ground);
+
+        setBikeParking(
+          data.bike_parking === "あり" ? "あり" : "なし"
+        );
+        setBikeParkingCapacity(data.bike_parking_capacity ?? "");
+
+        setUniformMain(data.uniform_main ?? "");
+        setUniformSub(data.uniform_sub ?? "");
+
+        setPrefecture(data.prefecture ?? "東京都");
+        setCity(data.city ?? "");
+        setTown(data.town ?? "");
+
+        setAddressDetail(data.address_detail ?? "");
+
+        const roster = data.roster_by_grade ?? {};
+        const fallbackMemberCount =
+          data.member_count ??
+          roster.TOTAL ??
+          null;
+
+        setMemberCount(
+          fallbackMemberCount == null ? "" : String(fallbackMemberCount)
+        );
+
+        setNote(data.note ?? "");
+
+        setContactEmail(data.contact_email ?? "");
+        setContactPhone(data.contact_phone ?? "");
+        setContactLineId(data.contact_line_id ?? "");
+
+        setLoading(false);
+      } catch (e) {
+        console.error(e);
         setToast({ type: "error", text: "チーム情報の読み込みに失敗しました" });
         setLoading(false);
-        return;
       }
-
-      const data: any = res.data;
-
-      if (data.owner_id !== auth.user.id) {
-        setToast({ type: "error", text: "このチームは編集できません" });
-        setLoading(false);
-        return;
-      }
-
-      setName(data.name ?? "");
-      setCategory(data.category ?? "");
-
-      setStrengthRank(data.strength_rank ?? "A");
-
-      setHasGround(!!data.has_ground);
-
-      setBikeParking(data.bike_parking ?? "なし");
-      setBikeParkingCapacity(data.bike_parking_capacity ?? "");
-
-      setUniformMain(data.uniform_main ?? "");
-      setUniformSub(data.uniform_sub ?? "");
-
-      setPrefecture(data.prefecture ?? "東京都");
-      setCity(data.city ?? "");
-      setTown(data.town ?? "");
-
-      setAddressDetail(data.address_detail ?? "");
-
-      const roster = data.roster_by_grade ?? {};
-
-      setRosterByGradeText({
-        G1: String(roster.G1 ?? 11),
-        G2: String(roster.G2 ?? 11),
-        G3: String(roster.G3 ?? 11),
-        G4: String(roster.G4 ?? 11),
-        G5: String(roster.G5 ?? 11),
-        G6: String(roster.G6 ?? 11),
-      });
-
-      setNote(data.note ?? "");
-
-      setContactEmail(data.contact_email ?? "");
-      setContactPhone(data.contact_phone ?? "");
-      setContactLineId(data.contact_line_id ?? "");
-
-      setLoading(false);
     })();
-  }, [teamId]);
+  }, [teamId, router]);
 
   const save = async () => {
-    if (!canSave) return;
+    if (!canSave || !teamId) return;
 
     setSaving(true);
     setToast({ type: "info", text: "保存中…" });
 
-    const roster_by_grade = gradeKeys.reduce((acc, g) => {
-      const v = (rosterByGradeText[g] ?? "").trim();
-      acc[g] = v === "" ? 0 : Math.max(0, Number(v) || 0);
-      return acc;
-    }, {} as Record<GradeKey, number>);
+    try {
+      const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
+      const memberCountNum =
+        memberCount.trim() === "" ? null : Math.max(0, Number(memberCount) || 0);
 
-    const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
+      const basePayload: any = {
+        name: name.trim(),
+        category,
+        categories: [category],
+        level: strengthRankToLegacyLevel(strengthRank),
+        strength_rank: strengthRank,
+        has_ground: hasGround,
+        bike_parking: bikeParking,
+        bike_parking_capacity:
+          bikeParking === "あり" ? bikeParkingCapacity || "不明" : null,
+        uniform_main: uniformMain.trim() || "不明",
+        uniform_sub: uniformSub.trim() || "不明",
+        member_count: memberCountNum,
+        note: note || "",
+        prefecture,
+        city,
+        town: town || null,
+        area: areaText,
+        address_detail: addressDetail.trim() || null,
+      };
 
-    const payload = {
-      name,
-      category,
-      categories: [category],
-      level: strengthRankToLegacyLevel(strengthRank),
-      strength_rank: strengthRank,
-      has_ground: hasGround,
-      bike_parking: bikeParking,
-      bike_parking_capacity:
-        bikeParking === "あり" ? bikeParkingCapacity || "不明" : null,
-      uniform_main: uniformMain || "不明",
-      uniform_sub: uniformSub || "不明",
-      roster_by_grade,
-      note,
-      prefecture,
-      city,
-      town,
-      area: areaText,
-      address_detail: addressDetail || null,
-      contact_email: contactEmail || null,
-      contact_phone: contactPhone || null,
-      contact_line_id: contactLineId || null,
-    };
+      const withContact: any = {
+        ...basePayload,
+        contact_email: contactEmail.trim() || null,
+        contact_phone: contactPhone.trim() || null,
+        contact_line_id: contactLineId.trim() || null,
+      };
 
-    const res = await supabase.from("teams").update(payload).eq("id", teamId);
+      let res = await supabase.from("teams").update(withContact).eq("id", teamId);
 
-    if (res.error) {
-      setToast({ type: "error", text: res.error.message });
+      if (res.error && isMissingColumnError(res.error)) {
+        console.warn("missing columns. retry without optional fields:", res.error.message);
+
+        const fallbackPayload: any = {
+          ...basePayload,
+        };
+
+        delete fallbackPayload.address_detail;
+        delete fallbackPayload.strength_rank;
+        delete fallbackPayload.bike_parking_capacity;
+        delete fallbackPayload.member_count;
+
+        res = await supabase.from("teams").update(fallbackPayload).eq("id", teamId);
+      }
+
+      if (res.error) {
+        console.error(res.error);
+        setToast({ type: "error", text: res.error.message });
+        setSaving(false);
+        return;
+      }
+
+      setToast({ type: "success", text: "✅ 更新しました" });
       setSaving(false);
-      return;
+      router.push("/teams");
+      router.refresh();
+    } catch (e: any) {
+      console.error(e);
+      setToast({ type: "error", text: e?.message ?? "保存に失敗しました" });
+      setSaving(false);
     }
-
-    setToast({ type: "success", text: "更新しました" });
-
-    router.push("/teams");
   };
 
-  if (loading) return <main style={{ padding: 24 }}>読み込み中…</main>;
+  if (loading) {
+    return <main className="sh-page-wrap" style={{ padding: 24 }}>読み込み中…</main>;
+  }
 
   return (
     <main className="sh-page-wrap" style={{ padding: 24 }}>
-      <h1>チーム編集</h1>
+      {toast ? (
+        <div
+          style={{
+            ...toastBox,
+            ...(toast.type === "success"
+              ? toastSuccess
+              : toast.type === "error"
+              ? toastError
+              : toastInfo),
+          }}
+          role="status"
+          aria-live="polite"
+        >
+          <div style={{ whiteSpace: "pre-wrap" }}>{toast.text}</div>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            style={toastClose}
+            aria-label="閉じる"
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
 
-      <section style={{ marginTop: 20, display: "grid", gap: 20 }}>
+      <section style={heroBox}>
+        <div style={heroBadge}>⚽ サカまち</div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 12,
+            flexWrap: "wrap",
+            marginTop: 10,
+          }}
+        >
+          <div>
+            <h1 style={{ margin: 0, fontSize: 30, fontWeight: 900 }}>チーム編集</h1>
+            <p style={heroText}>
+              登録済みのチーム情報を更新できます。
+            </p>
+          </div>
 
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="チーム名"
-        />
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/teams" className="sh-btn">
+              一覧へ
+            </Link>
+          </div>
+        </div>
+      </section>
 
-        <AreaPickerKanto
-          prefecture={prefecture}
-          setPrefecture={setPrefecture}
-          city={city}
-          setCity={setCity}
-          town={town}
-          setTown={setTown}
-        />
+      <section className="sh-section" style={{ marginTop: 16 }}>
+        <div style={{ display: "grid", gap: 18 }}>
+          <div style={infoNotice}>
+            <div style={noticeTitle}>編集について</div>
+            <div style={helperText}>
+              ※ 1アカウントで複数チームを登録できます。<br />
+              ※ 1チームにつき1カテゴリで管理してください。
+            </div>
+          </div>
 
-        <CategorySinglePicker
-          options={categoryOptions}
-          value={category}
-          onChange={setCategory}
-        />
+          <label style={label}>
+            <span style={labelTitle}>チーム名（必須）</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="sh-input"
+              disabled={saving}
+              placeholder="例：三宿FC U-12"
+            />
+          </label>
 
-        <StrengthRankPicker
-          value={strengthRank}
-          onChange={setStrengthRank}
-        />
+          <AreaPickerKanto
+            disabled={saving}
+            prefecture={prefecture}
+            setPrefecture={setPrefecture}
+            city={city}
+            setCity={setCity}
+            town={town}
+            setTown={setTown}
+            title="エリア（関東）"
+            townOptional={true}
+            allowAll={false}
+          />
 
-        <BikeParkingField
-          bikeParking={bikeParking}
-          setBikeParking={setBikeParking}
-          bikeParkingCapacity={bikeParkingCapacity}
-          setBikeParkingCapacity={setBikeParkingCapacity}
-          capacityOptions={BIKE_CAPACITY_OPTIONS}
-        />
+          <label style={label}>
+            <span style={labelTitle}>住所（丁目・番地・号）（任意）</span>
+            <input
+              value={addressDetail}
+              onChange={(e) => setAddressDetail(e.target.value)}
+              className="sh-input"
+              disabled={saving}
+              placeholder="例：1-2-3（丁目・番地・号）"
+              inputMode="text"
+              autoComplete="street-address"
+            />
+            <span style={helperText}>
+              ※ 地図リンクの精度を上げるための入力欄です（未入力でもOK）。
+            </span>
+          </label>
 
-        <RosterByGradeFields
-          gradeKeys={gradeKeys}
-          roster={rosterByGradeText}
-          setRoster={setRosterByGradeText}
-        />
+          <CategorySinglePicker
+            title="カテゴリ（必須）"
+            options={categoryOptions}
+            value={category}
+            onChange={setCategory}
+            disabled={saving}
+          />
 
-        <button onClick={save} disabled={!canSave}>
-          更新
-        </button>
+          <div style={subSection}>
+            <StrengthRankPicker
+              value={strengthRank}
+              onChange={setStrengthRank}
+              disabled={saving}
+              title="強さ（ランク選択）"
+            />
+          </div>
 
-        <Link href="/teams">一覧へ戻る</Link>
+          <label style={{ ...checkLabel, opacity: saving ? 0.7 : 1 }}>
+            <input
+              type="checkbox"
+              checked={hasGround}
+              onChange={(e) => setHasGround(e.target.checked)}
+              disabled={saving}
+            />
+            自チームでグラウンド提供できる
+          </label>
 
+          <BikeParkingField
+            bikeParking={bikeParking}
+            setBikeParking={setBikeParking}
+            bikeParkingCapacity={bikeParkingCapacity}
+            setBikeParkingCapacity={setBikeParkingCapacity}
+            capacityOptions={BIKE_CAPACITY_OPTIONS}
+            disabled={saving}
+          />
+
+          <div style={twoCols}>
+            <label style={label}>
+              <span style={labelTitle}>ユニフォーム（メイン）</span>
+              <input
+                value={uniformMain}
+                onChange={(e) => setUniformMain(e.target.value)}
+                className="sh-input"
+                disabled={saving}
+                placeholder="例：青"
+              />
+            </label>
+
+            <label style={label}>
+              <span style={labelTitle}>ユニフォーム（サブ）</span>
+              <input
+                value={uniformSub}
+                onChange={(e) => setUniformSub(e.target.value)}
+                className="sh-input"
+                disabled={saving}
+                placeholder="例：白"
+              />
+            </label>
+          </div>
+
+          <MemberCountField
+            value={memberCount}
+            onChange={setMemberCount}
+            disabled={saving}
+          />
+
+          <div style={softCard}>
+            <div style={blockTitle}>連絡先（任意）</div>
+
+            <div style={{ display: "grid", gap: 10 }}>
+              <label style={label}>
+                <span style={labelTitle}>メール</span>
+                <input
+                  value={contactEmail}
+                  onChange={(e) => setContactEmail(e.target.value)}
+                  className="sh-input"
+                  disabled={saving}
+                  placeholder="example@mail.com"
+                />
+              </label>
+
+              <label style={label}>
+                <span style={labelTitle}>電話番号</span>
+                <input
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  className="sh-input"
+                  disabled={saving}
+                  placeholder="09012345678"
+                />
+              </label>
+
+              <label style={label}>
+                <span style={labelTitle}>LINE ID</span>
+                <input
+                  value={contactLineId}
+                  onChange={(e) => setContactLineId(e.target.value)}
+                  className="sh-input"
+                  disabled={saving}
+                  placeholder="line_id"
+                />
+              </label>
+            </div>
+
+            <div style={{ marginTop: 8, ...helperText }}>
+              ※ 連絡先はこのチームごとに編集できます。<br />
+              ※ DBに contact_email / contact_phone / contact_line_id が無い環境でも保存できるようにしています。
+            </div>
+          </div>
+
+          <label style={label}>
+            <span style={labelTitle}>メモ（任意）</span>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="sh-textarea"
+              style={{ minHeight: 100 }}
+              disabled={saving}
+              placeholder="対戦希望条件、活動方針など"
+            />
+          </label>
+
+          <div style={actionRow}>
+            <button
+              className="sh-btn sh-btn--primary"
+              onClick={save}
+              type="button"
+              disabled={!canSave}
+            >
+              {saving ? "保存中..." : "更新"}
+            </button>
+
+            <Link href="/teams" className="sh-btn sh-btn--ghost">
+              キャンセル
+            </Link>
+          </div>
+        </div>
       </section>
     </main>
   );
 }
+
+const heroBox: React.CSSProperties = {
+  borderRadius: 20,
+  background: "linear-gradient(135deg, #1e7f3c 0%, #145c2a 100%)",
+  color: "#fff",
+  padding: 20,
+  boxShadow: "0 10px 28px rgba(20,92,42,0.20)",
+};
+
+const heroBadge: React.CSSProperties = {
+  display: "inline-flex",
+  padding: "6px 12px",
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.14)",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const heroText: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "rgba(255,255,255,0.92)",
+  lineHeight: 1.7,
+};
+
+const infoNotice: React.CSSProperties = {
+  padding: 14,
+  border: "1px solid #d6eadb",
+  borderRadius: 16,
+  background: "#f5fbf6",
+};
+
+const noticeTitle: React.CSSProperties = {
+  fontWeight: 900,
+  marginBottom: 8,
+  color: "#1f5d30",
+};
+
+const subSection: React.CSSProperties = {
+  border: "1px solid #edf1ee",
+  borderRadius: 16,
+  background: "#fafcfb",
+  padding: 12,
+};
+
+const softCard: React.CSSProperties = {
+  padding: 14,
+  border: "1px solid #edf1ee",
+  borderRadius: 16,
+  background: "#fafcfb",
+};
+
+const label: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+};
+
+const labelTitle: React.CSSProperties = {
+  fontWeight: 800,
+  color: "#2d3b31",
+};
+
+const helperText: React.CSSProperties = {
+  fontSize: 12,
+  color: "#66756d",
+  lineHeight: 1.6,
+};
+
+const blockTitle: React.CSSProperties = {
+  fontWeight: 900,
+  marginBottom: 10,
+  color: "#1f5d30",
+};
+
+const checkLabel: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "12px 14px",
+  border: "1px solid #dfe7e2",
+  borderRadius: 14,
+  background: "#f8fbf9",
+  color: "#21342a",
+  fontWeight: 700,
+};
+
+const twoCols: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  gridTemplateColumns: "1fr 1fr",
+};
+
+const actionRow: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const toastBox: React.CSSProperties = {
+  position: "sticky",
+  top: 10,
+  zIndex: 50,
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: "1px solid #eee",
+  marginBottom: 12,
+};
+
+const toastSuccess: React.CSSProperties = {
+  background: "#ecfdf3",
+  borderColor: "#bbf7d0",
+  color: "#166534",
+};
+
+const toastError: React.CSSProperties = {
+  background: "#fef2f2",
+  borderColor: "#fecaca",
+  color: "#991b1b",
+};
+
+const toastInfo: React.CSSProperties = {
+  background: "#eff6ff",
+  borderColor: "#bfdbfe",
+  color: "#1e3a8a",
+};
+
+const toastClose: React.CSSProperties = {
+  border: "none",
+  background: "transparent",
+  fontSize: 20,
+  lineHeight: 1,
+  cursor: "pointer",
+  padding: 0,
+  opacity: 0.7,
+};

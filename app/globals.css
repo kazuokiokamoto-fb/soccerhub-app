@@ -548,3 +548,272 @@ body {
     min-height: 48px;
   }
 }
+
+:root {
+  --sm-green-1: #1f8f43;
+  --sm-green-2: #14652f;
+  --sm-green-3: #0f4d23;
+  --sm-cream: #f7faf7;
+  --sm-line: #d8e7db;
+  --sm-text: #1c2b22;
+  --sm-sub: #66756d;
+}
+
+/* ===== 基本入力UI ===== */
+.sh-input,
+.sh-select,
+.sh-textarea {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 16px;
+  border-radius: 14px;
+  border: 1px solid #d9e4dc;
+  background: #fff;
+  color: #21342a;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sh-input:focus,
+.sh-select:focus,
+.sh-textarea:focus {
+  border-color: var(--sm-green-1);
+  box-shadow: 0 0 0 3px rgba(31, 143, 67, 0.12);
+}
+
+.sh-textarea {
+  resize: vertical;
+}
+
+/* ===== 共通ボタン：サカまち風 ===== */
+.sh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--sm-line);
+  background: #fff;
+  color: var(--sm-green-3);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.sh-btn:hover {
+  background: #f8fbf9;
+  border-color: #bfd6c4;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(20, 92, 42, 0.08);
+}
+
+.sh-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(20, 92, 42, 0.12) inset;
+}
+
+.sh-btn:focus-visible {
+  outline: none;
+  border-color: var(--sm-green-1);
+  box-shadow: 0 0 0 3px rgba(31, 143, 67, 0.18);
+}
+
+.sh-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.sh-btn--primary {
+  background: linear-gradient(180deg, var(--sm-green-1), var(--sm-green-2));
+  border-color: var(--sm-green-2);
+  color: #fff;
+}
+
+.sh-btn--primary:hover {
+  background: linear-gradient(180deg, #22984a, #156b31);
+  border-color: #156b31;
+}
+
+.sh-btn--ghost {
+  background: #fff;
+  color: var(--sm-green-2);
+  border-color: var(--sm-line);
+}
+
+.sh-btn--danger {
+  border-color: #f1caca;
+  color: #b42318;
+}
+
+/* ===== ページ共通幅 ===== */
+.sh-page-wrap {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+/* ===== サカまち ヘッダー ===== */
+.smh-header {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid #e8efe9;
+}
+
+.smh-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.smh-brand {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.smh-brandMark {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  color: #fff;
+  background: linear-gradient(180deg, var(--sm-green-1), var(--sm-green-2));
+  box-shadow: 0 6px 14px rgba(20, 92, 42, 0.18);
+}
+
+.smh-brandTextWrap {
+  min-width: 0;
+}
+
+.smh-brandText {
+  font-family: var(--font-logo-jp), var(--font-geist-sans), sans-serif;
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: var(--sm-green-2);
+  text-shadow:
+    -2px -2px 0 #fff,
+     2px -2px 0 #fff,
+    -2px  2px 0 #fff,
+     2px  2px 0 #fff;
+}
+
+.smh-brandSub {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.1;
+  color: #7a8a80;
+  letter-spacing: 0.08em;
+}
+
+.smh-nav {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.smh-link {
+  text-decoration: none;
+  color: var(--sm-green-3);
+  font-weight: 800;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.smh-user {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #6f7d74;
+  font-size: 12px;
+}
+
+.smh-logout {
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 12px;
+}
+
+/* ===== ホームカードグリッド ===== */
+.sh-home-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* ===== スマホ調整 ===== */
+@media (max-width: 900px) {
+  .sh-home-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .smh-link {
+    display: none;
+  }
+
+  .smh-user {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .sh-home-grid {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .smh-inner {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .smh-brandMark {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+    font-size: 19px;
+  }
+
+  .smh-brandText {
+    font-size: 22px;
+    letter-spacing: 0.06em;
+  }
+
+  .smh-brandSub {
+    font-size: 9px;
+  }
+
+  .smh-logout {
+    min-height: 36px;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  .sh-btn {
+    min-height: 44px;
+  }
+}
