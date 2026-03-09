@@ -9,15 +9,31 @@ import { supabase } from "@/app/lib/supabase";
 import { GradeKey } from "@/app/lib/types";
 
 import { CATEGORY_OPTIONS } from "@/app/lib/categories";
-import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
 import {
   StrengthRankPicker,
   StrengthRank,
   strengthRankToLegacyLevel,
 } from "@/app/components/StrengthRankPicker";
+import { CategorySinglePicker } from "@/app/components/CategorySinglePicker";
+import { BikeParkingField } from "@/app/components/BikeParkingField";
+import { RosterByGradeFields } from "@/app/components/RosterByGradeFields";
 
 const gradeKeys: GradeKey[] = ["G1", "G2", "G3", "G4", "G5", "G6"];
+
+const BIKE_CAPACITY_OPTIONS = [
+  { value: "5", label: "5台" },
+  { value: "10", label: "10台" },
+  { value: "15", label: "15台" },
+  { value: "20", label: "20台" },
+  { value: "25", label: "25台" },
+  { value: "30", label: "30台" },
+  { value: "35", label: "35台" },
+  { value: "40", label: "40台" },
+  { value: "45", label: "45台" },
+  { value: "50+", label: "50台以上" },
+  { value: "不明", label: "不明" },
+] as const;
 
 type Toast = { type: "success" | "error" | "info"; text: string };
 
@@ -34,7 +50,16 @@ function isMissingColumnError(err: any) {
     (msg.includes("column") &&
       (msg.includes("contact_") ||
         msg.includes("address_detail") ||
-        msg.includes("strength_rank")))
+        msg.includes("strength_rank") ||
+        msg.includes("bike_parking_capacity")))
+  );
+}
+
+function normalizeCategoryOptions(
+  options: Array<string | { value: string; label: string }>
+): Array<{ value: string; label: string }> {
+  return options.map((opt) =>
+    typeof opt === "string" ? { value: opt, label: opt } : opt
   );
 }
 
@@ -46,10 +71,15 @@ export default function TeamNewPage() {
 
   const [name, setName] = useState("");
 
-  const [categories, setCategories] = useState<string[]>([]);
+  // 1チーム = 1カテゴリ
+  const [category, setCategory] = useState("");
   const [strengthRank, setStrengthRank] = useState<StrengthRank>("A");
   const [hasGround, setHasGround] = useState(false);
-  const [bikeParking, setBikeParking] = useState("不明");
+
+  // 駐輪場
+  const [bikeParking, setBikeParking] = useState<"なし" | "あり">("なし");
+  const [bikeParkingCapacity, setBikeParkingCapacity] = useState<string>("");
+
   const [uniformMain, setUniformMain] = useState("");
   const [uniformSub, setUniformSub] = useState("");
 
@@ -68,9 +98,17 @@ export default function TeamNewPage() {
   const [contactPhone, setContactPhone] = useState("");
   const [contactLineId, setContactLineId] = useState("");
 
+  const categoryOptions = useMemo(
+    () => normalizeCategoryOptions(CATEGORY_OPTIONS as Array<string | { value: string; label: string }>),
+    []
+  );
+
   const canSave = useMemo(() => {
-    return !!name.trim() && !!prefecture && !!city && categories.length > 0 && !saving;
-  }, [name, prefecture, city, categories, saving]);
+    const bikeOk =
+      bikeParking === "なし" || (bikeParking === "あり" && !!bikeParkingCapacity);
+
+    return !!name.trim() && !!prefecture && !!city && !!category && bikeOk && !saving;
+  }, [name, prefecture, city, category, bikeParking, bikeParkingCapacity, saving]);
 
   useEffect(() => {
     if (!toast) return;
@@ -80,10 +118,11 @@ export default function TeamNewPage() {
 
   const resetForm = () => {
     setName("");
-    setCategories([]);
+    setCategory("");
     setStrengthRank("A");
     setHasGround(false);
-    setBikeParking("不明");
+    setBikeParking("なし");
+    setBikeParkingCapacity("");
     setUniformMain("");
     setUniformSub("");
     setPrefecture("東京都");
@@ -121,17 +160,17 @@ export default function TeamNewPage() {
 
       const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
       const addrDetail = addressDetail.trim();
-      const primaryCategory = categories[0];
 
       const basePayload: any = {
         owner_id: auth.user.id,
         name: name.trim(),
-        categories,
-        category: primaryCategory,
+        categories: [category], // 既存互換用
+        category,
         level: strengthRankToLegacyLevel(strengthRank),
         strength_rank: strengthRank,
         has_ground: hasGround,
         bike_parking: bikeParking,
+        bike_parking_capacity: bikeParking === "あり" ? bikeParkingCapacity || "不明" : null,
         uniform_main: uniformMain.trim() || "不明",
         uniform_sub: uniformSub.trim() || "不明",
         roster_by_grade,
@@ -161,6 +200,7 @@ export default function TeamNewPage() {
 
         delete fallbackPayload.address_detail;
         delete fallbackPayload.strength_rank;
+        delete fallbackPayload.bike_parking_capacity;
 
         res = await supabase.from("teams").insert(fallbackPayload).select("id").single();
       }
@@ -242,6 +282,15 @@ export default function TeamNewPage() {
 
       <section className="sh-section" style={{ marginTop: 16 }}>
         <div style={{ display: "grid", gap: 18 }}>
+          <div style={infoNotice}>
+            <div style={noticeTitle}>登録について</div>
+            <div style={helperText}>
+              ※ 1アカウントで複数チームを登録できます。<br />
+              例：U12、U10、女子チームなどを別々に登録可能です。<br />
+              ※ 1チームにつき1カテゴリで登録してください。
+            </div>
+          </div>
+
           <label style={label}>
             <span style={labelTitle}>チーム名（必須）</span>
             <input
@@ -282,16 +331,13 @@ export default function TeamNewPage() {
             </span>
           </label>
 
-          <div style={subSection}>
-            <CheckboxGroup
-              title="カテゴリ（複数選択）"
-              options={CATEGORY_OPTIONS}
-              values={categories}
-              onChange={setCategories}
-              columns={3}
-              disabled={saving}
-            />
-          </div>
+          <CategorySinglePicker
+            title="カテゴリ（必須）"
+            options={categoryOptions}
+            value={category}
+            onChange={setCategory}
+            disabled={saving}
+          />
 
           <div style={subSection}>
             <StrengthRankPicker
@@ -312,19 +358,14 @@ export default function TeamNewPage() {
             自チームでグラウンド提供できる
           </label>
 
-          <label style={label}>
-            <span style={labelTitle}>🚲 駐輪場（チーム側）</span>
-            <select
-              value={bikeParking}
-              onChange={(e) => setBikeParking(e.target.value)}
-              className="sh-select"
-              disabled={saving}
-            >
-              <option value="あり">あり</option>
-              <option value="なし">なし</option>
-              <option value="不明">不明</option>
-            </select>
-          </label>
+          <BikeParkingField
+            bikeParking={bikeParking}
+            setBikeParking={setBikeParking}
+            bikeParkingCapacity={bikeParkingCapacity}
+            setBikeParkingCapacity={setBikeParkingCapacity}
+            capacityOptions={BIKE_CAPACITY_OPTIONS}
+            disabled={saving}
+          />
 
           <div style={twoCols}>
             <label style={label}>
@@ -350,29 +391,12 @@ export default function TeamNewPage() {
             </label>
           </div>
 
-          <div style={softCard}>
-            <div style={blockTitle}>各学年の人数（ざっくり）</div>
-            <div style={threeCols}>
-              {gradeKeys.map((g) => (
-                <label key={g} style={label}>
-                  <span style={labelTitle}>{g}</span>
-                  <input
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={rosterByGradeText[g]}
-                    onChange={(e) =>
-                      setRosterByGradeText({
-                        ...rosterByGradeText,
-                        [g]: e.target.value.replace(/[^\d]/g, ""),
-                      })
-                    }
-                    className="sh-input"
-                    disabled={saving}
-                  />
-                </label>
-              ))}
-            </div>
-          </div>
+          <RosterByGradeFields
+            gradeKeys={gradeKeys}
+            roster={rosterByGradeText}
+            setRoster={setRosterByGradeText}
+            disabled={saving}
+          />
 
           <div style={softCard}>
             <div style={blockTitle}>連絡先（任意）</div>
@@ -429,6 +453,25 @@ export default function TeamNewPage() {
             />
           </label>
 
+          <div style={faqBox}>
+            <div style={blockTitle}>Q&A</div>
+
+            <div style={faqItem}>
+              <div style={faqQ}>Q. 1つのアカウントで複数チームを登録できますか？</div>
+              <div style={faqA}>
+                A. はい、登録できます。カテゴリごとに別チームとして登録してください。
+                例：U12、U10、女子チームなど。
+              </div>
+            </div>
+
+            <div style={faqItem}>
+              <div style={faqQ}>Q. 1チームで複数カテゴリを持てますか？</div>
+              <div style={faqA}>
+                A. 現在は1チームにつき1カテゴリです。複数カテゴリがある場合は、チームを分けて登録してください。
+              </div>
+            </div>
+          </div>
+
           <div style={actionRow}>
             <button
               className="sh-btn sh-btn--primary"
@@ -472,6 +515,19 @@ const heroText: React.CSSProperties = {
   lineHeight: 1.7,
 };
 
+const infoNotice: React.CSSProperties = {
+  padding: 14,
+  border: "1px solid #d6eadb",
+  borderRadius: 16,
+  background: "#f5fbf6",
+};
+
+const noticeTitle: React.CSSProperties = {
+  fontWeight: 900,
+  marginBottom: 8,
+  color: "#1f5d30",
+};
+
 const subSection: React.CSSProperties = {
   border: "1px solid #edf1ee",
   borderRadius: 16,
@@ -484,6 +540,31 @@ const softCard: React.CSSProperties = {
   border: "1px solid #edf1ee",
   borderRadius: 16,
   background: "#fafcfb",
+};
+
+const faqBox: React.CSSProperties = {
+  padding: 14,
+  border: "1px solid #edf1ee",
+  borderRadius: 16,
+  background: "#fafcfb",
+  display: "grid",
+  gap: 12,
+};
+
+const faqItem: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+};
+
+const faqQ: React.CSSProperties = {
+  fontWeight: 800,
+  color: "#21342a",
+};
+
+const faqA: React.CSSProperties = {
+  fontSize: 14,
+  color: "#4a5d52",
+  lineHeight: 1.7,
 };
 
 const label: React.CSSProperties = {
@@ -524,12 +605,6 @@ const twoCols: React.CSSProperties = {
   display: "grid",
   gap: 12,
   gridTemplateColumns: "1fr 1fr",
-};
-
-const threeCols: React.CSSProperties = {
-  display: "grid",
-  gap: 10,
-  gridTemplateColumns: "repeat(3, 1fr)",
 };
 
 const actionRow: React.CSSProperties = {
