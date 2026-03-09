@@ -43,7 +43,7 @@ export default function AppHeader() {
 
           <div className="smh-logoTextWrap">
             <div className="smh-logoJa">サカまち</div>
-            <div className="smh-logoEn">Soccer Match Hub</div>
+            <div className="smh-logoEn">Soccer Match</div>
           </div>
         </Link>
 

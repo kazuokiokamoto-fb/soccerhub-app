@@ -506,3 +506,45 @@ body {
     flex: 0 0 auto;
   }
 }
+
+.sh-input {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 16px;
+  border-radius: 14px;
+  border: 1px solid #d9e4dc;
+  background: #fff;
+  color: #21342a;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  box-sizing: border-box;
+}
+
+.sh-input:focus {
+  border-color: #1e7f3c;
+  box-shadow: 0 0 0 3px rgba(30, 127, 60, 0.12);
+}
+
+.sh-textarea {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 16px;
+  border-radius: 14px;
+  border: 1px solid #d9e4dc;
+  background: #fff;
+  color: #21342a;
+  outline: none;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.sh-textarea:focus {
+  border-color: #1e7f3c;
+  box-shadow: 0 0 0 3px rgba(30, 127, 60, 0.12);
+}
+
+@media (max-width: 640px) {
+  .sh-btn {
+    min-height: 48px;
+  }
+}
