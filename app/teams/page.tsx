@@ -18,15 +18,22 @@ type DbTeam = {
   level: number;
   has_ground: boolean;
   bike_parking: string;
+  bike_parking_capacity?: string | null;
   uniform_main: string;
   uniform_sub: string;
+  member_count?: number | null;
   roster_by_grade: Record<string, number> | null;
   desired_dates: string[] | null;
   note: string | null;
   updated_at: string;
 };
 
-function toTeam(row: DbTeam): Team {
+type TeamRow = Team & {
+  bikeParkingCapacity?: string | null;
+  memberCount?: number | null;
+};
+
+function toTeam(row: DbTeam): TeamRow {
   return {
     id: row.id,
     name: row.name,
@@ -35,9 +42,12 @@ function toTeam(row: DbTeam): Team {
     level: row.level,
     hasGround: !!row.has_ground,
     bikeParking: row.bike_parking ?? "不明",
+    bikeParkingCapacity: row.bike_parking_capacity ?? null,
     uniformMain: row.uniform_main ?? "不明",
     uniformSub: row.uniform_sub ?? "不明",
-    rosterByGrade: (row.roster_by_grade ?? { G1: 0, G2: 0, G3: 0, G4: 0, G5: 0, G6: 0 }) as any,
+    memberCount: row.member_count ?? null,
+    rosterByGrade: (row.roster_by_grade ??
+      { G1: 0, G2: 0, G3: 0, G4: 0, G5: 0, G6: 0 }) as any,
     desiredDates: row.desired_dates ?? [],
     note: row.note ?? "",
     updatedAt: row.updated_at,
@@ -71,6 +81,32 @@ function levelLabel(level: number) {
   return "C";
 }
 
+function formatBikeParking(
+  bikeParking?: string | null,
+  bikeParkingCapacity?: string | null
+) {
+  if (bikeParking === "あり") {
+    if (bikeParkingCapacity && bikeParkingCapacity !== "不明") {
+      return `あり（${bikeParkingCapacity}）`;
+    }
+    if (bikeParkingCapacity === "不明") {
+      return "あり（台数不明）";
+    }
+    return "あり";
+  }
+
+  if (bikeParking === "なし") return "なし";
+  return bikeParking || "不明";
+}
+
+function getMemberCount(team: TeamRow) {
+  if (typeof team.memberCount === "number") return team.memberCount;
+
+  const roster = (team.rosterByGrade ?? {}) as Record<string, number>;
+  const total = Object.values(roster).reduce((sum, v) => sum + (Number(v) || 0), 0);
+  return total;
+}
+
 export default function TeamsPage() {
   return (
     <Suspense fallback={<p style={{ padding: 24, color: "#777" }}>読み込み中...</p>}>
@@ -84,7 +120,7 @@ function TeamsPageInner() {
   const createdId = searchParams.get("created") || "";
 
   const [meId, setMeId] = useState<string>("");
-  const [teams, setTeams] = useState<Team[]>([]);
+  const [teams, setTeams] = useState<TeamRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
 
@@ -100,15 +136,30 @@ function TeamsPageInner() {
   }, [createdId]);
 
   const load = async () => {
-    setLoading(true);
+  setLoading(true);
 
-    if (!meId) {
-      setTeams([]);
-      setLoading(false);
-      return;
-    }
+  if (!meId) {
+    setTeams([]);
+    setLoading(false);
+    return;
+  }
 
-    const { data, error } = await supabase
+  let rowsData: any[] | null = null;
+  let rowsError: any = null;
+
+  const firstRes = await supabase
+    .from("teams")
+    .select(
+      "id,owner_id,name,area,area_kana,category,level,has_ground,bike_parking,bike_parking_capacity,uniform_main,uniform_sub,member_count,roster_by_grade,desired_dates,note,updated_at"
+    )
+    .eq("owner_id", meId)
+    .order("area_kana", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (!firstRes.error) {
+    rowsData = firstRes.data as any[];
+  } else {
+    const fallbackRes = await supabase
       .from("teams")
       .select(
         "id,owner_id,name,area,area_kana,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at"
@@ -117,18 +168,22 @@ function TeamsPageInner() {
       .order("area_kana", { ascending: true })
       .order("name", { ascending: true });
 
-    if (error) {
-      console.error(error);
-      setToast({ type: "error", text: `読み込みに失敗しました: ${error.message}` });
-      setTeams([]);
-      setLoading(false);
-      return;
-    }
+    rowsData = (fallbackRes.data ?? []) as any[];
+    rowsError = fallbackRes.error;
+  }
 
-    const rows = (data ?? []) as DbTeam[];
-    setTeams(rows.map(toTeam));
+  if (rowsError) {
+    console.error(rowsError);
+    setToast({ type: "error", text: `読み込みに失敗しました: ${rowsError.message}` });
+    setTeams([]);
     setLoading(false);
-  };
+    return;
+  }
+
+  const rows = (rowsData ?? []) as DbTeam[];
+  setTeams(rows.map((row) => toTeam(row)));
+  setLoading(false);
+};
 
   useEffect(() => {
     load();
@@ -160,7 +215,11 @@ function TeamsPageInner() {
         <div
           style={{
             ...toastBox,
-            ...(toast.type === "success" ? toastSuccess : toast.type === "error" ? toastError : toastInfo),
+            ...(toast.type === "success"
+              ? toastSuccess
+              : toast.type === "error"
+              ? toastError
+              : toastInfo),
           }}
           role="status"
           aria-live="polite"
@@ -202,6 +261,8 @@ function TeamsPageInner() {
             teams.map((t) => {
               const isCreated = createdId && t.id === createdId;
               const rank = levelLabel(t.level);
+              const memberCount = getMemberCount(t);
+              const bikeParkingText = formatBikeParking(t.bikeParking, t.bikeParkingCapacity);
 
               return (
                 <div
@@ -211,7 +272,9 @@ function TeamsPageInner() {
                     borderRadius: 18,
                     border: isCreated ? "2px solid #86efac" : "1px solid #e5e7eb",
                     background: isCreated ? "#f0fdf4" : "#ffffff",
-                    boxShadow: isCreated ? "0 0 0 4px rgba(34,197,94,0.10)" : "0 4px 12px rgba(0,0,0,0.04)",
+                    boxShadow: isCreated
+                      ? "0 0 0 4px rgba(34,197,94,0.10)"
+                      : "0 4px 12px rgba(0,0,0,0.04)",
                   }}
                 >
                   <div
@@ -236,7 +299,7 @@ function TeamsPageInner() {
                       <div style={{ color: "#666", marginTop: 8, lineHeight: 1.8 }}>
                         📍 {t.area}
                         <br />
-                        💪 強さ {t.level} / 🏟 グラウンド {t.hasGround ? "あり" : "なし"} / 🚲 {t.bikeParking}
+                        💪 強さ {t.level} / 🏟 グラウンド {t.hasGround ? "あり" : "なし"} / 🚲 {bikeParkingText}
                       </div>
                     </div>
 
@@ -259,11 +322,8 @@ function TeamsPageInner() {
                     </div>
 
                     <div style={infoBox}>
-                      <div style={infoLabel}>人数</div>
-                      <div style={infoValue}>
-                        G1 {t.rosterByGrade.G1} / G2 {t.rosterByGrade.G2} / G3 {t.rosterByGrade.G3} / G4{" "}
-                        {t.rosterByGrade.G4} / G5 {t.rosterByGrade.G5} / G6 {t.rosterByGrade.G6}
-                      </div>
+                      <div style={infoLabel}>チーム所属人数</div>
+                      <div style={infoValue}>{memberCount}人</div>
                     </div>
 
                     <div style={infoBox}>
@@ -406,9 +466,23 @@ const toastBox: React.CSSProperties = {
   marginBottom: 12,
 };
 
-const toastSuccess: React.CSSProperties = { background: "#ecfdf3", borderColor: "#bbf7d0", color: "#166534" };
-const toastError: React.CSSProperties = { background: "#fef2f2", borderColor: "#fecaca", color: "#991b1b" };
-const toastInfo: React.CSSProperties = { background: "#eff6ff", borderColor: "#bfdbfe", color: "#1e3a8a" };
+const toastSuccess: React.CSSProperties = {
+  background: "#ecfdf3",
+  borderColor: "#bbf7d0",
+  color: "#166534",
+};
+
+const toastError: React.CSSProperties = {
+  background: "#fef2f2",
+  borderColor: "#fecaca",
+  color: "#991b1b",
+};
+
+const toastInfo: React.CSSProperties = {
+  background: "#eff6ff",
+  borderColor: "#bfdbfe",
+  color: "#1e3a8a",
+};
 
 const toastClose: React.CSSProperties = {
   border: "none",

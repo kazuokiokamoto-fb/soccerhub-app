@@ -2,25 +2,37 @@
 
 import React from "react";
 
-export function MemberCountField({
-  value,
-  onChange,
-  disabled,
-}: {
+type Props = {
   value: string;
   onChange: (v: string) => void;
   disabled?: boolean;
-}) {
+};
+
+export function MemberCountField({
+  value,
+  onChange,
+  disabled = false,
+}: Props) {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+
+    // 数字だけ許可
+    const cleaned = raw.replace(/[^\d]/g, "");
+
+    onChange(cleaned);
+  };
+
   return (
     <div style={card}>
       <div style={title}>チーム所属人数（概算人数でも可）</div>
 
       <label style={label}>
         <span style={labelTitle}>人数</span>
+
         <input
           value={value}
           disabled={disabled}
-          onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))}
+          onChange={handleChange}
           className="sh-input"
           inputMode="numeric"
           pattern="[0-9]*"

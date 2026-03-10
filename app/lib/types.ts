@@ -7,22 +7,30 @@ export type Team = {
   // 表示用（例: "東京都 世田谷区・三宿"）
   area: string;
 
-  // ✅ 住所（構造化）
-  prefecture?: string | null;     // 例: "東京都"
-  city?: string | null;           // 例: "世田谷区"
-  town?: string | null;           // 例: "三宿"
-  addressDetail?: string | null;  // ✅ NEW: "1-3-23" など（丁目・番地・号）
+  // 住所（構造化）
+  prefecture?: string | null;
+  city?: string | null;
+  town?: string | null;
+  addressDetail?: string | null;
 
-  category: string; // "U-12" など
-  level: number; // 1-10
+  category: string; // 例: "U-12"
+  level: number; // 旧互換の数値レベル
   hasGround: boolean; // グラウンド提供できる
+
   bikeParking: string; // "あり" | "なし" | "不明"
+  bikeParkingCapacity?: string | null; // 例: "20", "50+", "不明"
+
   uniformMain: string; // 例: "青"
   uniformSub: string; // 例: "白"
-  rosterByGrade: Record<GradeKey, number>; // 各学年のざっくり人数
 
-  // ※コメントと中身がズレてたのでコメントも現状に合わせておく（今は「希望枠」文字列）
-  desiredDates: string[]; // 例: ["土 午後", "祝日"] など（曜日/時間帯の希望）
+  // 新仕様：チーム所属人数（概算）
+  memberCount?: number | null;
+
+  // 旧データ互換用
+  rosterByGrade: Record<GradeKey, number>;
+
+  // 希望枠
+  desiredDates: string[]; // 例: ["土 午後", "祝日"]
 
   note: string;
   updatedAt: string;
