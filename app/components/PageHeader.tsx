@@ -90,7 +90,7 @@ const styles: Record<string, React.CSSProperties> = {
   brandTextWrap: {
     display: "flex",
     flexDirection: "column",
-    alignItems: "center",
+    alignItems: "flex-start",
     lineHeight: 1.1,
   },
 
