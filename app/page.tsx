@@ -114,11 +114,6 @@ export default function HomePage() {
     <main style={wrap}>
       <header style={hero}>
         <div style={heroInner}>
-          <div style={heroMini}>⚽ Soccer Match Hub</div>
-
-          <h1 style={title}>サカまち</h1>
-          <div style={heroEn}>Soccer Match</div>
-
           <p style={subTitle}>
             サッカー練習試合をもっと簡単に。
             <br />

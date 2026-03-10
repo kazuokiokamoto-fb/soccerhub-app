@@ -405,16 +405,6 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
 
   return (
     <main style={{ padding: 24, maxWidth: 980, margin: "0 auto" }}>
-      <PageHeader
-        actions={
-          <>
-            <Link href="/teams/new" className="sh-btn">
-              ＋ チーム登録へ
-            </Link>
-          </>
-        }
-      />
-
       {toast ? (
         <div
           style={{
@@ -441,7 +431,6 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
       ) : null}
 
       <section style={heroBox}>
-        <div style={heroBadge}>🔎 サカまち</div>
         <h1 style={heroTitle}>チーム検索</h1>
         <p style={heroDesc}>
           エリア、カテゴリ、強さ、グラウンド、駐輪場、人数などで絞り込めます。
