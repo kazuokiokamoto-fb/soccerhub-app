@@ -1,4 +1,3 @@
-// app/components/CheckboxGroup.tsx
 "use client";
 
 import React from "react";
@@ -12,14 +11,28 @@ export function CheckboxGroup(props: {
   onChange: (next: string[]) => void;
   columns?: number;
   disabled?: boolean;
+  useChipUI?: boolean;
 }) {
-  const { title, options, values, onChange, columns = 3, disabled } = props;
+  const {
+    title,
+    options,
+    values,
+    onChange,
+    columns = 3,
+    disabled,
+    useChipUI = false,
+  } = props;
 
   const setOne = (value: string, checked: boolean) => {
     const s = new Set(values);
     if (checked) s.add(value);
     else s.delete(value);
     onChange(Array.from(s));
+  };
+
+  const toggleOne = (value: string) => {
+    const checked = values.includes(value);
+    setOne(value, !checked);
   };
 
   const all = options.map((o) => o.value);
@@ -57,44 +70,69 @@ export function CheckboxGroup(props: {
         </div>
       ) : null}
 
-      <div
-        style={{
-          ...grid,
-          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-        }}
-      >
-        {options.map((o) => {
-          const checked = values.includes(o.value);
+      {useChipUI ? (
+        <div style={chipWrap}>
+          {options.map((o) => {
+            const checked = values.includes(o.value);
 
-          return (
-            <label
-              key={o.value}
-              style={{
-                ...item,
-                ...(checked ? itemChecked : null),
-                ...(disabled ? itemDisabled : null),
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={(e) => setOne(o.value, e.target.checked)}
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => toggleOne(o.value)}
                 disabled={disabled}
-                style={checkbox}
-              />
-
-              <span
+                aria-pressed={checked}
                 style={{
-                  ...labelText,
-                  ...(checked ? labelTextChecked : null),
+                  ...chip,
+                  ...(checked ? chipActive : null),
+                  ...(disabled ? chipDisabled : null),
                 }}
               >
                 {o.label}
-              </span>
-            </label>
-          );
-        })}
-      </div>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div
+          style={{
+            ...grid,
+            gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+          }}
+        >
+          {options.map((o) => {
+            const checked = values.includes(o.value);
+
+            return (
+              <label
+                key={o.value}
+                style={{
+                  ...item,
+                  ...(checked ? itemChecked : null),
+                  ...(disabled ? itemDisabled : null),
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => setOne(o.value, e.target.checked)}
+                  disabled={disabled}
+                  style={checkbox}
+                />
+
+                <span
+                  style={{
+                    ...labelText,
+                    ...(checked ? labelTextChecked : null),
+                  }}
+                >
+                  {o.label}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -176,4 +214,33 @@ const labelText: React.CSSProperties = {
 const labelTextChecked: React.CSSProperties = {
   color: "#145c2a",
   fontWeight: 800,
+};
+
+const chipWrap: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+};
+
+const chip: React.CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: 999,
+  border: "1px solid #d6eadb",
+  background: "#fff",
+  cursor: "pointer",
+  fontWeight: 800,
+  color: "#23412c",
+  transition: "all 0.15s ease",
+};
+
+const chipActive: React.CSSProperties = {
+  borderColor: "#145c2a",
+  background: "#145c2a",
+  color: "#fff",
+  boxShadow: "0 6px 14px rgba(20,92,42,0.14)",
+};
+
+const chipDisabled: React.CSSProperties = {
+  opacity: 0.6,
+  cursor: "not-allowed",
 };

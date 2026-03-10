@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
@@ -179,6 +178,20 @@ export default function MatchCalendarPage() {
 
   const [meId, setMeId] = useState<string>("");
 
+  // 入力中フィルター
+  const [draftKeyword, setDraftKeyword] = useState("");
+  const [draftCategoryFilter, setDraftCategoryFilter] = useState<string[]>([]);
+  const [draftPrefectureFilter, setDraftPrefectureFilter] = useState<string>("");
+  const [draftCityFilter, setDraftCityFilter] = useState<string>("");
+  const [draftTownFilter, setDraftTownFilter] = useState<string>("");
+
+  const [draftStrengthFilter, setDraftStrengthFilter] = useState<string>("");
+  const [draftGroundFilter, setDraftGroundFilter] = useState<"all" | "あり" | "なし">("all");
+  const [draftBikeFilter, setDraftBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
+  const [draftBikeCapacityMin, setDraftBikeCapacityMin] = useState<string>("");
+  const [draftMemberCountMin, setDraftMemberCountMin] = useState<string>("");
+
+  // 適用済みフィルター
   const [keyword, setKeyword] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [prefectureFilter, setPrefectureFilter] = useState<string>("");
@@ -227,6 +240,81 @@ export default function MatchCalendarPage() {
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setMeId(data?.user?.id || ""));
   }, []);
+
+  const applyFilters = () => {
+    setKeyword(draftKeyword);
+    setCategoryFilter(draftCategoryFilter);
+    setPrefectureFilter(draftPrefectureFilter);
+    setCityFilter(draftCityFilter);
+    setTownFilter(draftTownFilter);
+    setStrengthFilter(draftStrengthFilter);
+    setGroundFilter(draftGroundFilter);
+    setBikeFilter(draftBikeFilter);
+    setBikeCapacityMin(draftBikeCapacityMin);
+    setMemberCountMin(draftMemberCountMin);
+    setSelectedSlotId("");
+  };
+
+  const clearFilters = () => {
+    setDraftKeyword("");
+    setDraftCategoryFilter([]);
+    setDraftPrefectureFilter("");
+    setDraftCityFilter("");
+    setDraftTownFilter("");
+    setDraftStrengthFilter("");
+    setDraftGroundFilter("all");
+    setDraftBikeFilter("all");
+    setDraftBikeCapacityMin("");
+    setDraftMemberCountMin("");
+
+    setKeyword("");
+    setCategoryFilter([]);
+    setPrefectureFilter("");
+    setCityFilter("");
+    setTownFilter("");
+    setStrengthFilter("");
+    setGroundFilter("all");
+    setBikeFilter("all");
+    setBikeCapacityMin("");
+    setMemberCountMin("");
+    setSelectedSlotId("");
+  };
+
+  const hasDraftChanges = useMemo(() => {
+    return (
+      draftKeyword !== keyword ||
+      JSON.stringify(draftCategoryFilter) !== JSON.stringify(categoryFilter) ||
+      draftPrefectureFilter !== prefectureFilter ||
+      draftCityFilter !== cityFilter ||
+      draftTownFilter !== townFilter ||
+      draftStrengthFilter !== strengthFilter ||
+      draftGroundFilter !== groundFilter ||
+      draftBikeFilter !== bikeFilter ||
+      draftBikeCapacityMin !== bikeCapacityMin ||
+      draftMemberCountMin !== memberCountMin
+    );
+  }, [
+    draftKeyword,
+    keyword,
+    draftCategoryFilter,
+    categoryFilter,
+    draftPrefectureFilter,
+    prefectureFilter,
+    draftCityFilter,
+    cityFilter,
+    draftTownFilter,
+    townFilter,
+    draftStrengthFilter,
+    strengthFilter,
+    draftGroundFilter,
+    groundFilter,
+    draftBikeFilter,
+    bikeFilter,
+    draftBikeCapacityMin,
+    bikeCapacityMin,
+    draftMemberCountMin,
+    memberCountMin,
+  ]);
 
   const loadBase = async () => {
     setLoadingBase(true);
@@ -614,19 +702,6 @@ export default function MatchCalendarPage() {
     }
   };
 
-  const clearFilters = () => {
-    setKeyword("");
-    setCategoryFilter([]);
-    setPrefectureFilter("");
-    setCityFilter("");
-    setTownFilter("");
-    setStrengthFilter("");
-    setGroundFilter("all");
-    setBikeFilter("all");
-    setBikeCapacityMin("");
-    setMemberCountMin("");
-  };
-
   const calendarCells = useMemo(() => {
     const first = startOfMonth(monthDate);
     const last = endOfMonth(monthDate);
@@ -652,6 +727,32 @@ export default function MatchCalendarPage() {
     }
     return cells;
   }, [monthDate]);
+
+  const appliedSummary = useMemo(() => {
+    const parts: string[] = [];
+    if (keyword) parts.push(`キーワード: ${keyword}`);
+    if (prefectureFilter) parts.push(`都県: ${prefectureFilter}`);
+    if (cityFilter) parts.push(`市区町村: ${cityFilter}`);
+    if (townFilter) parts.push(`町名: ${townFilter}`);
+    if (categoryFilter.length > 0) parts.push(`カテゴリ: ${categoryFilter.join(" / ")}`);
+    if (strengthFilter) parts.push(`強さ: ${strengthFilter}`);
+    if (groundFilter !== "all") parts.push(`グラウンド: ${groundFilter}`);
+    if (bikeFilter !== "all") parts.push(`駐輪場: ${bikeFilter}`);
+    if (bikeCapacityMin) parts.push(`駐輪場台数: ${bikeCapacityMin}台以上`);
+    if (memberCountMin) parts.push(`所属人数: ${memberCountMin}人以上`);
+    return parts;
+  }, [
+    keyword,
+    prefectureFilter,
+    cityFilter,
+    townFilter,
+    categoryFilter,
+    strengthFilter,
+    groundFilter,
+    bikeFilter,
+    bikeCapacityMin,
+    memberCountMin,
+  ]);
 
   return (
     <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
@@ -680,28 +781,42 @@ export default function MatchCalendarPage() {
         </div>
       ) : null}
 
-      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+      <header style={pageHead}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900 }}>マッチング（カレンダー）</h1>
-          <p style={{ margin: "6px 0 0", color: "#555" }}>
-            日付ごとに「募集中の枠数」→ クリックで詳細 → 募集/申込み/承認
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 900 }}>試合を探す / 募集する</h1>
+          <p style={{ margin: "6px 0 0", color: "#555", lineHeight: 1.7 }}>
+            カレンダーで募集枠を確認しながら、条件を指定して相手を探せます。
+            自分のチームで募集枠を作ることもできます。
           </p>
         </div>
-
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <Link href="/teams/search" className="sh-btn">
-            チーム検索
-          </Link>
-        </div>
       </header>
+
+      {/* カレンダーを先頭に移動 */}
+      <section style={{ marginTop: 12 }}>
+        <Calendar
+          monthKey={monthKey}
+          loading={loading}
+          cells={calendarCells}
+          selectedYmd={selectedYmd}
+          countByDate={countByDate}
+          onSelectDate={(ymd) => {
+            setSelectedYmd(ymd);
+            setSelectedSlotId("");
+          }}
+          onPrevMonth={() => setMonthDate(addMonths(monthDate, -1))}
+          onNextMonth={() => setMonthDate(addMonths(monthDate, 1))}
+          onCreateForDate={openCreateForDate}
+          disableCreate={myTeams.length === 0}
+        />
+      </section>
 
       <section style={filterWrap}>
         <div style={{ display: "grid", gap: 12 }}>
           <label style={label}>
             <span style={labelTitle}>キーワード検索</span>
             <input
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
+              value={draftKeyword}
+              onChange={(e) => setDraftKeyword(e.target.value)}
               className="sh-input"
               placeholder="例：三宿 / SS / 青 / 20台 / 強度高め"
               disabled={loading}
@@ -713,20 +828,20 @@ export default function MatchCalendarPage() {
             allowAll={true}
             allLabel="関東（すべて）"
             disabled={loading}
-            prefecture={prefectureFilter}
-            setPrefecture={setPrefectureFilter}
-            city={cityFilter}
-            setCity={setCityFilter}
-            town={townFilter}
-            setTown={setTownFilter}
+            prefecture={draftPrefectureFilter}
+            setPrefecture={setDraftPrefectureFilter}
+            city={draftCityFilter}
+            setCity={setDraftCityFilter}
+            town={draftTownFilter}
+            setTown={setDraftTownFilter}
             townOptional={true}
           />
 
           <CheckboxGroup
             title="カテゴリで絞り込み（複数）"
             options={CATEGORY_OPTIONS}
-            values={categoryFilter}
-            onChange={setCategoryFilter}
+            values={draftCategoryFilter}
+            onChange={setDraftCategoryFilter}
             columns={3}
             disabled={loading}
           />
@@ -735,8 +850,8 @@ export default function MatchCalendarPage() {
             <label style={label}>
               <span style={labelTitle}>強さ</span>
               <select
-                value={strengthFilter}
-                onChange={(e) => setStrengthFilter(e.target.value)}
+                value={draftStrengthFilter}
+                onChange={(e) => setDraftStrengthFilter(e.target.value)}
                 className="sh-select"
                 disabled={loading}
               >
@@ -752,8 +867,8 @@ export default function MatchCalendarPage() {
             <label style={label}>
               <span style={labelTitle}>グラウンド提供</span>
               <select
-                value={groundFilter}
-                onChange={(e) => setGroundFilter(e.target.value as "all" | "あり" | "なし")}
+                value={draftGroundFilter}
+                onChange={(e) => setDraftGroundFilter(e.target.value as "all" | "あり" | "なし")}
                 className="sh-select"
                 disabled={loading}
               >
@@ -768,9 +883,9 @@ export default function MatchCalendarPage() {
             <label style={label}>
               <span style={labelTitle}>駐輪場</span>
               <select
-                value={bikeFilter}
+                value={draftBikeFilter}
                 onChange={(e) =>
-                  setBikeFilter(e.target.value as "all" | "あり" | "なし" | "不明")
+                  setDraftBikeFilter(e.target.value as "all" | "あり" | "なし" | "不明")
                 }
                 className="sh-select"
                 disabled={loading}
@@ -785,8 +900,8 @@ export default function MatchCalendarPage() {
             <label style={label}>
               <span style={labelTitle}>駐輪場台数（以上）</span>
               <select
-                value={bikeCapacityMin}
-                onChange={(e) => setBikeCapacityMin(e.target.value)}
+                value={draftBikeCapacityMin}
+                onChange={(e) => setDraftBikeCapacityMin(e.target.value)}
                 className="sh-select"
                 disabled={loading}
               >
@@ -805,8 +920,8 @@ export default function MatchCalendarPage() {
             <label style={label}>
               <span style={labelTitle}>チーム所属人数（以上）</span>
               <select
-                value={memberCountMin}
-                onChange={(e) => setMemberCountMin(e.target.value)}
+                value={draftMemberCountMin}
+                onChange={(e) => setDraftMemberCountMin(e.target.value)}
                 className="sh-select"
                 disabled={loading}
               >
@@ -821,32 +936,37 @@ export default function MatchCalendarPage() {
             </label>
           </div>
 
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={actionRow}>
+            <button
+              className="sh-btn sh-btn--primary"
+              type="button"
+              onClick={applyFilters}
+              disabled={loading || !hasDraftChanges}
+            >
+              {loading ? "更新中…" : "この条件で表示"}
+            </button>
+
             <button className="sh-btn" type="button" onClick={clearFilters} disabled={loading}>
               条件クリア
             </button>
+
             <span style={{ color: "#666", fontSize: 12 }}>
               表示中の募集枠：{filteredSlotsInMonth.length}
             </span>
           </div>
+
+          {appliedSummary.length > 0 ? (
+            <div style={appliedBox}>
+              <div style={appliedTitle}>現在の表示条件</div>
+              <div style={appliedText}>{appliedSummary.join(" / ")}</div>
+            </div>
+          ) : (
+            <div style={{ color: "#777", fontSize: 12 }}>
+              ※ 条件を入力して「この条件で表示」を押すと、カレンダーと募集一覧に反映されます
+            </div>
+          )}
         </div>
       </section>
-
-      <Calendar
-        monthKey={monthKey}
-        loading={loading}
-        cells={calendarCells}
-        selectedYmd={selectedYmd}
-        countByDate={countByDate}
-        onSelectDate={(ymd) => {
-          setSelectedYmd(ymd);
-          setSelectedSlotId("");
-        }}
-        onPrevMonth={() => setMonthDate(addMonths(monthDate, -1))}
-        onNextMonth={() => setMonthDate(addMonths(monthDate, 1))}
-        onCreateForDate={openCreateForDate}
-        disableCreate={myTeams.length === 0}
-      />
 
       <DaySlotList
         selectedYmd={selectedYmd}
@@ -896,8 +1016,12 @@ export default function MatchCalendarPage() {
   );
 }
 
+const pageHead: React.CSSProperties = {
+  marginBottom: 12,
+};
+
 const filterWrap: React.CSSProperties = {
-  marginTop: 12,
+  marginTop: 14,
   marginBottom: 12,
   padding: 12,
   borderRadius: 14,
@@ -925,6 +1049,33 @@ const threeCols: React.CSSProperties = {
   display: "grid",
   gap: 12,
   gridTemplateColumns: "repeat(3, 1fr)",
+};
+
+const actionRow: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  alignItems: "center",
+  flexWrap: "wrap",
+};
+
+const appliedBox: React.CSSProperties = {
+  border: "1px solid #e5e7eb",
+  borderRadius: 12,
+  background: "#fafafa",
+  padding: "10px 12px",
+};
+
+const appliedTitle: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#5b6d61",
+  marginBottom: 4,
+};
+
+const appliedText: React.CSSProperties = {
+  fontSize: 13,
+  color: "#444",
+  lineHeight: 1.7,
 };
 
 const toastBox: React.CSSProperties = {

@@ -157,22 +157,36 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
   const created = createdId ?? "";
 
   const [teams, setTeams] = useState<TeamRow[]>([]);
-  const [dbTeams, setDbTeams] = useState<DbTeam[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
 
-  const [keyword, setKeyword] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
-  const [prefectureFilter, setPrefectureFilter] = useState<string>("");
-  const [cityFilter, setCityFilter] = useState<string>("");
-  const [townFilter, setTownFilter] = useState<string>("");
+  // 入力中の条件
+  const [draftKeyword, setDraftKeyword] = useState("");
+  const [draftCategoryFilter, setDraftCategoryFilter] = useState<string[]>([]);
+  const [draftPrefectureFilter, setDraftPrefectureFilter] = useState<string>("");
+  const [draftCityFilter, setDraftCityFilter] = useState<string>("");
+  const [draftTownFilter, setDraftTownFilter] = useState<string>("");
 
-  const [strengthFilter, setStrengthFilter] = useState<string>("");
-  const [groundFilter, setGroundFilter] = useState<"all" | "あり" | "なし">("all");
-  const [bikeFilter, setBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
-  const [bikeCapacityMin, setBikeCapacityMin] = useState<string>("");
-  const [memberCountMin, setMemberCountMin] = useState<string>("");
-  const [hasNoteOnly, setHasNoteOnly] = useState(false);
+  const [draftStrengthFilter, setDraftStrengthFilter] = useState<string>("");
+  const [draftGroundFilter, setDraftGroundFilter] = useState<"all" | "あり" | "なし">("all");
+  const [draftBikeFilter, setDraftBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
+  const [draftBikeCapacityMin, setDraftBikeCapacityMin] = useState<string>("");
+  const [draftMemberCountMin, setDraftMemberCountMin] = useState<string>("");
+  const [draftHasNoteOnly, setDraftHasNoteOnly] = useState(false);
+
+  // 実際に適用済みの条件
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [appliedCategoryFilter, setAppliedCategoryFilter] = useState<string[]>([]);
+  const [appliedPrefectureFilter, setAppliedPrefectureFilter] = useState<string>("");
+  const [appliedCityFilter, setAppliedCityFilter] = useState<string>("");
+  const [appliedTownFilter, setAppliedTownFilter] = useState<string>("");
+
+  const [appliedStrengthFilter, setAppliedStrengthFilter] = useState<string>("");
+  const [appliedGroundFilter, setAppliedGroundFilter] = useState<"all" | "あり" | "なし">("all");
+  const [appliedBikeFilter, setAppliedBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
+  const [appliedBikeCapacityMin, setAppliedBikeCapacityMin] = useState<string>("");
+  const [appliedMemberCountMin, setAppliedMemberCountMin] = useState<string>("");
+  const [appliedHasNoteOnly, setAppliedHasNoteOnly] = useState(false);
 
   useEffect(() => {
     if (!created) return;
@@ -203,7 +217,6 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
     if (res.error) {
       console.error(res.error);
       setToast({ type: "error", text: `読み込みに失敗しました: ${res.error.message}` });
-      setDbTeams([]);
       setTeams([]);
       setLoading(false);
       return;
@@ -227,7 +240,6 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
       return compareStr(norm(a.name), norm(b.name));
     });
 
-    setDbTeams(sorted);
     setTeams(sorted.map(toTeam));
     setLoading(false);
   };
@@ -237,62 +249,88 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const applyFilters = () => {
+    setAppliedKeyword(draftKeyword);
+    setAppliedCategoryFilter([...draftCategoryFilter]);
+    setAppliedPrefectureFilter(draftPrefectureFilter);
+    setAppliedCityFilter(draftCityFilter);
+    setAppliedTownFilter(draftTownFilter);
+    setAppliedStrengthFilter(draftStrengthFilter);
+    setAppliedGroundFilter(draftGroundFilter);
+    setAppliedBikeFilter(draftBikeFilter);
+    setAppliedBikeCapacityMin(draftBikeCapacityMin);
+    setAppliedMemberCountMin(draftMemberCountMin);
+    setAppliedHasNoteOnly(draftHasNoteOnly);
+  };
+
   const clearFilters = () => {
-    setKeyword("");
-    setCategoryFilter([]);
-    setPrefectureFilter("");
-    setCityFilter("");
-    setTownFilter("");
-    setStrengthFilter("");
-    setGroundFilter("all");
-    setBikeFilter("all");
-    setBikeCapacityMin("");
-    setMemberCountMin("");
-    setHasNoteOnly(false);
+    setDraftKeyword("");
+    setDraftCategoryFilter([]);
+    setDraftPrefectureFilter("");
+    setDraftCityFilter("");
+    setDraftTownFilter("");
+    setDraftStrengthFilter("");
+    setDraftGroundFilter("all");
+    setDraftBikeFilter("all");
+    setDraftBikeCapacityMin("");
+    setDraftMemberCountMin("");
+    setDraftHasNoteOnly(false);
+
+    setAppliedKeyword("");
+    setAppliedCategoryFilter([]);
+    setAppliedPrefectureFilter("");
+    setAppliedCityFilter("");
+    setAppliedTownFilter("");
+    setAppliedStrengthFilter("");
+    setAppliedGroundFilter("all");
+    setAppliedBikeFilter("all");
+    setAppliedBikeCapacityMin("");
+    setAppliedMemberCountMin("");
+    setAppliedHasNoteOnly(false);
   };
 
   const filteredTeams = useMemo(() => {
     return teams.filter((t) => {
-      if (categoryFilter.length > 0) {
+      if (appliedCategoryFilter.length > 0) {
         const cats =
           Array.isArray(t.categories) && t.categories.length > 0
             ? t.categories
             : t.category
             ? [t.category]
             : [];
-        const ok = cats.some((c) => c && categoryFilter.includes(String(c).trim()));
+        const ok = cats.some((c) => c && appliedCategoryFilter.includes(String(c).trim()));
         if (!ok) return false;
       }
 
-      if (prefectureFilter && norm(t.prefecture) !== prefectureFilter) return false;
-      if (cityFilter && norm(t.city) !== cityFilter) return false;
-      if (townFilter && norm(t.town) !== townFilter) return false;
+      if (appliedPrefectureFilter && norm(t.prefecture) !== appliedPrefectureFilter) return false;
+      if (appliedCityFilter && norm(t.city) !== appliedCityFilter) return false;
+      if (appliedTownFilter && norm(t.town) !== appliedTownFilter) return false;
 
-      if (strengthFilter && levelLabel(Number(t.level ?? 0)) !== strengthFilter) return false;
+      if (appliedStrengthFilter && levelLabel(Number(t.level ?? 0)) !== appliedStrengthFilter) return false;
 
-      if (groundFilter !== "all") {
+      if (appliedGroundFilter !== "all") {
         const ground = t.hasGround ? "あり" : "なし";
-        if (ground !== groundFilter) return false;
+        if (ground !== appliedGroundFilter) return false;
       }
 
-      if (bikeFilter !== "all") {
-        if ((t.bikeParking ?? "不明") !== bikeFilter) return false;
+      if (appliedBikeFilter !== "all") {
+        if ((t.bikeParking ?? "不明") !== appliedBikeFilter) return false;
       }
 
-      if (bikeCapacityMin) {
+      if (appliedBikeCapacityMin) {
         const cap = parseBikeCapacity(t.bikeParkingCapacity);
-        if (cap == null || cap < Number(bikeCapacityMin)) return false;
+        if (cap == null || cap < Number(appliedBikeCapacityMin)) return false;
       }
 
-      if (memberCountMin) {
+      if (appliedMemberCountMin) {
         const count = Number(t.memberCount ?? 0);
-        if (count < Number(memberCountMin)) return false;
+        if (count < Number(appliedMemberCountMin)) return false;
       }
 
-      if (hasNoteOnly && !norm(t.note)) return false;
+      if (appliedHasNoteOnly && !norm(t.note)) return false;
 
-      if (keyword.trim()) {
-        const q = keyword.trim().toLowerCase();
+      if (appliedKeyword.trim()) {
+        const q = appliedKeyword.trim().toLowerCase();
         const hay = [
           t.name,
           t.area,
@@ -319,23 +357,51 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
     });
   }, [
     teams,
-    keyword,
-    categoryFilter,
-    prefectureFilter,
-    cityFilter,
-    townFilter,
-    strengthFilter,
-    groundFilter,
-    bikeFilter,
-    bikeCapacityMin,
-    memberCountMin,
-    hasNoteOnly,
+    appliedKeyword,
+    appliedCategoryFilter,
+    appliedPrefectureFilter,
+    appliedCityFilter,
+    appliedTownFilter,
+    appliedStrengthFilter,
+    appliedGroundFilter,
+    appliedBikeFilter,
+    appliedBikeCapacityMin,
+    appliedMemberCountMin,
+    appliedHasNoteOnly,
   ]);
 
   const createdTeam = useMemo(
     () => filteredTeams.find((t) => t.id === created),
     [filteredTeams, created]
   );
+
+  const hasAppliedFilters = useMemo(() => {
+    return !!(
+      appliedKeyword ||
+      appliedCategoryFilter.length > 0 ||
+      appliedPrefectureFilter ||
+      appliedCityFilter ||
+      appliedTownFilter ||
+      appliedStrengthFilter ||
+      appliedGroundFilter !== "all" ||
+      appliedBikeFilter !== "all" ||
+      appliedBikeCapacityMin ||
+      appliedMemberCountMin ||
+      appliedHasNoteOnly
+    );
+  }, [
+    appliedKeyword,
+    appliedCategoryFilter,
+    appliedPrefectureFilter,
+    appliedCityFilter,
+    appliedTownFilter,
+    appliedStrengthFilter,
+    appliedGroundFilter,
+    appliedBikeFilter,
+    appliedBikeCapacityMin,
+    appliedMemberCountMin,
+    appliedHasNoteOnly,
+  ]);
 
   return (
     <main style={{ padding: 24, maxWidth: 980, margin: "0 auto" }}>
@@ -374,18 +440,21 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
         </div>
       ) : null}
 
-      <h1 style={{ margin: 0 }}>チーム検索</h1>
-      <p style={{ color: "#555", marginTop: 6 }}>
-        エリア、カテゴリ、強さ、グラウンド、駐輪場、人数などで絞り込めます。
-      </p>
+      <section style={heroBox}>
+        <div style={heroBadge}>🔎 サカまち</div>
+        <h1 style={heroTitle}>チーム検索</h1>
+        <p style={heroDesc}>
+          エリア、カテゴリ、強さ、グラウンド、駐輪場、人数などで絞り込めます。
+        </p>
+      </section>
 
       <section style={filterWrap}>
         <div style={{ display: "grid", gap: 12 }}>
           <label style={label}>
             <span style={labelTitle}>キーワード検索</span>
             <input
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
+              value={draftKeyword}
+              onChange={(e) => setDraftKeyword(e.target.value)}
               className="sh-input"
               placeholder="例：三宿 / 青 / 強度高め / 20台 / SS"
               disabled={loading}
@@ -397,30 +466,32 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
             allowAll={true}
             allLabel="関東（すべて）"
             disabled={loading}
-            prefecture={prefectureFilter}
-            setPrefecture={setPrefectureFilter}
-            city={cityFilter}
-            setCity={setCityFilter}
-            town={townFilter}
-            setTown={setTownFilter}
+            prefecture={draftPrefectureFilter}
+            setPrefecture={setDraftPrefectureFilter}
+            city={draftCityFilter}
+            setCity={setDraftCityFilter}
+            town={draftTownFilter}
+            setTown={setDraftTownFilter}
             townOptional={true}
+            useChipUI={true}
           />
 
           <CheckboxGroup
             title="カテゴリで絞り込み（複数）"
             options={CATEGORY_OPTIONS}
-            values={categoryFilter}
-            onChange={setCategoryFilter}
+            values={draftCategoryFilter}
+            onChange={setDraftCategoryFilter}
             columns={3}
             disabled={loading}
+            useChipUI={true}
           />
 
           <div style={twoCols}>
             <label style={label}>
               <span style={labelTitle}>強さ</span>
               <select
-                value={strengthFilter}
-                onChange={(e) => setStrengthFilter(e.target.value)}
+                value={draftStrengthFilter}
+                onChange={(e) => setDraftStrengthFilter(e.target.value)}
                 className="sh-select"
                 disabled={loading}
               >
@@ -436,8 +507,8 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
             <label style={label}>
               <span style={labelTitle}>グラウンド提供</span>
               <select
-                value={groundFilter}
-                onChange={(e) => setGroundFilter(e.target.value as "all" | "あり" | "なし")}
+                value={draftGroundFilter}
+                onChange={(e) => setDraftGroundFilter(e.target.value as "all" | "あり" | "なし")}
                 className="sh-select"
                 disabled={loading}
               >
@@ -452,9 +523,9 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
             <label style={label}>
               <span style={labelTitle}>駐輪場</span>
               <select
-                value={bikeFilter}
+                value={draftBikeFilter}
                 onChange={(e) =>
-                  setBikeFilter(e.target.value as "all" | "あり" | "なし" | "不明")
+                  setDraftBikeFilter(e.target.value as "all" | "あり" | "なし" | "不明")
                 }
                 className="sh-select"
                 disabled={loading}
@@ -469,8 +540,8 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
             <label style={label}>
               <span style={labelTitle}>駐輪場台数（以上）</span>
               <select
-                value={bikeCapacityMin}
-                onChange={(e) => setBikeCapacityMin(e.target.value)}
+                value={draftBikeCapacityMin}
+                onChange={(e) => setDraftBikeCapacityMin(e.target.value)}
                 className="sh-select"
                 disabled={loading}
               >
@@ -489,8 +560,8 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
             <label style={label}>
               <span style={labelTitle}>チーム所属人数（以上）</span>
               <select
-                value={memberCountMin}
-                onChange={(e) => setMemberCountMin(e.target.value)}
+                value={draftMemberCountMin}
+                onChange={(e) => setDraftMemberCountMin(e.target.value)}
                 className="sh-select"
                 disabled={loading}
               >
@@ -508,22 +579,44 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
           <label style={checkLabel}>
             <input
               type="checkbox"
-              checked={hasNoteOnly}
-              onChange={(e) => setHasNoteOnly(e.target.checked)}
+              checked={draftHasNoteOnly}
+              onChange={(e) => setDraftHasNoteOnly(e.target.checked)}
               disabled={loading}
             />
             メモ入力があるチームのみ
           </label>
 
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={actionRow}>
+            <button className="sh-btn sh-btn--primary" type="button" onClick={applyFilters} disabled={loading}>
+              {loading ? "更新中…" : "この条件で検索"}
+            </button>
+
             <button className="sh-btn" type="button" onClick={clearFilters} disabled={loading}>
               条件クリア
             </button>
+
             <button className="sh-btn" type="button" onClick={load} disabled={loading}>
               {loading ? "更新中…" : "再読み込み"}
             </button>
-            <div style={{ color: "#666", fontSize: 12 }}>ヒット件数：{filteredTeams.length}</div>
+
+            <div style={{ color: "#666", fontSize: 12 }}>
+              ヒット件数：{filteredTeams.length}
+            </div>
           </div>
+
+          {hasAppliedFilters ? (
+            <div style={appliedInfo}>
+              検索条件を反映中：
+              {appliedPrefectureFilter ? ` ${appliedPrefectureFilter}` : "（都県なし）"} /
+              {appliedCityFilter ? ` ${appliedCityFilter}` : "（市区町村なし）"} /
+              {appliedTownFilter ? ` ${appliedTownFilter}` : "（町名なし）"} /
+              カテゴリ {appliedCategoryFilter.length}
+            </div>
+          ) : (
+            <div style={{ color: "#777", fontSize: 12 }}>
+              ※ 条件を入力して「この条件で検索」を押すと結果が更新されます
+            </div>
+          )}
         </div>
       </section>
 
@@ -610,6 +703,52 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
     </main>
   );
 }
+
+const heroBox: React.CSSProperties = {
+  borderRadius: 20,
+  background: "linear-gradient(135deg, #1e7f3c 0%, #145c2a 100%)",
+  color: "#fff",
+  padding: 18,
+  boxShadow: "0 10px 28px rgba(20,92,42,0.16)",
+  marginBottom: 12,
+};
+
+const heroBadge: React.CSSProperties = {
+  display: "inline-flex",
+  padding: "6px 12px",
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.14)",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const heroTitle: React.CSSProperties = {
+  margin: "10px 0 0",
+  fontSize: 28,
+  fontWeight: 900,
+};
+
+const heroDesc: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "rgba(255,255,255,0.92)",
+  lineHeight: 1.7,
+};
+
+const appliedInfo: React.CSSProperties = {
+  color: "#666",
+  fontSize: 12,
+  padding: "8px 10px",
+  borderRadius: 10,
+  background: "#f8faf8",
+  border: "1px solid #e5eee7",
+};
+
+const actionRow: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  alignItems: "center",
+  flexWrap: "wrap",
+};
 
 const miniInfo: React.CSSProperties = {
   padding: "10px 12px",

@@ -88,20 +88,24 @@ const styles: Record<string, React.CSSProperties> = {
   },
 
   brandTextWrap: {
-    display: "grid",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
     lineHeight: 1.1,
   },
 
   brandMain: {
     fontWeight: 900,
-    fontSize: 18,
+    fontSize: 20,
+    fontStyle: "italic",
     color: "#145c2a",
-    letterSpacing: 0.2,
+    letterSpacing: 0.5,
   },
 
   brandSub: {
     fontSize: 11,
     color: "#6b7280",
+    textAlign: "center",
   },
 
   right: {

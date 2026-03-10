@@ -55,7 +55,6 @@ export default function LoginClient() {
         const to = redirect || "/";
         setMsg(`✅ 認証OK。移動します → ${to}`);
 
-        // auth state change の処理と競合しにくいよう少し遅らせる
         setTimeout(() => {
           router.replace(to);
           router.refresh();
@@ -72,7 +71,6 @@ export default function LoginClient() {
   const goAfterAuth = async (path?: string) => {
     const to = path ?? redirect ?? "/";
 
-    // セッション確定待ち
     for (let i = 0; i < 10; i++) {
       const { data } = await supabase.auth.getSession();
       if (data.session) {
@@ -84,7 +82,6 @@ export default function LoginClient() {
       await sleep(150);
     }
 
-    // 最後の保険
     setMsg(`✅ 認証OK。移動します → ${to}`);
     router.replace(to);
     router.refresh();
@@ -204,7 +201,7 @@ export default function LoginClient() {
       <div style={card}>
         <div style={brandRow}>
           <div style={logoBall}>⚽</div>
-          <div>
+          <div style={brandTextWrap}>
             <div style={brand}>サカまち</div>
             <div style={brandSub}>Soccer Match Hub</div>
           </div>
@@ -214,7 +211,7 @@ export default function LoginClient() {
         <p style={lead}>チーム登録や練習試合マッチングを始めるにはログインしてください。</p>
 
         <div style={topActions}>
-          <Link href="/" className="sh-btn sh-btn--ghost">
+          <Link href="/" className="sh-btn sh-btn--ghost" style={topLinkBtn}>
             トップへ
           </Link>
         </div>
@@ -231,7 +228,9 @@ export default function LoginClient() {
             }}
           >
             <span style={googleIcon}>G</span>
-            <span>{loadingGoogle ? "Googleへ移動中…" : "Googleでログイン"}</span>
+            <span style={oauthBtnText}>
+              {loadingGoogle ? "Googleへ移動中…" : "Googleでログイン"}
+            </span>
           </button>
         </section>
 
@@ -280,6 +279,7 @@ export default function LoginClient() {
               onClick={signUp}
               disabled={loadingEmail || loadingGoogle || !canSubmit}
               type="button"
+              style={rowButton}
             >
               {loadingEmail ? "処理中…" : "新規登録"}
             </button>
@@ -289,6 +289,7 @@ export default function LoginClient() {
               onClick={signIn}
               disabled={loadingEmail || loadingGoogle || !canSubmit}
               type="button"
+              style={rowButton}
             >
               {loadingEmail ? "処理中…" : "ログイン"}
             </button>
@@ -316,7 +317,11 @@ export default function LoginClient() {
 
 const page: React.CSSProperties = {
   minHeight: "100dvh",
+  width: "100%",
+  maxWidth: "100%",
+  overflowX: "hidden",
   padding: "24px 16px",
+  boxSizing: "border-box",
   display: "grid",
   alignItems: "start",
 };
@@ -325,11 +330,13 @@ const card: React.CSSProperties = {
   width: "100%",
   maxWidth: 560,
   margin: "0 auto",
+  boxSizing: "border-box",
   background: "#ffffff",
   border: "1px solid #e4ebe6",
   borderRadius: 24,
   padding: 24,
   boxShadow: "0 10px 30px rgba(20, 92, 42, 0.08)",
+  overflowX: "hidden",
 };
 
 const brandRow: React.CSSProperties = {
@@ -337,11 +344,18 @@ const brandRow: React.CSSProperties = {
   alignItems: "center",
   gap: 14,
   marginBottom: 18,
+  minWidth: 0,
+};
+
+const brandTextWrap: React.CSSProperties = {
+  minWidth: 0,
+  flex: 1,
 };
 
 const logoBall: React.CSSProperties = {
   width: 54,
   height: 54,
+  minWidth: 54,
   borderRadius: 999,
   display: "grid",
   placeItems: "center",
@@ -357,12 +371,14 @@ const brand: React.CSSProperties = {
   lineHeight: 1.1,
   color: "#1f5d30",
   letterSpacing: 0.4,
+  wordBreak: "keep-all",
 };
 
 const brandSub: React.CSSProperties = {
   marginTop: 2,
   fontSize: 14,
   color: "#6a7c70",
+  wordBreak: "break-word",
 };
 
 const title: React.CSSProperties = {
@@ -370,6 +386,7 @@ const title: React.CSSProperties = {
   fontSize: 30,
   fontWeight: 900,
   color: "#142033",
+  wordBreak: "keep-all",
 };
 
 const lead: React.CSSProperties = {
@@ -386,15 +403,22 @@ const topActions: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
+const topLinkBtn: React.CSSProperties = {
+  maxWidth: "100%",
+  boxSizing: "border-box",
+};
+
 const section: React.CSSProperties = {
   display: "grid",
   gap: 12,
   marginTop: 18,
+  minWidth: 0,
 };
 
 const label: React.CSSProperties = {
   display: "grid",
   gap: 6,
+  minWidth: 0,
 };
 
 const labelTitle: React.CSSProperties = {
@@ -405,6 +429,8 @@ const labelTitle: React.CSSProperties = {
 
 const oauthBtn: React.CSSProperties = {
   width: "100%",
+  maxWidth: "100%",
+  boxSizing: "border-box",
   minHeight: 54,
   borderRadius: 14,
   border: "1px solid #d9e4dc",
@@ -417,11 +443,18 @@ const oauthBtn: React.CSSProperties = {
   justifyContent: "center",
   gap: 12,
   boxShadow: "0 4px 12px rgba(0,0,0,0.04)",
+  padding: "0 16px",
+};
+
+const oauthBtnText: React.CSSProperties = {
+  minWidth: 0,
+  wordBreak: "break-word",
 };
 
 const googleIcon: React.CSSProperties = {
   width: 28,
   height: 28,
+  minWidth: 28,
   borderRadius: 999,
   display: "grid",
   placeItems: "center",
@@ -449,9 +482,16 @@ const dividerText: React.CSSProperties = {
 
 const buttonRow: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 10,
   marginTop: 4,
+  width: "100%",
+};
+
+const rowButton: React.CSSProperties = {
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
 };
 
 const infoBox: React.CSSProperties = {
@@ -460,6 +500,7 @@ const infoBox: React.CSSProperties = {
   border: "1px solid #d6eadb",
   borderRadius: 16,
   background: "#f5fbf6",
+  boxSizing: "border-box",
 };
 
 const infoTitle: React.CSSProperties = {
@@ -477,6 +518,7 @@ const infoText: React.CSSProperties = {
 const messageBox: React.CSSProperties = {
   marginTop: 16,
   whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
   padding: 12,
   borderRadius: 12,
   border: "1px solid #eee",
@@ -484,6 +526,7 @@ const messageBox: React.CSSProperties = {
   fontSize: 13,
   lineHeight: 1.6,
   overflowX: "auto",
+  boxSizing: "border-box",
 };
 
 const note: React.CSSProperties = {

@@ -8,15 +8,20 @@ function LoginFallback() {
     <main
       style={{
         minHeight: "100dvh",
+        width: "100%",
+        maxWidth: "100%",
+        overflowX: "hidden",
         display: "grid",
         placeItems: "center",
-        padding: 24,
+        padding: 16,
+        boxSizing: "border-box",
       }}
     >
       <div
         style={{
           width: "100%",
           maxWidth: 560,
+          boxSizing: "border-box",
           background: "#ffffff",
           border: "1px solid #e4ebe6",
           borderRadius: 24,

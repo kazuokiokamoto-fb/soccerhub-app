@@ -40,6 +40,7 @@ export function AreaPickerKanto(props: {
   townOptional?: boolean;
   allowAll?: boolean;
   allLabel?: string;
+  useChipUI?: boolean;
 }) {
   const {
     disabled,
@@ -53,6 +54,7 @@ export function AreaPickerKanto(props: {
     townOptional = true,
     allowAll = true,
     allLabel = "関東（すべて）",
+    useChipUI = false,
   } = props;
 
   const [cityOptions, setCityOptions] = useState<Array<{ city: string; cityKana?: string }>>([]);
@@ -423,11 +425,186 @@ export function AreaPickerKanto(props: {
   const filteredCityOptions = useMemo(() => cityOptions, [cityOptions]);
   const filteredTownOptions = useMemo(() => townOptions, [townOptions]);
 
+  if (useChipUI) {
+    return (
+      <div style={wrap}>
+        <div style={titleStyle}>{title}</div>
+
+        <div style={block}>
+          <div style={sectionTitle}>都県</div>
+          <div style={prefButtonsWrap}>
+            {allowAll ? (
+              <button
+                type="button"
+                onClick={() => applyPrefecture("")}
+                disabled={disabled}
+                style={{
+                  ...prefBtn,
+                  ...(!prefecture ? prefBtnActive : null),
+                  ...(disabled ? disabledBtn : null),
+                }}
+              >
+                {allLabel}
+              </button>
+            ) : null}
+
+            {KANTO_PREFS.map((p) => {
+              const active = prefecture === p;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => applyPrefecture(p)}
+                  disabled={disabled}
+                  style={{
+                    ...prefBtn,
+                    ...(active ? prefBtnActive : null),
+                    ...(disabled ? disabledBtn : null),
+                  }}
+                >
+                  {p}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {prefecture ? (
+          <div style={block}>
+            <div style={sectionTitle}>市区町村</div>
+            <input
+              value={cityQuery}
+              onFocus={() => {
+                if (prefecture) setShowCityList(true);
+              }}
+              onChange={(e) => handleCityInputChange(e.target.value)}
+              onKeyDown={handleCityKeyDown}
+              className="sh-input"
+              placeholder="市区町村を検索"
+              disabled={disabled || !prefecture}
+            />
+
+            {city ? (
+              <div style={selectedInline}>
+                <span style={selectedInlineText}>選択中：{city}</span>
+                <button
+                  type="button"
+                  className="sh-btn sh-btn--ghost"
+                  onClick={clearCity}
+                  disabled={disabled}
+                >
+                  クリア
+                </button>
+              </div>
+            ) : null}
+
+            {showCityList ? (
+              <div style={chipWrap}>
+                {loadingCities ? (
+                  <div style={hintText}>市区町村を読み込み中です...</div>
+                ) : filteredCityOptions.length === 0 ? (
+                  <div style={hintText}>一致する市区町村候補がありません</div>
+                ) : (
+                  filteredCityOptions.map((x) => {
+                    const active = city === x.city;
+                    return (
+                      <button
+                        key={x.city}
+                        type="button"
+                        onClick={() => applyCity(x.city)}
+                        disabled={disabled}
+                        style={{
+                          ...prefBtn,
+                          ...(active ? prefBtnActive : null),
+                          ...(disabled ? disabledBtn : null),
+                        }}
+                      >
+                        {x.city}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {city ? (
+          <div style={block}>
+            <div style={sectionTitle}>町名</div>
+            <input
+              value={townQuery}
+              onFocus={() => {
+                if (city) setShowTownList(true);
+              }}
+              onChange={(e) => handleTownInputChange(e.target.value)}
+              onKeyDown={handleTownKeyDown}
+              className="sh-input"
+              placeholder="町名を検索"
+              disabled={disabled || !city}
+            />
+
+            {town ? (
+              <div style={selectedInline}>
+                <span style={selectedInlineText}>選択中：{town}</span>
+                <button
+                  type="button"
+                  className="sh-btn sh-btn--ghost"
+                  onClick={clearTown}
+                  disabled={disabled}
+                >
+                  クリア
+                </button>
+              </div>
+            ) : null}
+
+            {showTownList ? (
+              <div style={chipWrap}>
+                {loadingTowns ? (
+                  <div style={hintText}>町名候補を読み込み中です...</div>
+                ) : filteredTownOptions.length === 0 ? (
+                  <div style={hintText}>一致する町名候補がありません</div>
+                ) : (
+                  filteredTownOptions.map((x) => {
+                    const active = town === x.town;
+                    return (
+                      <button
+                        key={`${x.town}__${x.townKana ?? ""}`}
+                        type="button"
+                        onClick={() => applyTown(x.town)}
+                        disabled={disabled}
+                        style={{
+                          ...prefBtn,
+                          ...(active ? prefBtnActive : null),
+                          ...(disabled ? disabledBtn : null),
+                        }}
+                      >
+                        {x.town}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div style={previewText}>
+          表示例：
+          <b>
+            {prefecture
+              ? `${prefecture} ${city || "（市区町村未選択）"}${town ? "・" + town : ""}`
+              : `${allLabel}${city ? " / " + city : ""}${town ? " / " + town : ""}`}
+          </b>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={wrap}>
       <div style={titleStyle}>{title}</div>
 
-      {/* 都県 */}
       <div style={block}>
         <div style={rowHead}>
           <div style={sectionTitle}>都県（{allowAll ? "任意" : "必須"}）</div>
@@ -489,7 +666,6 @@ export function AreaPickerKanto(props: {
         ) : null}
       </div>
 
-      {/* 市区町村 */}
       <div style={block}>
         <div style={rowHead}>
           <div style={sectionTitle}>市区町村（任意）</div>
@@ -583,7 +759,6 @@ export function AreaPickerKanto(props: {
         ) : null}
       </div>
 
-      {/* 町名 */}
       <div style={block}>
         <div style={rowHead}>
           <div style={sectionTitle}>町名（{townOptional ? "任意" : "必須"}）</div>
@@ -832,3 +1007,21 @@ const kanaText = (active: boolean): React.CSSProperties => ({
   color: active ? "#145c2a" : "#7a867f",
   whiteSpace: "nowrap",
 });
+
+const chipWrap: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+};
+
+const selectedInline: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const selectedInlineText: React.CSSProperties = {
+  fontSize: 12,
+  color: "#66756d",
+};
