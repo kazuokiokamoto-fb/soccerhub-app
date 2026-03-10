@@ -499,7 +499,7 @@ export function AreaPickerKanto(props: {
             ) : null}
 
             {showCityList ? (
-              <div style={chipWrap}>
+              <div style={listBoxCompact}>
                 {loadingCities ? (
                   <div style={hintText}>市区町村を読み込み中です...</div>
                 ) : filteredCityOptions.length === 0 ? (
@@ -514,12 +514,15 @@ export function AreaPickerKanto(props: {
                         onClick={() => applyCity(x.city)}
                         disabled={disabled}
                         style={{
-                          ...prefBtn,
-                          ...(active ? prefBtnActive : null),
+                          ...rowBtn,
+                          ...(active ? rowBtnActive : null),
                           ...(disabled ? disabledBtn : null),
                         }}
                       >
-                        {x.city}
+                        <div style={rowInner}>
+                          <div style={mainText}>{x.city}</div>
+                          {x.cityKana ? <div style={kanaText(active)}>{x.cityKana}</div> : null}
+                        </div>
                       </button>
                     );
                   })
@@ -559,7 +562,7 @@ export function AreaPickerKanto(props: {
             ) : null}
 
             {showTownList ? (
-              <div style={chipWrap}>
+              <div style={listBoxCompact}>
                 {loadingTowns ? (
                   <div style={hintText}>町名候補を読み込み中です...</div>
                 ) : filteredTownOptions.length === 0 ? (
@@ -574,12 +577,15 @@ export function AreaPickerKanto(props: {
                         onClick={() => applyTown(x.town)}
                         disabled={disabled}
                         style={{
-                          ...prefBtn,
-                          ...(active ? prefBtnActive : null),
+                          ...rowBtn,
+                          ...(active ? rowBtnActive : null),
                           ...(disabled ? disabledBtn : null),
                         }}
                       >
-                        {x.town}
+                        <div style={rowInner}>
+                          <div style={mainText}>{x.town}</div>
+                          {x.townKana ? <div style={kanaText(active)}>{x.townKana}</div> : null}
+                        </div>
                       </button>
                     );
                   })
