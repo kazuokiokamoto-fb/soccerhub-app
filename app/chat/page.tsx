@@ -230,7 +230,7 @@ export default function ChatListPage() {
   return (
     <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
       <section style={heroBox}>
-        <h1 style={heroTitle}>💬チャット</h1>
+        <h1 style={heroTitle}>💬 チャット</h1>
         <p style={heroDesc}>
           相手チームとの連絡、日程調整、会場確認などをここでやり取りできます。
         </p>

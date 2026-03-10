@@ -232,7 +232,7 @@ function TeamsPageInner() {
       ) : null}
 
       <section style={heroBox}>
-        <h1 style={heroTitle}>⚙️マイページ</h1>
+        <h1 style={heroTitle}>⚙️ マイページ</h1>
         <p style={heroDesc}>
           自分が登録したチームの編集・削除ができます。
         </p>

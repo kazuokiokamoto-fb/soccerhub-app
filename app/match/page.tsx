@@ -779,7 +779,7 @@ export default function MatchCalendarPage() {
       ) : null}
 
       <section style={heroBox}>
-        <h1 style={heroTitle}>⚽試合を探す / 募集する</h1>
+        <h1 style={heroTitle}>⚽ 試合を探す / 募集する</h1>
         <p style={heroDesc}>
           カレンダーで募集枠を確認しながら、条件を指定して相手を探せます。
           自分のチームで募集枠を作ることもできます。
