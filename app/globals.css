@@ -364,3 +364,12 @@ body {
   }
 
 }
+
+.logoText {
+  font-family: "Zen Kaku Gothic New", sans-serif;
+  font-weight: 900;
+  font-size: 34px;
+  letter-spacing: 0.08em;
+  transform: skewX(-8deg);
+  color: #145c2a;
+}

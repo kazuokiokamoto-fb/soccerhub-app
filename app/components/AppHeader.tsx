@@ -36,7 +36,7 @@ export default function AppHeader() {
           <div className="smh-brandMark">⚽</div>
 
           <div className="smh-brandTextWrap">
-            <div className="smh-brandText">サカまち</div>
+            <div className="logoText">サカまち</div>
             <div className="smh-brandSub">Soccer Match</div>
           </div>
         </Link>
