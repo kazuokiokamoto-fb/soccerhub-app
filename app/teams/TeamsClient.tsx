@@ -431,7 +431,7 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
       ) : null}
 
       <section style={heroBox}>
-        <h1 style={heroTitle}>チーム検索</h1>
+        <h1 style={heroTitle}>🔍チーム検索</h1>
         <p style={heroDesc}>
           エリア、カテゴリ、強さ、グラウンド、駐輪場、人数などで絞り込めます。
         </p>
