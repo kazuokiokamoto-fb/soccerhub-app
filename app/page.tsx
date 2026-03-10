@@ -124,26 +124,34 @@ export default function HomePage() {
 
       <section style={grid} className="sh-home-grid">
         <Link href="/match" style={card}>
-          <div style={icon}>⚽</div>
-          <div style={cardTitle}>試合を探す / 募集する</div>
-          <div style={desc}>条件で絞り込みながら、カレンダー上で募集枠を探したり自分で募集できます。</div>
+          <div style={titleRow}>
+            <div style={icon}>⚽</div>
+            <div style={cardTitle}>試合を探す / 募集する</div>
+          </div>
+          <div style={desc}>
+            条件で絞り込みながら、カレンダー上で募集枠を探したり自分で募集できます。
+          </div>
         </Link>
 
         <Link href="/teams/search" style={card}>
-          <div style={icon}>🔎</div>
-          <div style={cardTitle}>チーム検索</div>
+          <div style={titleRow}>
+            <div style={icon}>🔎</div>
+            <div style={cardTitle}>チーム検索</div>
+          </div>
           <div style={desc}>地域・カテゴリ・強さ・人数・駐輪場などの条件からチームを探せます。</div>
         </Link>
 
         <Link href="/chat" style={card}>
-          <div style={icon}>💬</div>
-          <div style={cardTitle}>
+          <div style={titleRow}>
+            <div style={icon}>💬</div>
+            <div style={cardTitle}>
             チャット
             {meId ? (
               <span style={badge(unreadTotal)}>
                 {unreadTotal > 0 ? "未読あり" : "未読なし"}
               </span>
             ) : null}
+            </div>
           </div>
 
           {loadingChat ? (
@@ -162,8 +170,10 @@ export default function HomePage() {
         </Link>
 
         <Link href="/teams" style={card}>
-          <div style={icon}>⚙️</div>
-          <div style={cardTitle}>マイページ</div>
+          <div style={titleRow}>
+            <div style={icon}>⚙️</div>
+            <div style={cardTitle}>マイページ</div>
+          </div>
           <div style={desc}>自分のチーム情報の確認・編集、登録内容の見直しができます。</div>
         </Link>
       </section>
@@ -400,3 +410,10 @@ function badge(n: number): React.CSSProperties {
     borderRadius: 999,
   };
 }
+
+const titleRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "nowrap"
+};
