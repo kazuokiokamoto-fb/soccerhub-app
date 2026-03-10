@@ -781,15 +781,13 @@ export default function MatchCalendarPage() {
         </div>
       ) : null}
 
-      <header style={pageHead}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 900 }}>試合を探す / 募集する</h1>
-          <p style={{ margin: "6px 0 0", color: "#555", lineHeight: 1.7 }}>
-            カレンダーで募集枠を確認しながら、条件を指定して相手を探せます。
-            自分のチームで募集枠を作ることもできます。
-          </p>
-        </div>
-      </header>
+      <section style={heroBox}>
+        <h1 style={heroTitle}>試合を探す / 募集する</h1>
+        <p style={heroDesc}>
+          カレンダーで募集枠を確認しながら、条件を指定して相手を探せます。
+          自分のチームで募集枠を作ることもできます。
+        </p>
+      </section>
 
       {/* カレンダーを先頭に移動 */}
       <section style={{ marginTop: 12 }}>
@@ -1016,8 +1014,25 @@ export default function MatchCalendarPage() {
   );
 }
 
-const pageHead: React.CSSProperties = {
+const heroBox: React.CSSProperties = {
+  borderRadius: 20,
+  background: "linear-gradient(135deg, #1e7f3c 0%, #145c2a 100%)",
+  color: "#fff",
+  padding: 18,
+  boxShadow: "0 10px 28px rgba(20,92,42,0.16)",
   marginBottom: 12,
+};
+
+const heroTitle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 28,
+  fontWeight: 900,
+};
+
+const heroDesc: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "rgba(255,255,255,0.92)",
+  lineHeight: 1.7,
 };
 
 const filterWrap: React.CSSProperties = {
