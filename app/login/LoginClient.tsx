@@ -9,6 +9,10 @@ function timeout<T>(ms: number, label = "timeout") {
   return new Promise<T>((_, reject) => setTimeout(() => reject(new Error(label)), ms));
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export default function LoginClient() {
   const router = useRouter();
   const sp = useSearchParams();
@@ -25,18 +29,62 @@ export default function LoginClient() {
   const canSubmit = useMemo(() => !!email.trim() && !!password, [email, password]);
 
   useEffect(() => {
+    let mounted = true;
+
     (async () => {
       const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+
       if (data.session) {
         router.replace(redirect);
         router.refresh();
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
-  const goAfterAuth = (path?: string) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+
+      if (
+        session &&
+        (event === "SIGNED_IN" ||
+          event === "TOKEN_REFRESHED" ||
+          event === "INITIAL_SESSION")
+      ) {
+        const to = redirect || "/";
+        setMsg(`✅ 認証OK。移動します → ${to}`);
+
+        // auth state change の処理と競合しにくいよう少し遅らせる
+        setTimeout(() => {
+          router.replace(to);
+          router.refresh();
+        }, 100);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [redirect, router]);
+
+  const goAfterAuth = async (path?: string) => {
     const to = path ?? redirect ?? "/";
+
+    // セッション確定待ち
+    for (let i = 0; i < 10; i++) {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        setMsg(`✅ 認証OK。移動します → ${to}`);
+        router.replace(to);
+        router.refresh();
+        return;
+      }
+      await sleep(150);
+    }
+
+    // 最後の保険
     setMsg(`✅ 認証OK。移動します → ${to}`);
     router.replace(to);
     router.refresh();
@@ -62,7 +110,7 @@ export default function LoginClient() {
       }
 
       if (data?.session) {
-        goAfterAuth();
+        await goAfterAuth();
         return;
       }
 
@@ -101,7 +149,7 @@ export default function LoginClient() {
         return;
       }
 
-      goAfterAuth();
+      await goAfterAuth();
     } catch (e: any) {
       setMsg(
         `❌ ログインが返ってきません: ${e?.message ?? String(e)}\n` +
@@ -118,19 +166,33 @@ export default function LoginClient() {
 
     try {
       const origin =
-        typeof window !== "undefined" ? window.location.origin : "https://soccerhub-app.vercel.app";
+        typeof window !== "undefined"
+          ? window.location.origin
+          : "https://soccerhub-app.vercel.app";
 
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${origin}/login?redirect=${encodeURIComponent(redirect)}`,
+          redirectTo: `${origin}/auth/callback?redirect=${encodeURIComponent(redirect)}`,
+          queryParams: {
+            prompt: "select_account",
+          },
         },
       });
 
       if (error) {
         setMsg(`❌ Googleログイン失敗: ${error.message}`);
         setLoadingGoogle(false);
+        return;
       }
+
+      if (data?.url) {
+        window.location.assign(data.url);
+        return;
+      }
+
+      setMsg("❌ GoogleログインURLの取得に失敗しました。");
+      setLoadingGoogle(false);
     } catch (e: any) {
       setMsg(`❌ Googleログインエラー: ${e?.message ?? String(e)}`);
       setLoadingGoogle(false);
@@ -242,11 +304,7 @@ export default function LoginClient() {
           </div>
         </section>
 
-        {msg ? (
-          <pre style={messageBox}>
-            {msg}
-          </pre>
-        ) : null}
+        {msg ? <pre style={messageBox}>{msg}</pre> : null}
 
         <p style={note}>
           ※ メール末尾が <b>gmail.co</b> ではなく <b>gmail.com</b> かご確認ください。
