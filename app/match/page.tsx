@@ -1,4 +1,3 @@
-// （ファイルパスはあなたの実装に合わせて）例：app/match/page.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -6,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
-import type { DbTeam, DbVenue, DbSlot, DbRequest, Toast } from "./types";
+import type { DbVenue, DbSlot, DbRequest, Toast } from "./types";
 import { Calendar } from "./components/Calendar";
 import { DaySlotList } from "./components/DaySlotList";
 import { CreateSlotModal } from "./components/CreateSlotModal";
@@ -51,9 +50,49 @@ type SlotEx = DbSlot & {
   town?: string | null;
 };
 
+type TeamFilterRow = {
+  id: string;
+  owner_id: string | null;
+  name: string;
+  area: string | null;
+  category: string | null;
+  categories: string[] | null;
+  prefecture: string | null;
+  city: string | null;
+  town: string | null;
+  level: number | null;
+  strength_rank?: string | null;
+  has_ground: boolean | null;
+  bike_parking: string | null;
+  bike_parking_capacity?: string | null;
+  member_count?: number | null;
+  uniform_main: string | null;
+  uniform_sub: string | null;
+  roster_by_grade: Record<string, number> | null;
+  note: string | null;
+  updated_at: string;
+};
+
 const KANTO_PREFS = ["東京都", "神奈川県", "千葉県", "埼玉県", "茨城県", "栃木県", "群馬県"];
 
-function guessPartsFromAreaText(area?: string | null): { prefecture?: string; city?: string; town?: string } {
+function isMissingColumnError(err: any) {
+  const msg = String(err?.message ?? "");
+  return (
+    msg.includes("does not exist") ||
+    msg.includes("Could not find") ||
+    msg.includes("schema cache") ||
+    (msg.includes("column") &&
+      (msg.includes("bike_parking_capacity") ||
+        msg.includes("member_count") ||
+        msg.includes("strength_rank")))
+  );
+}
+
+function guessPartsFromAreaText(area?: string | null): {
+  prefecture?: string;
+  city?: string;
+  town?: string;
+} {
   const raw = (area ?? "").trim();
   if (!raw) return {};
   let prefecture = "";
@@ -84,6 +123,52 @@ function slotParts(s: SlotEx) {
   return guessPartsFromAreaText((s as any).area ?? "");
 }
 
+function levelLabel(level: number) {
+  if (level >= 9) return "SS";
+  if (level >= 7) return "S";
+  if (level >= 5) return "A";
+  if (level >= 3) return "B";
+  return "C";
+}
+
+function parseBikeCapacity(value?: string | null) {
+  const v = String(value ?? "").trim();
+  if (!v || v === "不明") return null;
+  if (v.includes("50")) return 50;
+  const n = Number(v.replace(/[^\d]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+function sumRoster(roster?: Record<string, number> | null) {
+  if (!roster) return 0;
+  return Object.values(roster).reduce((sum, v) => sum + (Number(v) || 0), 0);
+}
+
+function includesKeyword(team: TeamFilterRow | undefined, slot: SlotEx, keyword: string) {
+  const q = keyword.trim().toLowerCase();
+  if (!q) return true;
+
+  const hay = [
+    team?.name,
+    team?.area,
+    team?.category,
+    ...(team?.categories ?? []),
+    team?.note,
+    team?.uniform_main,
+    team?.uniform_sub,
+    team?.bike_parking,
+    team?.bike_parking_capacity,
+    slot.area,
+    slot.category,
+    levelLabel(Number(team?.level ?? 0)),
+    String(team?.member_count ?? sumRoster(team?.roster_by_grade)),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return hay.includes(q);
+}
+
 export default function MatchCalendarPage() {
   const router = useRouter();
 
@@ -94,15 +179,23 @@ export default function MatchCalendarPage() {
 
   const [meId, setMeId] = useState<string>("");
 
+  const [keyword, setKeyword] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [prefectureFilter, setPrefectureFilter] = useState<string>("");
   const [cityFilter, setCityFilter] = useState<string>("");
   const [townFilter, setTownFilter] = useState<string>("");
 
+  const [strengthFilter, setStrengthFilter] = useState<string>("");
+  const [groundFilter, setGroundFilter] = useState<"all" | "あり" | "なし">("all");
+  const [bikeFilter, setBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
+  const [bikeCapacityMin, setBikeCapacityMin] = useState<string>("");
+  const [memberCountMin, setMemberCountMin] = useState<string>("");
+
   const [monthDate, setMonthDate] = useState<Date>(() => startOfMonth(new Date()));
   const monthKey = useMemo(() => toMonthKey(monthDate), [monthDate]);
 
-  const [myTeams, setMyTeams] = useState<DbTeam[]>([]);
+  const [allTeams, setAllTeams] = useState<TeamFilterRow[]>([]);
+  const [myTeams, setMyTeams] = useState<TeamFilterRow[]>([]);
   const [venues, setVenues] = useState<DbVenue[]>([]);
   const [slotsInMonth, setSlotsInMonth] = useState<SlotEx[]>([]);
   const [requestsForMonth, setRequestsForMonth] = useState<DbRequest[]>([]);
@@ -121,6 +214,10 @@ export default function MatchCalendarPage() {
 
   const [requestTeamId, setRequestTeamId] = useState<string>("");
 
+  const teamMap = useMemo(() => {
+    return new Map(allTeams.map((t) => [t.id, t]));
+  }, [allTeams]);
+
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 2800);
@@ -134,6 +231,7 @@ export default function MatchCalendarPage() {
   const loadBase = async () => {
     setLoadingBase(true);
     setToast({ type: "info", text: "読み込み中…" });
+
     try {
       const { data: userData } = await supabase.auth.getUser();
       const uid = userData?.user?.id || "";
@@ -142,25 +240,32 @@ export default function MatchCalendarPage() {
         return;
       }
 
-      const { data: teamRows, error: teamErr } = await supabase
-        .from("teams")
-        .select(
-          "id,name,area,category,categories,prefecture,city,town,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at,owner_id"
-        )
-        .eq("owner_id", uid)
-        .order("updated_at", { ascending: false });
+      let teamRes = await supabase.from("teams").select(
+        "id,owner_id,name,area,category,categories,prefecture,city,town,level,strength_rank,has_ground,bike_parking,bike_parking_capacity,member_count,uniform_main,uniform_sub,roster_by_grade,note,updated_at"
+      );
 
-      if (teamErr) {
-        console.error(teamErr);
-        setToast({ type: "error", text: `チーム読み込みに失敗: ${teamErr.message}` });
+      if (teamRes.error && isMissingColumnError(teamRes.error)) {
+        teamRes = await supabase.from("teams").select(
+          "id,owner_id,name,area,category,categories,prefecture,city,town,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,note,updated_at"
+        );
+      }
+
+      if (teamRes.error) {
+        console.error(teamRes.error);
+        setToast({ type: "error", text: `チーム読み込みに失敗: ${teamRes.error.message}` });
+        setAllTeams([]);
         setMyTeams([]);
       } else {
-        const ts = (teamRows ?? []) as DbTeam[];
-        setMyTeams(ts);
-        if (!hostTeamId && ts[0]?.id) setHostTeamId(ts[0].id);
-        if (!requestTeamId && ts[0]?.id) setRequestTeamId(ts[0].id);
-        if (!slotArea && (ts[0] as any)?.area) setSlotArea(((ts[0] as any).area as string) || "");
-        if ((ts[0] as any)?.category) setSlotCategory(((ts[0] as any).category as string) || "U-12");
+        const rows = (teamRes.data ?? []) as TeamFilterRow[];
+        setAllTeams(rows);
+
+        const mine = rows.filter((t) => t.owner_id === uid);
+        setMyTeams(mine);
+
+        if (!hostTeamId && mine[0]?.id) setHostTeamId(mine[0].id);
+        if (!requestTeamId && mine[0]?.id) setRequestTeamId(mine[0].id);
+        if (!slotArea && mine[0]?.area) setSlotArea(mine[0].area || "");
+        if (mine[0]?.category) setSlotCategory(mine[0].category || "U-12");
       }
 
       const { data: venueRows, error: venueErr } = await supabase
@@ -190,6 +295,7 @@ export default function MatchCalendarPage() {
   const loadMonth = async () => {
     setLoadingMonth(true);
     setToast({ type: "info", text: "カレンダー更新中…" });
+
     try {
       const start = formatYmd(startOfMonth(monthDate));
       const end = formatYmd(endOfMonth(monthDate));
@@ -244,18 +350,79 @@ export default function MatchCalendarPage() {
 
   const filteredSlotsInMonth = useMemo(() => {
     return slotsInMonth.filter((s) => {
+      const team = teamMap.get((s as any).host_team_id);
+
       if (categoryFilter.length > 0) {
-        const cat = (s.category ?? "").trim();
-        if (!cat) return false;
-        if (!categoryFilter.includes(cat)) return false;
+        const cats =
+          Array.isArray(team?.categories) && team?.categories.length > 0
+            ? team?.categories
+            : team?.category
+            ? [team.category]
+            : s.category
+            ? [s.category]
+            : [];
+        const ok = cats.some((c) => c && categoryFilter.includes(String(c).trim()));
+        if (!ok) return false;
       }
-      const parts = slotParts(s);
+
+      const parts = team
+        ? {
+            prefecture: team.prefecture ?? slotParts(s).prefecture,
+            city: team.city ?? slotParts(s).city,
+            town: team.town ?? slotParts(s).town,
+          }
+        : slotParts(s);
+
       if (prefectureFilter && (parts.prefecture ?? "") !== prefectureFilter) return false;
       if (cityFilter && (parts.city ?? "") !== cityFilter) return false;
       if (townFilter && (parts.town ?? "") !== townFilter) return false;
+
+      if (strengthFilter) {
+        const label = levelLabel(Number(team?.level ?? 0));
+        if (label !== strengthFilter) return false;
+      }
+
+      if (groundFilter !== "all") {
+        const ground = team?.has_ground ? "あり" : "なし";
+        if (ground !== groundFilter) return false;
+      }
+
+      if (bikeFilter !== "all") {
+        const bike = String(team?.bike_parking ?? "不明");
+        if (bike !== bikeFilter) return false;
+      }
+
+      if (bikeCapacityMin) {
+        const cap = parseBikeCapacity(team?.bike_parking_capacity);
+        if (cap == null || cap < Number(bikeCapacityMin)) return false;
+      }
+
+      if (memberCountMin) {
+        const count =
+          team?.member_count != null
+            ? Number(team.member_count)
+            : sumRoster(team?.roster_by_grade);
+        if (count < Number(memberCountMin)) return false;
+      }
+
+      if (!includesKeyword(team, s, keyword)) return false;
+
       return true;
     });
-  }, [slotsInMonth, categoryFilter, prefectureFilter, cityFilter, townFilter]);
+  }, [
+    slotsInMonth,
+    teamMap,
+    keyword,
+    categoryFilter,
+    prefectureFilter,
+    cityFilter,
+    townFilter,
+    strengthFilter,
+    groundFilter,
+    bikeFilter,
+    bikeCapacityMin,
+    memberCountMin,
+  ]);
 
   const countByDate = useMemo(() => {
     const m = new Map<string, number>();
@@ -423,6 +590,7 @@ export default function MatchCalendarPage() {
     const ok = await updateRequestStatus(rid, "accepted");
     if (ok) await loadMonth();
   };
+
   const reject = async (rid: string) => {
     const ok = await updateRequestStatus(rid, "rejected");
     if (ok) await loadMonth();
@@ -447,10 +615,16 @@ export default function MatchCalendarPage() {
   };
 
   const clearFilters = () => {
+    setKeyword("");
     setCategoryFilter([]);
     setPrefectureFilter("");
     setCityFilter("");
     setTownFilter("");
+    setStrengthFilter("");
+    setGroundFilter("all");
+    setBikeFilter("all");
+    setBikeCapacityMin("");
+    setMemberCountMin("");
   };
 
   const calendarCells = useMemo(() => {
@@ -485,19 +659,27 @@ export default function MatchCalendarPage() {
         <div
           style={{
             ...toastBox,
-            ...(toast.type === "success" ? toastSuccess : toast.type === "error" ? toastError : toastInfo),
+            ...(toast.type === "success"
+              ? toastSuccess
+              : toast.type === "error"
+              ? toastError
+              : toastInfo),
           }}
           role="status"
           aria-live="polite"
         >
           <div style={{ whiteSpace: "pre-wrap" }}>{toast.text}</div>
-          <button type="button" onClick={() => setToast(null)} style={toastClose} aria-label="閉じる">
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            style={toastClose}
+            aria-label="閉じる"
+          >
             ×
           </button>
         </div>
       ) : null}
 
-      {/* ✅ ヘッダー整理：右上は「チーム検索」「更新」だけ */}
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900 }}>マッチング（カレンダー）</h1>
@@ -515,6 +697,17 @@ export default function MatchCalendarPage() {
 
       <section style={filterWrap}>
         <div style={{ display: "grid", gap: 12 }}>
+          <label style={label}>
+            <span style={labelTitle}>キーワード検索</span>
+            <input
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              className="sh-input"
+              placeholder="例：三宿 / SS / 青 / 20台 / 強度高め"
+              disabled={loading}
+            />
+          </label>
+
           <AreaPickerKanto
             title="エリアで絞り込み（関東）"
             allowAll={true}
@@ -538,21 +731,104 @@ export default function MatchCalendarPage() {
             disabled={loading}
           />
 
-          {categoryFilter.length > 0 || prefectureFilter || cityFilter || townFilter ? (
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="sh-btn" type="button" onClick={clearFilters} disabled={loading}>
-                条件クリア
-              </button>
-              <span style={{ color: "#666", fontSize: 12 }}>
-                絞り込み中：
-                {prefectureFilter ? ` ${prefectureFilter}` : "（都県なし）"} /
-                {cityFilter ? ` ${cityFilter}` : "（市区町村なし）"} /
-                {townFilter ? ` ${townFilter}` : "（町名なし）"} / カテゴリ {categoryFilter.length}
-              </span>
-            </div>
-          ) : (
-            <div style={{ color: "#777", fontSize: 12 }}>※ エリア（都県→市区町村→町名）とカテゴリで絞り込みできます</div>
-          )}
+          <div style={twoCols}>
+            <label style={label}>
+              <span style={labelTitle}>強さ</span>
+              <select
+                value={strengthFilter}
+                onChange={(e) => setStrengthFilter(e.target.value)}
+                className="sh-select"
+                disabled={loading}
+              >
+                <option value="">指定なし</option>
+                <option value="SS">SS</option>
+                <option value="S">S</option>
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
+              </select>
+            </label>
+
+            <label style={label}>
+              <span style={labelTitle}>グラウンド提供</span>
+              <select
+                value={groundFilter}
+                onChange={(e) => setGroundFilter(e.target.value as "all" | "あり" | "なし")}
+                className="sh-select"
+                disabled={loading}
+              >
+                <option value="all">指定なし</option>
+                <option value="あり">あり</option>
+                <option value="なし">なし</option>
+              </select>
+            </label>
+          </div>
+
+          <div style={threeCols}>
+            <label style={label}>
+              <span style={labelTitle}>駐輪場</span>
+              <select
+                value={bikeFilter}
+                onChange={(e) =>
+                  setBikeFilter(e.target.value as "all" | "あり" | "なし" | "不明")
+                }
+                className="sh-select"
+                disabled={loading}
+              >
+                <option value="all">指定なし</option>
+                <option value="あり">あり</option>
+                <option value="なし">なし</option>
+                <option value="不明">不明</option>
+              </select>
+            </label>
+
+            <label style={label}>
+              <span style={labelTitle}>駐輪場台数（以上）</span>
+              <select
+                value={bikeCapacityMin}
+                onChange={(e) => setBikeCapacityMin(e.target.value)}
+                className="sh-select"
+                disabled={loading}
+              >
+                <option value="">指定なし</option>
+                <option value="5">5台以上</option>
+                <option value="10">10台以上</option>
+                <option value="15">15台以上</option>
+                <option value="20">20台以上</option>
+                <option value="25">25台以上</option>
+                <option value="30">30台以上</option>
+                <option value="40">40台以上</option>
+                <option value="50">50台以上</option>
+              </select>
+            </label>
+
+            <label style={label}>
+              <span style={labelTitle}>チーム所属人数（以上）</span>
+              <select
+                value={memberCountMin}
+                onChange={(e) => setMemberCountMin(e.target.value)}
+                className="sh-select"
+                disabled={loading}
+              >
+                <option value="">指定なし</option>
+                <option value="5">5人以上</option>
+                <option value="10">10人以上</option>
+                <option value="15">15人以上</option>
+                <option value="20">20人以上</option>
+                <option value="25">25人以上</option>
+                <option value="30">30人以上</option>
+              </select>
+            </label>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <button className="sh-btn" type="button" onClick={clearFilters} disabled={loading}>
+              条件クリア
+            </button>
+            <span style={{ color: "#666", fontSize: 12 }}>
+              表示中の募集枠：{filteredSlotsInMonth.length}
+            </span>
+          </div>
         </div>
       </section>
 
@@ -576,7 +852,7 @@ export default function MatchCalendarPage() {
         selectedYmd={selectedYmd}
         slots={slotsOnSelectedDate as any}
         venues={venues}
-        myTeams={myTeams}
+        myTeams={myTeams as any}
         meId={meId}
         requestsForMonth={requestsForMonth}
         selectedSlotId={selectedSlotId}
@@ -597,7 +873,7 @@ export default function MatchCalendarPage() {
       <CreateSlotModal
         open={openCreate}
         loading={loading}
-        myTeams={myTeams}
+        myTeams={myTeams as any}
         venues={venues}
         slotDate={slotDate}
         hostTeamId={hostTeamId}
@@ -629,6 +905,28 @@ const filterWrap: React.CSSProperties = {
   background: "#fff",
 };
 
+const label: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+};
+
+const labelTitle: React.CSSProperties = {
+  fontWeight: 800,
+  color: "#2d3b31",
+};
+
+const twoCols: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  gridTemplateColumns: "1fr 1fr",
+};
+
+const threeCols: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  gridTemplateColumns: "repeat(3, 1fr)",
+};
+
 const toastBox: React.CSSProperties = {
   position: "sticky",
   top: 10,
@@ -643,9 +941,23 @@ const toastBox: React.CSSProperties = {
   marginBottom: 12,
 };
 
-const toastSuccess: React.CSSProperties = { background: "#ecfdf3", borderColor: "#bbf7d0", color: "#166534" };
-const toastError: React.CSSProperties = { background: "#fef2f2", borderColor: "#fecaca", color: "#991b1b" };
-const toastInfo: React.CSSProperties = { background: "#eff6ff", borderColor: "#bfdbfe", color: "#1e3a8a" };
+const toastSuccess: React.CSSProperties = {
+  background: "#ecfdf3",
+  borderColor: "#bbf7d0",
+  color: "#166534",
+};
+
+const toastError: React.CSSProperties = {
+  background: "#fef2f2",
+  borderColor: "#fecaca",
+  color: "#991b1b",
+};
+
+const toastInfo: React.CSSProperties = {
+  background: "#eff6ff",
+  borderColor: "#bfdbfe",
+  color: "#1e3a8a",
+};
 
 const toastClose: React.CSSProperties = {
   border: "none",
