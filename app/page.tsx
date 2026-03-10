@@ -114,7 +114,7 @@ export default function HomePage() {
     <main style={wrap}>
       <header style={hero}>
         <div style={heroInner}>
-          <p style={subTitle}>
+          <p style={heroDesc}>
             サッカー練習試合をもっと簡単に。
             <br />
             チーム同士をつなぐマッチングサービス。
@@ -283,6 +283,12 @@ const subTitle: React.CSSProperties = {
   marginBottom: 0,
   lineHeight: 1.5,
   fontSize: 13,
+};
+
+const heroDesc: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "rgba(255,255,255,0.92)",
+  lineHeight: 1.7,
 };
 
 const grid: React.CSSProperties = {

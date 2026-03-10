@@ -232,16 +232,22 @@ function TeamsPageInner() {
       ) : null}
 
       <section style={heroBox}>
-        <div style={heroBadge}>⚽ サカまち</div>
-        <h1 style={title}>マイチーム</h1>
-        <p style={desc}>自分が登録したチームの編集・削除ができます。</p>
 
-        <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-          <Link href="/teams/new" className="sh-btn sh-btn--primary">
-            ＋ チーム登録へ
-          </Link>
-        </div>
+        <h1 style={heroTitle}>マイページ</h1>
+
+        <p style={heroDesc}>
+          自分が登録したチームの編集・削除ができます。
+        </p>
+
       </section>
+
+      <Link
+        href="/teams/new"
+        className="sh-btn sh-btn--primary"
+        style={{ marginTop: 12 }}
+      >
+        ＋チーム登録へ
+      </Link>
 
       {!meId ? <div style={{ marginTop: 16, color: "#991b1b" }}>ログインが必要です。</div> : null}
 
@@ -369,6 +375,20 @@ const heroBadge: React.CSSProperties = {
   background: "rgba(255,255,255,0.14)",
   fontSize: 12,
   fontWeight: 800,
+};
+
+const heroTitle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 28,
+  fontWeight: 900,
+  color: "#ffffff",
+};
+
+const heroDesc: React.CSSProperties = {
+  margin: "8px 0 0",
+  fontSize: 14,
+  lineHeight: 1.7,
+  color: "rgba(255,255,255,0.92)",
 };
 
 const title: React.CSSProperties = {

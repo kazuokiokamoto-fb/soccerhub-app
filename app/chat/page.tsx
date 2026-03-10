@@ -59,7 +59,6 @@ export default function ChatListPage() {
     (async () => {
       setLoading(true);
       try {
-        // 1) 自分の所属チーム（相手判定に使う）
         const { data: myTeamsRows } = await supabase
           .from("teams")
           .select("id")
@@ -67,7 +66,6 @@ export default function ChatListPage() {
 
         const myTeamIds = new Set<string>((myTeamsRows ?? []).map((r: any) => r.id).filter(Boolean));
 
-        // 2) 自分の chat_members（thread_id & last_read_at）
         const { data: myMemberRows, error: cmErr } = await supabase
           .from("chat_members")
           .select("thread_id, last_read_at, created_at")
@@ -93,7 +91,6 @@ export default function ChatListPage() {
           return;
         }
 
-        // 3) thread 本体（kind等は取らない）
         const { data: thRows, error: thErr } = await supabase
           .from("chat_threads")
           .select("id, created_at, updated_at")
@@ -105,7 +102,6 @@ export default function ChatListPage() {
           return;
         }
 
-        // 4) 各スレッドの参加チーム
         const { data: membersRows, error: membersErr } = await supabase
           .from("chat_members")
           .select("thread_id, team_id")
@@ -131,7 +127,6 @@ export default function ChatListPage() {
 
         const uniqTeamIds = Array.from(new Set(allTeamIds));
 
-        // 5) チーム名（表示用）
         const teamMap = new Map<string, TeamMini>();
         if (uniqTeamIds.length > 0) {
           const { data: teamRows, error: teamErr } = await supabase
@@ -148,7 +143,6 @@ export default function ChatListPage() {
           }
         }
 
-        // 6) 最後のメッセージ（まとめ取り→JSで thread ごとに先頭を採用）
         const lastMsgByThread = new Map<string, LastMsgMini>();
         {
           const limit = Math.min(2000, Math.max(400, threadIds.length * 50));
@@ -172,7 +166,6 @@ export default function ChatListPage() {
           }
         }
 
-        // 7) 整形（相手チーム名 + 未読判定）
         const merged: ThreadRow[] = ((thRows ?? []) as any[]).map((t) => {
           const tid = t.id as string;
           const memberTeamIds = memberTeamsByThread.get(tid) ?? [];
@@ -211,7 +204,6 @@ export default function ChatListPage() {
           };
         });
 
-        // 並び：未読優先 → 最終更新順
         merged.sort((a, b) => {
           const au = a.isUnread ? 1 : 0;
           const bu = b.isUnread ? 1 : 0;
@@ -236,15 +228,18 @@ export default function ChatListPage() {
   }, [loading, threads.length]);
 
   return (
-    <main style={{ padding: 16, maxWidth: 900, margin: "0 auto" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900 }}>チャット一覧</h1>
-      </header>
+    <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
+      <section style={heroBox}>
+        <h1 style={heroTitle}>チャット</h1>
+        <p style={heroDesc}>
+          相手チームとの連絡、日程調整、会場確認などをここでやり取りできます。
+        </p>
+      </section>
 
       {loading ? <p style={{ color: "#666" }}>読み込み中…</p> : null}
       {!loading && emptyText ? <p style={{ color: "#666" }}>{emptyText}</p> : null}
 
-      <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+      <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
         {threads.map((t) => {
           const title =
             t.otherTeamName
@@ -264,34 +259,45 @@ export default function ChatListPage() {
             <Link
               key={t.id}
               href={`/chat/${t.id}`}
-              className="sh-btn"
               style={{
                 display: "block",
-                padding: 12,
-                borderRadius: 12,
-                border: "1px solid #eee",
-                background: t.isUnread ? "#f0f9ff" : "#fff",
+                padding: 16,
+                borderRadius: 18,
+                border: t.isUnread ? "1px solid #cde7d4" : "1px solid #e5ece7",
+                background: t.isUnread ? "#f4fbf6" : "#fff",
                 textAlign: "left",
+                textDecoration: "none",
+                color: "#111",
+                boxShadow: t.isUnread ? "0 6px 18px rgba(20,92,42,0.06)" : "none",
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 {t.isUnread ? <span style={dot} aria-label="未読">●</span> : <span style={{ width: 10 }} />}
-                <div style={{ fontWeight: t.isUnread ? 900 : 800, fontSize: 16 }}>{title}</div>
+                <div style={{ fontWeight: t.isUnread ? 900 : 800, fontSize: 18, color: "#1f5d30" }}>{title}</div>
               </div>
 
               <div
                 style={{
-                  marginTop: 6,
+                  marginTop: 10,
                   color: "#374151",
-                  fontSize: 13,
-                  lineHeight: 1.6,
-                  fontWeight: t.isUnread ? 800 : 400,
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                  fontWeight: t.isUnread ? 700 : 400,
                 }}
               >
                 {lastLine}
               </div>
 
-              <div style={{ marginTop: 6, fontSize: 12, color: "#6b7280", display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 12,
+                  color: "#6b7280",
+                  display: "flex",
+                  gap: 10,
+                  flexWrap: "wrap",
+                }}
+              >
                 <span>{timeLine}</span>
               </div>
             </Link>
@@ -301,6 +307,27 @@ export default function ChatListPage() {
     </main>
   );
 }
+
+const heroBox: React.CSSProperties = {
+  borderRadius: 20,
+  background: "linear-gradient(135deg, #1e7f3c 0%, #145c2a 100%)",
+  color: "#fff",
+  padding: 18,
+  boxShadow: "0 10px 28px rgba(20,92,42,0.16)",
+  marginBottom: 12,
+};
+
+const heroTitle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 28,
+  fontWeight: 900,
+};
+
+const heroDesc: React.CSSProperties = {
+  margin: "8px 0 0",
+  color: "rgba(255,255,255,0.92)",
+  lineHeight: 1.7,
+};
 
 const dot: React.CSSProperties = {
   color: "#16a34a",
