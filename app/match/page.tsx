@@ -215,10 +215,10 @@ function matchesSlotFilters(
     Array.isArray(team?.categories) && team?.categories.length > 0
       ? team?.categories
       : team?.category
-      ? [team.category]
-      : s.category
-      ? [s.category]
-      : [];
+        ? [team.category]
+        : s.category
+          ? [s.category]
+          : [];
 
   if (filters.categoryFilter.length > 0) {
     if (cats.length === 0) return false;
@@ -630,6 +630,10 @@ export default function MatchCalendarPage() {
     return filteredSlotsInMonth.filter((s: any) => s.date === selectedYmd);
   }, [filteredSlotsInMonth, selectedYmd]);
 
+  const draftSlotsOnSelectedDate = useMemo(() => {
+    return draftFilteredSlotsInMonth.filter((s: any) => s.date === selectedYmd);
+  }, [draftFilteredSlotsInMonth, selectedYmd]);
+
   const selectedSlot = useMemo(() => {
     return slotsInMonth.find((s: any) => s.id === selectedSlotId) || null;
   }, [slotsInMonth, selectedSlotId]);
@@ -882,8 +886,8 @@ export default function MatchCalendarPage() {
             ...(toast.type === "success"
               ? toastSuccess
               : toast.type === "error"
-              ? toastError
-              : toastInfo),
+                ? toastError
+                : toastInfo),
           }}
           role="status"
           aria-live="polite"
@@ -977,12 +981,15 @@ export default function MatchCalendarPage() {
             </button>
           </div>
 
-          <div style={draftCountBox}>
-            <div style={draftCountMain}>
-              入力中の条件だと：{draftFilteredSlotsInMonth.length}件
-            </div>
-            <div style={draftCountSub}>
-              現在表示中：{filteredSlotsInMonth.length}件
+          <div style={stickyDraftCountWrap}>
+            <div style={draftCountBox}>
+              <div style={draftCountDate}>📅 {selectedYmd} の募集</div>
+              <div style={draftCountMain}>
+                入力中の条件だと：{draftSlotsOnSelectedDate.length}件
+              </div>
+              <div style={draftCountSub}>
+                現在表示中：{slotsOnSelectedDate.length}件
+              </div>
             </div>
           </div>
 
@@ -1235,11 +1242,26 @@ const filterTitle: React.CSSProperties = {
   color: "#1f5d30",
 };
 
+const stickyDraftCountWrap: React.CSSProperties = {
+  position: "sticky",
+  top: 10,
+  zIndex: 15,
+};
+
 const draftCountBox: React.CSSProperties = {
   border: "1px solid #dbe7df",
   borderRadius: 12,
-  background: "#f7fbf8",
+  background: "rgba(247,251,248,0.96)",
+  backdropFilter: "blur(6px)",
   padding: "10px 12px",
+  boxShadow: "0 4px 12px rgba(0,0,0,0.04)",
+};
+
+const draftCountDate: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#5b6d61",
+  marginBottom: 4,
 };
 
 const draftCountMain: React.CSSProperties = {

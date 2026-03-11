@@ -195,7 +195,7 @@ const countText: React.CSSProperties = {
 
 const statusText: React.CSSProperties = {
   marginTop: 2,
-  fontSize: 11,
+  fontSize: 10,
   color: "#6b7280",
   lineHeight: 1.2,
 };
