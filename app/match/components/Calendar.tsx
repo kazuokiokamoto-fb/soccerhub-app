@@ -158,7 +158,7 @@ const calendarGrid: React.CSSProperties = {
 const calCell: React.CSSProperties = {
   minWidth: 0,
   width: "100%",
-  minHeight: 78,
+  minHeight: 70,
   padding: "8px 6px",
   borderRadius: 12,
   border: "1px solid #e5e7eb",
@@ -195,7 +195,7 @@ const countText: React.CSSProperties = {
 
 const statusText: React.CSSProperties = {
   marginTop: 2,
-  fontSize: 10,
+  fontSize: 9,
   color: "#6b7280",
   lineHeight: 1.2,
 };

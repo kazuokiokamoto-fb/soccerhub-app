@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { Calendar } from "./components/Calendar";
 import { DaySlotList } from "./components/DaySlotList";
@@ -9,7 +10,10 @@ import { CreateSlotModal } from "./components/CreateSlotModal";
 import { CATEGORY_OPTIONS } from "@/app/lib/categories";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
-import { StrengthRankPicker } from "@/app/components/StrengthRankPicker";
+import {
+  StrengthRankPicker,
+  type StrengthRank,
+} from "@/app/components/StrengthRankPicker";
 
 import {
   buildCalendarCells,
@@ -42,13 +46,26 @@ import {
   actionRow,
 } from "./styles/matchPageStyles";
 
-const summaryOuter: React.CSSProperties = {
+const pageMain: React.CSSProperties = {
+  padding: 16,
+  maxWidth: 980,
+  margin: "0 auto",
+};
+
+const stickySummaryOuter: React.CSSProperties = {
+  position: "sticky",
+  top: 72,
+  zIndex: 40,
   marginTop: 12,
   marginBottom: 12,
 };
 
 export default function MatchCalendarPage() {
-  const [monthDate, setMonthDate] = useState<Date>(() => startOfMonth(new Date()));
+  const router = useRouter();
+
+  const [monthDate, setMonthDate] = useState<Date>(() =>
+    startOfMonth(new Date())
+  );
   const [selectedYmd, setSelectedYmd] = useState<string>(ymdToday());
   const [selectedSlotId, setSelectedSlotId] = useState<string>("");
   const [openCreate, setOpenCreate] = useState(false);
@@ -77,6 +94,8 @@ export default function MatchCalendarPage() {
     appliedFilters,
     draftFilters,
     hasDraftChanges,
+    applyDraftToApplied,
+    clearAllFilters,
   } = useMatchFilters();
 
   const {
@@ -101,19 +120,25 @@ export default function MatchCalendarPage() {
   }, [allTeams]);
 
   const filteredSlotsInMonth = useMemo(() => {
-    return slotsInMonth.filter((s: any) => matchesSlotFilters(s, teamMap, appliedFilters));
+    return slotsInMonth.filter((s: any) =>
+      matchesSlotFilters(s, teamMap, appliedFilters)
+    );
   }, [slotsInMonth, teamMap, appliedFilters]);
 
   const draftFilteredSlotsInMonth = useMemo(() => {
-    return slotsInMonth.filter((s: any) => matchesSlotFilters(s, teamMap, draftFilters));
+    return slotsInMonth.filter((s: any) =>
+      matchesSlotFilters(s, teamMap, draftFilters)
+    );
   }, [slotsInMonth, teamMap, draftFilters]);
 
   const countByDate = useMemo(() => {
     const m = new Map<string, number>();
+
     for (const s of filteredSlotsInMonth) {
       const k = (s as any).date;
       m.set(k, (m.get(k) ?? 0) + 1);
     }
+
     return m;
   }, [filteredSlotsInMonth]);
 
@@ -149,8 +174,19 @@ export default function MatchCalendarPage() {
     }, 120);
   };
 
+  const handleApplyFilters = () => {
+    applyDraftToApplied();
+    setSelectedSlotId("");
+    scrollToDayList();
+  };
+
+  const handleClearFilters = () => {
+    clearAllFilters();
+    setSelectedSlotId("");
+  };
+
   return (
-    <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
+    <main style={pageMain}>
       <section style={heroBox}>
         <h1 style={heroTitle}>⚽ 試合を探す / 募集する</h1>
         <p style={heroDesc}>
@@ -177,11 +213,12 @@ export default function MatchCalendarPage() {
         />
       </section>
 
-      <div style={summaryOuter}>
+      <div style={stickySummaryOuter}>
         <div style={stickySummaryBar}>
           <div style={stickySummaryDate}>📅 {selectedYmd}</div>
           <div style={stickySummaryCount}>
-            入力中：{draftSlotsOnSelectedDate.length}件 / 表示中：{slotsOnSelectedDate.length}件
+            入力中：{draftSlotsOnSelectedDate.length}件 / 表示中：
+            {slotsOnSelectedDate.length}件
           </div>
         </div>
       </div>
@@ -268,7 +305,7 @@ export default function MatchCalendarPage() {
           />
 
           <StrengthRankPicker
-            value={draftStrengthFilter}
+            value={draftStrengthFilter as StrengthRank | ""}
             onChange={setDraftStrengthFilter}
             disabled={loading}
             title="強さ"
@@ -355,9 +392,19 @@ export default function MatchCalendarPage() {
             <button
               type="button"
               className="sh-btn sh-btn--primary"
+              onClick={handleApplyFilters}
               disabled={!hasDraftChanges || loading}
             >
               この条件で表示
+            </button>
+
+            <button
+              type="button"
+              className="sh-btn"
+              onClick={handleClearFilters}
+              disabled={loading}
+            >
+              クリア
             </button>
 
             <button
