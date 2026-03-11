@@ -73,6 +73,19 @@ type TeamFilterRow = {
   updated_at: string;
 };
 
+type MatchFilters = {
+  keyword: string;
+  categoryFilter: string[];
+  prefectureFilter: string;
+  cityFilter: string;
+  townFilter: string;
+  groundFilter: "all" | "あり" | "なし";
+  strengthFilter: StrengthRank | "";
+  bikeFilter: "all" | "あり" | "なし" | "不明";
+  bikeCapacityMin: string;
+  memberCountMin: string;
+};
+
 const KANTO_PREFS = ["東京都", "神奈川県", "千葉県", "埼玉県", "茨城県", "栃木県", "群馬県"];
 
 function isMissingColumnError(err: any) {
@@ -191,6 +204,72 @@ function includesKeyword(team: TeamFilterRow | undefined, slot: SlotEx, keyword:
   return hay.includes(q);
 }
 
+function matchesSlotFilters(
+  s: SlotEx,
+  teamMap: Map<string, TeamFilterRow>,
+  filters: MatchFilters
+) {
+  const team = teamMap.get((s as any).host_team_id);
+
+  const cats =
+    Array.isArray(team?.categories) && team?.categories.length > 0
+      ? team?.categories
+      : team?.category
+      ? [team.category]
+      : s.category
+      ? [s.category]
+      : [];
+
+  if (filters.categoryFilter.length > 0) {
+    if (cats.length === 0) return false;
+    if (!cats.some((c) => c && filters.categoryFilter.includes(String(c).trim()))) return false;
+  }
+
+  const parts = team
+    ? {
+        prefecture: team.prefecture ?? slotParts(s).prefecture,
+        city: team.city ?? slotParts(s).city,
+        town: team.town ?? slotParts(s).town,
+      }
+    : slotParts(s);
+
+  if (filters.prefectureFilter && (parts.prefecture ?? "") !== filters.prefectureFilter) return false;
+  if (filters.cityFilter && (parts.city ?? "") !== filters.cityFilter) return false;
+  if (filters.townFilter && (parts.town ?? "") !== filters.townFilter) return false;
+
+  if (filters.groundFilter !== "all") {
+    const val = team?.has_ground ? "あり" : "なし";
+    if (val !== filters.groundFilter) return false;
+  }
+
+  if (filters.strengthFilter) {
+    const rank = levelLabel(Number(team?.level ?? 0));
+    if (rank !== filters.strengthFilter) return false;
+  }
+
+  if (filters.bikeFilter !== "all") {
+    const bike = String(team?.bike_parking ?? "不明");
+    if (bike !== filters.bikeFilter) return false;
+  }
+
+  if (filters.bikeCapacityMin) {
+    const cap = parseBikeCapacity(team?.bike_parking_capacity);
+    if (cap == null || cap < Number(filters.bikeCapacityMin)) return false;
+  }
+
+  if (filters.memberCountMin) {
+    const count =
+      team?.member_count != null
+        ? Number(team.member_count)
+        : sumRoster(team?.roster_by_grade);
+    if (count < Number(filters.memberCountMin)) return false;
+  }
+
+  if (!includesKeyword(team, s, filters.keyword)) return false;
+
+  return true;
+}
+
 export default function MatchCalendarPage() {
   const router = useRouter();
 
@@ -252,6 +331,58 @@ export default function MatchCalendarPage() {
   const teamMap = useMemo(() => {
     return new Map(allTeams.map((t) => [t.id, t]));
   }, [allTeams]);
+
+  const appliedFilters = useMemo<MatchFilters>(() => {
+    return {
+      keyword,
+      categoryFilter,
+      prefectureFilter,
+      cityFilter,
+      townFilter,
+      groundFilter,
+      strengthFilter,
+      bikeFilter,
+      bikeCapacityMin,
+      memberCountMin,
+    };
+  }, [
+    keyword,
+    categoryFilter,
+    prefectureFilter,
+    cityFilter,
+    townFilter,
+    groundFilter,
+    strengthFilter,
+    bikeFilter,
+    bikeCapacityMin,
+    memberCountMin,
+  ]);
+
+  const draftFilters = useMemo<MatchFilters>(() => {
+    return {
+      keyword: draftKeyword,
+      categoryFilter: draftCategoryFilter,
+      prefectureFilter: draftPrefectureFilter,
+      cityFilter: draftCityFilter,
+      townFilter: draftTownFilter,
+      groundFilter: draftGroundFilter,
+      strengthFilter: draftStrengthFilter,
+      bikeFilter: draftBikeFilter,
+      bikeCapacityMin: draftBikeCapacityMin,
+      memberCountMin: draftMemberCountMin,
+    };
+  }, [
+    draftKeyword,
+    draftCategoryFilter,
+    draftPrefectureFilter,
+    draftCityFilter,
+    draftTownFilter,
+    draftGroundFilter,
+    draftStrengthFilter,
+    draftBikeFilter,
+    draftBikeCapacityMin,
+    draftMemberCountMin,
+  ]);
 
   useEffect(() => {
     if (!toast) return;
@@ -479,81 +610,12 @@ export default function MatchCalendarPage() {
   }, [monthKey]);
 
   const filteredSlotsInMonth = useMemo(() => {
-    return slotsInMonth.filter((s) => {
-      const team = teamMap.get((s as any).host_team_id);
+    return slotsInMonth.filter((s) => matchesSlotFilters(s, teamMap, appliedFilters));
+  }, [slotsInMonth, teamMap, appliedFilters]);
 
-      const cats =
-        Array.isArray(team?.categories) && team?.categories.length > 0
-          ? team?.categories
-          : team?.category
-          ? [team.category]
-          : s.category
-          ? [s.category]
-          : [];
-
-      if (categoryFilter.length > 0) {
-        if (cats.length === 0) return false;
-        if (!cats.some((c) => c && categoryFilter.includes(String(c).trim()))) return false;
-      }
-
-      const parts = team
-        ? {
-            prefecture: team.prefecture ?? slotParts(s).prefecture,
-            city: team.city ?? slotParts(s).city,
-            town: team.town ?? slotParts(s).town,
-          }
-        : slotParts(s);
-
-      if (prefectureFilter && (parts.prefecture ?? "") !== prefectureFilter) return false;
-      if (cityFilter && (parts.city ?? "") !== cityFilter) return false;
-      if (townFilter && (parts.town ?? "") !== townFilter) return false;
-
-      if (groundFilter !== "all") {
-        const val = team?.has_ground ? "あり" : "なし";
-        if (val !== groundFilter) return false;
-      }
-
-      if (strengthFilter) {
-        const rank = levelLabel(Number(team?.level ?? 0));
-        if (rank !== strengthFilter) return false;
-      }
-
-      if (bikeFilter !== "all") {
-        const bike = String(team?.bike_parking ?? "不明");
-        if (bike !== bikeFilter) return false;
-      }
-
-      if (bikeCapacityMin) {
-        const cap = parseBikeCapacity(team?.bike_parking_capacity);
-        if (cap == null || cap < Number(bikeCapacityMin)) return false;
-      }
-
-      if (memberCountMin) {
-        const count =
-          team?.member_count != null
-            ? Number(team.member_count)
-            : sumRoster(team?.roster_by_grade);
-        if (count < Number(memberCountMin)) return false;
-      }
-
-      if (!includesKeyword(team, s, keyword)) return false;
-
-      return true;
-    });
-  }, [
-    slotsInMonth,
-    teamMap,
-    keyword,
-    categoryFilter,
-    prefectureFilter,
-    cityFilter,
-    townFilter,
-    groundFilter,
-    strengthFilter,
-    bikeFilter,
-    bikeCapacityMin,
-    memberCountMin,
-  ]);
+  const draftFilteredSlotsInMonth = useMemo(() => {
+    return slotsInMonth.filter((s) => matchesSlotFilters(s, teamMap, draftFilters));
+  }, [slotsInMonth, teamMap, draftFilters]);
 
   const countByDate = useMemo(() => {
     const m = new Map<string, number>();
@@ -915,6 +977,15 @@ export default function MatchCalendarPage() {
             </button>
           </div>
 
+          <div style={draftCountBox}>
+            <div style={draftCountMain}>
+              入力中の条件だと：{draftFilteredSlotsInMonth.length}件
+            </div>
+            <div style={draftCountSub}>
+              現在表示中：{filteredSlotsInMonth.length}件
+            </div>
+          </div>
+
           <label style={label}>
             <span style={labelTitle}>キーワード検索</span>
             <input
@@ -1162,6 +1233,25 @@ const filterTitle: React.CSSProperties = {
   fontSize: 18,
   fontWeight: 900,
   color: "#1f5d30",
+};
+
+const draftCountBox: React.CSSProperties = {
+  border: "1px solid #dbe7df",
+  borderRadius: 12,
+  background: "#f7fbf8",
+  padding: "10px 12px",
+};
+
+const draftCountMain: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 900,
+  color: "#166534",
+};
+
+const draftCountSub: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 12,
+  color: "#6b7280",
 };
 
 const label: React.CSSProperties = {

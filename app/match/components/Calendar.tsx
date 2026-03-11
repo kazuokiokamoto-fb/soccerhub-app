@@ -50,12 +50,7 @@ export function Calendar(props: {
             key={w}
             style={{
               ...weekLabel,
-              color:
-                i === 5
-                  ? "#2563eb"
-                  : i === 6
-                  ? "#dc2626"
-                  : "#666666",
+              color: i === 5 ? "#2563eb" : i === 6 ? "#dc2626" : "#666666",
             }}
           >
             {w}
@@ -163,7 +158,7 @@ const calendarGrid: React.CSSProperties = {
 const calCell: React.CSSProperties = {
   minWidth: 0,
   width: "100%",
-  aspectRatio: "1 / 1.08",
+  minHeight: 92,
   padding: "8px 6px",
   borderRadius: 12,
   border: "1px solid #e5e7eb",
@@ -172,8 +167,9 @@ const calCell: React.CSSProperties = {
   textAlign: "left",
   display: "flex",
   flexDirection: "column",
-  justifyContent: "space-between",
   alignItems: "flex-start",
+  justifyContent: "flex-start",
+  gap: 2,
   overflow: "hidden",
 };
 
@@ -190,6 +186,7 @@ const dayNumText: React.CSSProperties = {
 };
 
 const countText: React.CSSProperties = {
+  marginTop: 4,
   fontSize: 12,
   fontWeight: 800,
   color: "#065f46",
@@ -197,6 +194,7 @@ const countText: React.CSSProperties = {
 };
 
 const statusText: React.CSSProperties = {
+  marginTop: 2,
   fontSize: 11,
   color: "#6b7280",
   lineHeight: 1.2,
