@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 
 import { Calendar } from "./components/Calendar";
 import { DaySlotList } from "./components/DaySlotList";
@@ -10,10 +9,7 @@ import { CreateSlotModal } from "./components/CreateSlotModal";
 import { CATEGORY_OPTIONS } from "@/app/lib/categories";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
-import {
-  StrengthRankPicker,
-  type StrengthRank,
-} from "@/app/components/StrengthRankPicker";
+import { StrengthRankPicker } from "@/app/components/StrengthRankPicker";
 
 import {
   buildCalendarCells,
@@ -46,17 +42,12 @@ import {
   actionRow,
 } from "./styles/matchPageStyles";
 
-const stickySummaryOuter: React.CSSProperties = {
-  position: "sticky",
-  top: 72,
-  zIndex: 40,
+const summaryOuter: React.CSSProperties = {
   marginTop: 12,
   marginBottom: 12,
 };
 
 export default function MatchCalendarPage() {
-  const router = useRouter();
-
   const [monthDate, setMonthDate] = useState<Date>(() => startOfMonth(new Date()));
   const [selectedYmd, setSelectedYmd] = useState<string>(ymdToday());
   const [selectedSlotId, setSelectedSlotId] = useState<string>("");
@@ -110,15 +101,11 @@ export default function MatchCalendarPage() {
   }, [allTeams]);
 
   const filteredSlotsInMonth = useMemo(() => {
-    return slotsInMonth.filter((s: any) =>
-      matchesSlotFilters(s, teamMap, appliedFilters)
-    );
+    return slotsInMonth.filter((s: any) => matchesSlotFilters(s, teamMap, appliedFilters));
   }, [slotsInMonth, teamMap, appliedFilters]);
 
   const draftFilteredSlotsInMonth = useMemo(() => {
-    return slotsInMonth.filter((s: any) =>
-      matchesSlotFilters(s, teamMap, draftFilters)
-    );
+    return slotsInMonth.filter((s: any) => matchesSlotFilters(s, teamMap, draftFilters));
   }, [slotsInMonth, teamMap, draftFilters]);
 
   const countByDate = useMemo(() => {
@@ -190,12 +177,11 @@ export default function MatchCalendarPage() {
         />
       </section>
 
-      <div style={stickySummaryOuter}>
+      <div style={summaryOuter}>
         <div style={stickySummaryBar}>
           <div style={stickySummaryDate}>📅 {selectedYmd}</div>
           <div style={stickySummaryCount}>
-            入力中：{draftSlotsOnSelectedDate.length}件 / 表示中：
-            {slotsOnSelectedDate.length}件
+            入力中：{draftSlotsOnSelectedDate.length}件 / 表示中：{slotsOnSelectedDate.length}件
           </div>
         </div>
       </div>
@@ -282,7 +268,7 @@ export default function MatchCalendarPage() {
           />
 
           <StrengthRankPicker
-            value={draftStrengthFilter as StrengthRank | ""}
+            value={draftStrengthFilter}
             onChange={setDraftStrengthFilter}
             disabled={loading}
             title="強さ"
