@@ -192,7 +192,7 @@ const dayNumText: React.CSSProperties = {
 const countText: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 800,
-  color: "#111827",
+  color: "#065f46",
   lineHeight: 1.2,
 };
 
