@@ -15,8 +15,6 @@ export default function AppHeader() {
   const { user, loading, signOut } = useAuth();
   const [busy, setBusy] = React.useState(false);
 
-  if (pathname === "/login") return null;
-
   const onLogout = async () => {
     if (busy) return;
     setBusy(true);
@@ -42,18 +40,22 @@ export default function AppHeader() {
         </Link>
 
         <nav className="smh-nav">
-          <Link href="/match" className="smh-link">
-            試合
-          </Link>
-          <Link href="/teams/search" className="smh-link">
-            検索
-          </Link>
-          <Link href="/teams" className="smh-link">
-            マイページ
-          </Link>
-          <Link href="/chat" className="smh-link">
-            チャット
-          </Link>
+          {pathname !== "/login" ? (
+            <>
+              <Link href="/match" className="smh-link">
+                試合
+              </Link>
+              <Link href="/teams/search" className="smh-link">
+                検索
+              </Link>
+              <Link href="/teams" className="smh-link">
+                マイページ
+              </Link>
+              <Link href="/chat" className="smh-link">
+                チャット
+              </Link>
+            </>
+          ) : null}
 
           {loading ? (
             <span className="smh-user">...</span>
@@ -69,6 +71,10 @@ export default function AppHeader() {
                 {busy ? "..." : "ログアウト"}
               </button>
             </>
+          ) : pathname === "/login" ? (
+            <Link href="/" className="sh-btn smh-logout">
+              トップへ
+            </Link>
           ) : (
             <Link href="/login" className="sh-btn smh-logout">
               ログイン
