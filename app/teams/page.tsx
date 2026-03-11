@@ -353,8 +353,8 @@ function TeamsPageInner() {
 }
 
 const wrap: React.CSSProperties = {
-  padding: 24,
-  maxWidth: 960,
+  padding: 16,
+  maxWidth: 980,
   margin: "0 auto",
 };
 

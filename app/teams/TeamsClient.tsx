@@ -472,7 +472,7 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
   ]);
 
   return (
-    <main style={{ padding: 24, maxWidth: 980, margin: "0 auto" }}>
+    <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
       {toast ? (
         <div
           style={{
