@@ -553,7 +553,9 @@ export default function MatchCalendarPage() {
     try {
       const myTeamId = requestTeamId || (myTeams[0] as any)?.id;
 
-      if (!myTeamId) return setToast({ type: "error", text: "自分のチームがありません（先にチーム作成/選択）" });
+      if (!myTeamId) {
+        return setToast({ type: "error", text: "自分のチームがありません（先にチーム作成/選択）" });
+      }
       if (!otherTeamId) return setToast({ type: "error", text: "相手チーム情報がありません" });
       if (myTeamId === otherTeamId) return;
 
@@ -843,18 +845,16 @@ export default function MatchCalendarPage() {
             useChipUI={true}
           />
 
-          <div style={twoCols}>
-            <div style={label}>
-              <StrengthRankPicker
-                value={draftStrengthFilter}
-                onChange={setDraftStrengthFilter}
-                disabled={loading}
-                title="強さ"
-                allowEmpty={true}
-                emptyLabel="指定なし"
-              />
-            </div>
+          <StrengthRankPicker
+            value={draftStrengthFilter}
+            onChange={setDraftStrengthFilter}
+            disabled={loading}
+            title="強さ"
+            allowEmpty={true}
+            emptyLabel="指定なし"
+          />
 
+          <div style={twoCols}>
             <label style={label}>
               <span style={labelTitle}>グラウンド提供</span>
               <select
@@ -869,6 +869,25 @@ export default function MatchCalendarPage() {
               </select>
             </label>
 
+            <label style={label}>
+              <span style={labelTitle}>駐輪場</span>
+              <select
+                value={draftBikeFilter}
+                onChange={(e) =>
+                  setDraftBikeFilter(e.target.value as "all" | "あり" | "なし" | "不明")
+                }
+                className="sh-select"
+                disabled={loading}
+              >
+                <option value="all">指定なし</option>
+                <option value="あり">あり</option>
+                <option value="なし">なし</option>
+                <option value="不明">不明</option>
+              </select>
+            </label>
+          </div>
+
+          <div style={twoCols}>
             <label style={label}>
               <span style={labelTitle}>駐輪場台数（以上）</span>
               <select
@@ -1038,12 +1057,6 @@ const twoCols: React.CSSProperties = {
   display: "grid",
   gap: 12,
   gridTemplateColumns: "1fr 1fr",
-};
-
-const threeCols: React.CSSProperties = {
-  display: "grid",
-  gap: 12,
-  gridTemplateColumns: "repeat(3, 1fr)",
 };
 
 const actionRow: React.CSSProperties = {
