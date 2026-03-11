@@ -415,7 +415,9 @@ export default function TeamEditPage() {
           <div style={subSection}>
             <StrengthRankPicker
               value={strengthRank}
-              onChange={setStrengthRank}
+              onChange={(rank) => {
+                if (rank !== "") setStrengthRank(rank);
+              }}
               disabled={saving}
               title="強さ（ランク選択）"
             />
