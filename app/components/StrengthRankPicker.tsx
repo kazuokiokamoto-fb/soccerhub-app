@@ -16,7 +16,7 @@ type StrengthDef = {
 const STRENGTH_DEFS: StrengthDef[] = [
   {
     rank: "SS",
-    shortLabel: "都・県リーグ 1・2部",
+    shortLabel: "都・県リーグ1・2部",
     title: "公式戦上位レベルの強度を想定したカテゴリー",
     bullets: [
       "都・県リーグ上位所属",
@@ -29,7 +29,7 @@ const STRENGTH_DEFS: StrengthDef[] = [
   },
   {
     rank: "S",
-    shortLabel: "都・県リーグ 3・4部",
+    shortLabel: "都・県リーグ3・4部",
     title: "公式戦基準の競争力を持つカテゴリー",
     bullets: [
       "都・県リーグ所属",
@@ -42,7 +42,7 @@ const STRENGTH_DEFS: StrengthDef[] = [
   },
   {
     rank: "A",
-    shortLabel: "地域リーグ 1・2部",
+    shortLabel: "地域リーグ1・2部",
     title: "育成と競争のバランス型カテゴリー",
     bullets: [
       "地域リーグ上位所属",
@@ -55,7 +55,7 @@ const STRENGTH_DEFS: StrengthDef[] = [
   },
   {
     rank: "B",
-    shortLabel: "地域リーグ 3・4部",
+    shortLabel: "地域リーグ3・4部",
     title: "成長重視の実戦経験カテゴリー",
     bullets: [
       "地域リーグ所属",
@@ -81,10 +81,6 @@ const STRENGTH_DEFS: StrengthDef[] = [
   },
 ];
 
-/**
- * 既存DBの数値levelへ変換
- * SS=9, S=7, A=5, B=3, C=1
- */
 export function strengthRankToLegacyLevel(rank: StrengthRank): number {
   switch (rank) {
     case "SS":
@@ -102,12 +98,7 @@ export function strengthRankToLegacyLevel(rank: StrengthRank): number {
   }
 }
 
-/**
- * 既存DBの数値levelからランクへ復元
- */
-export function legacyLevelToStrengthRank(
-  level?: number | null
-): StrengthRank {
+export function legacyLevelToStrengthRank(level?: number | null): StrengthRank {
   if (level == null) return "A";
   if (level >= 8) return "SS";
   if (level >= 6) return "S";
@@ -153,33 +144,17 @@ export function StrengthRankPicker(props: {
             disabled={disabled}
             aria-pressed={value === ""}
             style={{
-              ...rankBtn,
-              ...(value === "" ? rankBtnActive : null),
+              ...rankRowBtn,
+              ...(value === "" ? rankRowBtnActive : null),
               ...(disabled ? disabledStyle : null),
             }}
           >
-            <div style={rankTopRow}>
-              <div style={{ ...rankMain, fontSize: 20 }}>{emptyLabel}</div>
-              {value === "" ? <span style={selectedBadge}>選択中</span> : null}
+            <div style={rankRowLeft}>
+              <span style={rankCode}>指定なし</span>
+              <span style={rankStars}>―――</span>
+              <span style={rankLabel}>条件を限定せずに表示</span>
             </div>
-
-            <div
-              style={{
-                ...starsText,
-                color: value === "" ? "#7a5a00" : "#7b7b7b",
-              }}
-            >
-              ―――
-            </div>
-
-            <div
-              style={{
-                ...shortLabelText,
-                color: value === "" ? "#145c2a" : "#4e5a53",
-              }}
-            >
-              条件を限定せずに表示
-            </div>
+            {value === "" ? <span style={selectedBadge}>選択中</span> : null}
           </button>
         ) : null}
 
@@ -194,30 +169,17 @@ export function StrengthRankPicker(props: {
               disabled={disabled}
               aria-pressed={active}
               style={{
-                ...rankBtn,
-                ...(active ? rankBtnActive : null),
+                ...rankRowBtn,
+                ...(active ? rankRowBtnActive : null),
                 ...(disabled ? disabledStyle : null),
               }}
             >
-              <div style={rankTopRow}>
-                <div style={rankMain}>{item.rank}</div>
-                {active ? <span style={selectedBadge}>選択中</span> : null}
+              <div style={rankRowLeft}>
+                <span style={rankCode}>{item.rank}</span>
+                <span style={rankStars}>{item.stars}</span>
+                <span style={rankLabel}>{item.shortLabel}</span>
               </div>
-
-              <div
-                style={{ ...starsText, color: active ? "#7a5a00" : "#7b7b7b" }}
-              >
-                {item.stars}
-              </div>
-
-              <div
-                style={{
-                  ...shortLabelText,
-                  color: active ? "#145c2a" : "#4e5a53",
-                }}
-              >
-                {item.shortLabel}
-              </div>
+              {active ? <span style={selectedBadge}>選択中</span> : null}
             </button>
           );
         })}
@@ -245,7 +207,6 @@ export function StrengthRankPicker(props: {
           <>
             <div style={detailTop}>
               <div style={rankPill}>{selected.rank}</div>
-
               <div style={{ display: "grid", gap: 4 }}>
                 <div style={detailShortLabel}>{selected.shortLabel}</div>
                 <div style={detailStars}>{selected.stars}</div>
@@ -300,65 +261,70 @@ const rankList: React.CSSProperties = {
   gap: 10,
 };
 
-const rankBtn: React.CSSProperties = {
-  padding: "14px 14px",
-  borderRadius: 14,
+const rankRowBtn: React.CSSProperties = {
+  width: "100%",
   border: "1px solid #dfe7e2",
-  background: "#ffffff",
+  borderRadius: 16,
+  background: "#fff",
+  padding: "14px 16px",
   cursor: "pointer",
   textAlign: "left",
-  transition: "all 0.15s ease",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
   boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
-  width: "100%",
 };
 
-const rankBtnActive: React.CSSProperties = {
+const rankRowBtnActive: React.CSSProperties = {
   borderColor: "#bfdcc7",
   background: "#eef7f0",
   boxShadow: "0 6px 14px rgba(20,92,42,0.08)",
 };
 
-const rankTopRow: React.CSSProperties = {
+const rankRowLeft: React.CSSProperties = {
   display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 8,
+  alignItems: "center",
+  gap: 12,
   flexWrap: "wrap",
+  minWidth: 0,
 };
 
-const rankMain: React.CSSProperties = {
-  fontSize: 24,
+const rankCode: React.CSSProperties = {
+  fontSize: 22,
   fontWeight: 900,
-  lineHeight: 1,
   color: "#16391f",
+  minWidth: 52,
+};
+
+const rankStars: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 800,
+  color: "#7a5a00",
+  letterSpacing: 0.2,
+  whiteSpace: "nowrap",
+};
+
+const rankLabel: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 700,
+  color: "#314137",
+  lineHeight: 1.5,
 };
 
 const selectedBadge: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  padding: "2px 8px",
-  minHeight: 22,
+  padding: "4px 10px",
+  minHeight: 28,
   borderRadius: 999,
   background: "#f5c542",
   color: "#3a2b00",
-  fontSize: 11,
+  fontSize: 12,
   fontWeight: 900,
   whiteSpace: "nowrap",
-};
-
-const starsText: React.CSSProperties = {
-  marginTop: 8,
-  fontSize: 12,
-  fontWeight: 800,
-  letterSpacing: 0.2,
-};
-
-const shortLabelText: React.CSSProperties = {
-  marginTop: 6,
-  fontSize: 13,
-  lineHeight: 1.55,
-  fontWeight: 700,
+  flexShrink: 0,
 };
 
 const detailCard: React.CSSProperties = {
