@@ -88,19 +88,6 @@ export default function LoginPage() {
       </section>
 
       <section style={card}>
-        <div style={brandRow}>
-          <div style={brandMark}>⚽</div>
-          <div>
-            <div style={brandTitle}>サカまち</div>
-            <div style={brandSub}>Soccer Match Hub</div>
-          </div>
-        </div>
-
-        <h2 style={title}>ログイン / 登録</h2>
-        <p style={desc}>
-          チーム登録や練習試合マッチングを始めるにはログインしてください。
-        </p>
-
         <div style={{ marginTop: 18 }}>
           <button
             type="button"
@@ -202,8 +189,7 @@ const heroBox: React.CSSProperties = {
   color: "#fff",
   padding: 18,
   boxShadow: "0 10px 28px rgba(20,92,42,0.16)",
-  marginTop: 12,
-  marginBottom: 16,
+  marginBottom: 12,
 };
 
 const heroTitle: React.CSSProperties = {
