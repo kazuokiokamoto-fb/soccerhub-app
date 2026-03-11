@@ -932,6 +932,13 @@ export default function MatchCalendarPage() {
       </section>
 
       <div ref={dayListRef} style={dayListWrap}>
+        <div style={stickySummaryBar}>
+          <div style={stickySummaryDate}>📅 {selectedYmd} の募集一覧</div>
+          <div style={stickySummaryCount}>
+            入力中：{draftSlotsOnSelectedDate.length}件 / 表示中：{slotsOnSelectedDate.length}件
+          </div>
+        </div>
+
         <div style={dayListHeaderRow}>
           <h2 style={dayListTitle}>📋 {selectedYmd} の募集一覧</h2>
 
@@ -979,18 +986,6 @@ export default function MatchCalendarPage() {
             >
               募集一覧へ
             </button>
-          </div>
-
-          <div style={stickyDraftCountWrap}>
-            <div style={draftCountBox}>
-              <div style={draftCountDate}>📅 {selectedYmd} の募集</div>
-              <div style={draftCountMain}>
-                入力中の条件だと：{draftSlotsOnSelectedDate.length}件
-              </div>
-              <div style={draftCountSub}>
-                現在表示中：{slotsOnSelectedDate.length}件
-              </div>
-            </div>
           </div>
 
           <label style={label}>
@@ -1201,6 +1196,34 @@ const dayListWrap: React.CSSProperties = {
   scrollMarginTop: 88,
 };
 
+const stickySummaryBar: React.CSSProperties = {
+  position: "sticky",
+  top: 10,
+  zIndex: 20,
+  marginBottom: 10,
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid #dbe7df",
+  background: "rgba(247,251,248,0.96)",
+  backdropFilter: "blur(8px)",
+  boxShadow: "0 6px 16px rgba(0,0,0,0.06)",
+};
+
+const stickySummaryDate: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 900,
+  color: "#1f5d30",
+  lineHeight: 1.4,
+};
+
+const stickySummaryCount: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 13,
+  fontWeight: 800,
+  color: "#166534",
+  lineHeight: 1.4,
+};
+
 const dayListHeaderRow: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -1240,40 +1263,6 @@ const filterTitle: React.CSSProperties = {
   fontSize: 18,
   fontWeight: 900,
   color: "#1f5d30",
-};
-
-const stickyDraftCountWrap: React.CSSProperties = {
-  position: "sticky",
-  top: 10,
-  zIndex: 15,
-};
-
-const draftCountBox: React.CSSProperties = {
-  border: "1px solid #dbe7df",
-  borderRadius: 12,
-  background: "rgba(247,251,248,0.96)",
-  backdropFilter: "blur(6px)",
-  padding: "10px 12px",
-  boxShadow: "0 4px 12px rgba(0,0,0,0.04)",
-};
-
-const draftCountDate: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 800,
-  color: "#5b6d61",
-  marginBottom: 4,
-};
-
-const draftCountMain: React.CSSProperties = {
-  fontSize: 14,
-  fontWeight: 900,
-  color: "#166534",
-};
-
-const draftCountSub: React.CSSProperties = {
-  marginTop: 4,
-  fontSize: 12,
-  color: "#6b7280",
 };
 
 const label: React.CSSProperties = {
