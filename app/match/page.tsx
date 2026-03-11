@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 
@@ -223,6 +223,8 @@ export default function MatchCalendarPage() {
   const [venueId, setVenueId] = useState<string>("");
 
   const [requestTeamId, setRequestTeamId] = useState<string>("");
+
+  const dayListRef = useRef<HTMLDivElement | null>(null);
 
   const teamMap = useMemo(() => {
     return new Map(allTeams.map((t) => [t.id, t]));
@@ -630,6 +632,13 @@ export default function MatchCalendarPage() {
     setOpenCreate(false);
     await loadMonth();
     setSelectedYmd(slotDate);
+
+    setTimeout(() => {
+      dayListRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
   };
 
   const requestSlot = async (slotId: string) => {
@@ -799,6 +808,13 @@ export default function MatchCalendarPage() {
           onSelectDate={(ymd) => {
             setSelectedYmd(ymd);
             setSelectedSlotId("");
+
+            setTimeout(() => {
+              dayListRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              });
+            }, 120);
           }}
           onPrevMonth={() => setMonthDate(addMonths(monthDate, -1))}
           onNextMonth={() => setMonthDate(addMonths(monthDate, 1))}
@@ -963,27 +979,33 @@ export default function MatchCalendarPage() {
         </div>
       </section>
 
-      <DaySlotList
-        selectedYmd={selectedYmd}
-        slots={slotsOnSelectedDate as any}
-        venues={venues}
-        myTeams={myTeams as any}
-        meId={meId}
-        requestsForMonth={requestsForMonth}
-        selectedSlotId={selectedSlotId}
-        onToggleDetail={(slotId) => setSelectedSlotId(selectedSlotId === slotId ? "" : slotId)}
-        requestTeamId={requestTeamId}
-        onChangeRequestTeamId={setRequestTeamId}
-        onRequestSlot={requestSlot}
-        onCancelMyRequest={cancelMyRequest}
-        selectedSlot={selectedSlot as any}
-        selectedSlotRequests={selectedSlotRequests as DbRequest[]}
-        isMineSlot={isMineSlot}
-        onAccept={accept}
-        onReject={reject}
-        onOpenChatWithTeam={openDmAndGo}
-        loading={loading}
-      />
+      <div ref={dayListRef} style={{ marginTop: 12, scrollMarginTop: 88 }}>
+        <h2 style={dayListTitle}>
+          📋 {selectedYmd} の募集一覧
+        </h2>
+
+        <DaySlotList
+          selectedYmd={selectedYmd}
+          slots={slotsOnSelectedDate as any}
+          venues={venues}
+          myTeams={myTeams as any}
+          meId={meId}
+          requestsForMonth={requestsForMonth}
+          selectedSlotId={selectedSlotId}
+          onToggleDetail={(slotId) => setSelectedSlotId(selectedSlotId === slotId ? "" : slotId)}
+          requestTeamId={requestTeamId}
+          onChangeRequestTeamId={setRequestTeamId}
+          onRequestSlot={requestSlot}
+          onCancelMyRequest={cancelMyRequest}
+          selectedSlot={selectedSlot as any}
+          selectedSlotRequests={selectedSlotRequests as DbRequest[]}
+          isMineSlot={isMineSlot}
+          onAccept={accept}
+          onReject={reject}
+          onOpenChatWithTeam={openDmAndGo}
+          loading={loading}
+        />
+      </div>
 
       <CreateSlotModal
         open={openCreate}
@@ -1084,6 +1106,13 @@ const appliedText: React.CSSProperties = {
   fontSize: 13,
   color: "#444",
   lineHeight: 1.7,
+};
+
+const dayListTitle: React.CSSProperties = {
+  margin: "0 0 10px",
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#1f5d30",
 };
 
 const toastBox: React.CSSProperties = {
