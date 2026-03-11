@@ -15,7 +15,13 @@ import {
   type StrengthRank,
 } from "@/app/components/StrengthRankPicker";
 
-import { buildCalendarCells, addMonths, startOfMonth, toMonthKey, ymdToday } from "./utils/date";
+import {
+  buildCalendarCells,
+  addMonths,
+  startOfMonth,
+  toMonthKey,
+  ymdToday,
+} from "./utils/date";
 import { matchesSlotFilters } from "./utils/filters";
 
 import { useMatchFilters } from "./hooks/useMatchFilters";
@@ -38,15 +44,15 @@ import {
   labelTitle,
   twoCols,
   actionRow,
-  appliedBox,
-  appliedTitle,
-  appliedText,
-  toastBox,
-  toastSuccess,
-  toastError,
-  toastInfo,
-  toastClose,
 } from "./styles/matchPageStyles";
+
+const stickySummaryOuter: React.CSSProperties = {
+  position: "sticky",
+  top: 72,
+  zIndex: 40,
+  marginTop: 12,
+  marginBottom: 12,
+};
 
 export default function MatchCalendarPage() {
   const router = useRouter();
@@ -54,7 +60,6 @@ export default function MatchCalendarPage() {
   const [monthDate, setMonthDate] = useState<Date>(() => startOfMonth(new Date()));
   const [selectedYmd, setSelectedYmd] = useState<string>(ymdToday());
   const [selectedSlotId, setSelectedSlotId] = useState<string>("");
-
   const [openCreate, setOpenCreate] = useState(false);
 
   const {
@@ -78,7 +83,6 @@ export default function MatchCalendarPage() {
     setDraftBikeCapacityMin,
     draftMemberCountMin,
     setDraftMemberCountMin,
-
     appliedFilters,
     draftFilters,
     hasDraftChanges,
@@ -167,24 +171,26 @@ export default function MatchCalendarPage() {
         </p>
       </section>
 
-      <Calendar
-        monthKey={monthKey}
-        loading={loading}
-        cells={calendarCells}
-        selectedYmd={selectedYmd}
-        countByDate={countByDate}
-        onSelectDate={(ymd) => {
-          setSelectedYmd(ymd);
-          setSelectedSlotId("");
-          scrollToDayList();
-        }}
-        onPrevMonth={() => setMonthDate(addMonths(monthDate, -1))}
-        onNextMonth={() => setMonthDate(addMonths(monthDate, 1))}
-        onCreateForDate={() => setOpenCreate(true)}
-        disableCreate={myTeams.length === 0}
-      />
+      <section style={{ marginTop: 12 }}>
+        <Calendar
+          monthKey={monthKey}
+          loading={loading}
+          cells={calendarCells}
+          selectedYmd={selectedYmd}
+          countByDate={countByDate}
+          onSelectDate={(ymd) => {
+            setSelectedYmd(ymd);
+            setSelectedSlotId("");
+            scrollToDayList();
+          }}
+          onPrevMonth={() => setMonthDate(addMonths(monthDate, -1))}
+          onNextMonth={() => setMonthDate(addMonths(monthDate, 1))}
+          onCreateForDate={() => setOpenCreate(true)}
+          disableCreate={myTeams.length === 0}
+        />
+      </section>
 
-      <div ref={dayListRef} style={dayListWrap}>
+      <div style={stickySummaryOuter}>
         <div style={stickySummaryBar}>
           <div style={stickySummaryDate}>📅 {selectedYmd}</div>
           <div style={stickySummaryCount}>
@@ -192,11 +198,13 @@ export default function MatchCalendarPage() {
             {slotsOnSelectedDate.length}件
           </div>
         </div>
+      </div>
 
+      <div ref={dayListRef} style={dayListWrap}>
         <div style={dayListHeaderRow}>
           <h2 style={dayListTitle}>募集一覧</h2>
 
-          <button className="sh-btn" onClick={scrollToFilter}>
+          <button type="button" className="sh-btn" onClick={scrollToFilter}>
             絞り込み
           </button>
         </div>
@@ -227,94 +235,154 @@ export default function MatchCalendarPage() {
       </div>
 
       <section ref={filterRef} style={filterWrap}>
-        <div style={filterHeaderRow}>
-          <h2 style={filterTitle}>絞り込み条件</h2>
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={filterHeaderRow}>
+            <h2 style={filterTitle}>絞り込み条件</h2>
 
-          <button className="sh-btn" onClick={scrollToDayList}>
-            募集一覧へ
-          </button>
-        </div>
+            <button type="button" className="sh-btn" onClick={scrollToDayList}>
+              募集一覧へ
+            </button>
+          </div>
 
-        <label style={label}>
-          <span style={labelTitle}>キーワード</span>
+          <label style={label}>
+            <span style={labelTitle}>キーワード</span>
 
-          <input
-            value={draftKeyword}
-            onChange={(e) => setDraftKeyword(e.target.value)}
-            className="sh-input"
+            <input
+              value={draftKeyword}
+              onChange={(e) => setDraftKeyword(e.target.value)}
+              className="sh-input"
+              disabled={loading}
+              placeholder="例：三宿 / 青 / 強度高め / U-12 / SS"
+            />
+          </label>
+
+          <AreaPickerKanto
+            title="エリア"
+            allowAll={true}
+            allLabel="関東（すべて）"
+            disabled={loading}
+            prefecture={draftPrefectureFilter}
+            setPrefecture={setDraftPrefectureFilter}
+            city={draftCityFilter}
+            setCity={setDraftCityFilter}
+            town={draftTownFilter}
+            setTown={setDraftTownFilter}
+            townOptional={true}
+            useChipUI={true}
           />
-        </label>
 
-        <AreaPickerKanto
-          title="エリア"
-          prefecture={draftPrefectureFilter}
-          setPrefecture={setDraftPrefectureFilter}
-          city={draftCityFilter}
-          setCity={setDraftCityFilter}
-          town={draftTownFilter}
-          setTown={setDraftTownFilter}
-        />
+          <CheckboxGroup
+            title="カテゴリ"
+            options={CATEGORY_OPTIONS}
+            values={draftCategoryFilter}
+            onChange={setDraftCategoryFilter}
+            columns={3}
+            disabled={loading}
+            useChipUI={true}
+          />
 
-        <CheckboxGroup
-          title="カテゴリ"
-          options={CATEGORY_OPTIONS}
-          values={draftCategoryFilter}
-          onChange={setDraftCategoryFilter}
-          columns={3}
-        />
+          <StrengthRankPicker
+            value={draftStrengthFilter as StrengthRank | ""}
+            onChange={setDraftStrengthFilter}
+            disabled={loading}
+            title="強さ"
+            allowEmpty={true}
+            emptyLabel="指定なし"
+          />
 
-        <StrengthRankPicker
-          value={draftStrengthFilter}
-          onChange={setDraftStrengthFilter}
-          title="強さ"
-        />
+          <div style={twoCols}>
+            <label style={label}>
+              <span style={labelTitle}>グラウンド</span>
 
-        <div style={twoCols}>
-          <label style={label}>
-            <span style={labelTitle}>グラウンド</span>
+              <select
+                value={draftGroundFilter}
+                onChange={(e) => setDraftGroundFilter(e.target.value as any)}
+                className="sh-select"
+                disabled={loading}
+              >
+                <option value="all">指定なし</option>
+                <option value="あり">あり</option>
+                <option value="なし">なし</option>
+              </select>
+            </label>
 
-            <select
-              value={draftGroundFilter}
-              onChange={(e) =>
-                setDraftGroundFilter(e.target.value as any)
-              }
-              className="sh-select"
+            <label style={label}>
+              <span style={labelTitle}>駐輪場</span>
+
+              <select
+                value={draftBikeFilter}
+                onChange={(e) => setDraftBikeFilter(e.target.value as any)}
+                className="sh-select"
+                disabled={loading}
+              >
+                <option value="all">指定なし</option>
+                <option value="あり">あり</option>
+                <option value="なし">なし</option>
+                <option value="不明">不明</option>
+              </select>
+            </label>
+          </div>
+
+          <div style={twoCols}>
+            <label style={label}>
+              <span style={labelTitle}>駐輪場台数（以上）</span>
+
+              <select
+                value={draftBikeCapacityMin}
+                onChange={(e) => setDraftBikeCapacityMin(e.target.value)}
+                className="sh-select"
+                disabled={loading}
+              >
+                <option value="">指定なし</option>
+                <option value="5">5台以上</option>
+                <option value="10">10台以上</option>
+                <option value="15">15台以上</option>
+                <option value="20">20台以上</option>
+                <option value="25">25台以上</option>
+                <option value="30">30台以上</option>
+                <option value="40">40台以上</option>
+                <option value="50">50台以上</option>
+              </select>
+            </label>
+
+            <label style={label}>
+              <span style={labelTitle}>チーム所属人数（以上）</span>
+
+              <select
+                value={draftMemberCountMin}
+                onChange={(e) => setDraftMemberCountMin(e.target.value)}
+                className="sh-select"
+                disabled={loading}
+              >
+                <option value="">指定なし</option>
+                <option value="5">5人以上</option>
+                <option value="10">10人以上</option>
+                <option value="15">15人以上</option>
+                <option value="20">20人以上</option>
+                <option value="25">25人以上</option>
+                <option value="30">30人以上</option>
+              </select>
+            </label>
+          </div>
+
+          <div style={actionRow}>
+            <button
+              type="button"
+              className="sh-btn sh-btn--primary"
+              disabled={!hasDraftChanges || loading}
             >
-              <option value="all">指定なし</option>
-              <option value="あり">あり</option>
-              <option value="なし">なし</option>
-            </select>
-          </label>
+              この条件で表示
+            </button>
 
-          <label style={label}>
-            <span style={labelTitle}>駐輪場</span>
-
-            <select
-              value={draftBikeFilter}
-              onChange={(e) =>
-                setDraftBikeFilter(e.target.value as any)
-              }
-              className="sh-select"
+            <button
+              type="button"
+              className="sh-btn"
+              onClick={loadMonth}
+              disabled={loading}
             >
-              <option value="all">指定なし</option>
-              <option value="あり">あり</option>
-              <option value="なし">なし</option>
-              <option value="不明">不明</option>
-            </select>
-          </label>
-        </div>
-
-        <div style={actionRow}>
-          <button
-            className="sh-btn sh-btn--primary"
-            disabled={!hasDraftChanges}
-          >
-            この条件で表示
-          </button>
-
-          <button className="sh-btn" onClick={loadMonth}>
-            再読み込み
-          </button>
+              再読み込み
+            </button>
+          </div>
         </div>
       </section>
 
