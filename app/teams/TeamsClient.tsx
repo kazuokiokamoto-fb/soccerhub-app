@@ -10,6 +10,7 @@ import { Team } from "../lib/types";
 import { CATEGORY_OPTIONS } from "@/app/lib/categories";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
+import { StrengthRankPicker, type StrengthRank } from "@/app/components/StrengthRankPicker";
 
 type DbTeam = {
   id: string;
@@ -167,7 +168,7 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
   const [draftCityFilter, setDraftCityFilter] = useState<string>("");
   const [draftTownFilter, setDraftTownFilter] = useState<string>("");
 
-  const [draftStrengthFilter, setDraftStrengthFilter] = useState<string>("");
+  const [draftStrengthFilter, setDraftStrengthFilter] = useState<StrengthRank | "">("");
   const [draftGroundFilter, setDraftGroundFilter] = useState<"all" | "あり" | "なし">("all");
   const [draftBikeFilter, setDraftBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
   const [draftBikeCapacityMin, setDraftBikeCapacityMin] = useState<string>("");
@@ -181,7 +182,7 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
   const [appliedCityFilter, setAppliedCityFilter] = useState<string>("");
   const [appliedTownFilter, setAppliedTownFilter] = useState<string>("");
 
-  const [appliedStrengthFilter, setAppliedStrengthFilter] = useState<string>("");
+  const [appliedStrengthFilter, setAppliedStrengthFilter] = useState<StrengthRank | "">("");
   const [appliedGroundFilter, setAppliedGroundFilter] = useState<"all" | "あり" | "なし">("all");
   const [appliedBikeFilter, setAppliedBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
   const [appliedBikeCapacityMin, setAppliedBikeCapacityMin] = useState<string>("");
@@ -476,22 +477,16 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
           />
 
           <div style={twoCols}>
-            <label style={label}>
-              <span style={labelTitle}>強さ</span>
-              <select
+            <div style={label}>
+              <StrengthRankPicker
                 value={draftStrengthFilter}
-                onChange={(e) => setDraftStrengthFilter(e.target.value)}
-                className="sh-select"
+                onChange={setDraftStrengthFilter}
                 disabled={loading}
-              >
-                <option value="">指定なし</option>
-                <option value="SS">SS</option>
-                <option value="S">S</option>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-              </select>
-            </label>
+                title="強さ"
+                allowEmpty={true}
+                emptyLabel="指定なし"
+              />
+            </div>
 
             <label style={label}>
               <span style={labelTitle}>グラウンド提供</span>

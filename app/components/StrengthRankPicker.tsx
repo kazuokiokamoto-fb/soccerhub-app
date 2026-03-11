@@ -108,25 +108,64 @@ export function legacyLevelToStrengthRank(level?: number | null): StrengthRank {
 }
 
 export function StrengthRankPicker(props: {
-  value: StrengthRank;
-  onChange: (rank: StrengthRank) => void;
+  value: StrengthRank | "";
+  onChange: (rank: StrengthRank | "") => void;
   disabled?: boolean;
   title?: string;
+  allowEmpty?: boolean;
+  emptyLabel?: string;
 }) {
-  const { value, onChange, disabled, title = "強さ（ランク選択）" } = props;
+  const {
+    value,
+    onChange,
+    disabled,
+    title = "強さ（ランク選択）",
+    allowEmpty = false,
+    emptyLabel = "指定なし",
+  } = props;
 
-  const selected = STRENGTH_DEFS.find((x) => x.rank === value) ?? STRENGTH_DEFS[2];
+  const selected =
+    STRENGTH_DEFS.find((x) => x.rank === value) ?? STRENGTH_DEFS[2];
 
   return (
     <div style={wrap}>
       <div style={head}>
         <div>
           <div style={titleStyle}>{title}</div>
-          <div style={subText}>ランクを押すと説明が切り替わります</div>
+          <div style={subText}>
+            ランクを押すと説明が切り替わります
+          </div>
         </div>
       </div>
 
       <div style={rankGrid}>
+        {allowEmpty ? (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            disabled={disabled}
+            aria-pressed={value === ""}
+            style={{
+              ...rankBtn,
+              ...(value === "" ? rankBtnActive : null),
+              ...(disabled ? disabledStyle : null),
+            }}
+          >
+            <div style={rankTopRow}>
+              <div style={{ ...rankMain, fontSize: 20 }}>{emptyLabel}</div>
+              {value === "" ? <span style={selectedBadge}>選択中</span> : null}
+            </div>
+
+            <div style={{ ...starsText, color: value === "" ? "#7a5a00" : "#7b7b7b" }}>
+              ―――
+            </div>
+
+            <div style={{ ...shortLabelText, color: value === "" ? "#145c2a" : "#4e5a53" }}>
+              条件を限定せずに表示
+            </div>
+          </button>
+        ) : null}
+
         {STRENGTH_DEFS.map((item) => {
           const active = item.rank === value;
 
@@ -160,29 +199,45 @@ export function StrengthRankPicker(props: {
         })}
       </div>
 
-      <div style={detailCard}>
-        <div style={detailTop}>
-          <div style={rankPill}>{selected.rank}</div>
-
-          <div style={{ display: "grid", gap: 4 }}>
-            <div style={detailShortLabel}>{selected.shortLabel}</div>
-            <div style={detailStars}>{selected.stars}</div>
+      {value === "" ? (
+        <div style={detailCard}>
+          <div style={detailTitle}>指定なし</div>
+          <div style={bulletList}>
+            <div style={bulletRow}>
+              <span style={bulletMark}>•</span>
+              <span>強さ条件を設定せずに検索します</span>
+            </div>
+            <div style={bulletRow}>
+              <span style={bulletMark}>•</span>
+              <span>より多くのチームや募集枠を表示したいときに使います</span>
+            </div>
           </div>
         </div>
+      ) : (
+        <div style={detailCard}>
+          <div style={detailTop}>
+            <div style={rankPill}>{selected.rank}</div>
 
-        <div style={detailTitle}>{selected.title}</div>
-
-        <div style={bulletList}>
-          {selected.bullets.map((b) => (
-            <div key={b} style={bulletRow}>
-              <span style={bulletMark}>•</span>
-              <span>{b}</span>
+            <div style={{ display: "grid", gap: 4 }}>
+              <div style={detailShortLabel}>{selected.shortLabel}</div>
+              <div style={detailStars}>{selected.stars}</div>
             </div>
-          ))}
-        </div>
+          </div>
 
-        <div style={noteBox}>{selected.note}</div>
-      </div>
+          <div style={detailTitle}>{selected.title}</div>
+
+          <div style={bulletList}>
+            {selected.bullets.map((b) => (
+              <div key={b} style={bulletRow}>
+                <span style={bulletMark}>•</span>
+                <span>{b}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={noteBox}>{selected.note}</div>
+        </div>
+      )}
     </div>
   );
 }

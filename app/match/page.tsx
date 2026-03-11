@@ -12,6 +12,7 @@ import { CreateSlotModal } from "./components/CreateSlotModal";
 import { CATEGORY_OPTIONS } from "@/app/lib/categories";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
+import { StrengthRankPicker, type StrengthRank } from "@/app/components/StrengthRankPicker";
 
 function ymdToday() {
   const d = new Date();
@@ -184,7 +185,7 @@ export default function MatchCalendarPage() {
   const [draftCityFilter, setDraftCityFilter] = useState<string>("");
   const [draftTownFilter, setDraftTownFilter] = useState<string>("");
   const [draftGroundFilter, setDraftGroundFilter] = useState<"all" | "あり" | "なし">("all");
-  const [draftStrengthFilter, setDraftStrengthFilter] = useState<string>("");
+  const [draftStrengthFilter, setDraftStrengthFilter] = useState<StrengthRank | "">("");
   const [draftBikeFilter, setDraftBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
   const [draftBikeCapacityMin, setDraftBikeCapacityMin] = useState<string>("");
   const [draftMemberCountMin, setDraftMemberCountMin] = useState<string>("");
@@ -195,7 +196,7 @@ export default function MatchCalendarPage() {
   const [cityFilter, setCityFilter] = useState<string>("");
   const [townFilter, setTownFilter] = useState<string>("");
   const [groundFilter, setGroundFilter] = useState<"all" | "あり" | "なし">("all");
-  const [strengthFilter, setStrengthFilter] = useState<string>("");
+  const [strengthFilter, setStrengthFilter] = useState<StrengthRank | "">("");
   const [bikeFilter, setBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
   const [bikeCapacityMin, setBikeCapacityMin] = useState<string>("");
   const [memberCountMin, setMemberCountMin] = useState<string>("");
@@ -843,22 +844,16 @@ export default function MatchCalendarPage() {
           />
 
           <div style={twoCols}>
-            <label style={label}>
-              <span style={labelTitle}>強さ</span>
-              <select
+            <div style={label}>
+              <StrengthRankPicker
                 value={draftStrengthFilter}
-                onChange={(e) => setDraftStrengthFilter(e.target.value)}
-                className="sh-select"
+                onChange={setDraftStrengthFilter}
                 disabled={loading}
-              >
-                <option value="">指定なし</option>
-                <option value="SS">SS</option>
-                <option value="S">S</option>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-              </select>
-            </label>
+                title="強さ"
+                allowEmpty={true}
+                emptyLabel="指定なし"
+              />
+            </div>
 
             <label style={label}>
               <span style={labelTitle}>グラウンド提供</span>
@@ -871,25 +866,6 @@ export default function MatchCalendarPage() {
                 <option value="all">指定なし</option>
                 <option value="あり">あり</option>
                 <option value="なし">なし</option>
-              </select>
-            </label>
-          </div>
-
-          <div style={threeCols}>
-            <label style={label}>
-              <span style={labelTitle}>駐輪場</span>
-              <select
-                value={draftBikeFilter}
-                onChange={(e) =>
-                  setDraftBikeFilter(e.target.value as "all" | "あり" | "なし" | "不明")
-                }
-                className="sh-select"
-                disabled={loading}
-              >
-                <option value="all">指定なし</option>
-                <option value="あり">あり</option>
-                <option value="なし">なし</option>
-                <option value="不明">不明</option>
               </select>
             </label>
 
