@@ -10,12 +10,9 @@ export function useMatchFilters() {
   const [draftPrefectureFilter, setDraftPrefectureFilter] = useState("");
   const [draftCityFilter, setDraftCityFilter] = useState("");
   const [draftTownFilter, setDraftTownFilter] = useState("");
-  const [draftGroundFilter, setDraftGroundFilter] =
-    useState<"all" | "あり" | "なし">("all");
-  const [draftStrengthFilter, setDraftStrengthFilter] =
-    useState<StrengthRank | "">("");
-  const [draftBikeFilter, setDraftBikeFilter] =
-    useState<"all" | "あり" | "なし" | "不明">("all");
+  const [draftGroundFilter, setDraftGroundFilter] = useState<"all" | "あり" | "なし">("all");
+  const [draftStrengthFilter, setDraftStrengthFilter] = useState<StrengthRank | "">("");
+  const [draftBikeFilter, setDraftBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
   const [draftBikeCapacityMin, setDraftBikeCapacityMin] = useState("");
   const [draftMemberCountMin, setDraftMemberCountMin] = useState("");
 
@@ -24,16 +21,13 @@ export function useMatchFilters() {
   const [prefectureFilter, setPrefectureFilter] = useState("");
   const [cityFilter, setCityFilter] = useState("");
   const [townFilter, setTownFilter] = useState("");
-  const [groundFilter, setGroundFilter] =
-    useState<"all" | "あり" | "なし">("all");
-  const [strengthFilter, setStrengthFilter] =
-    useState<StrengthRank | "">("");
-  const [bikeFilter, setBikeFilter] =
-    useState<"all" | "あり" | "なし" | "不明">("all");
+  const [groundFilter, setGroundFilter] = useState<"all" | "あり" | "なし">("all");
+  const [strengthFilter, setStrengthFilter] = useState<StrengthRank | "">("");
+  const [bikeFilter, setBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
   const [bikeCapacityMin, setBikeCapacityMin] = useState("");
   const [memberCountMin, setMemberCountMin] = useState("");
 
-  const appliedFilters: MatchFilters = useMemo(() => {
+  const appliedFilters = useMemo<MatchFilters>(() => {
     return {
       keyword,
       categoryFilter,
@@ -59,7 +53,7 @@ export function useMatchFilters() {
     memberCountMin,
   ]);
 
-  const draftFilters: MatchFilters = useMemo(() => {
+  const draftFilters = useMemo<MatchFilters>(() => {
     return {
       keyword: draftKeyword,
       categoryFilter: draftCategoryFilter,
@@ -121,6 +115,43 @@ export function useMatchFilters() {
     memberCountMin,
   ]);
 
+  const applyDraftToApplied = () => {
+    setKeyword(draftKeyword);
+    setCategoryFilter(draftCategoryFilter);
+    setPrefectureFilter(draftPrefectureFilter);
+    setCityFilter(draftCityFilter);
+    setTownFilter(draftTownFilter);
+    setGroundFilter(draftGroundFilter);
+    setStrengthFilter(draftStrengthFilter);
+    setBikeFilter(draftBikeFilter);
+    setBikeCapacityMin(draftBikeCapacityMin);
+    setMemberCountMin(draftMemberCountMin);
+  };
+
+  const clearAllFilters = () => {
+    setDraftKeyword("");
+    setDraftCategoryFilter([]);
+    setDraftPrefectureFilter("");
+    setDraftCityFilter("");
+    setDraftTownFilter("");
+    setDraftGroundFilter("all");
+    setDraftStrengthFilter("");
+    setDraftBikeFilter("all");
+    setDraftBikeCapacityMin("");
+    setDraftMemberCountMin("");
+
+    setKeyword("");
+    setCategoryFilter([]);
+    setPrefectureFilter("");
+    setCityFilter("");
+    setTownFilter("");
+    setGroundFilter("all");
+    setStrengthFilter("");
+    setBikeFilter("all");
+    setBikeCapacityMin("");
+    setMemberCountMin("");
+  };
+
   return {
     draftKeyword,
     setDraftKeyword,
@@ -143,29 +174,11 @@ export function useMatchFilters() {
     draftMemberCountMin,
     setDraftMemberCountMin,
 
-    keyword,
-    setKeyword,
-    categoryFilter,
-    setCategoryFilter,
-    prefectureFilter,
-    setPrefectureFilter,
-    cityFilter,
-    setCityFilter,
-    townFilter,
-    setTownFilter,
-    groundFilter,
-    setGroundFilter,
-    strengthFilter,
-    setStrengthFilter,
-    bikeFilter,
-    setBikeFilter,
-    bikeCapacityMin,
-    setBikeCapacityMin,
-    memberCountMin,
-    setMemberCountMin,
-
     appliedFilters,
     draftFilters,
     hasDraftChanges,
+
+    applyDraftToApplied,
+    clearAllFilters,
   };
 }
