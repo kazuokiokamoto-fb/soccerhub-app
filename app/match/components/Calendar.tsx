@@ -28,30 +28,53 @@ export function Calendar(props: {
     disableCreate,
   } = props;
 
+  const weekLabels = ["月", "火", "水", "木", "金", "土", "日"];
+
   return (
     <section style={{ ...card, marginTop: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+      <div style={headerRow}>
         <button className="sh-btn" type="button" onClick={onPrevMonth}>
           ← 前月
         </button>
 
-        <div style={{ fontWeight: 900, fontSize: 18 }}>{monthKey}</div>
+        <div style={monthTitle}>{monthKey}</div>
 
         <button className="sh-btn" type="button" onClick={onNextMonth}>
           次月 →
         </button>
       </div>
 
-      <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
-        {["月", "火", "水", "木", "金", "土", "日"].map((w) => (
-          <div key={w} style={{ textAlign: "center", fontWeight: 800, color: "#666", fontSize: 12 }}>
+      <div style={weekHeaderGrid}>
+        {weekLabels.map((w, i) => (
+          <div
+            key={w}
+            style={{
+              ...weekLabel,
+              color:
+                i === 5
+                  ? "#2563eb"
+                  : i === 6
+                  ? "#dc2626"
+                  : "#666666",
+            }}
+          >
             {w}
           </div>
         ))}
+      </div>
 
-        {cells.map((c) => {
+      <div style={calendarGrid}>
+        {cells.map((c, index) => {
           const n = countByDate.get(c.ymd) ?? 0;
           const isSelected = c.ymd === selectedYmd;
+          const weekday = index % 7;
+
+          const dayColor =
+            weekday === 5
+              ? "#2563eb"
+              : weekday === 6
+              ? "#dc2626"
+              : "#374151";
 
           return (
             <button
@@ -60,25 +83,34 @@ export function Calendar(props: {
               onClick={() => onSelectDate(c.ymd)}
               style={{
                 ...calCell,
-                opacity: c.inMonth ? 1 : 0.45,
-                border: isSelected ? "2px solid #86efac" : "1px solid #eee",
-                background: isSelected ? "#f0fdf4" : "white",
+                ...(isSelected ? calCellSelected : null),
+                opacity: c.inMonth ? 1 : 0.42,
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <div style={{ fontWeight: 900 }}>{c.dayNum}</div>
-                {n > 0 ? <div style={badge}>{n}</div> : null}
+              <div
+                style={{
+                  ...dayNumText,
+                  color: c.inMonth ? dayColor : "#9ca3af",
+                }}
+              >
+                {c.dayNum}
               </div>
-              <div style={{ marginTop: 6, color: "#777", fontSize: 12, textAlign: "left" }}>
-                {n > 0 ? "募集中" : "—"}
-              </div>
+
+              <div style={countText}>{n > 0 ? `${n}件` : "-"}</div>
+
+              <div style={statusText}>{n > 0 ? "募集中" : "-"}</div>
             </button>
           );
         })}
       </div>
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
-        <button className="sh-btn" type="button" onClick={() => onCreateForDate(selectedYmd)} disabled={loading || disableCreate}>
+      <div style={bottomRow}>
+        <button
+          className="sh-btn"
+          type="button"
+          onClick={() => onCreateForDate(selectedYmd)}
+          disabled={loading || disableCreate}
+        >
           ＋ {selectedYmd} に募集を作る
         </button>
       </div>
@@ -93,19 +125,86 @@ const card: React.CSSProperties = {
   background: "#fff",
 };
 
-const calCell: React.CSSProperties = {
-  padding: 10,
-  borderRadius: 12,
-  minHeight: 76,
-  cursor: "pointer",
-  textAlign: "left",
+const headerRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
 };
 
-const badge: React.CSSProperties = {
-  padding: "2px 8px",
-  borderRadius: 999,
-  background: "#111827",
-  color: "white",
-  fontSize: 12,
+const monthTitle: React.CSSProperties = {
   fontWeight: 900,
+  fontSize: 18,
+  lineHeight: 1.2,
+  textAlign: "center",
+};
+
+const weekHeaderGrid: React.CSSProperties = {
+  marginTop: 12,
+  display: "grid",
+  gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+  gap: 6,
+};
+
+const weekLabel: React.CSSProperties = {
+  textAlign: "center",
+  fontWeight: 800,
+  fontSize: 12,
+  minWidth: 0,
+};
+
+const calendarGrid: React.CSSProperties = {
+  marginTop: 6,
+  display: "grid",
+  gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+  gap: 6,
+};
+
+const calCell: React.CSSProperties = {
+  minWidth: 0,
+  width: "100%",
+  aspectRatio: "1 / 1.08",
+  padding: "8px 6px",
+  borderRadius: 12,
+  border: "1px solid #e5e7eb",
+  background: "#ffffff",
+  cursor: "pointer",
+  textAlign: "left",
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  overflow: "hidden",
+};
+
+const calCellSelected: React.CSSProperties = {
+  border: "2px solid #86efac",
+  background: "#f0fdf4",
+  boxShadow: "0 0 0 3px rgba(134,239,172,0.18)",
+};
+
+const dayNumText: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 14,
+  lineHeight: 1.1,
+};
+
+const countText: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#111827",
+  lineHeight: 1.2,
+};
+
+const statusText: React.CSSProperties = {
+  fontSize: 11,
+  color: "#6b7280",
+  lineHeight: 1.2,
+};
+
+const bottomRow: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  marginTop: 12,
 };

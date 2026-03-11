@@ -95,8 +95,10 @@ function guessPartsFromAreaText(area?: string | null): {
 } {
   const raw = (area ?? "").trim();
   if (!raw) return {};
+
   let prefecture = "";
   let rest = raw;
+
   for (const p of KANTO_PREFS) {
     if (raw.startsWith(p)) {
       prefecture = p;
@@ -104,22 +106,42 @@ function guessPartsFromAreaText(area?: string | null): {
       break;
     }
   }
+
   rest = rest.replace(/^\s+/, "");
+
   if (rest.includes("・")) {
     const [c, t] = rest.split("・").map((s) => s.trim());
-    return { prefecture: prefecture || undefined, city: c || undefined, town: t || undefined };
+    return {
+      prefecture: prefecture || undefined,
+      city: c || undefined,
+      town: t || undefined,
+    };
   }
+
   const tokens = rest.split(/\s+/).filter(Boolean);
   const city = tokens[0] ?? "";
   const town = tokens[1] ?? "";
-  return { prefecture: prefecture || undefined, city: city || undefined, town: town || undefined };
+
+  return {
+    prefecture: prefecture || undefined,
+    city: city || undefined,
+    town: town || undefined,
+  };
 }
 
 function slotParts(s: SlotEx) {
   const p = (s.prefecture ?? "").trim();
   const c = (s.city ?? "").trim();
   const t = (s.town ?? "").trim();
-  if (p || c || t) return { prefecture: p || undefined, city: c || undefined, town: t || undefined };
+
+  if (p || c || t) {
+    return {
+      prefecture: p || undefined,
+      city: c || undefined,
+      town: t || undefined,
+    };
+  }
+
   return guessPartsFromAreaText((s as any).area ?? "");
 }
 
@@ -225,6 +247,7 @@ export default function MatchCalendarPage() {
   const [requestTeamId, setRequestTeamId] = useState<string>("");
 
   const dayListRef = useRef<HTMLDivElement | null>(null);
+  const filterRef = useRef<HTMLDivElement | null>(null);
 
   const teamMap = useMemo(() => {
     return new Map(allTeams.map((t) => [t.id, t]));
@@ -240,6 +263,24 @@ export default function MatchCalendarPage() {
     supabase.auth.getUser().then(({ data }) => setMeId(data?.user?.id || ""));
   }, []);
 
+  const scrollToDayList = () => {
+    setTimeout(() => {
+      dayListRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
+  };
+
+  const scrollToFilter = () => {
+    setTimeout(() => {
+      filterRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
+  };
+
   const applyFilters = () => {
     setKeyword(draftKeyword);
     setCategoryFilter(draftCategoryFilter);
@@ -252,6 +293,8 @@ export default function MatchCalendarPage() {
     setBikeCapacityMin(draftBikeCapacityMin);
     setMemberCountMin(draftMemberCountMin);
     setSelectedSlotId("");
+
+    scrollToDayList();
   };
 
   const clearFilters = () => {
@@ -632,13 +675,7 @@ export default function MatchCalendarPage() {
     setOpenCreate(false);
     await loadMonth();
     setSelectedYmd(slotDate);
-
-    setTimeout(() => {
-      dayListRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 120);
+    scrollToDayList();
   };
 
   const requestSlot = async (slotId: string) => {
@@ -660,6 +697,7 @@ export default function MatchCalendarPage() {
       requester_user_id: uid,
       status: "pending" as const,
     };
+
     const { error } = await supabase.from("match_requests").insert(payload);
     if (error) {
       console.error(error);
@@ -695,15 +733,22 @@ export default function MatchCalendarPage() {
 
   const cancelMyRequest = async (requestId: string) => {
     if (!requestId) return;
+
     setLoadingMonth(true);
     setToast({ type: "info", text: "キャンセル中…" });
+
     try {
-      const { error } = await supabase.from("match_requests").update({ status: "cancelled" }).eq("id", requestId);
+      const { error } = await supabase
+        .from("match_requests")
+        .update({ status: "cancelled" })
+        .eq("id", requestId);
+
       if (error) {
         console.error(error);
         setToast({ type: "error", text: `キャンセル失敗: ${error.message}` });
         return;
       }
+
       setToast({ type: "success", text: "✅ 申込みをキャンセルしました" });
       await loadMonth();
     } finally {
@@ -724,16 +769,19 @@ export default function MatchCalendarPage() {
       d.setDate(1 - (prefix - i));
       cells.push({ ymd: formatYmd(d), dayNum: d.getDate(), inMonth: false });
     }
+
     for (let day = 1; day <= daysInMonth; day++) {
       const d = new Date(first.getFullYear(), first.getMonth(), day);
       cells.push({ ymd: formatYmd(d), dayNum: day, inMonth: true });
     }
+
     while (cells.length % 7 !== 0) {
       const lastYmd = cells[cells.length - 1]!.ymd;
       const dd = new Date(lastYmd + "T00:00:00");
       dd.setDate(dd.getDate() + 1);
       cells.push({ ymd: formatYmd(dd), dayNum: dd.getDate(), inMonth: false });
     }
+
     return cells;
   }, [monthDate]);
 
@@ -808,13 +856,7 @@ export default function MatchCalendarPage() {
           onSelectDate={(ymd) => {
             setSelectedYmd(ymd);
             setSelectedSlotId("");
-
-            setTimeout(() => {
-              dayListRef.current?.scrollIntoView({
-                behavior: "smooth",
-                block: "start",
-              });
-            }, 120);
+            scrollToDayList();
           }}
           onPrevMonth={() => setMonthDate(addMonths(monthDate, -1))}
           onNextMonth={() => setMonthDate(addMonths(monthDate, 1))}
@@ -823,8 +865,56 @@ export default function MatchCalendarPage() {
         />
       </section>
 
-      <section style={filterWrap}>
+      <div ref={dayListRef} style={dayListWrap}>
+        <div style={dayListHeaderRow}>
+          <h2 style={dayListTitle}>📋 {selectedYmd} の募集一覧</h2>
+
+          <button
+            type="button"
+            className="sh-btn"
+            onClick={scrollToFilter}
+          >
+            絞り込み
+          </button>
+        </div>
+
+        <DaySlotList
+          selectedYmd={selectedYmd}
+          slots={slotsOnSelectedDate as any}
+          venues={venues}
+          myTeams={myTeams as any}
+          meId={meId}
+          requestsForMonth={requestsForMonth}
+          selectedSlotId={selectedSlotId}
+          onToggleDetail={(slotId) => setSelectedSlotId(selectedSlotId === slotId ? "" : slotId)}
+          requestTeamId={requestTeamId}
+          onChangeRequestTeamId={setRequestTeamId}
+          onRequestSlot={requestSlot}
+          onCancelMyRequest={cancelMyRequest}
+          selectedSlot={selectedSlot as any}
+          selectedSlotRequests={selectedSlotRequests as DbRequest[]}
+          isMineSlot={isMineSlot}
+          onAccept={accept}
+          onReject={reject}
+          onOpenChatWithTeam={openDmAndGo}
+          loading={loading}
+        />
+      </div>
+
+      <section ref={filterRef} style={filterWrap}>
         <div style={{ display: "grid", gap: 12 }}>
+          <div style={filterHeaderRow}>
+            <h2 style={filterTitle}>絞り込み条件</h2>
+
+            <button
+              type="button"
+              className="sh-btn"
+              onClick={scrollToDayList}
+            >
+              募集一覧へ
+            </button>
+          </div>
+
           <label style={label}>
             <span style={labelTitle}>キーワード検索</span>
             <input
@@ -973,39 +1063,11 @@ export default function MatchCalendarPage() {
             </div>
           ) : (
             <div style={{ color: "#777", fontSize: 12 }}>
-              ※ 条件を入力して「この条件で表示」を押すと、カレンダーと募集一覧に反映されます
+              ※ 条件を入力して「この条件で表示」を押すと、募集一覧に反映されます
             </div>
           )}
         </div>
       </section>
-
-      <div ref={dayListRef} style={{ marginTop: 12, scrollMarginTop: 88 }}>
-        <h2 style={dayListTitle}>
-          📋 {selectedYmd} の募集一覧
-        </h2>
-
-        <DaySlotList
-          selectedYmd={selectedYmd}
-          slots={slotsOnSelectedDate as any}
-          venues={venues}
-          myTeams={myTeams as any}
-          meId={meId}
-          requestsForMonth={requestsForMonth}
-          selectedSlotId={selectedSlotId}
-          onToggleDetail={(slotId) => setSelectedSlotId(selectedSlotId === slotId ? "" : slotId)}
-          requestTeamId={requestTeamId}
-          onChangeRequestTeamId={setRequestTeamId}
-          onRequestSlot={requestSlot}
-          onCancelMyRequest={cancelMyRequest}
-          selectedSlot={selectedSlot as any}
-          selectedSlotRequests={selectedSlotRequests as DbRequest[]}
-          isMineSlot={isMineSlot}
-          onAccept={accept}
-          onReject={reject}
-          onOpenChatWithTeam={openDmAndGo}
-          loading={loading}
-        />
-      </div>
 
       <CreateSlotModal
         open={openCreate}
@@ -1056,6 +1118,27 @@ const heroDesc: React.CSSProperties = {
   fontSize: 14,
 };
 
+const dayListWrap: React.CSSProperties = {
+  marginTop: 12,
+  scrollMarginTop: 88,
+};
+
+const dayListHeaderRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+  marginBottom: 10,
+};
+
+const dayListTitle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#1f5d30",
+};
+
 const filterWrap: React.CSSProperties = {
   marginTop: 12,
   marginBottom: 12,
@@ -1063,6 +1146,22 @@ const filterWrap: React.CSSProperties = {
   borderRadius: 14,
   border: "1px solid #eee",
   background: "#fff",
+  scrollMarginTop: 88,
+};
+
+const filterHeaderRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const filterTitle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#1f5d30",
 };
 
 const label: React.CSSProperties = {
@@ -1106,13 +1205,6 @@ const appliedText: React.CSSProperties = {
   fontSize: 13,
   color: "#444",
   lineHeight: 1.7,
-};
-
-const dayListTitle: React.CSSProperties = {
-  margin: "0 0 10px",
-  fontSize: 18,
-  fontWeight: 900,
-  color: "#1f5d30",
 };
 
 const toastBox: React.CSSProperties = {
