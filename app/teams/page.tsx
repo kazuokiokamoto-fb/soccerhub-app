@@ -123,6 +123,7 @@ function TeamsPageInner() {
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setMeId(data?.user?.id ?? ""));
@@ -135,55 +136,174 @@ function TeamsPageInner() {
     return () => clearTimeout(t);
   }, [createdId]);
 
+  const loadUnreadChats = async (uid: string) => {
+    try {
+      const { data: myTeamsRows, error: teamErr } = await supabase
+        .from("teams")
+        .select("id")
+        .eq("owner_id", uid);
+
+      if (teamErr) {
+        console.error(teamErr);
+        setUnreadChatCount(0);
+        return;
+      }
+
+      const myTeamIds = new Set<string>(
+        (myTeamsRows ?? []).map((r: any) => r.id).filter(Boolean)
+      );
+
+      const { data: myMemberRows, error: cmErr } = await supabase
+        .from("chat_members")
+        .select("thread_id, last_read_at, created_at")
+        .eq("user_id", uid)
+        .order("created_at", { ascending: false });
+
+      if (cmErr) {
+        console.error(cmErr);
+        setUnreadChatCount(0);
+        return;
+      }
+
+      const threadIds = Array.from(
+        new Set((myMemberRows ?? []).map((r: any) => r.thread_id).filter(Boolean))
+      );
+
+      if (threadIds.length === 0) {
+        setUnreadChatCount(0);
+        return;
+      }
+
+      const myLastReadMap = new Map<string, string | null>();
+      for (const r of myMemberRows ?? []) {
+        if (!r.thread_id) continue;
+        if (!myLastReadMap.has(r.thread_id)) {
+          myLastReadMap.set(r.thread_id, (r as any).last_read_at ?? null);
+        }
+      }
+
+      const { data: membersRows, error: membersErr } = await supabase
+        .from("chat_members")
+        .select("thread_id, team_id")
+        .in("thread_id", threadIds);
+
+      if (membersErr) {
+        console.error(membersErr);
+        setUnreadChatCount(0);
+        return;
+      }
+
+      const memberTeamsByThread = new Map<string, string[]>();
+      for (const r of membersRows ?? []) {
+        const tid = (r as any).thread_id as string;
+        const teamId = (r as any).team_id as string;
+        if (!tid || !teamId) continue;
+        if (!memberTeamsByThread.has(tid)) memberTeamsByThread.set(tid, []);
+        memberTeamsByThread.get(tid)!.push(teamId);
+      }
+
+      const limit = Math.min(2000, Math.max(400, threadIds.length * 50));
+      const { data: msgRows, error: msgErr } = await supabase
+        .from("chat_messages")
+        .select("thread_id, body, created_at")
+        .in("thread_id", threadIds)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (msgErr) {
+        console.error(msgErr);
+        setUnreadChatCount(0);
+        return;
+      }
+
+      const lastMsgByThread = new Map<string, { created_at: string }>();
+      for (const m of (msgRows ?? []) as any[]) {
+        const tid = m.thread_id as string;
+        if (!tid) continue;
+        if (!lastMsgByThread.has(tid)) {
+          lastMsgByThread.set(tid, { created_at: m.created_at });
+        }
+      }
+
+      let unread = 0;
+
+      for (const tid of threadIds) {
+        const memberTeamIds = memberTeamsByThread.get(tid) ?? [];
+        const hasOtherTeam = memberTeamIds.some((id) => !myTeamIds.has(id));
+        if (!hasOtherTeam) continue;
+
+        const last = lastMsgByThread.get(tid);
+        const myLastReadAt = myLastReadMap.get(tid) ?? null;
+
+        if (!last?.created_at) continue;
+
+        let isUnread = false;
+        if (!myLastReadAt) isUnread = true;
+        else isUnread = new Date(last.created_at).getTime() > new Date(myLastReadAt).getTime();
+
+        if (isUnread) unread += 1;
+      }
+
+      setUnreadChatCount(unread);
+    } catch (e) {
+      console.error(e);
+      setUnreadChatCount(0);
+    }
+  };
+
   const load = async () => {
-  setLoading(true);
+    setLoading(true);
 
-  if (!meId) {
-    setTeams([]);
-    setLoading(false);
-    return;
-  }
+    if (!meId) {
+      setTeams([]);
+      setUnreadChatCount(0);
+      setLoading(false);
+      return;
+    }
 
-  let rowsData: any[] | null = null;
-  let rowsError: any = null;
+    let rowsData: any[] | null = null;
+    let rowsError: any = null;
 
-  const firstRes = await supabase
-    .from("teams")
-    .select(
-      "id,owner_id,name,area,area_kana,category,level,has_ground,bike_parking,bike_parking_capacity,uniform_main,uniform_sub,member_count,roster_by_grade,desired_dates,note,updated_at"
-    )
-    .eq("owner_id", meId)
-    .order("area_kana", { ascending: true })
-    .order("name", { ascending: true });
-
-  if (!firstRes.error) {
-    rowsData = firstRes.data as any[];
-  } else {
-    const fallbackRes = await supabase
+    const firstRes = await supabase
       .from("teams")
       .select(
-        "id,owner_id,name,area,area_kana,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at"
+        "id,owner_id,name,area,area_kana,category,level,has_ground,bike_parking,bike_parking_capacity,uniform_main,uniform_sub,member_count,roster_by_grade,desired_dates,note,updated_at"
       )
       .eq("owner_id", meId)
       .order("area_kana", { ascending: true })
       .order("name", { ascending: true });
 
-    rowsData = (fallbackRes.data ?? []) as any[];
-    rowsError = fallbackRes.error;
-  }
+    if (!firstRes.error) {
+      rowsData = firstRes.data as any[];
+    } else {
+      const fallbackRes = await supabase
+        .from("teams")
+        .select(
+          "id,owner_id,name,area,area_kana,category,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at"
+        )
+        .eq("owner_id", meId)
+        .order("area_kana", { ascending: true })
+        .order("name", { ascending: true });
 
-  if (rowsError) {
-    console.error(rowsError);
-    setToast({ type: "error", text: `読み込みに失敗しました: ${rowsError.message}` });
-    setTeams([]);
+      rowsData = (fallbackRes.data ?? []) as any[];
+      rowsError = fallbackRes.error;
+    }
+
+    if (rowsError) {
+      console.error(rowsError);
+      setToast({ type: "error", text: `読み込みに失敗しました: ${rowsError.message}` });
+      setTeams([]);
+      setLoading(false);
+      return;
+    }
+
+    const rows = (rowsData ?? []) as DbTeam[];
+    setTeams(rows.map((row) => toTeam(row)));
+
+    await loadUnreadChats(meId);
+
     setLoading(false);
-    return;
-  }
-
-  const rows = (rowsData ?? []) as DbTeam[];
-  setTeams(rows.map((row) => toTeam(row)));
-  setLoading(false);
-};
+  };
 
   useEffect(() => {
     load();
@@ -218,8 +338,8 @@ function TeamsPageInner() {
             ...(toast.type === "success"
               ? toastSuccess
               : toast.type === "error"
-              ? toastError
-              : toastInfo),
+                ? toastError
+                : toastInfo),
           }}
           role="status"
           aria-live="polite"
@@ -234,18 +354,27 @@ function TeamsPageInner() {
       <section style={heroBox}>
         <h1 style={heroTitle}>⚙️ マイページ</h1>
         <p style={heroDesc}>
-          自分が登録したチームの編集・削除ができます。
+          自分が登録したチームの編集・削除、チャット確認ができます。
         </p>
-
       </section>
 
-      <Link
-        href="/teams/new"
-        className="sh-btn sh-btn--primary"
-        style={{ marginTop: 12 }}
-      >
-        ＋チーム登録へ
-      </Link>
+      <div style={topActionRow}>
+        <Link
+          href="/teams/new"
+          className="sh-btn sh-btn--primary"
+        >
+          ＋チーム登録へ
+        </Link>
+
+        <Link href="/chat" className="sh-btn" style={chatLinkBtn}>
+          <span>💬 チャット</span>
+          {unreadChatCount > 0 ? (
+            <span style={unreadBadge}>未読 {unreadChatCount}件</span>
+          ) : (
+            <span style={readBadge}>未読なし</span>
+          )}
+        </Link>
+      </div>
 
       {!meId ? <div style={{ marginTop: 16, color: "#991b1b" }}>ログインが必要です。</div> : null}
 
@@ -366,15 +495,6 @@ const heroBox: React.CSSProperties = {
   boxShadow: "0 10px 28px rgba(20,92,42,0.20)",
 };
 
-const heroBadge: React.CSSProperties = {
-  display: "inline-flex",
-  padding: "6px 12px",
-  borderRadius: 999,
-  background: "rgba(255,255,255,0.14)",
-  fontSize: 12,
-  fontWeight: 800,
-};
-
 const heroTitle: React.CSSProperties = {
   margin: 0,
   fontSize: 28,
@@ -389,16 +509,46 @@ const heroDesc: React.CSSProperties = {
   color: "rgba(255,255,255,0.92)",
 };
 
-const title: React.CSSProperties = {
-  margin: "10px 0 0",
-  fontSize: 30,
-  fontWeight: 900,
+const topActionRow: React.CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  alignItems: "center",
 };
 
-const desc: React.CSSProperties = {
-  margin: "8px 0 0",
-  color: "rgba(255,255,255,0.92)",
-  lineHeight: 1.7,
+const chatLinkBtn: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 10,
+};
+
+const unreadBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 24,
+  padding: "0 10px",
+  borderRadius: 999,
+  border: "1px solid #bbf7d0",
+  background: "#ecfdf3",
+  color: "#166534",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const readBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 24,
+  padding: "0 10px",
+  borderRadius: 999,
+  border: "1px solid #e5e7eb",
+  background: "#f9fafb",
+  color: "#6b7280",
+  fontSize: 12,
+  fontWeight: 800,
 };
 
 const miniInfo: React.CSSProperties = {

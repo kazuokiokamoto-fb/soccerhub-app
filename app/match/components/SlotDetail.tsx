@@ -54,6 +54,21 @@ function badgeStyle(status: DbRequest["status"]): React.CSSProperties {
   };
 }
 
+function buildGoogleMapUrl(venue: DbVenue | null, slot: DbSlot) {
+  const q = [
+    venue?.name ?? "",
+    venue?.address ?? "",
+    venue?.area ?? "",
+    slot.area ?? "",
+  ]
+    .map((x) => String(x ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+
+  if (!q) return "";
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+}
+
 export function SlotDetail(props: {
   slot: DbSlot | null;
   hostTeam: DbTeam | null;
@@ -105,6 +120,7 @@ export function SlotDetail(props: {
   if (!slot) return null;
 
   const venue = venues.find((v) => v.id === slot.venue_id) || null;
+  const googleMapUrl = buildGoogleMapUrl(venue, slot);
 
   const acceptedReq = useMemo(() => {
     const accepted = requests.filter((r) => r.status === "accepted");
@@ -157,6 +173,20 @@ export function SlotDetail(props: {
           <br />
           募集状態：<b>{slot.is_closed ? "締切" : "募集中"}</b>
         </div>
+
+        {googleMapUrl ? (
+          <div style={{ marginTop: 10 }}>
+            <a
+              href={googleMapUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="sh-btn"
+              style={{ textDecoration: "none" }}
+            >
+              📍 Googleマップで開く
+            </a>
+          </div>
+        ) : null}
       </div>
 
       <div style={sectionBox}>
