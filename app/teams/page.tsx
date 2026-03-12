@@ -303,7 +303,7 @@ function TeamsPageInner() {
                       <div style={{ color: "#666", marginTop: 8, lineHeight: 1.8 }}>
                         📍 {t.area}
                         <br />
-                        💪 強さ {t.level} / 🏟 グラウンド {t.hasGround ? "あり" : "なし"} / 🚲 {bikeParkingText}
+                        💪 強さ {rank} / 🏟 グラウンド {t.hasGround ? "あり" : "なし"} / 🚲 {bikeParkingText}
                       </div>
                     </div>
 
