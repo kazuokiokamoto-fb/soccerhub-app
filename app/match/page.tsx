@@ -1,7 +1,8 @@
+// app/match/page.tsx
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "@/app/lib/supabase";
 
 import { Calendar } from "./components/Calendar";
 import { DaySlotList } from "./components/DaySlotList";
@@ -51,6 +52,18 @@ const summaryWrap: React.CSSProperties = {
   marginBottom: 12,
 };
 
+const summaryHeaderRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const createButtonInline: React.CSSProperties = {
+  flexShrink: 0,
+};
+
 const contentScrollBox: React.CSSProperties = {
   maxHeight: "calc(100vh - 260px)",
   overflowY: "auto",
@@ -58,12 +71,13 @@ const contentScrollBox: React.CSSProperties = {
 };
 
 export default function MatchCalendarPage() {
-  const router = useRouter();
-
   const [monthDate, setMonthDate] = useState<Date>(() => startOfMonth(new Date()));
   const [selectedYmd, setSelectedYmd] = useState<string>(ymdToday());
   const [selectedSlotId, setSelectedSlotId] = useState<string>("");
   const [openCreate, setOpenCreate] = useState(false);
+
+  const [requestTeamId, setRequestTeamId] = useState<string>("");
+  const [requestComment, setRequestComment] = useState<string>("");
 
   const {
     draftKeyword,
@@ -89,6 +103,7 @@ export default function MatchCalendarPage() {
     appliedFilters,
     draftFilters,
     hasDraftChanges,
+    applyDraftToApplied,
   } = useMatchFilters();
 
   const {
@@ -108,16 +123,22 @@ export default function MatchCalendarPage() {
   const dayListRef = useRef<HTMLDivElement | null>(null);
   const filterRef = useRef<HTMLDivElement | null>(null);
 
+  useEffect(() => {
+    if (!requestTeamId && myTeams[0]?.id) {
+      setRequestTeamId(myTeams[0].id);
+    }
+  }, [myTeams, requestTeamId]);
+
   const teamMap = useMemo(() => {
     return new Map(allTeams.map((t) => [t.id, t]));
   }, [allTeams]);
 
   const filteredSlotsInMonth = useMemo(() => {
-    return slotsInMonth.filter((s: any) => matchesSlotFilters(s, teamMap, appliedFilters));
+    return slotsInMonth.filter((s: any) => matchesSlotFilters(s, teamMap as any, appliedFilters));
   }, [slotsInMonth, teamMap, appliedFilters]);
 
   const draftFilteredSlotsInMonth = useMemo(() => {
-    return slotsInMonth.filter((s: any) => matchesSlotFilters(s, teamMap, draftFilters));
+    return slotsInMonth.filter((s: any) => matchesSlotFilters(s, teamMap as any, draftFilters));
   }, [slotsInMonth, teamMap, draftFilters]);
 
   const countByDate = useMemo(() => {
@@ -136,6 +157,25 @@ export default function MatchCalendarPage() {
   const draftSlotsOnSelectedDate = useMemo(() => {
     return draftFilteredSlotsInMonth.filter((s: any) => s.date === selectedYmd);
   }, [draftFilteredSlotsInMonth, selectedYmd]);
+
+  const selectedSlot = useMemo(() => {
+    return slotsInMonth.find((s) => s.id === selectedSlotId) || null;
+  }, [slotsInMonth, selectedSlotId]);
+
+  const selectedHostTeam = useMemo(() => {
+    if (!selectedSlot) return null;
+    return teamMap.get(selectedSlot.host_team_id) || null;
+  }, [selectedSlot, teamMap]);
+
+  const selectedSlotRequests = useMemo(() => {
+    if (!selectedSlotId) return [];
+    return requestsForMonth.filter((r) => r.slot_id === selectedSlotId);
+  }, [requestsForMonth, selectedSlotId]);
+
+  const isMineSlot = useMemo(() => {
+    if (!selectedSlot) return false;
+    return !!meId && selectedSlot.owner_id === meId;
+  }, [selectedSlot, meId]);
 
   const calendarCells = useMemo(() => {
     return buildCalendarCells(monthDate);
@@ -161,6 +201,183 @@ export default function MatchCalendarPage() {
     }, 120);
   };
 
+  const handleApplyAndJump = () => {
+    applyDraftToApplied();
+    setSelectedSlotId("");
+    scrollToDayList();
+  };
+
+  const openDmAndGo = async (otherTeamId: string) => {
+    try {
+      const myTeamId = requestTeamId || myTeams[0]?.id;
+
+      if (!myTeamId) {
+        alert("自分のチームがありません");
+        return;
+      }
+      if (!otherTeamId || myTeamId === otherTeamId) return;
+
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u?.user?.id;
+      if (!uid) {
+        alert("ログインが必要です");
+        return;
+      }
+
+      const { data, error } = await supabase.rpc("rpc_get_or_create_dm_thread", {
+        my_team_id: myTeamId,
+        other_team_id: otherTeamId,
+      });
+
+      if (error) {
+        console.error(error);
+        alert(`チャット開始に失敗しました: ${error.message}`);
+        return;
+      }
+
+      const threadId = data as string;
+      if (!threadId) {
+        alert("threadId が取得できませんでした");
+        return;
+      }
+
+      window.location.href = `/chat/${threadId}`;
+    } catch (e: any) {
+      console.error(e);
+      alert(`チャットを開けません: ${e?.message ?? "unknown error"}`);
+    }
+  };
+
+  const requestSlot = async (slotId: string) => {
+    const slot = slotsInMonth.find((s) => s.id === slotId);
+    if (!slot) return;
+
+    if (!requestTeamId) {
+      alert("申込みチームを選んでください");
+      return;
+    }
+
+    const { data: u } = await supabase.auth.getUser();
+    const uid = u?.user?.id;
+    if (!uid) {
+      alert("ログインが必要です");
+      return;
+    }
+
+    const already = requestsForMonth.some(
+      (r) => r.slot_id === slotId && r.requester_user_id === uid && r.status !== "cancelled"
+    );
+    if (already) {
+      alert("すでに申込み済みです");
+      return;
+    }
+
+    const confirmText = requestComment.trim()
+      ? `この内容で試合申込しますか？\n\nコメント:\n${requestComment.trim()}`
+      : "この内容で試合申込しますか？";
+
+    if (!window.confirm(confirmText)) return;
+
+    const payload = {
+      slot_id: slotId,
+      requester_team_id: requestTeamId,
+      requester_user_id: uid,
+      status: "pending" as const,
+      comment: requestComment.trim() || null,
+    };
+
+    const { data: insertedRequest, error } = await supabase
+      .from("match_requests")
+      .insert(payload)
+      .select("id,slot_id,requester_team_id,requester_user_id,status,comment,created_at")
+      .single();
+
+    if (error) {
+      console.error(error);
+      alert(`申込みに失敗しました: ${error.message}`);
+      return;
+    }
+
+    const hostTeam = teamMap.get(slot.host_team_id);
+    const requesterTeam = myTeams.find((t) => t.id === requestTeamId);
+
+    try {
+      const { data: threadId, error: rpcErr } = await supabase.rpc("rpc_get_or_create_dm_thread", {
+        my_team_id: requestTeamId,
+        other_team_id: slot.host_team_id,
+      });
+
+      if (!rpcErr && threadId) {
+        const bodyLines = [
+          "【試合申込】",
+          `${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
+          `カテゴリ: ${slot.category ?? "未設定"}`,
+          `エリア: ${slot.area ?? "未設定"}`,
+          `申込チーム: ${requesterTeam?.name ?? "未設定"}`,
+          `募集チーム: ${hostTeam?.name ?? "未設定"}`,
+          requestComment.trim() ? `コメント: ${requestComment.trim()}` : "",
+        ].filter(Boolean);
+
+        await supabase.from("chat_messages").insert({
+          thread_id: threadId,
+          sender_id: uid,
+          sender_team_id: requestTeamId,
+          body: bodyLines.join("\n"),
+        });
+      }
+    } catch (e) {
+      console.error("chat relay failed:", e);
+    }
+
+    setRequestComment("");
+    setSelectedSlotId(slotId);
+    await loadMonth();
+    scrollToDayList();
+  };
+
+  const updateRequestStatus = async (requestId: string, status: "accepted" | "rejected") => {
+    const { error } = await supabase
+      .from("match_requests")
+      .update({ status })
+      .eq("id", requestId);
+
+    if (error) {
+      console.error(error);
+      alert(`更新に失敗しました: ${error.message}`);
+      return false;
+    }
+    return true;
+  };
+
+  const accept = async (requestId: string) => {
+    const ok = await updateRequestStatus(requestId, "accepted");
+    if (!ok) return;
+    await loadMonth();
+  };
+
+  const reject = async (requestId: string) => {
+    const ok = await updateRequestStatus(requestId, "rejected");
+    if (!ok) return;
+    await loadMonth();
+  };
+
+  const cancelMyRequest = async (requestId: string) => {
+    if (!window.confirm("申込みをキャンセルしますか？")) return;
+
+    const { error } = await supabase
+      .from("match_requests")
+      .update({ status: "cancelled" })
+      .eq("id", requestId);
+
+    if (error) {
+      console.error(error);
+      alert(`キャンセル失敗: ${error.message}`);
+      return;
+    }
+
+    await loadMonth();
+  };
+
   return (
     <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
       <section style={heroBox}>
@@ -180,20 +397,34 @@ export default function MatchCalendarPage() {
           onSelectDate={(ymd) => {
             setSelectedYmd(ymd);
             setSelectedSlotId("");
+            setRequestComment("");
             scrollToDayList();
           }}
           onPrevMonth={() => setMonthDate(addMonths(monthDate, -1))}
           onNextMonth={() => setMonthDate(addMonths(monthDate, 1))}
-          onCreateForDate={() => setOpenCreate(true)}
           disableCreate={myTeams.length === 0}
         />
       </section>
 
       <div style={summaryWrap}>
         <div style={stickySummaryBar}>
-          <div style={stickySummaryDate}>📅 {selectedYmd}</div>
-          <div style={stickySummaryCount}>
-            入力中：{draftSlotsOnSelectedDate.length}件 / 表示中：{slotsOnSelectedDate.length}件
+          <div style={summaryHeaderRow}>
+            <div>
+              <div style={stickySummaryDate}>📅 {selectedYmd}</div>
+              <div style={stickySummaryCount}>
+                入力中の募集（{draftSlotsOnSelectedDate.length}件／{slotsOnSelectedDate.length}件）
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="sh-btn"
+              style={createButtonInline}
+              onClick={() => setOpenCreate(true)}
+              disabled={loading || myTeams.length === 0}
+            >
+              ＋募集を作る
+            </button>
           </div>
         </div>
       </div>
@@ -216,19 +447,24 @@ export default function MatchCalendarPage() {
             meId={meId}
             requestsForMonth={requestsForMonth}
             selectedSlotId={selectedSlotId}
-            onToggleDetail={(slotId) =>
-              setSelectedSlotId(selectedSlotId === slotId ? "" : slotId)
-            }
-            requestTeamId=""
-            onChangeRequestTeamId={() => {}}
-            onRequestSlot={() => {}}
-            onCancelMyRequest={() => {}}
-            selectedSlot={null}
-            selectedSlotRequests={[]}
-            isMineSlot={false}
-            onAccept={() => {}}
-            onReject={() => {}}
-            onOpenChatWithTeam={() => {}}
+            onToggleDetail={(slotId) => {
+              const next = selectedSlotId === slotId ? "" : slotId;
+              setSelectedSlotId(next);
+              setRequestComment("");
+            }}
+            requestTeamId={requestTeamId}
+            onChangeRequestTeamId={setRequestTeamId}
+            requestComment={requestComment}
+            onChangeRequestComment={setRequestComment}
+            onRequestSlot={requestSlot}
+            onCancelMyRequest={cancelMyRequest}
+            selectedSlot={selectedSlot}
+            selectedHostTeam={selectedHostTeam as any}
+            selectedSlotRequests={selectedSlotRequests}
+            isMineSlot={isMineSlot}
+            onAccept={accept}
+            onReject={reject}
+            onOpenChatWithTeam={openDmAndGo}
             loading={loading}
           />
         </div>
@@ -368,18 +604,10 @@ export default function MatchCalendarPage() {
               <button
                 type="button"
                 className="sh-btn sh-btn--primary"
+                onClick={handleApplyAndJump}
                 disabled={!hasDraftChanges || loading}
               >
-                この条件で表示
-              </button>
-
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={loadMonth}
-                disabled={loading}
-              >
-                再読み込み
+                この条件で一覧表示
               </button>
             </div>
           </div>

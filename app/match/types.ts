@@ -1,16 +1,30 @@
 // app/match/types.ts
+
 export type DbTeam = {
   id: string;
   name: string;
   area: string | null;
   category: string | null;
+  categories?: string[] | null;
+
+  prefecture?: string | null;
+  city?: string | null;
+  town?: string | null;
+
   level: number | null;
+  strength_rank?: string | null;
+
   has_ground: boolean | null;
   bike_parking: string | null;
+  bike_parking_capacity?: string | null;
+
   uniform_main: string | null;
   uniform_sub: string | null;
+
   roster_by_grade: Record<string, number> | null;
-  desired_dates: string[] | null;
+  member_count?: number | null;
+  desired_dates?: string[] | null;
+
   note: string | null;
   updated_at: string;
   owner_id: string | null;
@@ -30,12 +44,15 @@ export type DbSlot = {
   id: string;
   owner_id: string;
   host_team_id: string;
-  date: string; // YYYY-MM-DD
-  start_time: string; // HH:MM:SS or HH:MM
+  date: string;
+  start_time: string;
   end_time: string;
   venue_id: string | null;
   area: string | null;
   category: string | null;
+  prefecture?: string | null;
+  city?: string | null;
+  town?: string | null;
   created_at?: string;
 };
 
@@ -46,6 +63,7 @@ export type DbRequest = {
   requester_user_id: string;
   status: "pending" | "accepted" | "rejected" | "cancelled";
   created_at: string;
+  comment?: string | null;
 };
 
 export type Toast = { type: "success" | "error" | "info"; text: string };

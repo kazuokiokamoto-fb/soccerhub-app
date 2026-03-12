@@ -50,14 +50,15 @@ export function DaySlotList(props: {
 
   requestTeamId: string;
   onChangeRequestTeamId: (teamId: string) => void;
+  requestComment: string;
+  onChangeRequestComment: (v: string) => void;
   onRequestSlot: (slotId: string) => void;
 
   onCancelMyRequest: (requestId: string) => void;
-
-  // ✅ 追加：相手チームIDを渡すだけ。親がRPC→router.push(/chat/[threadId])
   onOpenChatWithTeam: (otherTeamId: string) => void | Promise<void>;
 
   selectedSlot: DbSlot | null;
+  selectedHostTeam: DbTeam | null;
   selectedSlotRequests: DbRequest[];
   isMineSlot: boolean;
   onAccept: (requestId: string) => void;
@@ -76,10 +77,13 @@ export function DaySlotList(props: {
     onToggleDetail,
     requestTeamId,
     onChangeRequestTeamId,
+    requestComment,
+    onChangeRequestComment,
     onRequestSlot,
     onCancelMyRequest,
     onOpenChatWithTeam,
     selectedSlot,
+    selectedHostTeam,
     selectedSlotRequests,
     isMineSlot,
     onAccept,
@@ -103,21 +107,6 @@ export function DaySlotList(props: {
               (r) => r.slot_id === s.id && r.requester_user_id === meId && r.status !== "cancelled"
             );
 
-            const disableRequest = !!loading || myTeams.length === 0 || isMine || !!myReq;
-
-            const requestBtnTitle = isMine
-              ? "自分の募集には申込みできません"
-              : myReq
-              ? "申込み済みです"
-              : myTeams.length === 0
-              ? "先に自分のチームを作ってください"
-              : "";
-
-            const canCancel = !!myReq && myReq.status === "pending";
-
-            // ✅ 相手の枠からチャット（常設DM）
-            const canChatFromList = !isMine && myTeams.length > 0;
-
             return (
               <div
                 key={s.id}
@@ -132,22 +121,12 @@ export function DaySlotList(props: {
                   <div style={{ fontWeight: 900, lineHeight: 1.35 }}>
                     {hhmm(s.start_time)}–{hhmm(s.end_time)} / {s.area || "エリア未設定"} /{" "}
                     {s.category || "カテゴリ未設定"} {isMine ? "（あなた）" : ""}
-                    {!isMine && myReq ? <span style={statusBadgeStyle(myReq.status)}>{myReq.status}</span> : null}
+                    {!isMine && myReq ? (
+                      <span style={statusBadgeStyle(myReq.status)}>{myReq.status}</span>
+                    ) : null}
                   </div>
 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    {canChatFromList ? (
-                      <button
-                        className="sh-btn"
-                        type="button"
-                        onClick={() => onOpenChatWithTeam((s as any).host_team_id)}
-                        disabled={!!loading}
-                        title="この募集を出している相手チームにチャットで連絡します"
-                      >
-                        💬 チャット
-                      </button>
-                    ) : null}
-
                     <button className="sh-btn" type="button" onClick={() => onToggleDetail(s.id)}>
                       {selectedSlotId === s.id ? "閉じる" : "詳細"}
                     </button>
@@ -159,62 +138,27 @@ export function DaySlotList(props: {
                   {venue ? `${venue.name}${venue.area ? `（${venue.area}）` : ""}` : "未設定"}
                 </div>
 
-                {!isMine ? (
-                  <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-                    <label style={{ display: "grid", gap: 6, flex: "1 1 220px" }}>
-                      <span style={{ fontSize: 12, color: "#555" }}>申込みチーム</span>
-                      <select
-                        value={requestTeamId}
-                        onChange={(e) => onChangeRequestTeamId(e.target.value)}
-                        style={input}
-                        disabled={!!loading || myTeams.length === 0 || !!myReq}
-                        title={myReq ? "申込み済みのため変更できません" : ""}
-                      >
-                        {myTeams.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button
-                        className="sh-btn"
-                        type="button"
-                        onClick={() => onRequestSlot(s.id)}
-                        disabled={disableRequest}
-                        title={requestBtnTitle}
-                      >
-                        {myReq ? `申込み済み（${myReq.status}）` : "対戦申込み（pending）"}
-                      </button>
-
-                      {canCancel ? (
-                        <button
-                          className="sh-btn"
-                          type="button"
-                          onClick={() => onCancelMyRequest(myReq!.id)}
-                          disabled={!!loading}
-                          title="申込みを取り消します"
-                        >
-                          申込みキャンセル
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-
                 {selectedSlotId === s.id ? (
                   <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eaeaea" }}>
                     <SlotDetail
                       slot={selectedSlot}
+                      hostTeam={selectedHostTeam}
                       isMine={isMineSlot}
                       meId={meId}
                       venues={venues}
                       requests={selectedSlotRequests}
+                      myTeams={myTeams}
+                      requestTeamId={requestTeamId}
+                      onChangeRequestTeamId={onChangeRequestTeamId}
+                      requestComment={requestComment}
+                      onChangeRequestComment={onChangeRequestComment}
+                      onRequestSlot={onRequestSlot}
+                      onCancelMyRequest={onCancelMyRequest}
+                      myRequest={myReq ?? null}
                       onAccept={onAccept}
                       onReject={onReject}
                       onOpenChat={onOpenChatWithTeam}
+                      loading={loading}
                     />
                   </div>
                 ) : null}
@@ -238,11 +182,4 @@ const h2: React.CSSProperties = {
   margin: 0,
   fontSize: 16,
   fontWeight: 900,
-};
-
-const input: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid #ddd",
-  background: "white",
 };

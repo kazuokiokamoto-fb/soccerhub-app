@@ -1,4 +1,3 @@
-// app/match/components/Calendar.tsx
 "use client";
 
 import React from "react";
@@ -12,20 +11,16 @@ export function Calendar(props: {
   onSelectDate: (ymd: string) => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
-  onCreateForDate: (ymd: string) => void;
   disableCreate?: boolean;
 }) {
   const {
     monthKey,
-    loading,
     cells,
     selectedYmd,
     countByDate,
     onSelectDate,
     onPrevMonth,
     onNextMonth,
-    onCreateForDate,
-    disableCreate,
   } = props;
 
   const weekLabels = ["月", "火", "水", "木", "金", "土", "日"];
@@ -97,17 +92,6 @@ export function Calendar(props: {
             </button>
           );
         })}
-      </div>
-
-      <div style={bottomRow}>
-        <button
-          className="sh-btn"
-          type="button"
-          onClick={() => onCreateForDate(selectedYmd)}
-          disabled={loading || disableCreate}
-        >
-          ＋ {selectedYmd} に募集を作る
-        </button>
       </div>
     </section>
   );
@@ -198,11 +182,4 @@ const statusText: React.CSSProperties = {
   fontSize: 9,
   color: "#6b7280",
   lineHeight: 1.2,
-};
-
-const bottomRow: React.CSSProperties = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
-  marginTop: 12,
 };

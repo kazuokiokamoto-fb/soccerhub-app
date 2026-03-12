@@ -1,9 +1,9 @@
+// app/match/hooks/useMatchData.ts
 "use client";
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
-import type { DbVenue, DbSlot, DbRequest } from "../types";
-import type { TeamFilterRow } from "../utils/filters";
+import type { DbVenue, DbSlot, DbRequest, DbTeam } from "../types";
 import { formatYmd, startOfMonth, endOfMonth } from "../utils/date";
 
 export function useMatchData(monthDate: Date) {
@@ -12,8 +12,8 @@ export function useMatchData(monthDate: Date) {
 
   const [meId, setMeId] = useState("");
 
-  const [allTeams, setAllTeams] = useState<TeamFilterRow[]>([]);
-  const [myTeams, setMyTeams] = useState<TeamFilterRow[]>([]);
+  const [allTeams, setAllTeams] = useState<DbTeam[]>([]);
+  const [myTeams, setMyTeams] = useState<DbTeam[]>([]);
   const [venues, setVenues] = useState<DbVenue[]>([]);
 
   const [slotsInMonth, setSlotsInMonth] = useState<DbSlot[]>([]);
@@ -34,10 +34,10 @@ export function useMatchData(monthDate: Date) {
     const { data: teamRows } = await supabase
       .from("teams")
       .select(
-        "id,owner_id,name,area,category,categories,prefecture,city,town,level,strength_rank,has_ground,bike_parking,bike_parking_capacity,member_count,uniform_main,uniform_sub,roster_by_grade,note,updated_at"
+        "id,owner_id,name,area,category,categories,prefecture,city,town,level,strength_rank,has_ground,bike_parking,bike_parking_capacity,member_count,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at"
       );
 
-    const teams = (teamRows ?? []) as TeamFilterRow[];
+    const teams = (teamRows ?? []) as DbTeam[];
 
     setAllTeams(teams);
     setMyTeams(teams.filter((t) => t.owner_id === uid));
@@ -48,7 +48,6 @@ export function useMatchData(monthDate: Date) {
       .order("name", { ascending: true });
 
     setVenues((venueRows ?? []) as DbVenue[]);
-
     setLoadingBase(false);
   }
 
@@ -69,10 +68,9 @@ export function useMatchData(monthDate: Date) {
       .order("start_time", { ascending: true });
 
     const slots = (slotRows ?? []) as DbSlot[];
-
     setSlotsInMonth(slots);
 
-    const slotIds = slots.map((s) => s.id);
+    const slotIds = slots.map((s) => s.id).filter(Boolean);
 
     if (slotIds.length === 0) {
       setRequestsForMonth([]);
@@ -82,12 +80,11 @@ export function useMatchData(monthDate: Date) {
 
     const { data: reqRows } = await supabase
       .from("match_requests")
-      .select("id,slot_id,requester_team_id,requester_user_id,status,created_at")
+      .select("id,slot_id,requester_team_id,requester_user_id,status,comment,created_at")
       .in("slot_id", slotIds)
       .order("created_at", { ascending: false });
 
     setRequestsForMonth((reqRows ?? []) as DbRequest[]);
-
     setLoadingMonth(false);
   }
 
