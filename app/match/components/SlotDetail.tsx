@@ -37,18 +37,18 @@ function badgeStyle(status: DbRequest["status"]): React.CSSProperties {
       status === "accepted"
         ? "#ecfdf3"
         : status === "rejected"
-        ? "#fef2f2"
-        : status === "cancelled"
-        ? "#f3f4f6"
-        : "#eff6ff",
+          ? "#fef2f2"
+          : status === "cancelled"
+            ? "#f3f4f6"
+            : "#eff6ff",
     color:
       status === "accepted"
         ? "#166534"
         : status === "rejected"
-        ? "#991b1b"
-        : status === "cancelled"
-        ? "#374151"
-        : "#1e3a8a",
+          ? "#991b1b"
+          : status === "cancelled"
+            ? "#374151"
+            : "#1e3a8a",
     fontSize: 12,
     fontWeight: 800,
   };
@@ -57,6 +57,7 @@ function badgeStyle(status: DbRequest["status"]): React.CSSProperties {
 export function SlotDetail(props: {
   slot: DbSlot | null;
   hostTeam: DbTeam | null;
+  allTeams: DbTeam[];
   isMine: boolean;
   meId: string;
   venues: DbVenue[];
@@ -73,6 +74,7 @@ export function SlotDetail(props: {
 
   onAccept: (requestId: string) => void;
   onReject: (requestId: string) => void;
+  onToggleClosed: (slotId: string, nextClosed: boolean) => void;
   onOpenChat: (otherTeamId: string) => void | Promise<void>;
 
   loading?: boolean;
@@ -80,6 +82,7 @@ export function SlotDetail(props: {
   const {
     slot,
     hostTeam,
+    allTeams,
     isMine,
     meId,
     venues,
@@ -94,6 +97,7 @@ export function SlotDetail(props: {
     myRequest,
     onAccept,
     onReject,
+    onToggleClosed,
     onOpenChat,
     loading,
   } = props;
@@ -130,6 +134,10 @@ export function SlotDetail(props: {
     `${hostTeam?.prefecture ?? ""} ${hostTeam?.city ?? ""}${hostTeam?.town ? "・" + hostTeam.town : ""}`.trim() ||
     "未設定";
 
+  const requesterTeamName = (teamId: string) => {
+    return allTeams.find((t) => t.id === teamId)?.name ?? teamId;
+  };
+
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div>
@@ -146,6 +154,8 @@ export function SlotDetail(props: {
           <br />
           グラウンド：
           {venue ? `${venue.name}${venue.address ? ` / ${venue.address}` : ""}` : "未設定"}
+          <br />
+          募集状態：<b>{slot.is_closed ? "締切" : "募集中"}</b>
         </div>
       </div>
 
@@ -176,12 +186,18 @@ export function SlotDetail(props: {
         <div style={sectionBox}>
           <div style={sectionTitle}>試合申込</div>
 
-          {myRequest ? (
+          {slot.is_closed ? (
+            <div style={{ color: "#991b1b", fontWeight: 700 }}>
+              この募集は締切済みです。
+            </div>
+          ) : myRequest ? (
             <div style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span>現在の申込状況：</span>
                 <span style={badgeStyle(myRequest.status)}>{myRequest.status}</span>
               </div>
+
+              <div><b>申込チーム：</b>{requesterTeamName(myRequest.requester_team_id)}</div>
 
               {myRequest.comment?.trim() ? (
                 <div style={commentBox}>
@@ -226,7 +242,7 @@ export function SlotDetail(props: {
                 <textarea
                   value={requestComment}
                   onChange={(e) => onChangeRequestComment(e.target.value)}
-                  placeholder="例：3/27の午前帯でぜひ対戦お願いします。交流重視でお願いしたいです。"
+                  placeholder="例：6年主体です。交流重視でぜひお願いします。"
                   style={textarea}
                   disabled={!!loading}
                 />
@@ -245,7 +261,20 @@ export function SlotDetail(props: {
             </div>
           )}
         </div>
-      ) : null}
+      ) : (
+        <div style={sectionBox}>
+          <div style={sectionTitle}>募集管理</div>
+
+          <button
+            className="sh-btn"
+            type="button"
+            onClick={() => onToggleClosed(slot.id, !slot.is_closed)}
+            disabled={!!loading}
+          >
+            {slot.is_closed ? "募集を再開する" : "募集を締切にする"}
+          </button>
+        </div>
+      )}
 
       {canShowChatButton ? (
         <div>
@@ -267,16 +296,12 @@ export function SlotDetail(props: {
                 <div key={r.id} style={requestRow}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <b>status</b>
+                      <b>{requesterTeamName(r.requester_team_id)}</b>
                       <span style={badgeStyle(r.status)}>{r.status}</span>
                     </div>
                     <div style={{ color: "#777", fontSize: 12 }}>
                       {new Date(r.created_at).toLocaleString()}
                     </div>
-                  </div>
-
-                  <div style={{ marginTop: 6, color: "#555", fontSize: 13 }}>
-                    requester_team_id: <b>{r.requester_team_id}</b>
                   </div>
 
                   {r.comment?.trim() ? (
@@ -291,7 +316,7 @@ export function SlotDetail(props: {
                       className="sh-btn"
                       type="button"
                       onClick={() => onAccept(r.id)}
-                      disabled={r.status !== "pending"}
+                      disabled={r.status !== "pending" || !!slot.is_closed}
                     >
                       承認
                     </button>

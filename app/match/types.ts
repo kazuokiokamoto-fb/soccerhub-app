@@ -32,7 +32,7 @@ export type DbTeam = {
 
 export type DbVenue = {
   id: string;
-  name: string;
+  name: string | null;
   area: string | null;
   address: string | null;
   has_parking: boolean | null;
@@ -53,6 +53,7 @@ export type DbSlot = {
   prefecture?: string | null;
   city?: string | null;
   town?: string | null;
+  is_closed?: boolean;
   created_at?: string;
 };
 
@@ -62,11 +63,14 @@ export type DbRequest = {
   requester_team_id: string;
   requester_user_id: string;
   status: "pending" | "accepted" | "rejected" | "cancelled";
-  created_at: string;
   comment?: string | null;
+  created_at: string;
 };
 
-export type Toast = { type: "success" | "error" | "info"; text: string };
+export type Toast = {
+  type: "success" | "error" | "info";
+  text: string;
+};
 
 export type DbThread = {
   id: string;

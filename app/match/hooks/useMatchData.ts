@@ -28,64 +28,68 @@ export function useMatchData(monthDate: Date) {
   async function loadBase() {
     setLoadingBase(true);
 
-    const { data: userData } = await supabase.auth.getUser();
-    const uid = userData?.user?.id || "";
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData?.user?.id || "";
 
-    const { data: teamRows } = await supabase
-      .from("teams")
-      .select(
-        "id,owner_id,name,area,category,categories,prefecture,city,town,level,strength_rank,has_ground,bike_parking,bike_parking_capacity,member_count,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at"
-      );
+      const { data: teamRows } = await supabase
+        .from("teams")
+        .select(
+          "id,owner_id,name,area,category,categories,prefecture,city,town,level,strength_rank,has_ground,bike_parking,bike_parking_capacity,member_count,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at"
+        );
 
-    const teams = (teamRows ?? []) as DbTeam[];
+      const teams = (teamRows ?? []) as DbTeam[];
+      setAllTeams(teams);
+      setMyTeams(teams.filter((t) => t.owner_id === uid));
 
-    setAllTeams(teams);
-    setMyTeams(teams.filter((t) => t.owner_id === uid));
+      const { data: venueRows } = await supabase
+        .from("venues")
+        .select("id,name,area,address,has_parking,has_bike_parking,note")
+        .order("name", { ascending: true });
 
-    const { data: venueRows } = await supabase
-      .from("venues")
-      .select("id,name,area,address,has_parking,has_bike_parking,note")
-      .order("name", { ascending: true });
-
-    setVenues((venueRows ?? []) as DbVenue[]);
-    setLoadingBase(false);
+      setVenues((venueRows ?? []) as DbVenue[]);
+    } finally {
+      setLoadingBase(false);
+    }
   }
 
   async function loadMonth() {
     setLoadingMonth(true);
 
-    const start = formatYmd(startOfMonth(monthDate));
-    const end = formatYmd(endOfMonth(monthDate));
+    try {
+      const start = formatYmd(startOfMonth(monthDate));
+      const end = formatYmd(endOfMonth(monthDate));
 
-    const { data: slotRows } = await supabase
-      .from("match_slots")
-      .select(
-        "id,owner_id,host_team_id,date,start_time,end_time,venue_id,area,category,prefecture,city,town,created_at"
-      )
-      .gte("date", start)
-      .lte("date", end)
-      .order("date", { ascending: true })
-      .order("start_time", { ascending: true });
+      const { data: slotRows } = await supabase
+        .from("match_slots")
+        .select(
+          "id,owner_id,host_team_id,date,start_time,end_time,venue_id,area,category,prefecture,city,town,is_closed,created_at"
+        )
+        .gte("date", start)
+        .lte("date", end)
+        .order("date", { ascending: true })
+        .order("start_time", { ascending: true });
 
-    const slots = (slotRows ?? []) as DbSlot[];
-    setSlotsInMonth(slots);
+      const slots = (slotRows ?? []) as DbSlot[];
+      setSlotsInMonth(slots);
 
-    const slotIds = slots.map((s) => s.id).filter(Boolean);
+      const slotIds = slots.map((s) => s.id).filter(Boolean);
 
-    if (slotIds.length === 0) {
-      setRequestsForMonth([]);
+      if (slotIds.length === 0) {
+        setRequestsForMonth([]);
+        return;
+      }
+
+      const { data: reqRows } = await supabase
+        .from("match_requests")
+        .select("id,slot_id,requester_team_id,requester_user_id,status,comment,created_at")
+        .in("slot_id", slotIds)
+        .order("created_at", { ascending: false });
+
+      setRequestsForMonth((reqRows ?? []) as DbRequest[]);
+    } finally {
       setLoadingMonth(false);
-      return;
     }
-
-    const { data: reqRows } = await supabase
-      .from("match_requests")
-      .select("id,slot_id,requester_team_id,requester_user_id,status,comment,created_at")
-      .in("slot_id", slotIds)
-      .order("created_at", { ascending: false });
-
-    setRequestsForMonth((reqRows ?? []) as DbRequest[]);
-    setLoadingMonth(false);
   }
 
   useEffect(() => {

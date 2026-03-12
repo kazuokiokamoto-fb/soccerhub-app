@@ -70,6 +70,27 @@ const contentScrollBox: React.CSSProperties = {
   WebkitOverflowScrolling: "touch",
 };
 
+function hhmm(v: string) {
+  if (!v) return "";
+  return v.slice(0, 5);
+}
+
+function buildAreaText(
+  team?: {
+    area?: string | null;
+    prefecture?: string | null;
+    city?: string | null;
+    town?: string | null;
+  } | null,
+  fallback?: string
+) {
+  const fromTeam =
+    (team?.area ?? "").trim() ||
+    `${team?.prefecture ?? ""} ${team?.city ?? ""}${team?.town ? "・" + team.town : ""}`.trim();
+
+  return fromTeam || (fallback ?? "").trim() || null;
+}
+
 export default function MatchCalendarPage() {
   const [monthDate, setMonthDate] = useState<Date>(() => startOfMonth(new Date()));
   const [selectedYmd, setSelectedYmd] = useState<string>(ymdToday());
@@ -78,6 +99,15 @@ export default function MatchCalendarPage() {
 
   const [requestTeamId, setRequestTeamId] = useState<string>("");
   const [requestComment, setRequestComment] = useState<string>("");
+
+  // CreateSlotModal 接続用
+  const [hostTeamId, setHostTeamId] = useState<string>("");
+  const [slotDate, setSlotDate] = useState<string>(ymdToday());
+  const [startTime, setStartTime] = useState<string>("13:00");
+  const [endTime, setEndTime] = useState<string>("15:00");
+  const [slotArea, setSlotArea] = useState<string>("");
+  const [slotCategory, setSlotCategory] = useState<string>("U-12");
+  const [venueId, setVenueId] = useState<string>("");
 
   const {
     draftKeyword,
@@ -129,8 +159,24 @@ export default function MatchCalendarPage() {
     }
   }, [myTeams, requestTeamId]);
 
+  useEffect(() => {
+    if (!hostTeamId && myTeams[0]?.id) {
+      setHostTeamId(myTeams[0].id);
+    }
+    if (!slotArea && myTeams[0]?.area) {
+      setSlotArea(myTeams[0].area ?? "");
+    }
+    if (myTeams[0]?.category && !slotCategory) {
+      setSlotCategory(myTeams[0].category ?? "U-12");
+    }
+  }, [myTeams, hostTeamId, slotArea, slotCategory]);
+
   const teamMap = useMemo(() => {
     return new Map(allTeams.map((t) => [t.id, t]));
+  }, [allTeams]);
+
+  const requestTeamNameMap = useMemo(() => {
+    return new Map(allTeams.map((t) => [t.id, t.name || "チーム未設定"]));
   }, [allTeams]);
 
   const filteredSlotsInMonth = useMemo(() => {
@@ -207,40 +253,55 @@ export default function MatchCalendarPage() {
     scrollToDayList();
   };
 
+  const resetCreateFormForDate = (ymd: string) => {
+    const firstTeam = myTeams[0] ?? null;
+    setSlotDate(ymd);
+    setHostTeamId(firstTeam?.id ?? "");
+    setStartTime("13:00");
+    setEndTime("15:00");
+    setSlotArea(firstTeam?.area ?? "");
+    setSlotCategory(firstTeam?.category ?? "U-12");
+    setVenueId("");
+  };
+
+  const getOrCreateDmThread = async (myTeamId: string, otherTeamId: string) => {
+    const { data, error } = await supabase.rpc("rpc_get_or_create_dm_thread", {
+      my_team_id: myTeamId,
+      other_team_id: otherTeamId,
+    });
+
+    if (error) throw error;
+    return data as string;
+  };
+
+  const insertChatMessage = async (params: {
+    threadId: string;
+    senderId: string;
+    senderTeamId: string | null;
+    body: string;
+  }) => {
+    const { threadId, senderId, senderTeamId, body } = params;
+
+    const { error } = await supabase.from("chat_messages").insert({
+      thread_id: threadId,
+      sender_id: senderId,
+      sender_team_id: senderTeamId,
+      body,
+    });
+
+    if (error) throw error;
+  };
+
   const openDmAndGo = async (otherTeamId: string) => {
     try {
       const myTeamId = requestTeamId || myTeams[0]?.id;
-
       if (!myTeamId) {
         alert("自分のチームがありません");
         return;
       }
       if (!otherTeamId || myTeamId === otherTeamId) return;
 
-      const { data: u } = await supabase.auth.getUser();
-      const uid = u?.user?.id;
-      if (!uid) {
-        alert("ログインが必要です");
-        return;
-      }
-
-      const { data, error } = await supabase.rpc("rpc_get_or_create_dm_thread", {
-        my_team_id: myTeamId,
-        other_team_id: otherTeamId,
-      });
-
-      if (error) {
-        console.error(error);
-        alert(`チャット開始に失敗しました: ${error.message}`);
-        return;
-      }
-
-      const threadId = data as string;
-      if (!threadId) {
-        alert("threadId が取得できませんでした");
-        return;
-      }
-
+      const threadId = await getOrCreateDmThread(myTeamId, otherTeamId);
       window.location.href = `/chat/${threadId}`;
     } catch (e: any) {
       console.error(e);
@@ -251,6 +312,19 @@ export default function MatchCalendarPage() {
   const requestSlot = async (slotId: string) => {
     const slot = slotsInMonth.find((s) => s.id === slotId);
     if (!slot) return;
+
+    if (slot.is_closed) {
+      alert("この募集は締切です");
+      return;
+    }
+
+    const acceptedExists = requestsForMonth.some(
+      (r) => r.slot_id === slotId && r.status === "accepted"
+    );
+    if (acceptedExists) {
+      alert("この募集はすでに成立済みです");
+      return;
+    }
 
     if (!requestTeamId) {
       alert("申込みチームを選んでください");
@@ -286,11 +360,7 @@ export default function MatchCalendarPage() {
       comment: requestComment.trim() || null,
     };
 
-    const { data: insertedRequest, error } = await supabase
-      .from("match_requests")
-      .insert(payload)
-      .select("id,slot_id,requester_team_id,requester_user_id,status,comment,created_at")
-      .single();
+    const { error } = await supabase.from("match_requests").insert(payload);
 
     if (error) {
       console.error(error);
@@ -302,29 +372,24 @@ export default function MatchCalendarPage() {
     const requesterTeam = myTeams.find((t) => t.id === requestTeamId);
 
     try {
-      const { data: threadId, error: rpcErr } = await supabase.rpc("rpc_get_or_create_dm_thread", {
-        my_team_id: requestTeamId,
-        other_team_id: slot.host_team_id,
+      const threadId = await getOrCreateDmThread(requestTeamId, slot.host_team_id);
+
+      const bodyLines = [
+        "【試合申込】",
+        `${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
+        `カテゴリ: ${slot.category ?? "未設定"}`,
+        `エリア: ${slot.area ?? "未設定"}`,
+        `申込チーム: ${requesterTeam?.name ?? "未設定"}`,
+        `募集チーム: ${hostTeam?.name ?? "未設定"}`,
+        requestComment.trim() ? `コメント: ${requestComment.trim()}` : "",
+      ].filter(Boolean);
+
+      await insertChatMessage({
+        threadId,
+        senderId: uid,
+        senderTeamId: requestTeamId,
+        body: bodyLines.join("\n"),
       });
-
-      if (!rpcErr && threadId) {
-        const bodyLines = [
-          "【試合申込】",
-          `${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
-          `カテゴリ: ${slot.category ?? "未設定"}`,
-          `エリア: ${slot.area ?? "未設定"}`,
-          `申込チーム: ${requesterTeam?.name ?? "未設定"}`,
-          `募集チーム: ${hostTeam?.name ?? "未設定"}`,
-          requestComment.trim() ? `コメント: ${requestComment.trim()}` : "",
-        ].filter(Boolean);
-
-        await supabase.from("chat_messages").insert({
-          thread_id: threadId,
-          sender_id: uid,
-          sender_team_id: requestTeamId,
-          body: bodyLines.join("\n"),
-        });
-      }
     } catch (e) {
       console.error("chat relay failed:", e);
     }
@@ -336,6 +401,12 @@ export default function MatchCalendarPage() {
   };
 
   const updateRequestStatus = async (requestId: string, status: "accepted" | "rejected") => {
+    const target = requestsForMonth.find((r) => r.id === requestId);
+    if (!target) return false;
+
+    const slot = slotsInMonth.find((s) => s.id === target.slot_id);
+    if (!slot) return false;
+
     const { error } = await supabase
       .from("match_requests")
       .update({ status })
@@ -346,6 +417,42 @@ export default function MatchCalendarPage() {
       alert(`更新に失敗しました: ${error.message}`);
       return false;
     }
+
+    if (status === "accepted") {
+      await supabase
+        .from("match_slots")
+        .update({ is_closed: true })
+        .eq("id", target.slot_id);
+
+      try {
+        const { data: u } = await supabase.auth.getUser();
+        const uid = u?.user?.id;
+        if (uid) {
+          const threadId = await getOrCreateDmThread(slot.host_team_id, target.requester_team_id);
+
+          const requesterTeamName =
+            requestTeamNameMap.get(target.requester_team_id) ?? "相手チーム";
+          const hostTeamName =
+            requestTeamNameMap.get(slot.host_team_id) ?? "募集チーム";
+
+          await insertChatMessage({
+            threadId,
+            senderId: uid,
+            senderTeamId: slot.host_team_id,
+            body: [
+              "【試合申込 承認】",
+              `${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
+              `募集チーム: ${hostTeamName}`,
+              `申込チーム: ${requesterTeamName}`,
+              "申込が承認されました。詳細はこのチャットで調整してください。",
+            ].join("\n"),
+          });
+        }
+      } catch (e) {
+        console.error("accepted auto chat failed:", e);
+      }
+    }
+
     return true;
   };
 
@@ -364,6 +471,9 @@ export default function MatchCalendarPage() {
   const cancelMyRequest = async (requestId: string) => {
     if (!window.confirm("申込みをキャンセルしますか？")) return;
 
+    const req = requestsForMonth.find((r) => r.id === requestId);
+    if (!req) return;
+
     const { error } = await supabase
       .from("match_requests")
       .update({ status: "cancelled" })
@@ -375,7 +485,103 @@ export default function MatchCalendarPage() {
       return;
     }
 
+    try {
+      const slot = slotsInMonth.find((s) => s.id === req.slot_id);
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u?.user?.id;
+      if (slot && uid) {
+        const threadId = await getOrCreateDmThread(req.requester_team_id, slot.host_team_id);
+        const requesterTeamName =
+          requestTeamNameMap.get(req.requester_team_id) ?? "申込チーム";
+
+        await insertChatMessage({
+          threadId,
+          senderId: uid,
+          senderTeamId: req.requester_team_id,
+          body: `【試合申込 取消】\n${requesterTeamName} が申込みをキャンセルしました。`,
+        });
+      }
+    } catch (e) {
+      console.error("cancel chat relay failed:", e);
+    }
+
     await loadMonth();
+  };
+
+  const toggleClosed = async (slotId: string, nextClosed: boolean) => {
+    const { error } = await supabase
+      .from("match_slots")
+      .update({ is_closed: nextClosed })
+      .eq("id", slotId);
+
+    if (error) {
+      console.error(error);
+      alert(`募集状態の更新に失敗しました: ${error.message}`);
+      return;
+    }
+
+    await loadMonth();
+  };
+
+  const createSlot = async () => {
+    if (!slotDate) {
+      alert("日付を入力してください");
+      return;
+    }
+    if (!hostTeamId) {
+      alert("ホストチームを選んでください");
+      return;
+    }
+    if (!startTime || !endTime) {
+      alert("開始時刻と終了時刻を入力してください");
+      return;
+    }
+    if (startTime >= endTime) {
+      alert("終了時刻は開始時刻より後にしてください");
+      return;
+    }
+
+    const { data: u } = await supabase.auth.getUser();
+    const uid = u?.user?.id;
+    if (!uid) {
+      alert("ログインが必要です");
+      return;
+    }
+
+    const hostTeam = myTeams.find((t) => t.id === hostTeamId);
+    if (!hostTeam) {
+      alert("ホストチームが見つかりません");
+      return;
+    }
+
+    const payload = {
+      owner_id: uid,
+      host_team_id: hostTeamId,
+      date: slotDate,
+      start_time: startTime,
+      end_time: endTime,
+      venue_id: venueId || null,
+      area: buildAreaText(hostTeam, slotArea),
+      category: slotCategory || hostTeam.category || null,
+      prefecture: hostTeam.prefecture ?? null,
+      city: hostTeam.city ?? null,
+      town: hostTeam.town ?? null,
+      is_closed: false,
+    };
+
+    const { error } = await supabase.from("match_slots").insert(payload);
+
+    if (error) {
+      console.error(error);
+      alert(`募集作成に失敗しました: ${error.message}`);
+      return;
+    }
+
+    setOpenCreate(false);
+    resetCreateFormForDate(slotDate);
+    setSelectedYmd(slotDate);
+    await loadMonth();
+    scrollToDayList();
   };
 
   return (
@@ -402,6 +608,10 @@ export default function MatchCalendarPage() {
           }}
           onPrevMonth={() => setMonthDate(addMonths(monthDate, -1))}
           onNextMonth={() => setMonthDate(addMonths(monthDate, 1))}
+          onCreateForDate={(ymd) => {
+            resetCreateFormForDate(ymd);
+            setOpenCreate(true);
+          }}
           disableCreate={myTeams.length === 0}
         />
       </section>
@@ -420,7 +630,10 @@ export default function MatchCalendarPage() {
               type="button"
               className="sh-btn"
               style={createButtonInline}
-              onClick={() => setOpenCreate(true)}
+              onClick={() => {
+                resetCreateFormForDate(selectedYmd);
+                setOpenCreate(true);
+              }}
               disabled={loading || myTeams.length === 0}
             >
               ＋募集を作る
@@ -443,6 +656,7 @@ export default function MatchCalendarPage() {
             selectedYmd={selectedYmd}
             slots={slotsOnSelectedDate as any}
             venues={venues}
+            allTeams={allTeams as any}
             myTeams={myTeams as any}
             meId={meId}
             requestsForMonth={requestsForMonth}
@@ -465,6 +679,7 @@ export default function MatchCalendarPage() {
             onAccept={accept}
             onReject={reject}
             onOpenChatWithTeam={openDmAndGo}
+            onToggleClosed={toggleClosed}
             loading={loading}
           />
         </div>
@@ -619,22 +834,22 @@ export default function MatchCalendarPage() {
         loading={loading}
         myTeams={myTeams as any}
         venues={venues}
-        slotDate={selectedYmd}
-        hostTeamId=""
-        startTime="13:00"
-        endTime="15:00"
-        slotArea=""
-        slotCategory="U-12"
-        venueId=""
-        setSlotDate={() => {}}
-        setHostTeamId={() => {}}
-        setStartTime={() => {}}
-        setEndTime={() => {}}
-        setSlotArea={() => {}}
-        setSlotCategory={() => {}}
-        setVenueId={() => {}}
+        slotDate={slotDate}
+        hostTeamId={hostTeamId}
+        startTime={startTime}
+        endTime={endTime}
+        slotArea={slotArea}
+        slotCategory={slotCategory}
+        venueId={venueId}
+        setSlotDate={setSlotDate}
+        setHostTeamId={setHostTeamId}
+        setStartTime={setStartTime}
+        setEndTime={setEndTime}
+        setSlotArea={setSlotArea}
+        setSlotCategory={setSlotCategory}
+        setVenueId={setVenueId}
         onClose={() => setOpenCreate(false)}
-        onCreate={() => {}}
+        onCreate={createSlot}
       />
     </main>
   );

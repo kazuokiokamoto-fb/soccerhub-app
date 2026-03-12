@@ -21,18 +21,18 @@ function statusBadgeStyle(status: DbRequest["status"]) {
       status === "accepted"
         ? "#ecfdf3"
         : status === "rejected"
-        ? "#fef2f2"
-        : status === "cancelled"
-        ? "#f3f4f6"
-        : "#eff6ff",
+          ? "#fef2f2"
+          : status === "cancelled"
+            ? "#f3f4f6"
+            : "#eff6ff",
     color:
       status === "accepted"
         ? "#166534"
         : status === "rejected"
-        ? "#991b1b"
-        : status === "cancelled"
-        ? "#374151"
-        : "#1e3a8a",
+          ? "#991b1b"
+          : status === "cancelled"
+            ? "#374151"
+            : "#1e3a8a",
   } as React.CSSProperties;
 }
 
@@ -40,6 +40,7 @@ export function DaySlotList(props: {
   selectedYmd: string;
   slots: DbSlot[];
   venues: DbVenue[];
+  allTeams: DbTeam[];
   myTeams: DbTeam[];
   meId: string;
 
@@ -63,6 +64,7 @@ export function DaySlotList(props: {
   isMineSlot: boolean;
   onAccept: (requestId: string) => void;
   onReject: (requestId: string) => void;
+  onToggleClosed: (slotId: string, nextClosed: boolean) => void;
 
   loading?: boolean;
 }) {
@@ -70,6 +72,7 @@ export function DaySlotList(props: {
     selectedYmd,
     slots,
     venues,
+    allTeams,
     myTeams,
     meId,
     requestsForMonth,
@@ -88,6 +91,7 @@ export function DaySlotList(props: {
     isMineSlot,
     onAccept,
     onReject,
+    onToggleClosed,
     loading,
   } = props;
 
@@ -101,11 +105,19 @@ export function DaySlotList(props: {
         <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
           {slots.map((s) => {
             const isMine = !!meId && s.owner_id === meId;
-            const venue = venues.find((v) => v.id === s.venue_id) || null;
 
             const myReq = requestsForMonth.find(
-              (r) => r.slot_id === s.id && r.requester_user_id === meId && r.status !== "cancelled"
+              (r) =>
+                r.slot_id === s.id &&
+                r.requester_user_id === meId &&
+                r.status !== "cancelled"
             );
+
+            const acceptedReq = requestsForMonth.find(
+              (r) => r.slot_id === s.id && r.status === "accepted"
+            );
+
+            const venue = venues.find((v) => v.id === s.venue_id) || null;
 
             return (
               <div
@@ -113,7 +125,8 @@ export function DaySlotList(props: {
                 style={{
                   padding: 12,
                   borderRadius: 12,
-                  border: selectedSlotId === s.id ? "2px solid #86efac" : "1px solid #eee",
+                  border:
+                    selectedSlotId === s.id ? "2px solid #86efac" : "1px solid #eee",
                   background: selectedSlotId === s.id ? "#f0fdf4" : "#fafafa",
                 }}
               >
@@ -121,13 +134,34 @@ export function DaySlotList(props: {
                   <div style={{ fontWeight: 900, lineHeight: 1.35 }}>
                     {hhmm(s.start_time)}–{hhmm(s.end_time)} / {s.area || "エリア未設定"} /{" "}
                     {s.category || "カテゴリ未設定"} {isMine ? "（あなた）" : ""}
+                    {s.is_closed ? (
+                      <span style={{ ...statusBadgeStyle("cancelled"), marginLeft: 8 }}>
+                        締切
+                      </span>
+                    ) : null}
+                    {acceptedReq ? (
+                      <span style={{ ...statusBadgeStyle("accepted"), marginLeft: 8 }}>
+                        成立済み
+                      </span>
+                    ) : null}
                     {!isMine && myReq ? (
                       <span style={statusBadgeStyle(myReq.status)}>{myReq.status}</span>
                     ) : null}
                   </div>
 
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    <button className="sh-btn" type="button" onClick={() => onToggleDetail(s.id)}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
+                  >
+                    <button
+                      className="sh-btn"
+                      type="button"
+                      onClick={() => onToggleDetail(s.id)}
+                    >
                       {selectedSlotId === s.id ? "閉じる" : "詳細"}
                     </button>
                   </div>
@@ -143,6 +177,7 @@ export function DaySlotList(props: {
                     <SlotDetail
                       slot={selectedSlot}
                       hostTeam={selectedHostTeam}
+                      allTeams={allTeams}
                       isMine={isMineSlot}
                       meId={meId}
                       venues={venues}
@@ -157,6 +192,7 @@ export function DaySlotList(props: {
                       myRequest={myReq ?? null}
                       onAccept={onAccept}
                       onReject={onReject}
+                      onToggleClosed={onToggleClosed}
                       onOpenChat={onOpenChatWithTeam}
                       loading={loading}
                     />
