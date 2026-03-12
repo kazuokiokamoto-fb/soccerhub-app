@@ -70,11 +70,6 @@ const contentScrollBox: React.CSSProperties = {
   WebkitOverflowScrolling: "touch",
 };
 
-function hhmm(v: string) {
-  if (!v) return "";
-  return v.slice(0, 5);
-}
-
 function buildAreaText(
   team?: {
     area?: string | null;
@@ -100,7 +95,6 @@ export default function MatchCalendarPage() {
   const [requestTeamId, setRequestTeamId] = useState<string>("");
   const [requestComment, setRequestComment] = useState<string>("");
 
-  // CreateSlotModal 接続用
   const [hostTeamId, setHostTeamId] = useState<string>("");
   const [slotDate, setSlotDate] = useState<string>(ymdToday());
   const [startTime, setStartTime] = useState<string>("13:00");
@@ -251,6 +245,25 @@ export default function MatchCalendarPage() {
     applyDraftToApplied();
     setSelectedSlotId("");
     scrollToDayList();
+  };
+
+  const handleResetFilters = () => {
+    setDraftKeyword("");
+    setDraftCategoryFilter([]);
+    setDraftPrefectureFilter("");
+    setDraftCityFilter("");
+    setDraftTownFilter("");
+    setDraftGroundFilter("all" as any);
+    setDraftStrengthFilter("" as any);
+    setDraftBikeFilter("all" as any);
+    setDraftBikeCapacityMin("");
+    setDraftMemberCountMin("");
+
+    setTimeout(() => {
+      applyDraftToApplied();
+      setSelectedSlotId("");
+      scrollToDayList();
+    }, 0);
   };
 
   const resetCreateFormForDate = (ymd: string) => {
@@ -823,6 +836,15 @@ export default function MatchCalendarPage() {
                 disabled={!hasDraftChanges || loading}
               >
                 この条件で一覧表示
+              </button>
+
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={handleResetFilters}
+                disabled={loading}
+              >
+                条件リセット
               </button>
             </div>
           </div>

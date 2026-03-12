@@ -10,6 +10,14 @@ function hhmm(v: string) {
   return v.slice(0, 5);
 }
 
+function levelLabel(level: number) {
+  if (level >= 9) return "SS";
+  if (level >= 7) return "S";
+  if (level >= 5) return "A";
+  if (level >= 3) return "B";
+  return "C";
+}
+
 function statusBadgeStyle(status: DbRequest["status"]) {
   return {
     marginLeft: 8,
@@ -106,6 +114,16 @@ export function DaySlotList(props: {
           {slots.map((s) => {
             const isMine = !!meId && s.owner_id === meId;
 
+            const hostTeam =
+              allTeams.find((t) => t.id === s.host_team_id) ?? null;
+
+            const hostTeamName =
+              hostTeam?.name?.trim() || "チーム未設定";
+
+            const rankText =
+              hostTeam?.strength_rank?.trim() ||
+              levelLabel(Number(hostTeam?.level ?? 0));
+
             const myReq = requestsForMonth.find(
               (r) =>
                 r.slot_id === s.id &&
@@ -113,63 +131,43 @@ export function DaySlotList(props: {
                 r.status !== "cancelled"
             );
 
-            const acceptedReq = requestsForMonth.find(
-              (r) => r.slot_id === s.id && r.status === "accepted"
-            );
-
-            const venue = venues.find((v) => v.id === s.venue_id) || null;
-
             return (
               <div
                 key={s.id}
                 style={{
                   padding: 12,
                   borderRadius: 12,
-                  border:
-                    selectedSlotId === s.id ? "2px solid #86efac" : "1px solid #eee",
+                  border: selectedSlotId === s.id ? "2px solid #86efac" : "1px solid #eee",
                   background: selectedSlotId === s.id ? "#f0fdf4" : "#fafafa",
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                  <div style={{ fontWeight: 900, lineHeight: 1.35 }}>
-                    {hhmm(s.start_time)}–{hhmm(s.end_time)} / {s.area || "エリア未設定"} /{" "}
-                    {s.category || "カテゴリ未設定"} {isMine ? "（あなた）" : ""}
-                    {s.is_closed ? (
-                      <span style={{ ...statusBadgeStyle("cancelled"), marginLeft: 8 }}>
-                        締切
-                      </span>
-                    ) : null}
-                    {acceptedReq ? (
-                      <span style={{ ...statusBadgeStyle("accepted"), marginLeft: 8 }}>
-                        成立済み
-                      </span>
-                    ) : null}
-                    {!isMine && myReq ? (
-                      <span style={statusBadgeStyle(myReq.status)}>{myReq.status}</span>
-                    ) : null}
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 900, lineHeight: 1.35 }}>
+                      {hhmm(s.start_time)}–{hhmm(s.end_time)} / {s.area || "エリア未設定"} /{" "}
+                      {s.category || "カテゴリ未設定"} {isMine ? "（あなた）" : ""}
+                      {s.is_closed ? (
+                        <span style={{ ...statusBadgeStyle("cancelled"), marginLeft: 8 }}>締切</span>
+                      ) : null}
+                      {!isMine && myReq ? (
+                        <span style={statusBadgeStyle(myReq.status)}>{myReq.status}</span>
+                      ) : null}
+                    </div>
+
+                    <div style={hostTeamText}>
+                      募集中チーム：<b>{hostTeamName}</b>
+                    </div>
+
+                    <div style={rankTextStyle}>
+                      強さランク：<b>{rankText}</b>
+                    </div>
                   </div>
 
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                    }}
-                  >
-                    <button
-                      className="sh-btn"
-                      type="button"
-                      onClick={() => onToggleDetail(s.id)}
-                    >
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <button className="sh-btn" type="button" onClick={() => onToggleDetail(s.id)}>
                       {selectedSlotId === s.id ? "閉じる" : "詳細"}
                     </button>
                   </div>
-                </div>
-
-                <div style={{ marginTop: 6, color: "#666", lineHeight: 1.6 }}>
-                  グラウンド：
-                  {venue ? `${venue.name}${venue.area ? `（${venue.area}）` : ""}` : "未設定"}
                 </div>
 
                 {selectedSlotId === s.id ? (
@@ -218,4 +216,18 @@ const h2: React.CSSProperties = {
   margin: 0,
   fontSize: 16,
   fontWeight: 900,
+};
+
+const hostTeamText: React.CSSProperties = {
+  marginTop: 8,
+  color: "#4b5563",
+  fontSize: 14,
+  lineHeight: 1.5,
+};
+
+const rankTextStyle: React.CSSProperties = {
+  marginTop: 4,
+  color: "#4b5563",
+  fontSize: 14,
+  lineHeight: 1.5,
 };
