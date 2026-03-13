@@ -1,6 +1,8 @@
 // app/match/page.tsx
 "use client";
 
+import AppHero from "@/app/components/AppHero";
+import AppTabNav from "@/app/components/AppTabNav";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 
@@ -29,9 +31,6 @@ import { useMatchFilters } from "./hooks/useMatchFilters";
 import { useMatchData } from "./hooks/useMatchData";
 
 import {
-  heroBox,
-  heroTitle,
-  heroDesc,
   dayListWrap,
   stickySummaryBar,
   stickySummaryDate,
@@ -587,12 +586,13 @@ export default function MatchCalendarPage() {
 
   return (
     <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
-      <section style={heroBox}>
-        <h1 style={heroTitle}>⚽ 試合を探す / 募集する</h1>
-        <p style={heroDesc}>
-          カレンダーで募集枠を確認しながら、条件を指定して相手を探せます。
-        </p>
-      </section>
+      <AppHero
+        icon="⚽️"
+        title="試合を探す / 募集する"
+        desc="カレンダーで募集枠を確認しながら、条件を指定して相手を探せます。"
+      />
+
+      <AppTabNav />
 
       <section style={{ marginTop: 12 }}>
         <Calendar

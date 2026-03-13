@@ -5,6 +5,8 @@ import { supabase } from "@/app/lib/supabase";
 import { CATEGORY_OPTIONS } from "@/app/lib/categories";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
+import AppHero from "@/app/components/AppHero";
+import AppTabNav from "@/app/components/AppTabNav";
 
 type Toast = { type: "success" | "error" | "info"; text: string };
 
@@ -230,20 +232,24 @@ export default function TeamsSearchClient() {
           aria-live="polite"
         >
           <div style={{ whiteSpace: "pre-wrap" }}>{toast.text}</div>
-          <button type="button" onClick={() => setToast(null)} style={toastClose} aria-label="閉じる">
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            style={toastClose}
+            aria-label="閉じる"
+          >
             ×
           </button>
         </div>
       ) : null}
 
-      <header style={pageHead}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 900 }}>チーム検索</h1>
-          <p style={{ margin: "6px 0 0", color: "#555", lineHeight: 1.7 }}>
-            地域やカテゴリ、強さなどの条件から、対戦相手候補のチームを探せます。
-          </p>
-        </div>
-      </header>
+      <AppHero
+        icon="🔎"
+        title="チーム検索"
+        desc="地域やカテゴリ、強さなどの条件から、対戦相手候補のチームを探せます。"
+      />
+
+      <AppTabNav />
 
       <section style={filterWrap}>
         <div style={{ display: "grid", gap: 12 }}>

@@ -1,5 +1,7 @@
 "use client";
 
+import AppHero from "@/app/components/AppHero";
+import AppTabNav from "@/app/components/AppTabNav";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
@@ -507,12 +509,13 @@ export default function MyPage() {
         </div>
       ) : null}
 
-      <section style={heroBox}>
-        <h1 style={heroTitle}>⚙️ マイページ</h1>
-        <p style={heroDesc}>
-          アカウント情報、チーム情報、自分の募集、申込、届いたオファーを確認できます。
-        </p>
-      </section>
+      <AppHero
+        icon="⚙️"
+        title="マイページ"
+        desc="アカウント情報、チーム情報、自分の募集、申込、届いたオファーを確認できます。"
+      />
+
+<AppTabNav />
 
       {!me ? (
         <div style={{ marginTop: 16, color: "#991b1b" }}>ログインが必要です。</div>
@@ -752,28 +755,6 @@ export default function MyPage() {
     </main>
   );
 }
-
-const heroBox: React.CSSProperties = {
-  borderRadius: 20,
-  background: "linear-gradient(135deg, #1e7f3c 0%, #145c2a 100%)",
-  color: "#fff",
-  padding: 20,
-  boxShadow: "0 10px 28px rgba(20,92,42,0.20)",
-  marginBottom: 16,
-};
-
-const heroTitle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 28,
-  fontWeight: 900,
-};
-
-const heroDesc: React.CSSProperties = {
-  margin: "8px 0 0",
-  fontSize: 14,
-  lineHeight: 1.7,
-  color: "rgba(255,255,255,0.92)",
-};
 
 const box: React.CSSProperties = {
   padding: 16,

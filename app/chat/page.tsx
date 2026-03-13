@@ -4,6 +4,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
+import AppHero from "@/app/components/AppHero";
+import AppTabNav from "@/app/components/AppTabNav";
 
 type TeamMini = { id: string; name: string | null; category?: string | null };
 type LastMsgMini = { thread_id: string; body: string | null; created_at: string };
@@ -229,12 +231,13 @@ export default function ChatListPage() {
 
   return (
     <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
-      <section style={heroBox}>
-        <h1 style={heroTitle}>💬 チャット</h1>
-        <p style={heroDesc}>
-          相手チームとの連絡、日程調整、会場確認などをここでやり取りできます。
-        </p>
-      </section>
+      <AppHero
+        icon="💬"
+        title="チャット"
+        desc="相手チームとの連絡、日程調整、会場確認などをここでやり取りできます。"
+      />
+
+      <AppTabNav />
 
       {loading ? <p style={{ color: "#666" }}>読み込み中…</p> : null}
       {!loading && emptyText ? <p style={{ color: "#666" }}>{emptyText}</p> : null}
