@@ -128,6 +128,7 @@ export default function MatchCalendarPage() {
     draftFilters,
     hasDraftChanges,
     applyDraftToApplied,
+    clearAllFilters,
   } = useMatchFilters();
 
   const {
@@ -248,22 +249,9 @@ export default function MatchCalendarPage() {
   };
 
   const handleResetFilters = () => {
-    setDraftKeyword("");
-    setDraftCategoryFilter([]);
-    setDraftPrefectureFilter("");
-    setDraftCityFilter("");
-    setDraftTownFilter("");
-    setDraftGroundFilter("all" as any);
-    setDraftStrengthFilter("" as any);
-    setDraftBikeFilter("all" as any);
-    setDraftBikeCapacityMin("");
-    setDraftMemberCountMin("");
-
-    setTimeout(() => {
-      applyDraftToApplied();
-      setSelectedSlotId("");
-      scrollToDayList();
-    }, 0);
+    clearAllFilters();
+    setSelectedSlotId("");
+    scrollToDayList();
   };
 
   const resetCreateFormForDate = (ymd: string) => {
