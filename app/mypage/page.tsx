@@ -300,7 +300,7 @@ export default function MyPage() {
       ].filter(Boolean))
     );
 
-    let teamDict: Record<string, TeamRow> = {};
+    const teamDict: Record<string, TeamRow> = {};
     if (relatedTeamIds.length > 0) {
       const { data: relatedTeamsRows } = await supabase
         .from("teams")
@@ -515,7 +515,7 @@ export default function MyPage() {
         desc="アカウント情報、チーム情報、自分の募集、申込、届いたオファーを確認できます。"
       />
 
-<AppTabNav />
+      <AppTabNav />
 
       {!me ? (
         <div style={{ marginTop: 16, color: "#991b1b" }}>ログインが必要です。</div>
@@ -524,6 +524,9 @@ export default function MyPage() {
       <section style={box}>
         <div style={sectionHead}>
           <h2 style={sectionTitle}>アカウント</h2>
+          <Link href="/mypage/account" className="sh-btn sh-btn--primary">
+            アカウント編集
+          </Link>
         </div>
 
         <div style={infoGrid}>
