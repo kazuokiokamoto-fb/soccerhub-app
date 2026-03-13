@@ -157,16 +157,20 @@ function toTeam(row: DbTeam): TeamRow {
 export default function TeamsClient({ createdId }: { createdId?: string }) {
   const created = createdId ?? "";
 
+  const [meId, setMeId] = useState<string>("");
+  const [myTeamIds, setMyTeamIds] = useState<string[]>([]);
+
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
+
+  const [expandedTeamId, setExpandedTeamId] = useState<string>("");
 
   const [draftKeyword, setDraftKeyword] = useState("");
   const [draftCategoryFilter, setDraftCategoryFilter] = useState<string[]>([]);
   const [draftPrefectureFilter, setDraftPrefectureFilter] = useState<string>("");
   const [draftCityFilter, setDraftCityFilter] = useState<string>("");
   const [draftTownFilter, setDraftTownFilter] = useState<string>("");
-
   const [draftStrengthFilter, setDraftStrengthFilter] = useState<StrengthRank | "">("");
   const [draftGroundFilter, setDraftGroundFilter] = useState<"all" | "あり" | "なし">("all");
   const [draftBikeFilter, setDraftBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
@@ -179,13 +183,18 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
   const [appliedPrefectureFilter, setAppliedPrefectureFilter] = useState<string>("");
   const [appliedCityFilter, setAppliedCityFilter] = useState<string>("");
   const [appliedTownFilter, setAppliedTownFilter] = useState<string>("");
-
   const [appliedStrengthFilter, setAppliedStrengthFilter] = useState<StrengthRank | "">("");
   const [appliedGroundFilter, setAppliedGroundFilter] = useState<"all" | "あり" | "なし">("all");
   const [appliedBikeFilter, setAppliedBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
   const [appliedBikeCapacityMin, setAppliedBikeCapacityMin] = useState<string>("");
   const [appliedMemberCountMin, setAppliedMemberCountMin] = useState<string>("");
   const [appliedHasNoteOnly, setAppliedHasNoteOnly] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setMeId(data?.user?.id ?? "");
+    });
+  }, []);
 
   useEffect(() => {
     if (!created) return;
@@ -203,49 +212,66 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
   const load = async () => {
     setLoading(true);
 
-    let res = await supabase.from("teams").select(
-      "id,name,area,category,categories,prefecture,city,town,address_detail,level,strength_rank,has_ground,bike_parking,bike_parking_capacity,member_count,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at,owner_id"
-    );
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const uid = userData?.user?.id ?? "";
+      setMeId(uid);
 
-    if (res.error && isMissingColumnError(res.error)) {
-      res = await supabase.from("teams").select(
-        "id,name,area,category,categories,prefecture,city,town,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at,owner_id"
+      if (uid) {
+        const { data: myTeamsRows } = await supabase
+          .from("teams")
+          .select("id")
+          .eq("owner_id", uid);
+
+        setMyTeamIds((myTeamsRows ?? []).map((r: any) => r.id).filter(Boolean));
+      } else {
+        setMyTeamIds([]);
+      }
+
+      let res = await supabase.from("teams").select(
+        "id,name,area,category,categories,prefecture,city,town,address_detail,level,strength_rank,has_ground,bike_parking,bike_parking_capacity,member_count,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at,owner_id"
       );
-    }
 
-    if (res.error) {
-      console.error(res.error);
-      setToast({ type: "error", text: `読み込みに失敗しました: ${res.error.message}` });
-      setTeams([]);
+      if (res.error && isMissingColumnError(res.error)) {
+        res = await supabase.from("teams").select(
+          "id,name,area,category,categories,prefecture,city,town,level,has_ground,bike_parking,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at,owner_id"
+        );
+      }
+
+      if (res.error) {
+        console.error(res.error);
+        setToast({ type: "error", text: `読み込みに失敗しました: ${res.error.message}` });
+        setTeams([]);
+        setLoading(false);
+        return;
+      }
+
+      const rows = (res.data ?? []) as DbTeam[];
+
+      const sorted = [...rows].sort((a, b) => {
+        const ap = norm(a.prefecture) || norm(a.area);
+        const bp = norm(b.prefecture) || norm(b.area);
+        if (ap !== bp) return compareStr(ap, bp);
+
+        const ac = norm(a.city);
+        const bc = norm(b.city);
+        if (ac !== bc) return compareStr(ac, bc);
+
+        const at = norm(a.town);
+        const bt = norm(b.town);
+        if (at !== bt) return compareStr(at, bt);
+
+        return compareStr(norm(a.name), norm(b.name));
+      });
+
+      setTeams(sorted.map(toTeam));
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const rows = (res.data ?? []) as DbTeam[];
-
-    const sorted = [...rows].sort((a, b) => {
-      const ap = norm(a.prefecture) || norm(a.area);
-      const bp = norm(b.prefecture) || norm(b.area);
-      if (ap !== bp) return compareStr(ap, bp);
-
-      const ac = norm(a.city);
-      const bc = norm(b.city);
-      if (ac !== bc) return compareStr(ac, bc);
-
-      const at = norm(a.town);
-      const bt = norm(b.town);
-      if (at !== bt) return compareStr(at, bt);
-
-      return compareStr(norm(a.name), norm(b.name));
-    });
-
-    setTeams(sorted.map(toTeam));
-    setLoading(false);
   };
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const applyFilters = () => {
@@ -286,6 +312,8 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
     setAppliedBikeCapacityMin("");
     setAppliedMemberCountMin("");
     setAppliedHasNoteOnly(false);
+
+    setExpandedTeamId("");
   };
 
   const hasDraftChanges = useMemo(() => {
@@ -328,75 +356,78 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
   ]);
 
   const filteredTeams = useMemo(() => {
-    return teams.filter((t) => {
-      if (appliedCategoryFilter.length > 0) {
-        const cats =
-          Array.isArray(t.categories) && t.categories.length > 0
-            ? t.categories
-            : t.category
-            ? [t.category]
-            : [];
-        const ok = cats.some((c) => c && appliedCategoryFilter.includes(String(c).trim()));
-        if (!ok) return false;
-      }
+    return teams
+      .filter((t) => !myTeamIds.includes(t.id))
+      .filter((t) => {
+        if (appliedCategoryFilter.length > 0) {
+          const cats =
+            Array.isArray(t.categories) && t.categories.length > 0
+              ? t.categories
+              : t.category
+              ? [t.category]
+              : [];
+          const ok = cats.some((c) => c && appliedCategoryFilter.includes(String(c).trim()));
+          if (!ok) return false;
+        }
 
-      if (appliedPrefectureFilter && norm(t.prefecture) !== appliedPrefectureFilter) return false;
-      if (appliedCityFilter && norm(t.city) !== appliedCityFilter) return false;
-      if (appliedTownFilter && norm(t.town) !== appliedTownFilter) return false;
+        if (appliedPrefectureFilter && norm(t.prefecture) !== appliedPrefectureFilter) return false;
+        if (appliedCityFilter && norm(t.city) !== appliedCityFilter) return false;
+        if (appliedTownFilter && norm(t.town) !== appliedTownFilter) return false;
 
-      if (appliedStrengthFilter && levelLabel(Number(t.level ?? 0)) !== appliedStrengthFilter) {
-        return false;
-      }
+        if (appliedStrengthFilter && levelLabel(Number(t.level ?? 0)) !== appliedStrengthFilter) {
+          return false;
+        }
 
-      if (appliedGroundFilter !== "all") {
-        const ground = t.hasGround ? "あり" : "なし";
-        if (ground !== appliedGroundFilter) return false;
-      }
+        if (appliedGroundFilter !== "all") {
+          const ground = t.hasGround ? "あり" : "なし";
+          if (ground !== appliedGroundFilter) return false;
+        }
 
-      if (appliedBikeFilter !== "all") {
-        if ((t.bikeParking ?? "不明") !== appliedBikeFilter) return false;
-      }
+        if (appliedBikeFilter !== "all") {
+          if ((t.bikeParking ?? "不明") !== appliedBikeFilter) return false;
+        }
 
-      if (appliedBikeCapacityMin) {
-        const cap = parseBikeCapacity(t.bikeParkingCapacity);
-        if (cap == null || cap < Number(appliedBikeCapacityMin)) return false;
-      }
+        if (appliedBikeCapacityMin) {
+          const cap = parseBikeCapacity(t.bikeParkingCapacity);
+          if (cap == null || cap < Number(appliedBikeCapacityMin)) return false;
+        }
 
-      if (appliedMemberCountMin) {
-        const count = Number(t.memberCount ?? 0);
-        if (count < Number(appliedMemberCountMin)) return false;
-      }
+        if (appliedMemberCountMin) {
+          const count = Number(t.memberCount ?? 0);
+          if (count < Number(appliedMemberCountMin)) return false;
+        }
 
-      if (appliedHasNoteOnly && !norm(t.note)) return false;
+        if (appliedHasNoteOnly && !norm(t.note)) return false;
 
-      if (appliedKeyword.trim()) {
-        const q = appliedKeyword.trim().toLowerCase();
-        const hay = [
-          t.name,
-          t.area,
-          t.prefecture,
-          t.city,
-          t.town,
-          t.category,
-          ...(t.categories ?? []),
-          t.uniformMain,
-          t.uniformSub,
-          t.note,
-          t.bikeParking,
-          t.bikeParkingCapacity,
-          String(t.memberCount ?? ""),
-          levelLabel(Number(t.level ?? 0)),
-        ]
-          .join(" ")
-          .toLowerCase();
+        if (appliedKeyword.trim()) {
+          const q = appliedKeyword.trim().toLowerCase();
+          const hay = [
+            t.name,
+            t.area,
+            t.prefecture,
+            t.city,
+            t.town,
+            t.category,
+            ...(t.categories ?? []),
+            t.uniformMain,
+            t.uniformSub,
+            t.note,
+            t.bikeParking,
+            t.bikeParkingCapacity,
+            String(t.memberCount ?? ""),
+            levelLabel(Number(t.level ?? 0)),
+          ]
+            .join(" ")
+            .toLowerCase();
 
-        if (!hay.includes(q)) return false;
-      }
+          if (!hay.includes(q)) return false;
+        }
 
-      return true;
-    });
+        return true;
+      });
   }, [
     teams,
+    myTeamIds,
     appliedKeyword,
     appliedCategoryFilter,
     appliedPrefectureFilter,
@@ -454,7 +485,7 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
     if (appliedGroundFilter !== "all") parts.push(`グラウンド提供: ${appliedGroundFilter}`);
     if (appliedBikeFilter !== "all") parts.push(`駐輪場: ${appliedBikeFilter}`);
     if (appliedBikeCapacityMin) parts.push(`駐輪場台数: ${appliedBikeCapacityMin}台以上`);
-    if (appliedMemberCountMin) parts.push(`チーム所属人数: ${appliedMemberCountMin}人以上`);
+    if (appliedMemberCountMin) parts.push(`所属人数: ${appliedMemberCountMin}人以上`);
     if (appliedHasNoteOnly) parts.push("メモありのみ");
     return parts;
   }, [
@@ -470,6 +501,45 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
     appliedMemberCountMin,
     appliedHasNoteOnly,
   ]);
+
+  const openDmWithTeam = async (otherTeamId: string) => {
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const uid = authData?.user?.id;
+      if (!uid) {
+        alert("ログインが必要です");
+        return;
+      }
+
+      const { data: myTeamsRows } = await supabase
+        .from("teams")
+        .select("id")
+        .eq("owner_id", uid)
+        .limit(1);
+
+      const myTeamId = myTeamsRows?.[0]?.id;
+      if (!myTeamId) {
+        alert("先に自分のチームを登録してください");
+        return;
+      }
+
+      const { data, error } = await supabase.rpc("rpc_get_or_create_dm_thread", {
+        my_team_id: myTeamId,
+        other_team_id: otherTeamId,
+      });
+
+      if (error) {
+        console.error(error);
+        alert(`チャットを開けません: ${error.message}`);
+        return;
+      }
+
+      window.location.href = `/chat/${data}`;
+    } catch (e: any) {
+      console.error(e);
+      alert(`チャットを開けません: ${e?.message ?? "unknown error"}`);
+    }
+  };
 
   return (
     <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
@@ -501,7 +571,7 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
       <section style={heroBox}>
         <h1 style={heroTitle}>🔍 チーム検索</h1>
         <p style={heroDesc}>
-          エリア、カテゴリ、強さ、グラウンド、駐輪場、人数などで絞り込めます。
+          相手チームを探して、詳細確認やチャット、募集確認につなげられます。
         </p>
       </section>
 
@@ -695,6 +765,8 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
                   ? `あり（${t.bikeParkingCapacity === "50+" ? "50台以上" : `${t.bikeParkingCapacity}台`}）`
                   : t.bikeParking;
 
+              const expanded = expandedTeamId === t.id;
+
               return (
                 <div
                   key={t.id}
@@ -702,7 +774,7 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
                     padding: 14,
                     borderRadius: 14,
                     border: isCreated ? "2px solid #86efac" : "1px solid #eee",
-                    background: isCreated ? "#f0fdf4" : "#fafafa",
+                    background: isCreated ? "#f0fdf4" : expanded ? "#f8fdf9" : "#fafafa",
                     boxShadow: isCreated ? "0 0 0 4px rgba(34,197,94,0.10)" : "none",
                   }}
                 >
@@ -728,33 +800,99 @@ export default function TeamsClient({ createdId }: { createdId?: string }) {
                       </div>
                     </div>
 
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <Link className="sh-btn" href={`/teams/${t.id}/edit`}>
-                        編集
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="sh-btn"
+                        type="button"
+                        onClick={() => setExpandedTeamId(expanded ? "" : t.id)}
+                      >
+                        {expanded ? "閉じる" : "詳細"}
+                      </button>
+
+                      <button
+                        className="sh-btn"
+                        type="button"
+                        onClick={() => openDmWithTeam(t.id)}
+                      >
+                        チャット
+                      </button>
+
+                      <Link
+                        className="sh-btn"
+                        href={`/match?team=${t.id}`}
+                      >
+                        募集を見る
                       </Link>
                     </div>
                   </div>
 
-                  <div style={infoGrid}>
-                    <div style={infoBox}>
-                      <div style={infoLabel}>ユニフォーム</div>
-                      <div style={infoValue}>
-                        {t.uniformMain}（メイン） / {t.uniformSub}（サブ）
-                      </div>
-                    </div>
-
-                    <div style={infoBox}>
-                      <div style={infoLabel}>希望枠</div>
-                      <div style={infoValue}>{formatAvailability(t.desiredDates)}</div>
-                    </div>
-
-                    {t.note ? (
+                  {expanded ? (
+                    <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                       <div style={infoBox}>
-                        <div style={infoLabel}>メモ</div>
-                        <div style={infoValue}>{t.note}</div>
+                        <div style={infoLabel}>カテゴリ</div>
+                        <div style={infoValue}>
+                          {Array.isArray(t.categories) && t.categories.length > 0
+                            ? t.categories.join(" / ")
+                            : t.category || "未設定"}
+                        </div>
                       </div>
-                    ) : null}
-                  </div>
+
+                      <div style={infoBox}>
+                        <div style={infoLabel}>所在地</div>
+                        <div style={infoValue}>
+                          {t.prefecture || ""}
+                          {t.city ? ` ${t.city}` : ""}
+                          {t.town ? `・${t.town}` : ""}
+                          {t.addressDetail ? ` ${t.addressDetail}` : ""}
+                        </div>
+                      </div>
+
+                      <div style={infoGrid}>
+                        <div style={infoBox}>
+                          <div style={infoLabel}>ユニフォーム</div>
+                          <div style={infoValue}>
+                            {t.uniformMain}（メイン） / {t.uniformSub}（サブ）
+                          </div>
+                        </div>
+
+                        <div style={infoBox}>
+                          <div style={infoLabel}>希望枠</div>
+                          <div style={infoValue}>{formatAvailability(t.desiredDates)}</div>
+                        </div>
+
+                        <div style={infoBox}>
+                          <div style={infoLabel}>駐輪場</div>
+                          <div style={infoValue}>{bikeText || "不明"}</div>
+                        </div>
+
+                        <div style={infoBox}>
+                          <div style={infoLabel}>チーム所属人数</div>
+                          <div style={infoValue}>{t.memberCount ?? 0}人</div>
+                        </div>
+
+                        {t.note ? (
+                          <div style={infoBox}>
+                            <div style={infoLabel}>メモ</div>
+                            <div style={infoValue}>{t.note}</div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div style={detailActionRow}>
+                        <button
+                          className="sh-btn"
+                          type="button"
+                          onClick={() => openDmWithTeam(t.id)}
+                        >
+                          このチームにチャットする
+                        </button>
+
+                        <Link className="sh-btn sh-btn--primary" href={`/match?team=${t.id}`}>
+                          このチームの募集を探す
+                        </Link>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               );
             })
@@ -855,6 +993,13 @@ const actionRow: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
+const detailActionRow: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  marginTop: 4,
+};
+
 const appliedBox: React.CSSProperties = {
   border: "1px solid #e5e7eb",
   borderRadius: 12,
@@ -878,7 +1023,7 @@ const appliedText: React.CSSProperties = {
 const infoGrid: React.CSSProperties = {
   display: "grid",
   gap: 10,
-  marginTop: 12,
+  marginTop: 0,
 };
 
 const infoBox: React.CSSProperties = {
