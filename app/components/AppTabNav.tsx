@@ -15,14 +15,17 @@ export default function AppTabNav() {
   const pathname = usePathname();
 
   const isActive = (href: string) => {
+    if (!pathname) return false;
+
     if (href === "/match") {
-      return pathname === "/match" || pathname?.startsWith("/matches");
+      return pathname === "/match" || pathname.startsWith("/matches");
     }
-    return pathname === href || pathname?.startsWith(href + "/");
+
+    return pathname === href || pathname.startsWith(href + "/");
   };
 
   return (
-    <nav style={wrap}>
+    <nav style={navWrap}>
       {tabs.map((tab) => {
         const active = isActive(tab.href);
 
@@ -36,7 +39,8 @@ export default function AppTabNav() {
             }}
           >
             <span style={tabIcon}>{tab.icon}</span>
-            <span>{tab.label}</span>
+
+            <span style={tabLabel}>{tab.label}</span>
           </Link>
         );
       })}
@@ -44,15 +48,15 @@ export default function AppTabNav() {
   );
 }
 
-const wrap: React.CSSProperties = {
+const navWrap: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(4, 1fr)",
   gap: 10,
-  marginBottom: 16,
+  marginBottom: 18,
 };
 
 const tabItem: React.CSSProperties = {
-  minHeight: 56,
+  minHeight: 58,
   borderRadius: 16,
   display: "flex",
   alignItems: "center",
@@ -60,8 +64,9 @@ const tabItem: React.CSSProperties = {
   gap: 8,
   textDecoration: "none",
   fontWeight: 900,
-  fontSize: 15,
+  fontSize: 14,
   border: "1px solid #dbe7df",
+  transition: "all .15s ease",
 };
 
 const activeTab: React.CSSProperties = {
@@ -78,4 +83,8 @@ const inactiveTab: React.CSSProperties = {
 const tabIcon: React.CSSProperties = {
   fontSize: 18,
   lineHeight: 1,
+};
+
+const tabLabel: React.CSSProperties = {
+  whiteSpace: "nowrap",
 };

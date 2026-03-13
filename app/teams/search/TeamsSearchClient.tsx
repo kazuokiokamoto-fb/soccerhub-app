@@ -1,10 +1,15 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
 import { CATEGORY_OPTIONS } from "@/app/lib/categories";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
+import {
+  StrengthRankPicker,
+  type StrengthRank,
+} from "@/app/components/StrengthRankPicker";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 
@@ -12,19 +17,34 @@ type Toast = { type: "success" | "error" | "info"; text: string };
 
 type DbTeam = {
   id: string;
+  owner_id: string | null;
   name: string | null;
+
   area: string | null;
-  category: string | null;
-  categories: string[] | null;
-  level: number | null;
-  has_ground: boolean | null;
-  bike_parking: string | null;
-  uniform_main: string | null;
-  uniform_sub: string | null;
-  note: string | null;
   prefecture: string | null;
   city: string | null;
   town: string | null;
+  address_detail?: string | null;
+
+  category: string | null;
+  categories: string[] | null;
+
+  level: number | null;
+  strength_rank?: string | null;
+
+  has_ground: boolean | null;
+  bike_parking: string | null;
+  bike_parking_capacity?: string | null;
+
+  member_count?: number | null;
+  roster_by_grade?: Record<string, number> | null;
+
+  uniform_main: string | null;
+  uniform_sub: string | null;
+
+  desired_dates?: string[] | null;
+  note: string | null;
+
   updated_at: string;
 };
 
@@ -36,29 +56,85 @@ function levelLabel(level: number) {
   return "C";
 }
 
+function norm(v?: string | null) {
+  return (v ?? "").trim();
+}
+
+function buildAreaText(team: DbTeam) {
+  const direct = norm(team.area);
+  if (direct) return direct;
+
+  const composed = `${team.prefecture ?? ""} ${team.city ?? ""}${
+    team.town ? "・" + team.town : ""
+  }`.trim();
+
+  return composed || "（エリア未設定）";
+}
+
+function getStrength(team: DbTeam) {
+  return (team.strength_rank as StrengthRank | null) || levelLabel(Number(team.level ?? 0));
+}
+
+function getMemberCount(team: DbTeam) {
+  if (typeof team.member_count === "number") return team.member_count;
+
+  const roster = (team.roster_by_grade ?? {}) as Record<string, number>;
+  return Object.values(roster).reduce((sum, v) => sum + (Number(v) || 0), 0);
+}
+
+function parseBikeCapacity(value?: string | null) {
+  const v = String(value ?? "").trim();
+  if (!v || v === "不明") return null;
+  if (v === "50+") return 50;
+  const n = Number(v.replace(/[^\d]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+function formatBikeParking(team: DbTeam) {
+  if (team.bike_parking === "あり") {
+    if (team.bike_parking_capacity) {
+      if (team.bike_parking_capacity === "50+") return "あり（50台以上）";
+      return `あり（${team.bike_parking_capacity}台）`;
+    }
+    return "あり";
+  }
+  return team.bike_parking ?? "不明";
+}
+
+function formatDesiredDates(arr?: string[] | null) {
+  const values = Array.isArray(arr) ? arr.filter(Boolean) : [];
+  if (values.length === 0) return "未登録";
+  return values.join(" / ");
+}
+
 export default function TeamsSearchClient() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [loading, setLoading] = useState(true);
-
   const [teams, setTeams] = useState<DbTeam[]>([]);
 
-  // 入力中
   const [draftKeyword, setDraftKeyword] = useState("");
   const [draftCategoryFilter, setDraftCategoryFilter] = useState<string[]>([]);
-  const [draftPrefecture, setDraftPrefecture] = useState<string>("");
-  const [draftCity, setDraftCity] = useState<string>("");
-  const [draftTown, setDraftTown] = useState<string>("");
+  const [draftPrefecture, setDraftPrefecture] = useState("");
+  const [draftCity, setDraftCity] = useState("");
+  const [draftTown, setDraftTown] = useState("");
+  const [draftStrengthFilter, setDraftStrengthFilter] = useState<StrengthRank | "">("");
   const [draftGroundFilter, setDraftGroundFilter] = useState<"all" | "あり" | "なし">("all");
-  const [draftStrengthFilter, setDraftStrengthFilter] = useState<string>("");
+  const [draftBikeFilter, setDraftBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
+  const [draftBikeCapacityMin, setDraftBikeCapacityMin] = useState("");
+  const [draftMemberCountMin, setDraftMemberCountMin] = useState("");
+  const [draftHasNoteOnly, setDraftHasNoteOnly] = useState(false);
 
-  // 適用中
   const [keyword, setKeyword] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
-  const [prefecture, setPrefecture] = useState<string>("");
-  const [city, setCity] = useState<string>("");
-  const [town, setTown] = useState<string>("");
+  const [prefecture, setPrefecture] = useState("");
+  const [city, setCity] = useState("");
+  const [town, setTown] = useState("");
+  const [strengthFilter, setStrengthFilter] = useState<StrengthRank | "">("");
   const [groundFilter, setGroundFilter] = useState<"all" | "あり" | "なし">("all");
-  const [strengthFilter, setStrengthFilter] = useState<string>("");
+  const [bikeFilter, setBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
+  const [bikeCapacityMin, setBikeCapacityMin] = useState("");
+  const [memberCountMin, setMemberCountMin] = useState("");
+  const [hasNoteOnly, setHasNoteOnly] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -68,41 +144,42 @@ export default function TeamsSearchClient() {
 
   const load = async () => {
     setLoading(true);
-    setToast({ type: "info", text: "読み込み中…" });
 
     const { data, error } = await supabase
       .from("teams")
       .select(
-        "id,name,area,category,categories,level,has_ground,bike_parking,uniform_main,uniform_sub,note,prefecture,city,town,updated_at"
+        "id,owner_id,name,area,prefecture,city,town,address_detail,category,categories,level,strength_rank,has_ground,bike_parking,bike_parking_capacity,member_count,roster_by_grade,uniform_main,uniform_sub,desired_dates,note,updated_at"
       )
       .order("updated_at", { ascending: false });
 
     if (error) {
       console.error(error);
       setTeams([]);
-      setToast({ type: "error", text: `読み込みに失敗: ${error.message}` });
+      setToast({ type: "error", text: `読み込みに失敗しました: ${error.message}` });
       setLoading(false);
       return;
     }
 
     setTeams((data ?? []) as DbTeam[]);
-    setToast(null);
     setLoading(false);
   };
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const applyFilters = () => {
     setKeyword(draftKeyword);
-    setCategoryFilter(draftCategoryFilter);
+    setCategoryFilter([...draftCategoryFilter]);
     setPrefecture(draftPrefecture);
     setCity(draftCity);
     setTown(draftTown);
-    setGroundFilter(draftGroundFilter);
     setStrengthFilter(draftStrengthFilter);
+    setGroundFilter(draftGroundFilter);
+    setBikeFilter(draftBikeFilter);
+    setBikeCapacityMin(draftBikeCapacityMin);
+    setMemberCountMin(draftMemberCountMin);
+    setHasNoteOnly(draftHasNoteOnly);
   };
 
   const clearFilters = () => {
@@ -111,16 +188,24 @@ export default function TeamsSearchClient() {
     setDraftPrefecture("");
     setDraftCity("");
     setDraftTown("");
-    setDraftGroundFilter("all");
     setDraftStrengthFilter("");
+    setDraftGroundFilter("all");
+    setDraftBikeFilter("all");
+    setDraftBikeCapacityMin("");
+    setDraftMemberCountMin("");
+    setDraftHasNoteOnly(false);
 
     setKeyword("");
     setCategoryFilter([]);
     setPrefecture("");
     setCity("");
     setTown("");
-    setGroundFilter("all");
     setStrengthFilter("");
+    setGroundFilter("all");
+    setBikeFilter("all");
+    setBikeCapacityMin("");
+    setMemberCountMin("");
+    setHasNoteOnly(false);
   };
 
   const hasDraftChanges = useMemo(() => {
@@ -130,8 +215,12 @@ export default function TeamsSearchClient() {
       draftPrefecture !== prefecture ||
       draftCity !== city ||
       draftTown !== town ||
+      draftStrengthFilter !== strengthFilter ||
       draftGroundFilter !== groundFilter ||
-      draftStrengthFilter !== strengthFilter
+      draftBikeFilter !== bikeFilter ||
+      draftBikeCapacityMin !== bikeCapacityMin ||
+      draftMemberCountMin !== memberCountMin ||
+      draftHasNoteOnly !== hasNoteOnly
     );
   }, [
     draftKeyword,
@@ -144,10 +233,18 @@ export default function TeamsSearchClient() {
     city,
     draftTown,
     town,
-    draftGroundFilter,
-    groundFilter,
     draftStrengthFilter,
     strengthFilter,
+    draftGroundFilter,
+    groundFilter,
+    draftBikeFilter,
+    bikeFilter,
+    draftBikeCapacityMin,
+    bikeCapacityMin,
+    draftMemberCountMin,
+    memberCountMin,
+    draftHasNoteOnly,
+    hasNoteOnly,
   ]);
 
   const filtered = useMemo(() => {
@@ -160,40 +257,58 @@ export default function TeamsSearchClient() {
           : [];
 
       if (categoryFilter.length > 0) {
-        if (cats.length === 0) return false;
         if (!cats.some((c) => c && categoryFilter.includes(String(c).trim()))) return false;
       }
 
-      if (prefecture && (t.prefecture ?? "") !== prefecture) return false;
-      if (city && (t.city ?? "") !== city) return false;
-      if (town && (t.town ?? "") !== town) return false;
+      if (prefecture && norm(t.prefecture) !== prefecture) return false;
+      if (city && norm(t.city) !== city) return false;
+      if (town && norm(t.town) !== town) return false;
+
+      if (strengthFilter) {
+        if (getStrength(t) !== strengthFilter) return false;
+      }
 
       if (groundFilter !== "all") {
         const val = t.has_ground ? "あり" : "なし";
         if (val !== groundFilter) return false;
       }
 
-      if (strengthFilter) {
-        const rank = levelLabel(Number(t.level ?? 0));
-        if (rank !== strengthFilter) return false;
+      if (bikeFilter !== "all") {
+        const val = (t.bike_parking ?? "不明") as "あり" | "なし" | "不明";
+        if (val !== bikeFilter) return false;
       }
+
+      if (bikeCapacityMin) {
+        const cap = parseBikeCapacity(t.bike_parking_capacity);
+        if (cap == null || cap < Number(bikeCapacityMin)) return false;
+      }
+
+      if (memberCountMin) {
+        const count = Number(getMemberCount(t));
+        if (count < Number(memberCountMin)) return false;
+      }
+
+      if (hasNoteOnly && !norm(t.note)) return false;
 
       if (keyword.trim()) {
         const q = keyword.trim().toLowerCase();
         const hay = [
           t.name,
           t.area,
-          t.category,
-          ...(t.categories ?? []),
           t.prefecture,
           t.city,
           t.town,
+          t.category,
+          ...(t.categories ?? []),
           t.note,
           t.uniform_main,
           t.uniform_sub,
           t.bike_parking,
-          levelLabel(Number(t.level ?? 0)),
+          t.bike_parking_capacity,
+          getStrength(t),
+          String(getMemberCount(t)),
         ]
+          .filter(Boolean)
           .join(" ")
           .toLowerCase();
 
@@ -202,7 +317,20 @@ export default function TeamsSearchClient() {
 
       return true;
     });
-  }, [teams, keyword, categoryFilter, prefecture, city, town, groundFilter, strengthFilter]);
+  }, [
+    teams,
+    keyword,
+    categoryFilter,
+    prefecture,
+    city,
+    town,
+    strengthFilter,
+    groundFilter,
+    bikeFilter,
+    bikeCapacityMin,
+    memberCountMin,
+    hasNoteOnly,
+  ]);
 
   const appliedSummary = useMemo(() => {
     const parts: string[] = [];
@@ -212,9 +340,25 @@ export default function TeamsSearchClient() {
     if (town) parts.push(`町名: ${town}`);
     if (categoryFilter.length > 0) parts.push(`カテゴリ: ${categoryFilter.join(" / ")}`);
     if (strengthFilter) parts.push(`強さ: ${strengthFilter}`);
-    if (groundFilter !== "all") parts.push(`グラウンド提供: ${groundFilter}`);
+    if (groundFilter !== "all") parts.push(`グラウンド: ${groundFilter}`);
+    if (bikeFilter !== "all") parts.push(`駐輪場: ${bikeFilter}`);
+    if (bikeCapacityMin) parts.push(`駐輪場台数: ${bikeCapacityMin}台以上`);
+    if (memberCountMin) parts.push(`人数: ${memberCountMin}人以上`);
+    if (hasNoteOnly) parts.push("メモありのみ");
     return parts;
-  }, [keyword, prefecture, city, town, categoryFilter, strengthFilter, groundFilter]);
+  }, [
+    keyword,
+    prefecture,
+    city,
+    town,
+    categoryFilter,
+    strengthFilter,
+    groundFilter,
+    bikeFilter,
+    bikeCapacityMin,
+    memberCountMin,
+    hasNoteOnly,
+  ]);
 
   return (
     <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
@@ -246,7 +390,7 @@ export default function TeamsSearchClient() {
       <AppHero
         icon="🔎"
         title="チーム検索"
-        desc="地域やカテゴリ、強さなどの条件から、対戦相手候補のチームを探せます。"
+        desc="地域やカテゴリ、強さ、駐輪場、人数などの条件から対戦相手候補を探せます。"
       />
 
       <AppTabNav />
@@ -276,6 +420,7 @@ export default function TeamsSearchClient() {
             town={draftTown}
             setTown={setDraftTown}
             townOptional={true}
+            useChipUI={true}
           />
 
           <CheckboxGroup
@@ -285,26 +430,19 @@ export default function TeamsSearchClient() {
             onChange={setDraftCategoryFilter}
             columns={3}
             disabled={loading}
+            useChipUI={true}
+          />
+
+          <StrengthRankPicker
+            value={draftStrengthFilter}
+            onChange={setDraftStrengthFilter}
+            disabled={loading}
+            title="強さ"
+            allowEmpty={true}
+            emptyLabel="指定なし"
           />
 
           <div style={twoCols}>
-            <label style={label}>
-              <span style={labelTitle}>強さ</span>
-              <select
-                value={draftStrengthFilter}
-                onChange={(e) => setDraftStrengthFilter(e.target.value)}
-                className="sh-select"
-                disabled={loading}
-              >
-                <option value="">指定なし</option>
-                <option value="SS">SS</option>
-                <option value="S">S</option>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-              </select>
-            </label>
-
             <label style={label}>
               <span style={labelTitle}>グラウンド提供</span>
               <select
@@ -317,6 +455,73 @@ export default function TeamsSearchClient() {
                 <option value="あり">あり</option>
                 <option value="なし">なし</option>
               </select>
+            </label>
+
+            <label style={label}>
+              <span style={labelTitle}>駐輪場</span>
+              <select
+                value={draftBikeFilter}
+                onChange={(e) =>
+                  setDraftBikeFilter(e.target.value as "all" | "あり" | "なし" | "不明")
+                }
+                className="sh-select"
+                disabled={loading}
+              >
+                <option value="all">指定なし</option>
+                <option value="あり">あり</option>
+                <option value="なし">なし</option>
+                <option value="不明">不明</option>
+              </select>
+            </label>
+          </div>
+
+          <div style={threeCols}>
+            <label style={label}>
+              <span style={labelTitle}>駐輪場台数（以上）</span>
+              <select
+                value={draftBikeCapacityMin}
+                onChange={(e) => setDraftBikeCapacityMin(e.target.value)}
+                className="sh-select"
+                disabled={loading}
+              >
+                <option value="">指定なし</option>
+                <option value="5">5台以上</option>
+                <option value="10">10台以上</option>
+                <option value="15">15台以上</option>
+                <option value="20">20台以上</option>
+                <option value="25">25台以上</option>
+                <option value="30">30台以上</option>
+                <option value="40">40台以上</option>
+                <option value="50">50台以上</option>
+              </select>
+            </label>
+
+            <label style={label}>
+              <span style={labelTitle}>チーム所属人数（以上）</span>
+              <select
+                value={draftMemberCountMin}
+                onChange={(e) => setDraftMemberCountMin(e.target.value)}
+                className="sh-select"
+                disabled={loading}
+              >
+                <option value="">指定なし</option>
+                <option value="5">5人以上</option>
+                <option value="10">10人以上</option>
+                <option value="15">15人以上</option>
+                <option value="20">20人以上</option>
+                <option value="25">25人以上</option>
+                <option value="30">30人以上</option>
+              </select>
+            </label>
+
+            <label style={checkLabel}>
+              <input
+                type="checkbox"
+                checked={draftHasNoteOnly}
+                onChange={(e) => setDraftHasNoteOnly(e.target.checked)}
+                disabled={loading}
+              />
+              メモ入力があるチームのみ
             </label>
           </div>
 
@@ -348,7 +553,7 @@ export default function TeamsSearchClient() {
             </div>
           ) : (
             <div style={{ color: "#777", fontSize: 12 }}>
-              ※ 条件を入力して「この条件で表示」を押すと、検索結果に反映されます
+              ※ 条件を入れて「この条件で表示」を押すと、一覧に反映されます
             </div>
           )}
         </div>
@@ -357,62 +562,72 @@ export default function TeamsSearchClient() {
       {loading ? (
         <p style={{ color: "#777", marginTop: 16 }}>読み込み中...</p>
       ) : (
-        <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
+        <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
           {filtered.length === 0 ? (
-            <p style={{ color: "#777" }}>条件に合うチームがありません。</p>
+            <div style={emptyBox}>条件に合うチームがありません。</div>
           ) : (
-            filtered.map((t) => {
-              const cats =
-                Array.isArray(t.categories) && t.categories.length > 0
-                  ? t.categories.join(", ")
-                  : (t.category ?? "未設定");
-
-              const area =
-                (t.area ?? "").trim() ||
-                `${t.prefecture ?? ""} ${t.city ?? ""}${t.town ? "・" + t.town : ""}`.trim() ||
-                "（エリア未設定）";
-
-              return (
-                <div key={t.id} style={card}>
-                  <div style={{ fontWeight: 900, fontSize: 18 }}>
-                    {t.name ?? "（名称未設定）"}
-                  </div>
-
-                  <div style={{ color: "#666", marginTop: 6, lineHeight: 1.7 }}>
-                    📍 {area}
-                    <br />
-                    🏷 {cats} / 💪 強さ {levelLabel(Number(t.level ?? 0))} / 🏟 グラウンド{" "}
-                    {t.has_ground ? "あり" : "なし"} / 🚲 {t.bike_parking ?? "不明"}
-                  </div>
-
-                  <div style={infoGrid}>
-                    <div style={infoBox}>
-                      <div style={infoLabel}>ユニフォーム</div>
-                      <div style={infoValue}>
-                        {t.uniform_main ?? "不明"}（メイン） / {t.uniform_sub ?? "不明"}（サブ）
-                      </div>
+            filtered.map((t) => (
+              <div key={t.id} style={card}>
+                <div style={cardTop}>
+                  <div>
+                    <div style={teamName}>{t.name ?? "（名称未設定）"}</div>
+                    <div style={subLine}>
+                      📍 {buildAreaText(t)}
+                      <br />
+                      🏷{" "}
+                      {Array.isArray(t.categories) && t.categories.length > 0
+                        ? t.categories.join(" / ")
+                        : t.category ?? "未設定"}
+                      {" / "}💪 強さ {getStrength(t)}
                     </div>
-
-                    {t.note ? (
-                      <div style={infoBox}>
-                        <div style={infoLabel}>メモ</div>
-                        <div style={infoValue}>{t.note}</div>
-                      </div>
-                    ) : null}
                   </div>
+
+                  <div style={badge}>{getStrength(t)}</div>
                 </div>
-              );
-            })
+
+                <div style={infoGrid}>
+                  <div style={infoBox}>
+                    <div style={infoLabel}>グラウンド・駐輪場</div>
+                    <div style={infoValue}>
+                      グラウンド {t.has_ground ? "あり" : "なし"} / 駐輪場 {formatBikeParking(t)}
+                    </div>
+                  </div>
+
+                  <div style={infoBox}>
+                    <div style={infoLabel}>所属人数・希望枠</div>
+                    <div style={infoValue}>
+                      {getMemberCount(t)}人 / {formatDesiredDates(t.desired_dates)}
+                    </div>
+                  </div>
+
+                  <div style={infoBox}>
+                    <div style={infoLabel}>ユニフォーム</div>
+                    <div style={infoValue}>
+                      {t.uniform_main ?? "不明"}（メイン） / {t.uniform_sub ?? "不明"}（サブ）
+                    </div>
+                  </div>
+
+                  {t.note ? (
+                    <div style={infoBox}>
+                      <div style={infoLabel}>メモ</div>
+                      <div style={infoValue}>{t.note}</div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <Link href="/matches" className="sh-btn sh-btn--primary">
+                    このまま試合を探す
+                  </Link>
+                </div>
+              </div>
+            ))
           )}
         </div>
       )}
     </main>
   );
 }
-
-const pageHead: React.CSSProperties = {
-  marginBottom: 12,
-};
 
 const filterWrap: React.CSSProperties = {
   marginTop: 12,
@@ -433,10 +648,29 @@ const labelTitle: React.CSSProperties = {
   color: "#2d3b31",
 };
 
+const checkLabel: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "12px 12px",
+  border: "1px solid #eee",
+  borderRadius: 12,
+  background: "#fafafa",
+  minHeight: 48,
+};
+
 const twoCols: React.CSSProperties = {
   display: "grid",
   gap: 12,
-  gridTemplateColumns: "1fr 1fr",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  alignItems: "start",
+};
+
+const threeCols: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  alignItems: "start",
 };
 
 const actionRow: React.CSSProperties = {
@@ -467,22 +701,57 @@ const appliedText: React.CSSProperties = {
 };
 
 const card: React.CSSProperties = {
-  padding: 14,
-  borderRadius: 14,
-  border: "1px solid #eee",
-  background: "#fafafa",
+  padding: 16,
+  borderRadius: 16,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  boxShadow: "0 4px 12px rgba(0,0,0,0.04)",
+};
+
+const cardTop: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  alignItems: "flex-start",
+  flexWrap: "wrap",
+};
+
+const teamName: React.CSSProperties = {
+  fontSize: 20,
+  fontWeight: 900,
+  color: "#16391f",
+};
+
+const subLine: React.CSSProperties = {
+  color: "#666",
+  marginTop: 8,
+  lineHeight: 1.8,
+};
+
+const badge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minWidth: 42,
+  height: 30,
+  padding: "0 12px",
+  borderRadius: 999,
+  background: "#f5c542",
+  color: "#3a2b00",
+  fontWeight: 900,
+  fontSize: 12,
 };
 
 const infoGrid: React.CSSProperties = {
   display: "grid",
   gap: 10,
-  marginTop: 12,
+  marginTop: 14,
 };
 
 const infoBox: React.CSSProperties = {
   border: "1px solid #edf1ee",
   borderRadius: 12,
-  background: "#fff",
+  background: "#fafcfb",
   padding: "10px 12px",
 };
 
@@ -497,6 +766,14 @@ const infoValue: React.CSSProperties = {
   fontSize: 14,
   color: "#2d3b31",
   lineHeight: 1.7,
+};
+
+const emptyBox: React.CSSProperties = {
+  padding: 20,
+  borderRadius: 16,
+  border: "1px solid #eee",
+  background: "#fff",
+  color: "#777",
 };
 
 const toastBox: React.CSSProperties = {
