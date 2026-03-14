@@ -5,10 +5,10 @@ import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
+import { useRouter } from "next/navigation";
 
 import { Calendar } from "./components/Calendar";
 import { DaySlotList } from "./components/DaySlotList";
-import { CreateSlotModal } from "./components/CreateSlotModal";
 
 import { CATEGORY_OPTIONS } from "@/app/lib/categories";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
@@ -69,41 +69,15 @@ const contentScrollBox: React.CSSProperties = {
   WebkitOverflowScrolling: "touch",
 };
 
-function buildAreaText(
-  team?: {
-    area?: string | null;
-    prefecture?: string | null;
-    city?: string | null;
-    town?: string | null;
-  } | null,
-  fallback?: string
-) {
-  const fromTeam =
-    (team?.area ?? "").trim() ||
-    `${team?.prefecture ?? ""} ${team?.city ?? ""}${team?.town ? "・" + team.town : ""}`.trim();
-
-  return fromTeam || (fallback ?? "").trim() || null;
-}
-
 export default function MatchCalendarPage() {
+  const router = useRouter();
+
   const [monthDate, setMonthDate] = useState<Date>(() => startOfMonth(new Date()));
   const [selectedYmd, setSelectedYmd] = useState<string>(ymdToday());
   const [selectedSlotId, setSelectedSlotId] = useState<string>("");
-  const [openCreate, setOpenCreate] = useState(false);
 
   const [requestTeamId, setRequestTeamId] = useState<string>("");
   const [requestComment, setRequestComment] = useState<string>("");
-
-  const [hostTeamId, setHostTeamId] = useState<string>("");
-  const [slotDate, setSlotDate] = useState<string>(ymdToday());
-  const [startTime, setStartTime] = useState<string>("13:00");
-  const [endTime, setEndTime] = useState<string>("15:00");
-  const [slotArea, setSlotArea] = useState<string>("");
-  const [slotCategory, setSlotCategory] = useState<string>("U-12");
-  const [venueId, setVenueId] = useState<string>("");
-
-  const [wantedLevelMin, setWantedLevelMin] = useState<string>("");
-  const [wantedLevelMax, setWantedLevelMax] = useState<string>("");
 
   const {
     draftKeyword,
@@ -155,18 +129,6 @@ export default function MatchCalendarPage() {
       setRequestTeamId(myTeams[0].id);
     }
   }, [myTeams, requestTeamId]);
-
-  useEffect(() => {
-    if (!hostTeamId && myTeams[0]?.id) {
-      setHostTeamId(myTeams[0].id);
-    }
-    if (!slotArea && myTeams[0]?.area) {
-      setSlotArea(myTeams[0].area ?? "");
-    }
-    if (myTeams[0]?.category && !slotCategory) {
-      setSlotCategory(myTeams[0].category ?? "U-12");
-    }
-  }, [myTeams, hostTeamId, slotArea, slotCategory]);
 
   const teamMap = useMemo(() => {
     return new Map(allTeams.map((t) => [t.id, t]));
@@ -256,17 +218,8 @@ export default function MatchCalendarPage() {
     scrollToDayList();
   };
 
-  const resetCreateFormForDate = (ymd: string) => {
-    const firstTeam = myTeams[0] ?? null;
-    setSlotDate(ymd);
-    setHostTeamId(firstTeam?.id ?? "");
-    setStartTime("13:00");
-    setEndTime("15:00");
-    setSlotArea(firstTeam?.area ?? "");
-    setSlotCategory(firstTeam?.category ?? "U-12");
-    setVenueId("");
-    setWantedLevelMin("");
-    setWantedLevelMax("");
+  const goToCreatePage = (ymd: string) => {
+    router.push(`/match/new?date=${encodeURIComponent(ymd)}`);
   };
 
   const getOrCreateDmThread = async (myTeamId: string, otherTeamId: string) => {
@@ -528,83 +481,6 @@ export default function MatchCalendarPage() {
     await loadMonth();
   };
 
-  const createSlot = async () => {
-    if (!slotDate) {
-      alert("日付を入力してください");
-      return;
-    }
-    if (!hostTeamId) {
-      alert("ホストチームを選んでください");
-      return;
-    }
-    if (!startTime || !endTime) {
-      alert("開始時刻と終了時刻を入力してください");
-      return;
-    }
-    if (startTime >= endTime) {
-      alert("終了時刻は開始時刻より後にしてください");
-      return;
-    }
-
-    if (
-      wantedLevelMin &&
-      wantedLevelMax &&
-      Number(wantedLevelMin) > Number(wantedLevelMax)
-    ) {
-      alert("希望相手の強さは、下限が上限を超えないようにしてください");
-      return;
-    }
-
-    const { data: u } = await supabase.auth.getUser();
-    const uid = u?.user?.id;
-    if (!uid) {
-      alert("ログインが必要です");
-      return;
-    }
-
-    const hostTeam = myTeams.find((t) => t.id === hostTeamId);
-    if (!hostTeam) {
-      alert("ホストチームが見つかりません");
-      return;
-    }
-
-    const builtArea = buildAreaText(hostTeam, slotArea);
-
-    const payload = {
-      owner_id: uid,
-      host_team_id: hostTeamId,
-      date: slotDate,
-      start_time: startTime,
-      end_time: endTime,
-      venue_id: venueId || null,
-      area: builtArea,
-      area_text: builtArea,
-      area_detail: null,
-      category: slotCategory || hostTeam.category || "U-12",
-      prefecture: hostTeam.prefecture ?? null,
-      city: hostTeam.city ?? null,
-      town: hostTeam.town ?? null,
-      level_min: wantedLevelMin ? Number(wantedLevelMin) : null,
-      level_max: wantedLevelMax ? Number(wantedLevelMax) : null,
-      status: "open",
-      is_closed: false,
-    };
-
-    const { error } = await supabase.from("match_slots").insert(payload);
-
-    if (error) {
-      console.error(error);
-      alert(`募集作成に失敗しました: ${error.message}`);
-      return;
-    }
-
-    setOpenCreate(false);
-    resetCreateFormForDate(slotDate);
-    setSelectedYmd(slotDate);
-    await loadMonth();
-    scrollToDayList();
-  };
-
   return (
     <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
       <AppHero
@@ -630,10 +506,7 @@ export default function MatchCalendarPage() {
           }}
           onPrevMonth={() => setMonthDate(addMonths(monthDate, -1))}
           onNextMonth={() => setMonthDate(addMonths(monthDate, 1))}
-          onCreateForDate={(ymd) => {
-            resetCreateFormForDate(ymd);
-            setOpenCreate(true);
-          }}
+          onCreateForDate={(ymd) => goToCreatePage(ymd)}
           disableCreate={myTeams.length === 0}
         />
       </section>
@@ -652,10 +525,7 @@ export default function MatchCalendarPage() {
               type="button"
               className="sh-btn"
               style={createButtonInline}
-              onClick={() => {
-                resetCreateFormForDate(selectedYmd);
-                setOpenCreate(true);
-              }}
+              onClick={() => goToCreatePage(selectedYmd)}
               disabled={loading || myTeams.length === 0}
             >
               ＋募集を作る
@@ -859,33 +729,6 @@ export default function MatchCalendarPage() {
           </div>
         </section>
       </div>
-
-      <CreateSlotModal
-        open={openCreate}
-        loading={loading}
-        myTeams={myTeams as any}
-        venues={venues}
-        slotDate={slotDate}
-        hostTeamId={hostTeamId}
-        startTime={startTime}
-        endTime={endTime}
-        slotArea={slotArea}
-        slotCategory={slotCategory}
-        venueId={venueId}
-        wantedLevelMin={wantedLevelMin}
-        wantedLevelMax={wantedLevelMax}
-        setSlotDate={setSlotDate}
-        setHostTeamId={setHostTeamId}
-        setStartTime={setStartTime}
-        setEndTime={setEndTime}
-        setSlotArea={setSlotArea}
-        setSlotCategory={setSlotCategory}
-        setVenueId={setVenueId}
-        setWantedLevelMin={setWantedLevelMin}
-        setWantedLevelMax={setWantedLevelMax}
-        onClose={() => setOpenCreate(false)}
-        onCreate={createSlot}
-      />
     </main>
   );
 }

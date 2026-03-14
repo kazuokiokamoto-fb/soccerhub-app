@@ -18,6 +18,26 @@ function levelLabel(level: number) {
   return "C";
 }
 
+function levelToRankLabel(level?: number | null) {
+  const n = Number(level ?? 0);
+  if (!level && level !== 0) return "";
+  if (n >= 9) return "SS";
+  if (n >= 7) return "S";
+  if (n >= 5) return "A";
+  if (n >= 3) return "B";
+  return "C";
+}
+
+function renderWantedLevelRange(slot: DbSlot) {
+  const min = levelToRankLabel(slot.level_min);
+  const max = levelToRankLabel(slot.level_max);
+
+  if (min && max) return `${min}〜${max}`;
+  if (min) return `${min}以上`;
+  if (max) return `${max}以下`;
+  return "指定なし";
+}
+
 function statusBadgeStyle(status: DbRequest["status"]) {
   return {
     marginLeft: 8,
@@ -144,7 +164,7 @@ export function DaySlotList(props: {
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontWeight: 900, lineHeight: 1.35 }}>
-                      {hhmm(s.start_time)}–{hhmm(s.end_time)} / {s.area || "エリア未設定"} /{" "}
+                      {hhmm(s.start_time)}–{hhmm(s.end_time)} / {s.area_text ?? s.area ?? "エリア未設定"} /{" "}
                       {s.category || "カテゴリ未設定"} {isMine ? "（あなた）" : ""}
                       {s.is_closed ? (
                         <span style={{ ...statusBadgeStyle("cancelled"), marginLeft: 8 }}>締切</span>
@@ -160,6 +180,10 @@ export function DaySlotList(props: {
 
                     <div style={rankTextStyle}>
                       強さランク：<b>{rankText}</b>
+                    </div>
+
+                    <div style={wantedTextStyle}>
+                      希望相手：<b>{renderWantedLevelRange(s)}</b>
                     </div>
                   </div>
 
@@ -230,4 +254,12 @@ const rankTextStyle: React.CSSProperties = {
   color: "#4b5563",
   fontSize: 14,
   lineHeight: 1.5,
+};
+
+const wantedTextStyle: React.CSSProperties = {
+  marginTop: 4,
+  color: "#1f5d30",
+  fontSize: 14,
+  lineHeight: 1.5,
+  fontWeight: 700,
 };
