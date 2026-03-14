@@ -144,7 +144,7 @@ export default function TeamsSearchClient() {
 
   const [draftKeyword, setDraftKeyword] = useState("");
   const [draftCategoryFilter, setDraftCategoryFilter] = useState<string[]>([]);
-  const [draftPrefecture, setDraftPrefecture] = useState("");
+  const [draftPrefectureFilter, setDraftPrefectureFilter] = useState<string[]>([]);
   const [draftCityFilter, setDraftCityFilter] = useState<string[]>([]);
   const [draftStrengthFilter, setDraftStrengthFilter] = useState<StrengthRank[]>([]);
   const [draftGroundFilter, setDraftGroundFilter] = useState<"all" | "あり" | "なし">("all");
@@ -155,7 +155,7 @@ export default function TeamsSearchClient() {
 
   const [keyword, setKeyword] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
-  const [prefecture, setPrefecture] = useState("");
+  const [prefectureFilter, setPrefectureFilter] = useState<string[]>([]);
   const [cityFilter, setCityFilter] = useState<string[]>([]);
   const [strengthFilter, setStrengthFilter] = useState<StrengthRank[]>([]);
   const [groundFilter, setGroundFilter] = useState<"all" | "あり" | "なし">("all");
@@ -210,19 +210,22 @@ export default function TeamsSearchClient() {
     return Array.from(
       new Set(
         teams
-          .filter((t) => !draftPrefecture || norm(t.prefecture) === draftPrefecture)
+          .filter((t) => {
+            if (draftPrefectureFilter.length === 0) return true;
+            return draftPrefectureFilter.includes(norm(t.prefecture));
+          })
           .map((t) => norm(t.city))
           .filter(Boolean)
       )
     )
       .sort((a, b) => a.localeCompare(b, "ja"))
       .map((v) => ({ value: v, label: v }));
-  }, [teams, draftPrefecture]);
+  }, [teams, draftPrefectureFilter]);
 
   const applyFilters = () => {
     setKeyword(draftKeyword);
     setCategoryFilter([...draftCategoryFilter]);
-    setPrefecture(draftPrefecture);
+    setPrefectureFilter([...draftPrefectureFilter]);
     setCityFilter([...draftCityFilter]);
     setStrengthFilter([...draftStrengthFilter]);
     setGroundFilter(draftGroundFilter);
@@ -235,7 +238,7 @@ export default function TeamsSearchClient() {
   const clearFilters = () => {
     setDraftKeyword("");
     setDraftCategoryFilter([]);
-    setDraftPrefecture("");
+    setDraftPrefectureFilter([]);
     setDraftCityFilter([]);
     setDraftStrengthFilter([]);
     setDraftGroundFilter("all");
@@ -246,7 +249,7 @@ export default function TeamsSearchClient() {
 
     setKeyword("");
     setCategoryFilter([]);
-    setPrefecture("");
+    setPrefectureFilter([]);
     setCityFilter([]);
     setStrengthFilter([]);
     setGroundFilter("all");
@@ -260,7 +263,7 @@ export default function TeamsSearchClient() {
     return (
       draftKeyword !== keyword ||
       JSON.stringify(draftCategoryFilter) !== JSON.stringify(categoryFilter) ||
-      draftPrefecture !== prefecture ||
+      JSON.stringify(draftPrefectureFilter) !== JSON.stringify(prefectureFilter) ||
       JSON.stringify(draftCityFilter) !== JSON.stringify(cityFilter) ||
       JSON.stringify(draftStrengthFilter) !== JSON.stringify(strengthFilter) ||
       draftGroundFilter !== groundFilter ||
@@ -274,8 +277,8 @@ export default function TeamsSearchClient() {
     keyword,
     draftCategoryFilter,
     categoryFilter,
-    draftPrefecture,
-    prefecture,
+    draftPrefectureFilter,
+    prefectureFilter,
     draftCityFilter,
     cityFilter,
     draftStrengthFilter,
@@ -307,7 +310,9 @@ export default function TeamsSearchClient() {
         }
       }
 
-      if (prefecture && norm(t.prefecture) !== prefecture) return false;
+      if (prefectureFilter.length > 0) {
+        if (!prefectureFilter.includes(norm(t.prefecture))) return false;
+      }
 
       if (cityFilter.length > 0) {
         if (!cityFilter.includes(norm(t.city))) return false;
@@ -369,7 +374,7 @@ export default function TeamsSearchClient() {
     teams,
     keyword,
     categoryFilter,
-    prefecture,
+    prefectureFilter,
     cityFilter,
     strengthFilter,
     groundFilter,
@@ -382,7 +387,7 @@ export default function TeamsSearchClient() {
   const appliedSummary = useMemo(() => {
     const parts: string[] = [];
     if (keyword) parts.push(`キーワード: ${keyword}`);
-    if (prefecture) parts.push(`都県: ${prefecture}`);
+    if (prefectureFilter.length > 0) parts.push(`都県: ${prefectureFilter.join(" / ")}`);
     if (cityFilter.length > 0) parts.push(`市区町村: ${cityFilter.join(" / ")}`);
     if (categoryFilter.length > 0) parts.push(`カテゴリ: ${categoryFilter.join(" / ")}`);
     if (strengthFilter.length > 0) parts.push(`強さ: ${strengthFilter.join(" / ")}`);
@@ -394,7 +399,7 @@ export default function TeamsSearchClient() {
     return parts;
   }, [
     keyword,
-    prefecture,
+    prefectureFilter,
     cityFilter,
     categoryFilter,
     strengthFilter,
@@ -440,6 +445,14 @@ export default function TeamsSearchClient() {
         desc="地域やカテゴリ、強さ、駐輪場、人数などの条件から対戦相手候補を探せます。"
       />
 
+      <div style={heroNoteBox}>
+        <div style={heroNoteText}>
+          ※市区町村は、現在チーム登録がある地域のみ表示されます。
+          <br />
+          近隣エリアも含めて探すと、対戦相手が見つかりやすくなります。
+        </div>
+      </div>
+
       <section style={filterWrap}>
         <div style={{ display: "grid", gap: 12 }}>
           <label style={label}>
@@ -453,25 +466,81 @@ export default function TeamsSearchClient() {
             />
           </label>
 
-          <label style={label}>
-            <span style={labelTitle}>都県</span>
-            <select
-              value={draftPrefecture}
-              onChange={(e) => {
-                setDraftPrefecture(e.target.value);
-                setDraftCityFilter([]);
-              }}
-              className="sh-select"
-              disabled={loading}
-            >
-              <option value="">指定なし</option>
-              {prefectureOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div style={sectionCard}>
+            <div style={sectionHeaderRow}>
+              <div>
+                <div style={sectionTitle}>都県</div>
+                <div style={sectionSubText}>複数選択できます</div>
+              </div>
+
+              <div style={chipActionRow}>
+                <button
+                  type="button"
+                  className="sh-btn"
+                  onClick={() => {
+                    setDraftPrefectureFilter(KANTO_PREFECTURES.map((p) => p.value));
+                  }}
+                  disabled={loading}
+                >
+                  全選択
+                </button>
+                <button
+                  type="button"
+                  className="sh-btn"
+                  onClick={() => {
+                    setDraftPrefectureFilter([]);
+                    setDraftCityFilter([]);
+                  }}
+                  disabled={loading}
+                >
+                  クリア
+                </button>
+              </div>
+            </div>
+
+            <div style={chipWrap}>
+              {prefectureOptions.map((opt) => {
+                const active = draftPrefectureFilter.includes(opt.value);
+
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => {
+                      setDraftPrefectureFilter((prev) => {
+                        const exists = prev.includes(opt.value);
+                        const next = exists
+                          ? prev.filter((v) => v !== opt.value)
+                          : [...prev, opt.value];
+
+                        setDraftCityFilter((prevCities) => {
+                          if (next.length === 0) return prevCities;
+
+                          const allowedCities = new Set(
+                            teams
+                              .filter((t) => next.includes(norm(t.prefecture)))
+                              .map((t) => norm(t.city))
+                              .filter(Boolean)
+                          );
+
+                          return prevCities.filter((city) => allowedCities.has(city));
+                        });
+
+                        return next;
+                      });
+                    }}
+                    style={{
+                      ...prefChip,
+                      ...(active ? prefChipActive : prefChipInactive),
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <CheckboxGroup
             title="市区町村で絞り込み（複数）"
@@ -701,6 +770,85 @@ const filterWrap: React.CSSProperties = {
   borderRadius: 14,
   border: "1px solid #eee",
   background: "#fff",
+};
+
+const heroNoteBox: React.CSSProperties = {
+  marginTop: 10,
+  marginBottom: 12,
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: "1px solid #e5e7eb",
+  background: "#fafafa",
+};
+
+const heroNoteText: React.CSSProperties = {
+  fontSize: 13,
+  color: "#55635a",
+  lineHeight: 1.8,
+  whiteSpace: "pre-wrap",
+};
+
+const sectionCard: React.CSSProperties = {
+  padding: 12,
+  borderRadius: 14,
+  border: "1px solid #eee",
+  background: "#fff",
+};
+
+const sectionHeaderRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  flexWrap: "wrap",
+  marginBottom: 10,
+};
+
+const sectionTitle: React.CSSProperties = {
+  fontWeight: 800,
+  color: "#2d3b31",
+  fontSize: 16,
+};
+
+const sectionSubText: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 12,
+  color: "#7a7a7a",
+};
+
+const chipActionRow: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const chipWrap: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const prefChip: React.CSSProperties = {
+  minHeight: 42,
+  padding: "0 16px",
+  borderRadius: 999,
+  border: "1px solid #cfd8d3",
+  fontWeight: 800,
+  fontSize: 14,
+  cursor: "pointer",
+  transition: "all 0.15s ease",
+};
+
+const prefChipActive: React.CSSProperties = {
+  background: "#2f7d32",
+  borderColor: "#2f7d32",
+  color: "#fff",
+  boxShadow: "0 6px 14px rgba(47,125,50,0.18)",
+};
+
+const prefChipInactive: React.CSSProperties = {
+  background: "#fff",
+  color: "#2d3b31",
 };
 
 const label: React.CSSProperties = {
