@@ -32,7 +32,7 @@ export type MatchFilters = {
   cityFilter: string;
   townFilter: string;
   groundFilter: "all" | "あり" | "なし";
-  strengthFilter: StrengthRank | "";
+  strengthFilter: StrengthRank[];
   bikeFilter: "all" | "あり" | "なし" | "不明";
   bikeCapacityMin: string;
   memberCountMin: string;
@@ -48,7 +48,7 @@ const KANTO_PREFS = [
   "群馬県",
 ];
 
-export function levelLabel(level: number) {
+export function levelLabel(level: number): StrengthRank {
   if (level >= 9) return "SS";
   if (level >= 7) return "S";
   if (level >= 5) return "A";
@@ -171,39 +171,43 @@ export function matchesSlotFilters(
     Array.isArray(team?.categories) && team?.categories.length > 0
       ? team.categories
       : team?.category
-      ? [team.category]
-      : slot.category
-      ? [slot.category]
-      : [];
+        ? [team.category]
+        : slot.category
+          ? [slot.category]
+          : [];
 
   if (filters.categoryFilter.length > 0) {
     if (cats.length === 0) return false;
 
-    if (
-      !cats.some((c) => c && filters.categoryFilter.includes(String(c).trim()))
-    )
+    if (!cats.some((c) => c && filters.categoryFilter.includes(String(c).trim()))) {
       return false;
+    }
   }
+
+  const fallbackParts = slotParts(slot);
 
   const parts = team
     ? {
-        prefecture: team.prefecture ?? slotParts(slot).prefecture,
-        city: team.city ?? slotParts(slot).city,
-        town: team.town ?? slotParts(slot).town,
+        prefecture: team.prefecture ?? fallbackParts.prefecture,
+        city: team.city ?? fallbackParts.city,
+        town: team.town ?? fallbackParts.town,
       }
-    : slotParts(slot);
+    : fallbackParts;
 
   if (
     filters.prefectureFilter &&
     (parts.prefecture ?? "") !== filters.prefectureFilter
-  )
+  ) {
     return false;
+  }
 
-  if (filters.cityFilter && (parts.city ?? "") !== filters.cityFilter)
+  if (filters.cityFilter && (parts.city ?? "") !== filters.cityFilter) {
     return false;
+  }
 
-  if (filters.townFilter && (parts.town ?? "") !== filters.townFilter)
+  if (filters.townFilter && (parts.town ?? "") !== filters.townFilter) {
     return false;
+  }
 
   if (filters.groundFilter !== "all") {
     const val = team?.has_ground ? "あり" : "なし";
@@ -211,10 +215,12 @@ export function matchesSlotFilters(
     if (val !== filters.groundFilter) return false;
   }
 
-  if (filters.strengthFilter) {
+  if (filters.strengthFilter.length > 0) {
     const rank = levelLabel(Number(team?.level ?? 0));
 
-    if (rank !== filters.strengthFilter) return false;
+    if (!filters.strengthFilter.includes(rank)) {
+      return false;
+    }
   }
 
   if (filters.bikeFilter !== "all") {

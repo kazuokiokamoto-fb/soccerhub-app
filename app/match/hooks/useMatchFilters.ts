@@ -6,24 +6,44 @@ import type { MatchFilters } from "../utils/filters";
 
 export function useMatchFilters() {
   const [draftKeyword, setDraftKeyword] = useState("");
+
   const [draftCategoryFilter, setDraftCategoryFilter] = useState<string[]>([]);
+
   const [draftPrefectureFilter, setDraftPrefectureFilter] = useState("");
   const [draftCityFilter, setDraftCityFilter] = useState("");
   const [draftTownFilter, setDraftTownFilter] = useState("");
-  const [draftGroundFilter, setDraftGroundFilter] = useState<"all" | "あり" | "なし">("all");
-  const [draftStrengthFilter, setDraftStrengthFilter] = useState<StrengthRank | "">("");
-  const [draftBikeFilter, setDraftBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
+
+  const [draftGroundFilter, setDraftGroundFilter] =
+    useState<"all" | "あり" | "なし">("all");
+
+  // ★ 複数選択対応
+  const [draftStrengthFilter, setDraftStrengthFilter] =
+    useState<StrengthRank[]>([]);
+
+  const [draftBikeFilter, setDraftBikeFilter] =
+    useState<"all" | "あり" | "なし" | "不明">("all");
+
   const [draftBikeCapacityMin, setDraftBikeCapacityMin] = useState("");
   const [draftMemberCountMin, setDraftMemberCountMin] = useState("");
 
   const [keyword, setKeyword] = useState("");
+
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
+
   const [prefectureFilter, setPrefectureFilter] = useState("");
   const [cityFilter, setCityFilter] = useState("");
   const [townFilter, setTownFilter] = useState("");
-  const [groundFilter, setGroundFilter] = useState<"all" | "あり" | "なし">("all");
-  const [strengthFilter, setStrengthFilter] = useState<StrengthRank | "">("");
-  const [bikeFilter, setBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
+
+  const [groundFilter, setGroundFilter] =
+    useState<"all" | "あり" | "なし">("all");
+
+  // ★ 複数選択対応
+  const [strengthFilter, setStrengthFilter] =
+    useState<StrengthRank[]>([]);
+
+  const [bikeFilter, setBikeFilter] =
+    useState<"all" | "あり" | "なし" | "不明">("all");
+
   const [bikeCapacityMin, setBikeCapacityMin] = useState("");
   const [memberCountMin, setMemberCountMin] = useState("");
 
@@ -87,7 +107,7 @@ export function useMatchFilters() {
       draftCityFilter !== cityFilter ||
       draftTownFilter !== townFilter ||
       draftGroundFilter !== groundFilter ||
-      draftStrengthFilter !== strengthFilter ||
+      JSON.stringify(draftStrengthFilter) !== JSON.stringify(strengthFilter) ||
       draftBikeFilter !== bikeFilter ||
       draftBikeCapacityMin !== bikeCapacityMin ||
       draftMemberCountMin !== memberCountMin
@@ -135,7 +155,7 @@ export function useMatchFilters() {
     setDraftCityFilter("");
     setDraftTownFilter("");
     setDraftGroundFilter("all");
-    setDraftStrengthFilter("");
+    setDraftStrengthFilter([]);
     setDraftBikeFilter("all");
     setDraftBikeCapacityMin("");
     setDraftMemberCountMin("");
@@ -146,7 +166,7 @@ export function useMatchFilters() {
     setCityFilter("");
     setTownFilter("");
     setGroundFilter("all");
-    setStrengthFilter("");
+    setStrengthFilter([]);
     setBikeFilter("all");
     setBikeCapacityMin("");
     setMemberCountMin("");

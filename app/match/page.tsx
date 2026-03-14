@@ -13,10 +13,7 @@ import { DaySlotList } from "./components/DaySlotList";
 import { CATEGORY_OPTIONS } from "@/app/lib/categories";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
-import {
-  StrengthRankPicker,
-  type StrengthRank,
-} from "@/app/components/StrengthRankPicker";
+import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 
 import {
   buildCalendarCells,
@@ -45,6 +42,14 @@ import {
   twoCols,
   actionRow,
 } from "./styles/matchPageStyles";
+
+const STRENGTH_OPTIONS: { value: StrengthRank; label: string }[] = [
+  { value: "SS", label: "SS" },
+  { value: "S", label: "S" },
+  { value: "A", label: "A" },
+  { value: "B", label: "B" },
+  { value: "C", label: "C" },
+];
 
 const summaryWrap: React.CSSProperties = {
   marginTop: 12,
@@ -508,9 +513,8 @@ export default function MatchCalendarPage() {
 
   return (
     <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
-      
       <AppTabNav />
-      
+
       <AppHero
         icon="⚽️"
         title="試合を探す / 募集する"
@@ -649,13 +653,14 @@ export default function MatchCalendarPage() {
               useChipUI={true}
             />
 
-            <StrengthRankPicker
-              value={draftStrengthFilter as StrengthRank | ""}
-              onChange={setDraftStrengthFilter}
-              disabled={loading}
+            <CheckboxGroup
               title="強さ"
-              allowEmpty={true}
-              emptyLabel="指定なし"
+              options={STRENGTH_OPTIONS}
+              values={draftStrengthFilter}
+              onChange={(values) => setDraftStrengthFilter(values as StrengthRank[])}
+              columns={5}
+              disabled={loading}
+              useChipUI={true}
             />
 
             <div style={twoCols}>
