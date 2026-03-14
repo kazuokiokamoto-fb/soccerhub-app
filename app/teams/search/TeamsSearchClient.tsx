@@ -11,6 +11,11 @@ import AppTabNav from "@/app/components/AppTabNav";
 
 type Toast = { type: "success" | "error" | "info"; text: string };
 
+type Option = {
+  value: string;
+  label: string;
+};
+
 type DbTeam = {
   id: string;
   owner_id: string | null;
@@ -44,9 +49,23 @@ type DbTeam = {
   updated_at: string;
 };
 
-const STRENGTH_OPTIONS: StrengthRank[] = ["SS", "S", "A", "B", "C"];
+const STRENGTH_OPTIONS: Option[] = [
+  { value: "SS", label: "SS" },
+  { value: "S", label: "S" },
+  { value: "A", label: "A" },
+  { value: "B", label: "B" },
+  { value: "C", label: "C" },
+];
 
-function levelLabel(level: number) {
+function normalizeOptions(
+  options: Array<string | { value: string; label: string }>
+): Option[] {
+  return options.map((opt) =>
+    typeof opt === "string" ? { value: opt, label: opt } : opt
+  );
+}
+
+function levelLabel(level: number): StrengthRank {
   if (level >= 9) return "SS";
   if (level >= 7) return "S";
   if (level >= 5) return "A";
@@ -70,8 +89,10 @@ function buildAreaText(team: DbTeam) {
 }
 
 function getStrength(team: DbTeam): StrengthRank {
-  return ((team.strength_rank as StrengthRank | null) ||
-    levelLabel(Number(team.level ?? 0))) as StrengthRank;
+  return (
+    (team.strength_rank as StrengthRank | null) ||
+    levelLabel(Number(team.level ?? 0))
+  ) as StrengthRank;
 }
 
 function getMemberCount(team: DbTeam) {
@@ -115,7 +136,6 @@ export default function TeamsSearchClient() {
   const [draftCategoryFilter, setDraftCategoryFilter] = useState<string[]>([]);
   const [draftPrefecture, setDraftPrefecture] = useState("");
   const [draftCityFilter, setDraftCityFilter] = useState<string[]>([]);
-  const [draftTown, setDraftTown] = useState("");
   const [draftStrengthFilter, setDraftStrengthFilter] = useState<StrengthRank[]>([]);
   const [draftGroundFilter, setDraftGroundFilter] = useState<"all" | "あり" | "なし">("all");
   const [draftBikeFilter, setDraftBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
@@ -127,7 +147,6 @@ export default function TeamsSearchClient() {
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [prefecture, setPrefecture] = useState("");
   const [cityFilter, setCityFilter] = useState<string[]>([]);
-  const [town, setTown] = useState("");
   const [strengthFilter, setStrengthFilter] = useState<StrengthRank[]>([]);
   const [groundFilter, setGroundFilter] = useState<"all" | "あり" | "なし">("all");
   const [bikeFilter, setBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
@@ -140,6 +159,12 @@ export default function TeamsSearchClient() {
     const t = setTimeout(() => setToast(null), 2800);
     return () => clearTimeout(t);
   }, [toast]);
+
+  const categoryOptions = useMemo(() => {
+    return normalizeOptions(
+      CATEGORY_OPTIONS as Array<string | { value: string; label: string }>
+    );
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -169,11 +194,7 @@ export default function TeamsSearchClient() {
 
   const prefectureOptions = useMemo(() => {
     return Array.from(
-      new Set(
-        teams
-          .map((t) => norm(t.prefecture))
-          .filter(Boolean)
-      )
+      new Set(teams.map((t) => norm(t.prefecture)).filter(Boolean))
     )
       .sort((a, b) => a.localeCompare(b, "ja"))
       .map((v) => ({ value: v, label: v }));
@@ -197,7 +218,6 @@ export default function TeamsSearchClient() {
     setCategoryFilter([...draftCategoryFilter]);
     setPrefecture(draftPrefecture);
     setCityFilter([...draftCityFilter]);
-    setTown(draftTown);
     setStrengthFilter([...draftStrengthFilter]);
     setGroundFilter(draftGroundFilter);
     setBikeFilter(draftBikeFilter);
@@ -211,7 +231,6 @@ export default function TeamsSearchClient() {
     setDraftCategoryFilter([]);
     setDraftPrefecture("");
     setDraftCityFilter([]);
-    setDraftTown("");
     setDraftStrengthFilter([]);
     setDraftGroundFilter("all");
     setDraftBikeFilter("all");
@@ -223,7 +242,6 @@ export default function TeamsSearchClient() {
     setCategoryFilter([]);
     setPrefecture("");
     setCityFilter([]);
-    setTown("");
     setStrengthFilter([]);
     setGroundFilter("all");
     setBikeFilter("all");
@@ -238,7 +256,6 @@ export default function TeamsSearchClient() {
       JSON.stringify(draftCategoryFilter) !== JSON.stringify(categoryFilter) ||
       draftPrefecture !== prefecture ||
       JSON.stringify(draftCityFilter) !== JSON.stringify(cityFilter) ||
-      draftTown !== town ||
       JSON.stringify(draftStrengthFilter) !== JSON.stringify(strengthFilter) ||
       draftGroundFilter !== groundFilter ||
       draftBikeFilter !== bikeFilter ||
@@ -255,8 +272,6 @@ export default function TeamsSearchClient() {
     prefecture,
     draftCityFilter,
     cityFilter,
-    draftTown,
-    town,
     draftStrengthFilter,
     strengthFilter,
     draftGroundFilter,
@@ -281,12 +296,16 @@ export default function TeamsSearchClient() {
           : [];
 
       if (categoryFilter.length > 0) {
-        if (!cats.some((c) => c && categoryFilter.includes(String(c).trim()))) return false;
+        if (!cats.some((c) => c && categoryFilter.includes(String(c).trim()))) {
+          return false;
+        }
       }
 
       if (prefecture && norm(t.prefecture) !== prefecture) return false;
-      if (cityFilter.length > 0 && !cityFilter.includes(norm(t.city))) return false;
-      if (town && norm(t.town) !== town) return false;
+
+      if (cityFilter.length > 0) {
+        if (!cityFilter.includes(norm(t.city))) return false;
+      }
 
       if (strengthFilter.length > 0) {
         if (!strengthFilter.includes(getStrength(t))) return false;
@@ -321,7 +340,6 @@ export default function TeamsSearchClient() {
           t.area,
           t.prefecture,
           t.city,
-          t.town,
           t.category,
           ...(t.categories ?? []),
           t.note,
@@ -347,7 +365,6 @@ export default function TeamsSearchClient() {
     categoryFilter,
     prefecture,
     cityFilter,
-    town,
     strengthFilter,
     groundFilter,
     bikeFilter,
@@ -361,7 +378,6 @@ export default function TeamsSearchClient() {
     if (keyword) parts.push(`キーワード: ${keyword}`);
     if (prefecture) parts.push(`都県: ${prefecture}`);
     if (cityFilter.length > 0) parts.push(`市区町村: ${cityFilter.join(" / ")}`);
-    if (town) parts.push(`町名: ${town}`);
     if (categoryFilter.length > 0) parts.push(`カテゴリ: ${categoryFilter.join(" / ")}`);
     if (strengthFilter.length > 0) parts.push(`強さ: ${strengthFilter.join(" / ")}`);
     if (groundFilter !== "all") parts.push(`グラウンド: ${groundFilter}`);
@@ -374,7 +390,6 @@ export default function TeamsSearchClient() {
     keyword,
     prefecture,
     cityFilter,
-    town,
     categoryFilter,
     strengthFilter,
     groundFilter,
@@ -462,20 +477,9 @@ export default function TeamsSearchClient() {
             useChipUI={true}
           />
 
-          <label style={label}>
-            <span style={labelTitle}>町名（単一）</span>
-            <input
-              value={draftTown}
-              onChange={(e) => setDraftTown(e.target.value)}
-              className="sh-input"
-              placeholder="例：三宿"
-              disabled={loading}
-            />
-          </label>
-
           <CheckboxGroup
             title="カテゴリで絞り込み（複数）"
-            options={CATEGORY_OPTIONS}
+            options={categoryOptions}
             values={draftCategoryFilter}
             onChange={setDraftCategoryFilter}
             columns={3}
@@ -498,7 +502,9 @@ export default function TeamsSearchClient() {
               <span style={labelTitle}>グラウンド提供</span>
               <select
                 value={draftGroundFilter}
-                onChange={(e) => setDraftGroundFilter(e.target.value as "all" | "あり" | "なし")}
+                onChange={(e) =>
+                  setDraftGroundFilter(e.target.value as "all" | "あり" | "なし")
+                }
                 className="sh-select"
                 disabled={loading}
               >
@@ -594,7 +600,9 @@ export default function TeamsSearchClient() {
               {loading ? "更新中…" : "再読み込み"}
             </button>
 
-            <div style={{ color: "#666", fontSize: 12 }}>ヒット件数：{filtered.length}</div>
+            <div style={{ color: "#666", fontSize: 12 }}>
+              ヒット件数：{filtered.length}
+            </div>
           </div>
 
           {appliedSummary.length > 0 ? (
