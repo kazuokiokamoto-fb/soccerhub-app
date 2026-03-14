@@ -17,6 +17,15 @@ function levelLabel(level: number) {
   return "C";
 }
 
+function levelToRankLabel(level?: number | null) {
+  const n = Number(level ?? 0);
+  if (n >= 9) return "SS";
+  if (n >= 7) return "S";
+  if (n >= 5) return "A";
+  if (n >= 3) return "B";
+  return "C";
+}
+
 function sumRoster(roster?: Record<string, number> | null) {
   if (!roster) return 0;
   return Object.values(roster).reduce((sum, v) => sum + (Number(v) || 0), 0);

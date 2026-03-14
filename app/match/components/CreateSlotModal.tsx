@@ -19,6 +19,9 @@ export function CreateSlotModal(props: {
   slotCategory: string;
   venueId: string;
 
+  wantedLevelMin: string;
+  wantedLevelMax: string;
+
   setSlotDate: (v: string) => void;
   setHostTeamId: (v: string) => void;
   setStartTime: (v: string) => void;
@@ -26,6 +29,9 @@ export function CreateSlotModal(props: {
   setSlotArea: (v: string) => void;
   setSlotCategory: (v: string) => void;
   setVenueId: (v: string) => void;
+
+  setWantedLevelMin: (v: string) => void;
+  setWantedLevelMax: (v: string) => void;
 
   onClose: () => void;
   onCreate: () => void;
@@ -42,6 +48,8 @@ export function CreateSlotModal(props: {
     slotArea,
     slotCategory,
     venueId,
+    wantedLevelMin,
+    wantedLevelMax,
     setSlotDate,
     setHostTeamId,
     setStartTime,
@@ -49,6 +57,8 @@ export function CreateSlotModal(props: {
     setSlotArea,
     setSlotCategory,
     setVenueId,
+    setWantedLevelMin,
+    setWantedLevelMax,
     onClose,
     onCreate,
   } = props;
@@ -104,6 +114,7 @@ export function CreateSlotModal(props: {
                 disabled={!!loading}
               />
             </label>
+
             <label style={label}>
               <span>終了</span>
               <input
@@ -116,18 +127,15 @@ export function CreateSlotModal(props: {
             </label>
           </div>
 
-          {/* ✅ エリア：23区 → 町名（検索付き） */}
-          <div style={{ ...cardLite }}>
+          <div style={cardLite}>
             <AreaSelect
               label="エリア（23区→町名）"
               value={slotArea}
               onChange={setSlotArea}
               disabled={!!loading}
-              // defaultCity を固定したければここで指定できる
-              // defaultCity="世田谷区"
             />
             <p style={{ margin: "8px 0 0", color: "#777", fontSize: 12 }}>
-              例：「世田谷区 三宿」のような形式で保存されます（既存 string と互換）
+              例：「世田谷区 三宿」のような形式で保存されます。
             </p>
           </div>
 
@@ -144,6 +152,42 @@ export function CreateSlotModal(props: {
               <option value="社会人">社会人</option>
             </select>
           </label>
+
+          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+            <label style={label}>
+              <span>希望相手の強さ（下限）</span>
+              <select
+                value={wantedLevelMin}
+                onChange={(e) => setWantedLevelMin(e.target.value)}
+                style={input}
+                disabled={!!loading}
+              >
+                <option value="">指定なし</option>
+                <option value="1">C</option>
+                <option value="3">B</option>
+                <option value="5">A</option>
+                <option value="7">S</option>
+                <option value="9">SS</option>
+              </select>
+            </label>
+
+            <label style={label}>
+              <span>希望相手の強さ（上限）</span>
+              <select
+                value={wantedLevelMax}
+                onChange={(e) => setWantedLevelMax(e.target.value)}
+                style={input}
+                disabled={!!loading}
+              >
+                <option value="">指定なし</option>
+                <option value="1">C</option>
+                <option value="3">B</option>
+                <option value="5">A</option>
+                <option value="7">S</option>
+                <option value="9">SS</option>
+              </select>
+            </label>
+          </div>
 
           <label style={label}>
             <span>グラウンド（任意）</span>
@@ -173,7 +217,7 @@ export function CreateSlotModal(props: {
           </div>
 
           <p style={{ margin: 0, color: "#777", fontSize: 12 }}>
-            ※ まずは「日付×時間で募集を作る」→ 相手が合わせる、で運用が回ります
+            ※ 募集時に、希望する相手の強さレンジも保存できます。
           </p>
         </div>
       </div>
@@ -181,7 +225,10 @@ export function CreateSlotModal(props: {
   );
 }
 
-const label: React.CSSProperties = { display: "grid", gap: 6 };
+const label: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+};
 
 const input: React.CSSProperties = {
   padding: "10px 12px",

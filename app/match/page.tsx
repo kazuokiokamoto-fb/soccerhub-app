@@ -102,6 +102,9 @@ export default function MatchCalendarPage() {
   const [slotCategory, setSlotCategory] = useState<string>("U-12");
   const [venueId, setVenueId] = useState<string>("");
 
+  const [wantedLevelMin, setWantedLevelMin] = useState<string>("");
+  const [wantedLevelMax, setWantedLevelMax] = useState<string>("");
+
   const {
     draftKeyword,
     setDraftKeyword,
@@ -262,6 +265,8 @@ export default function MatchCalendarPage() {
     setSlotArea(firstTeam?.area ?? "");
     setSlotCategory(firstTeam?.category ?? "U-12");
     setVenueId("");
+    setWantedLevelMin("");
+    setWantedLevelMax("");
   };
 
   const getOrCreateDmThread = async (myTeamId: string, otherTeamId: string) => {
@@ -378,7 +383,7 @@ export default function MatchCalendarPage() {
         "【試合申込】",
         `${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
         `カテゴリ: ${slot.category ?? "未設定"}`,
-        `エリア: ${slot.area ?? "未設定"}`,
+        `エリア: ${slot.area_text ?? slot.area ?? "未設定"}`,
         `申込チーム: ${requesterTeam?.name ?? "未設定"}`,
         `募集チーム: ${hostTeam?.name ?? "未設定"}`,
         requestComment.trim() ? `コメント: ${requestComment.trim()}` : "",
@@ -541,6 +546,15 @@ export default function MatchCalendarPage() {
       return;
     }
 
+    if (
+      wantedLevelMin &&
+      wantedLevelMax &&
+      Number(wantedLevelMin) > Number(wantedLevelMax)
+    ) {
+      alert("希望相手の強さは、下限が上限を超えないようにしてください");
+      return;
+    }
+
     const { data: u } = await supabase.auth.getUser();
     const uid = u?.user?.id;
     if (!uid) {
@@ -554,6 +568,8 @@ export default function MatchCalendarPage() {
       return;
     }
 
+    const builtArea = buildAreaText(hostTeam, slotArea);
+
     const payload = {
       owner_id: uid,
       host_team_id: hostTeamId,
@@ -561,11 +577,16 @@ export default function MatchCalendarPage() {
       start_time: startTime,
       end_time: endTime,
       venue_id: venueId || null,
-      area: buildAreaText(hostTeam, slotArea),
-      category: slotCategory || hostTeam.category || null,
+      area: builtArea,
+      area_text: builtArea,
+      area_detail: null,
+      category: slotCategory || hostTeam.category || "U-12",
       prefecture: hostTeam.prefecture ?? null,
       city: hostTeam.city ?? null,
       town: hostTeam.town ?? null,
+      level_min: wantedLevelMin ? Number(wantedLevelMin) : null,
+      level_max: wantedLevelMax ? Number(wantedLevelMax) : null,
+      status: "open",
       is_closed: false,
     };
 
@@ -851,6 +872,8 @@ export default function MatchCalendarPage() {
         slotArea={slotArea}
         slotCategory={slotCategory}
         venueId={venueId}
+        wantedLevelMin={wantedLevelMin}
+        wantedLevelMax={wantedLevelMax}
         setSlotDate={setSlotDate}
         setHostTeamId={setHostTeamId}
         setStartTime={setStartTime}
@@ -858,6 +881,8 @@ export default function MatchCalendarPage() {
         setSlotArea={setSlotArea}
         setSlotCategory={setSlotCategory}
         setVenueId={setVenueId}
+        setWantedLevelMin={setWantedLevelMin}
+        setWantedLevelMax={setWantedLevelMax}
         onClose={() => setOpenCreate(false)}
         onCreate={createSlot}
       />

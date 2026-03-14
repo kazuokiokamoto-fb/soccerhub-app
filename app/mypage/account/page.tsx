@@ -1,5 +1,7 @@
 "use client";
 
+import AppHero from "@/app/components/AppHero";
+import AppTabNav from "@/app/components/AppTabNav";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
@@ -164,22 +166,19 @@ export default function AccountEditPage() {
         </div>
       ) : null}
 
-      <section style={heroBox}>
-        <h1 style={heroTitle}>👤 アカウント設定</h1>
-        <p style={heroDesc}>
-          代表者情報と通知設定を編集できます。
-        </p>
-      </section>
+      <AppHero
+        icon="👤"
+        title="アカウント設定"
+        desc="代表者情報と通知設定を編集できます。"
+      />
+
+      <AppTabNav />
 
       <section style={card}>
         <div style={{ display: "grid", gap: 14 }}>
           <label style={label}>
             <span style={labelTitle}>メールアドレス</span>
-            <input
-              value={email}
-              className="sh-input"
-              disabled
-            />
+            <input value={email} className="sh-input" disabled />
             <span style={helperText}>
               ※ メールアドレス自体の変更は認証設定側で行います。
             </span>
@@ -258,7 +257,7 @@ export default function AccountEditPage() {
               {saving ? "保存中…" : "保存"}
             </button>
 
-            <Link href="/teams" className="sh-btn">
+            <Link href="/mypage" className="sh-btn">
               マイページへ戻る
             </Link>
           </div>
@@ -272,27 +271,6 @@ const wrap: React.CSSProperties = {
   padding: 16,
   maxWidth: 980,
   margin: "0 auto",
-};
-
-const heroBox: React.CSSProperties = {
-  borderRadius: 20,
-  background: "linear-gradient(135deg, #1e7f3c 0%, #145c2a 100%)",
-  color: "#fff",
-  padding: 20,
-  boxShadow: "0 10px 28px rgba(20,92,42,0.20)",
-};
-
-const heroTitle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 28,
-  fontWeight: 900,
-};
-
-const heroDesc: React.CSSProperties = {
-  margin: "8px 0 0",
-  fontSize: 14,
-  lineHeight: 1.7,
-  color: "rgba(255,255,255,0.92)",
 };
 
 const card: React.CSSProperties = {

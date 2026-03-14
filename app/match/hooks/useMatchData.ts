@@ -63,7 +63,7 @@ export function useMatchData(monthDate: Date) {
       const { data: slotRows } = await supabase
         .from("match_slots")
         .select(
-          "id,owner_id,host_team_id,date,start_time,end_time,venue_id,area,category,prefecture,city,town,is_closed,created_at"
+          "id,owner_id,host_team_id,date,start_time,end_time,venue_id,area,area_text,area_detail,category,level_min,level_max,status,prefecture,city,town,neighborhood,city_group,is_closed,created_at,updated_at"
         )
         .gte("date", start)
         .lte("date", end)

@@ -42,19 +42,33 @@ export type DbVenue = {
 
 export type DbSlot = {
   id: string;
-  owner_id: string;
+  owner_id: string | null;
   host_team_id: string;
   date: string;
   start_time: string;
   end_time: string;
   venue_id: string | null;
+
   area: string | null;
+  area_text?: string | null;
+  area_detail?: string | null;
+
   category: string | null;
+
+  level_min?: number | null;
+  level_max?: number | null;
+
+  status?: string | null;
+
   prefecture?: string | null;
   city?: string | null;
   town?: string | null;
-  is_closed?: boolean;
-  created_at?: string;
+  neighborhood?: string | null;
+  city_group?: string | null;
+
+  is_closed?: boolean | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type DbRequest = {
