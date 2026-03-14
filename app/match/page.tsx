@@ -139,11 +139,15 @@ export default function MatchCalendarPage() {
   }, [allTeams]);
 
   const filteredSlotsInMonth = useMemo(() => {
-    return slotsInMonth.filter((s: any) => matchesSlotFilters(s, teamMap as any, appliedFilters));
+    return slotsInMonth.filter((s: any) =>
+      matchesSlotFilters(s, teamMap as any, appliedFilters)
+    );
   }, [slotsInMonth, teamMap, appliedFilters]);
 
   const draftFilteredSlotsInMonth = useMemo(() => {
-    return slotsInMonth.filter((s: any) => matchesSlotFilters(s, teamMap as any, draftFilters));
+    return slotsInMonth.filter((s: any) =>
+      matchesSlotFilters(s, teamMap as any, draftFilters)
+    );
   }, [slotsInMonth, teamMap, draftFilters]);
 
   const countByDate = useMemo(() => {
@@ -219,7 +223,25 @@ export default function MatchCalendarPage() {
   };
 
   const goToCreatePage = (ymd: string) => {
-    router.push(`/match/new?date=${encodeURIComponent(ymd)}`);
+    const params = new URLSearchParams();
+
+    if (ymd) {
+      params.set("date", ymd);
+    }
+
+    const firstTeam = myTeams[0];
+    if (firstTeam?.id) {
+      params.set("hostTeamId", firstTeam.id);
+    }
+    if (firstTeam?.category) {
+      params.set("category", firstTeam.category);
+    }
+    if (firstTeam?.area) {
+      params.set("area", firstTeam.area);
+    }
+
+    const query = params.toString();
+    router.push(query ? `/match/new?${query}` : "/match/new");
   };
 
   const getOrCreateDmThread = async (myTeamId: string, otherTeamId: string) => {
@@ -358,7 +380,10 @@ export default function MatchCalendarPage() {
     scrollToDayList();
   };
 
-  const updateRequestStatus = async (requestId: string, status: "accepted" | "rejected") => {
+  const updateRequestStatus = async (
+    requestId: string,
+    status: "accepted" | "rejected"
+  ) => {
     const target = requestsForMonth.find((r) => r.id === requestId);
     if (!target) return false;
 
@@ -377,16 +402,16 @@ export default function MatchCalendarPage() {
     }
 
     if (status === "accepted") {
-      await supabase
-        .from("match_slots")
-        .update({ is_closed: true })
-        .eq("id", target.slot_id);
+      await supabase.from("match_slots").update({ is_closed: true }).eq("id", target.slot_id);
 
       try {
         const { data: u } = await supabase.auth.getUser();
         const uid = u?.user?.id;
         if (uid) {
-          const threadId = await getOrCreateDmThread(slot.host_team_id, target.requester_team_id);
+          const threadId = await getOrCreateDmThread(
+            slot.host_team_id,
+            target.requester_team_id
+          );
 
           const requesterTeamName =
             requestTeamNameMap.get(target.requester_team_id) ?? "相手チーム";

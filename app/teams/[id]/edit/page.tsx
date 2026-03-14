@@ -347,7 +347,7 @@ export default function TeamEditPage() {
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href="/teams" className="sh-btn">
+            <Link href="/mypage" className="sh-btn">
               一覧へ
             </Link>
           </div>
@@ -538,7 +538,7 @@ export default function TeamEditPage() {
               {saving ? "保存中..." : "更新"}
             </button>
 
-            <Link href="/teams" className="sh-btn sh-btn--ghost">
+            <Link href="/mypage" className="sh-btn sh-btn--ghost">
               キャンセル
             </Link>
           </div>
