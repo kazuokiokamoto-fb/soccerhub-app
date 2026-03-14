@@ -5,11 +5,7 @@ import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
 import { CATEGORY_OPTIONS } from "@/app/lib/categories";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
-import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
-import {
-  StrengthRankPicker,
-  type StrengthRank,
-} from "@/app/components/StrengthRankPicker";
+import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 
@@ -48,6 +44,8 @@ type DbTeam = {
   updated_at: string;
 };
 
+const STRENGTH_OPTIONS: StrengthRank[] = ["SS", "S", "A", "B", "C"];
+
 function levelLabel(level: number) {
   if (level >= 9) return "SS";
   if (level >= 7) return "S";
@@ -71,8 +69,9 @@ function buildAreaText(team: DbTeam) {
   return composed || "（エリア未設定）";
 }
 
-function getStrength(team: DbTeam) {
-  return (team.strength_rank as StrengthRank | null) || levelLabel(Number(team.level ?? 0));
+function getStrength(team: DbTeam): StrengthRank {
+  return ((team.strength_rank as StrengthRank | null) ||
+    levelLabel(Number(team.level ?? 0))) as StrengthRank;
 }
 
 function getMemberCount(team: DbTeam) {
@@ -115,9 +114,9 @@ export default function TeamsSearchClient() {
   const [draftKeyword, setDraftKeyword] = useState("");
   const [draftCategoryFilter, setDraftCategoryFilter] = useState<string[]>([]);
   const [draftPrefecture, setDraftPrefecture] = useState("");
-  const [draftCity, setDraftCity] = useState("");
+  const [draftCityFilter, setDraftCityFilter] = useState<string[]>([]);
   const [draftTown, setDraftTown] = useState("");
-  const [draftStrengthFilter, setDraftStrengthFilter] = useState<StrengthRank | "">("");
+  const [draftStrengthFilter, setDraftStrengthFilter] = useState<StrengthRank[]>([]);
   const [draftGroundFilter, setDraftGroundFilter] = useState<"all" | "あり" | "なし">("all");
   const [draftBikeFilter, setDraftBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
   const [draftBikeCapacityMin, setDraftBikeCapacityMin] = useState("");
@@ -127,9 +126,9 @@ export default function TeamsSearchClient() {
   const [keyword, setKeyword] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [prefecture, setPrefecture] = useState("");
-  const [city, setCity] = useState("");
+  const [cityFilter, setCityFilter] = useState<string[]>([]);
   const [town, setTown] = useState("");
-  const [strengthFilter, setStrengthFilter] = useState<StrengthRank | "">("");
+  const [strengthFilter, setStrengthFilter] = useState<StrengthRank[]>([]);
   const [groundFilter, setGroundFilter] = useState<"all" | "あり" | "なし">("all");
   const [bikeFilter, setBikeFilter] = useState<"all" | "あり" | "なし" | "不明">("all");
   const [bikeCapacityMin, setBikeCapacityMin] = useState("");
@@ -168,13 +167,38 @@ export default function TeamsSearchClient() {
     load();
   }, []);
 
+  const prefectureOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        teams
+          .map((t) => norm(t.prefecture))
+          .filter(Boolean)
+      )
+    )
+      .sort((a, b) => a.localeCompare(b, "ja"))
+      .map((v) => ({ value: v, label: v }));
+  }, [teams]);
+
+  const cityOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        teams
+          .filter((t) => !draftPrefecture || norm(t.prefecture) === draftPrefecture)
+          .map((t) => norm(t.city))
+          .filter(Boolean)
+      )
+    )
+      .sort((a, b) => a.localeCompare(b, "ja"))
+      .map((v) => ({ value: v, label: v }));
+  }, [teams, draftPrefecture]);
+
   const applyFilters = () => {
     setKeyword(draftKeyword);
     setCategoryFilter([...draftCategoryFilter]);
     setPrefecture(draftPrefecture);
-    setCity(draftCity);
+    setCityFilter([...draftCityFilter]);
     setTown(draftTown);
-    setStrengthFilter(draftStrengthFilter);
+    setStrengthFilter([...draftStrengthFilter]);
     setGroundFilter(draftGroundFilter);
     setBikeFilter(draftBikeFilter);
     setBikeCapacityMin(draftBikeCapacityMin);
@@ -186,9 +210,9 @@ export default function TeamsSearchClient() {
     setDraftKeyword("");
     setDraftCategoryFilter([]);
     setDraftPrefecture("");
-    setDraftCity("");
+    setDraftCityFilter([]);
     setDraftTown("");
-    setDraftStrengthFilter("");
+    setDraftStrengthFilter([]);
     setDraftGroundFilter("all");
     setDraftBikeFilter("all");
     setDraftBikeCapacityMin("");
@@ -198,9 +222,9 @@ export default function TeamsSearchClient() {
     setKeyword("");
     setCategoryFilter([]);
     setPrefecture("");
-    setCity("");
+    setCityFilter([]);
     setTown("");
-    setStrengthFilter("");
+    setStrengthFilter([]);
     setGroundFilter("all");
     setBikeFilter("all");
     setBikeCapacityMin("");
@@ -213,9 +237,9 @@ export default function TeamsSearchClient() {
       draftKeyword !== keyword ||
       JSON.stringify(draftCategoryFilter) !== JSON.stringify(categoryFilter) ||
       draftPrefecture !== prefecture ||
-      draftCity !== city ||
+      JSON.stringify(draftCityFilter) !== JSON.stringify(cityFilter) ||
       draftTown !== town ||
-      draftStrengthFilter !== strengthFilter ||
+      JSON.stringify(draftStrengthFilter) !== JSON.stringify(strengthFilter) ||
       draftGroundFilter !== groundFilter ||
       draftBikeFilter !== bikeFilter ||
       draftBikeCapacityMin !== bikeCapacityMin ||
@@ -229,8 +253,8 @@ export default function TeamsSearchClient() {
     categoryFilter,
     draftPrefecture,
     prefecture,
-    draftCity,
-    city,
+    draftCityFilter,
+    cityFilter,
     draftTown,
     town,
     draftStrengthFilter,
@@ -261,11 +285,11 @@ export default function TeamsSearchClient() {
       }
 
       if (prefecture && norm(t.prefecture) !== prefecture) return false;
-      if (city && norm(t.city) !== city) return false;
+      if (cityFilter.length > 0 && !cityFilter.includes(norm(t.city))) return false;
       if (town && norm(t.town) !== town) return false;
 
-      if (strengthFilter) {
-        if (getStrength(t) !== strengthFilter) return false;
+      if (strengthFilter.length > 0) {
+        if (!strengthFilter.includes(getStrength(t))) return false;
       }
 
       if (groundFilter !== "all") {
@@ -322,7 +346,7 @@ export default function TeamsSearchClient() {
     keyword,
     categoryFilter,
     prefecture,
-    city,
+    cityFilter,
     town,
     strengthFilter,
     groundFilter,
@@ -336,10 +360,10 @@ export default function TeamsSearchClient() {
     const parts: string[] = [];
     if (keyword) parts.push(`キーワード: ${keyword}`);
     if (prefecture) parts.push(`都県: ${prefecture}`);
-    if (city) parts.push(`市区町村: ${city}`);
+    if (cityFilter.length > 0) parts.push(`市区町村: ${cityFilter.join(" / ")}`);
     if (town) parts.push(`町名: ${town}`);
     if (categoryFilter.length > 0) parts.push(`カテゴリ: ${categoryFilter.join(" / ")}`);
-    if (strengthFilter) parts.push(`強さ: ${strengthFilter}`);
+    if (strengthFilter.length > 0) parts.push(`強さ: ${strengthFilter.join(" / ")}`);
     if (groundFilter !== "all") parts.push(`グラウンド: ${groundFilter}`);
     if (bikeFilter !== "all") parts.push(`駐輪場: ${bikeFilter}`);
     if (bikeCapacityMin) parts.push(`駐輪場台数: ${bikeCapacityMin}台以上`);
@@ -349,7 +373,7 @@ export default function TeamsSearchClient() {
   }, [
     keyword,
     prefecture,
-    city,
+    cityFilter,
     town,
     categoryFilter,
     strengthFilter,
@@ -394,7 +418,7 @@ export default function TeamsSearchClient() {
         title="チーム検索"
         desc="地域やカテゴリ、強さ、駐輪場、人数などの条件から対戦相手候補を探せます。"
       />
-      
+
       <section style={filterWrap}>
         <div style={{ display: "grid", gap: 12 }}>
           <label style={label}>
@@ -408,20 +432,46 @@ export default function TeamsSearchClient() {
             />
           </label>
 
-          <AreaPickerKanto
-            title="エリアで絞り込み（関東）"
-            allowAll={true}
-            allLabel="関東（すべて）"
+          <label style={label}>
+            <span style={labelTitle}>都県</span>
+            <select
+              value={draftPrefecture}
+              onChange={(e) => {
+                setDraftPrefecture(e.target.value);
+                setDraftCityFilter([]);
+              }}
+              className="sh-select"
+              disabled={loading}
+            >
+              <option value="">指定なし</option>
+              {prefectureOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <CheckboxGroup
+            title="市区町村で絞り込み（複数）"
+            options={cityOptions}
+            values={draftCityFilter}
+            onChange={setDraftCityFilter}
+            columns={3}
             disabled={loading}
-            prefecture={draftPrefecture}
-            setPrefecture={setDraftPrefecture}
-            city={draftCity}
-            setCity={setDraftCity}
-            town={draftTown}
-            setTown={setDraftTown}
-            townOptional={true}
             useChipUI={true}
           />
+
+          <label style={label}>
+            <span style={labelTitle}>町名（単一）</span>
+            <input
+              value={draftTown}
+              onChange={(e) => setDraftTown(e.target.value)}
+              className="sh-input"
+              placeholder="例：三宿"
+              disabled={loading}
+            />
+          </label>
 
           <CheckboxGroup
             title="カテゴリで絞り込み（複数）"
@@ -433,13 +483,14 @@ export default function TeamsSearchClient() {
             useChipUI={true}
           />
 
-          <StrengthRankPicker
-            value={draftStrengthFilter}
-            onChange={setDraftStrengthFilter}
+          <CheckboxGroup
+            title="強さ（複数）"
+            options={STRENGTH_OPTIONS}
+            values={draftStrengthFilter}
+            onChange={(values) => setDraftStrengthFilter(values as StrengthRank[])}
+            columns={5}
             disabled={loading}
-            title="強さ"
-            allowEmpty={true}
-            emptyLabel="指定なし"
+            useChipUI={true}
           />
 
           <div style={twoCols}>
