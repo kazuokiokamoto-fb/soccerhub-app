@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
+import AppHero from "@/app/components/AppHero";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -10,10 +11,45 @@ export default function LoginPage() {
 
   const [loadingLogin, setLoadingLogin] = useState(false);
   const [loadingSignup, setLoadingSignup] = useState(false);
+  const [loadingGoogle, setLoadingGoogle] = useState(false);
+
   const [message, setMessage] = useState("");
+
+  const isLineInAppBrowser = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const ua = window.navigator.userAgent || "";
+    return /Line\//i.test(ua) || /LIFF/i.test(ua);
+  }, []);
+
+  useEffect(() => {
+    if (!isLineInAppBrowser) return;
+
+    setMessage(
+      [
+        "LINE内ブラウザでは Googleログインがブロックされることがあります。",
+        "右上メニューなどから Safari / Chrome で開いてからログインしてください。",
+      ].join("\n")
+    );
+  }, [isLineInAppBrowser]);
 
   const handleGoogleLogin = async () => {
     setMessage("");
+
+    if (isLineInAppBrowser) {
+      setMessage(
+        [
+          "LINE内ブラウザでは Googleログインができません。",
+          "このページを Safari / Chrome で開き直してから、Googleでログインしてください。",
+          "",
+          "例：",
+          "・LINE右上のメニューから『Safariで開く』",
+          "・URLをコピーして Safari / Chrome に貼り付ける",
+        ].join("\n")
+      );
+      return;
+    }
+
+    setLoadingGoogle(true);
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -24,6 +60,8 @@ export default function LoginPage() {
             : undefined,
       },
     });
+
+    setLoadingGoogle(false);
 
     if (error) {
       setMessage(`Googleログインに失敗しました: ${error.message}`);
@@ -80,24 +118,37 @@ export default function LoginPage() {
 
   return (
     <main style={pageWrap}>
-      <section style={heroBox}>
-        <h1 style={heroTitle}>⚽ ログイン / 登録</h1>
-        <p style={heroDesc}>
-          チーム登録、練習試合の募集、対戦相手検索、チャット機能を使うにはログインしてください。
-        </p>
-      </section>
+      <AppHero
+        icon="🔐"
+        title="ログイン / 登録"
+        desc="チーム登録、練習試合の募集、対戦相手検索、チャット機能を使うにはログインしてください。"
+      />
 
       <section style={card}>
-        <div style={{ marginTop: 18 }}>
+        <div style={blockTitle}>Googleで続ける</div>
+
+        <div style={{ marginTop: 14 }}>
           <button
             type="button"
             className="sh-btn"
             style={topButton}
             onClick={handleGoogleLogin}
+            disabled={loadingGoogle || loadingLogin || loadingSignup}
           >
-            Googleでログイン
+            {loadingGoogle ? "Googleへ移動中..." : "Googleでログイン"}
           </button>
         </div>
+
+        {isLineInAppBrowser ? (
+          <div style={warnBox}>
+            <div style={warnTitle}>LINE内ブラウザでは Googleログイン不可</div>
+            <div style={warnText}>
+              Google の仕様により、LINEアプリ内ブラウザではログインできない場合があります。
+              <br />
+              Safari / Chrome でこのページを開き直してからログインしてください。
+            </div>
+          </div>
+        ) : null}
 
         <div style={divider}>またはメールで続ける</div>
 
@@ -133,7 +184,7 @@ export default function LoginPage() {
             className="sh-btn"
             style={subButton}
             onClick={handleSignup}
-            disabled={loadingSignup || loadingLogin}
+            disabled={loadingSignup || loadingLogin || loadingGoogle}
           >
             {loadingSignup ? "新規登録中..." : "新規登録"}
           </button>
@@ -143,7 +194,7 @@ export default function LoginPage() {
             className="sh-btn sh-btn--primary"
             style={mainButton}
             onClick={handleLogin}
-            disabled={loadingLogin || loadingSignup}
+            disabled={loadingLogin || loadingSignup || loadingGoogle}
           >
             {loadingLogin ? "ログイン中..." : "ログイン"}
           </button>
@@ -166,7 +217,7 @@ export default function LoginPage() {
             まずはログイン後にチーム登録をすると、練習試合の募集や申込みができるようになります。
           </div>
 
-          <div style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Link href="/" className="sh-btn">
               トップへ
             </Link>
@@ -183,30 +234,8 @@ const pageWrap: React.CSSProperties = {
   margin: "0 auto",
 };
 
-const heroBox: React.CSSProperties = {
-  borderRadius: 20,
-  background: "linear-gradient(135deg, #1e7f3c 0%, #145c2a 100%)",
-  color: "#fff",
-  padding: 18,
-  boxShadow: "0 10px 28px rgba(20,92,42,0.16)",
-  marginBottom: 12,
-};
-
-const heroTitle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 28,
-  fontWeight: 900,
-  lineHeight: 1.3,
-};
-
-const heroDesc: React.CSSProperties = {
-  margin: "10px 0 0",
-  color: "rgba(255,255,255,0.92)",
-  lineHeight: 1.8,
-  fontSize: 14,
-};
-
 const card: React.CSSProperties = {
+  marginTop: 12,
   border: "1px solid #e5ece7",
   borderRadius: 24,
   background: "#fff",
@@ -214,53 +243,10 @@ const card: React.CSSProperties = {
   boxShadow: "0 8px 24px rgba(0,0,0,0.05)",
 };
 
-const brandRow: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 16,
-  marginBottom: 20,
-};
-
-const brandMark: React.CSSProperties = {
-  width: 72,
-  height: 72,
-  borderRadius: 999,
-  display: "grid",
-  placeItems: "center",
-  fontSize: 34,
-  color: "#fff",
-  background: "linear-gradient(180deg, #1f8f43, #14652f)",
-  boxShadow: "0 8px 18px rgba(20, 92, 42, 0.18)",
-};
-
-const brandTitle: React.CSSProperties = {
-  fontFamily: '"Zen Kaku Gothic New", sans-serif',
+const blockTitle: React.CSSProperties = {
+  fontSize: 18,
   fontWeight: 900,
-  fontSize: 32,
-  letterSpacing: "0.08em",
-  transform: "skewX(-8deg)",
-  color: "#145c2a",
-};
-
-const brandSub: React.CSSProperties = {
-  fontSize: 12,
-  color: "#7a8a80",
-  letterSpacing: "0.05em",
-  marginTop: 4,
-};
-
-const title: React.CSSProperties = {
-  margin: 0,
-  fontSize: 28,
-  fontWeight: 900,
-  color: "#14213d",
-};
-
-const desc: React.CSSProperties = {
-  margin: "12px 0 0",
-  color: "#666",
-  fontSize: 14,
-  lineHeight: 1.9,
+  color: "#1f5d30",
 };
 
 const topButton: React.CSSProperties = {
@@ -268,6 +254,27 @@ const topButton: React.CSSProperties = {
   minHeight: 56,
   fontSize: 18,
   fontWeight: 900,
+};
+
+const warnBox: React.CSSProperties = {
+  marginTop: 14,
+  padding: 14,
+  borderRadius: 14,
+  border: "1px solid #fde68a",
+  background: "#fffbeb",
+};
+
+const warnTitle: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 900,
+  color: "#92400e",
+};
+
+const warnText: React.CSSProperties = {
+  marginTop: 6,
+  fontSize: 13,
+  lineHeight: 1.8,
+  color: "#78350f",
 };
 
 const divider: React.CSSProperties = {
