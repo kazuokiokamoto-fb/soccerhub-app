@@ -49,6 +49,16 @@ type DbTeam = {
   updated_at: string;
 };
 
+const KANTO_PREFECTURES: Option[] = [
+  { value: "東京都", label: "東京都" },
+  { value: "神奈川県", label: "神奈川県" },
+  { value: "千葉県", label: "千葉県" },
+  { value: "埼玉県", label: "埼玉県" },
+  { value: "茨城県", label: "茨城県" },
+  { value: "栃木県", label: "栃木県" },
+  { value: "群馬県", label: "群馬県" },
+];
+
 const STRENGTH_OPTIONS: Option[] = [
   { value: "SS", label: "SS" },
   { value: "S", label: "S" },
@@ -193,12 +203,8 @@ export default function TeamsSearchClient() {
   }, []);
 
   const prefectureOptions = useMemo(() => {
-    return Array.from(
-      new Set(teams.map((t) => norm(t.prefecture)).filter(Boolean))
-    )
-      .sort((a, b) => a.localeCompare(b, "ja"))
-      .map((v) => ({ value: v, label: v }));
-  }, [teams]);
+    return KANTO_PREFECTURES;
+  }, []);
 
   const cityOptions = useMemo(() => {
     return Array.from(
