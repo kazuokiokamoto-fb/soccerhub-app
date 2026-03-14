@@ -387,14 +387,14 @@ export default function TeamsSearchClient() {
         </div>
       ) : null}
 
+      <AppTabNav />
+
       <AppHero
         icon="🔎"
         title="チーム検索"
         desc="地域やカテゴリ、強さ、駐輪場、人数などの条件から対戦相手候補を探せます。"
       />
-
-      <AppTabNav />
-
+      
       <section style={filterWrap}>
         <div style={{ display: "grid", gap: 12 }}>
           <label style={label}>

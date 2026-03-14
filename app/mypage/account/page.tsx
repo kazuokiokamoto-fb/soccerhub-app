@@ -172,8 +172,6 @@ export default function AccountEditPage() {
         desc="代表者情報と通知設定を編集できます。"
       />
 
-      <AppTabNav />
-
       <section style={card}>
         <div style={{ display: "grid", gap: 14 }}>
           <label style={label}>

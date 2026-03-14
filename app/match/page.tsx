@@ -508,13 +508,14 @@ export default function MatchCalendarPage() {
 
   return (
     <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
+      
+      <AppTabNav />
+      
       <AppHero
         icon="⚽️"
         title="試合を探す / 募集する"
         desc="カレンダーで募集枠を確認しながら、条件を指定して相手を探せます。"
       />
-
-      <AppTabNav />
 
       <section style={{ marginTop: 12 }}>
         <Calendar

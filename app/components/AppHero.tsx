@@ -2,51 +2,47 @@
 
 import React from "react";
 
-type Props = {
+export default function AppHero(props: {
   icon: string;
   title: string;
-  desc?: string;
-};
+  desc: string;
+}) {
+  const { icon, title, desc } = props;
 
-export default function AppHero({ icon, title, desc }: Props) {
   return (
     <section style={heroBox}>
       <h1 style={heroTitle}>
-        <span style={heroIcon}>{icon}</span>
+        <span style={{ marginRight: 6 }}>{icon}</span>
         {title}
       </h1>
-
-      {desc ? <p style={heroDesc}>{desc}</p> : null}
+      <p style={heroDesc}>{desc}</p>
     </section>
   );
 }
 
 const heroBox: React.CSSProperties = {
-  borderRadius: 20,
+  borderRadius: 18,
   background: "linear-gradient(135deg, #1e7f3c 0%, #145c2a 100%)",
   color: "#fff",
-  padding: "22px 20px",
-  boxShadow: "0 10px 28px rgba(20,92,42,0.20)",
-  marginBottom: 18,
+
+  // ★ここを小さく
+  padding: "14px 16px",
+
+  boxShadow: "0 8px 20px rgba(20,92,42,0.15)",
+  marginBottom: 12,
 };
 
 const heroTitle: React.CSSProperties = {
   margin: 0,
-  fontSize: 26,
-  fontWeight: 900,
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-};
 
-const heroIcon: React.CSSProperties = {
-  fontSize: 26,
-  lineHeight: 1,
+  // ★少し小さく
+  fontSize: 22,
+  fontWeight: 900,
 };
 
 const heroDesc: React.CSSProperties = {
-  margin: "10px 0 0",
-  fontSize: 14,
-  lineHeight: 1.7,
-  color: "rgba(255,255,255,0.92)",
+  margin: "4px 0 0",
+  fontSize: 13,
+  lineHeight: 1.6,
+  color: "rgba(255,255,255,0.9)",
 };

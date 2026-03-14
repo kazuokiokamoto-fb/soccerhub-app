@@ -509,13 +509,13 @@ export default function MyPage() {
         </div>
       ) : null}
 
+      <AppTabNav />
+
       <AppHero
         icon="⚙️"
         title="マイページ"
         desc="アカウント情報、チーム情報、自分の募集、申込、届いたオファーを確認できます。"
       />
-
-      <AppTabNav />
 
       {!me ? (
         <div style={{ marginTop: 16, color: "#991b1b" }}>ログインが必要です。</div>
