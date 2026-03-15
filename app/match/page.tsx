@@ -52,17 +52,17 @@ type StrengthGuide = {
 };
 
 const STRENGTH_OPTIONS = [
-  { value: "SS", label: "SS" },
-  { value: "S", label: "S" },
-  { value: "A", label: "A" },
-  { value: "B", label: "B" },
-  { value: "C", label: "C" },
+  { value: "SS", label: "SS 都・県リーグ1・2部" },
+  { value: "S", label: "S 都・県リーグ3・4部" },
+  { value: "A", label: "A 地域リーグ1・2部" },
+  { value: "B", label: "B 地域リーグ3・4部" },
+  { value: "C", label: "C フレンドリー" },
 ];
 
 const STRENGTH_GUIDES: StrengthGuide[] = [
   {
     rank: "SS",
-    short: "都・県リーグ 1・2部",
+    short: "都・県リーグ1・2部",
     title: "公式戦上位レベルの強度を想定したカテゴリー",
     bullets: [
       "都・県リーグ上位所属",
@@ -74,7 +74,7 @@ const STRENGTH_GUIDES: StrengthGuide[] = [
   },
   {
     rank: "S",
-    short: "都・県リーグ 3・4部",
+    short: "都・県リーグ3・4部",
     title: "公式戦基準の競争力を持つカテゴリー",
     bullets: [
       "都・県リーグ所属",
@@ -86,7 +86,7 @@ const STRENGTH_GUIDES: StrengthGuide[] = [
   },
   {
     rank: "A",
-    short: "地域リーグ 1・2部",
+    short: "地域リーグ1・2部",
     title: "育成と競争のバランス型カテゴリー",
     bullets: [
       "地域リーグ上位所属",
@@ -98,7 +98,7 @@ const STRENGTH_GUIDES: StrengthGuide[] = [
   },
   {
     rank: "B",
-    short: "地域リーグ 3・4部",
+    short: "地域リーグ3・4部",
     title: "成長重視の実戦経験カテゴリー",
     bullets: [
       "地域リーグ所属",
@@ -166,6 +166,12 @@ const strengthTitleWrap: React.CSSProperties = {
   gap: 4,
 };
 
+const strengthTitleRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+};
+
 const strengthTitle: React.CSSProperties = {
   fontWeight: 900,
   fontSize: 16,
@@ -202,13 +208,35 @@ const helpButton: React.CSSProperties = {
 const strengthSimpleList: React.CSSProperties = {
   marginTop: 12,
   display: "grid",
-  gap: 6,
+  gap: 8,
 };
 
-const strengthSimpleRow: React.CSSProperties = {
-  fontSize: 13,
-  color: "#47564d",
-  lineHeight: 1.6,
+const strengthSimpleButton: React.CSSProperties = {
+  width: "100%",
+  border: "1px solid #d6eadb",
+  borderRadius: 12,
+  background: "#fff",
+  padding: "10px 12px",
+  cursor: "pointer",
+  textAlign: "left",
+  fontSize: 14,
+  fontWeight: 800,
+  color: "#23412c",
+  lineHeight: 1.5,
+  transition: "all 0.15s ease",
+};
+
+const strengthSimpleButtonActive: React.CSSProperties = {
+  borderColor: "#145c2a",
+  background: "#145c2a",
+  color: "#fff",
+  boxShadow: "0 6px 14px rgba(20,92,42,0.14)",
+};
+
+const strengthSimpleCode: React.CSSProperties = {
+  display: "inline-block",
+  minWidth: 28,
+  fontWeight: 900,
 };
 
 const modalOverlay: React.CSSProperties = {
@@ -916,7 +944,19 @@ export default function MatchCalendarPage() {
             <div style={strengthCard}>
               <div style={strengthHead}>
                 <div style={strengthTitleWrap}>
-                  <div style={strengthTitle}>強さ</div>
+                  <div style={strengthTitleRow}>
+                    <div style={strengthTitle}>強さ</div>
+                    <button
+                      type="button"
+                      aria-label="強さの説明"
+                      title="強さの説明"
+                      style={helpButton}
+                      onClick={() => setShowStrengthHelp(true)}
+                      disabled={loading}
+                    >
+                      ?
+                    </button>
+                  </div>
                   <div style={strengthSubText}>複数選択できます</div>
                 </div>
 
@@ -940,39 +980,60 @@ export default function MatchCalendarPage() {
                   >
                     クリア
                   </button>
-
-                  <button
-                    type="button"
-                    aria-label="強さの説明"
-                    title="強さの説明"
-                    style={helpButton}
-                    onClick={() => setShowStrengthHelp(true)}
-                    disabled={loading}
-                  >
-                    ?
-                  </button>
                 </div>
               </div>
 
-              <CheckboxGroup
-                options={STRENGTH_OPTIONS}
-                values={draftStrengthFilter}
-                onChange={(values) => setDraftStrengthFilter(values as StrengthRank[])}
-                columns={5}
-                disabled={loading}
-                useChipUI={true}
-              />
-
               <div style={strengthSimpleList}>
-                {STRENGTH_GUIDES.map((item) => (
-                  <div key={item.rank} style={strengthSimpleRow}>
-                    <strong>{item.rank}</strong>：{item.short}
-                  </div>
-                ))}
+                {STRENGTH_GUIDES.map((item) => {
+                  const active = draftStrengthFilter.includes(item.rank);
+
+                  return (
+                    <button
+                      key={item.rank}
+                      type="button"
+                      disabled={loading}
+                      onClick={() => {
+                        setDraftStrengthFilter((prev) => {
+                          if (prev.includes(item.rank)) {
+                            return prev.filter((v) => v !== item.rank);
+                          }
+                          return [...prev, item.rank];
+                        });
+                      }}
+                      aria-pressed={active}
+                      style={{
+                        ...strengthSimpleButton,
+                        ...(active ? strengthSimpleButtonActive : null),
+                      }}
+                    >
+                      <span style={strengthSimpleCode}>{item.rank}</span>
+                      <span>{item.short}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             <div style={twoCols}>
+              <label style={label}>
+                <span style={labelTitle}>チーム所属人数（以上）</span>
+
+                <select
+                  value={draftMemberCountMin}
+                  onChange={(e) => setDraftMemberCountMin(e.target.value)}
+                  className="sh-select"
+                  disabled={loading}
+                >
+                  <option value="">指定なし</option>
+                  <option value="5">5人以上</option>
+                  <option value="10">10人以上</option>
+                  <option value="15">15人以上</option>
+                  <option value="20">20人以上</option>
+                  <option value="25">25人以上</option>
+                  <option value="30">30人以上</option>
+                </select>
+              </label>
+
               <label style={label}>
                 <span style={labelTitle}>グラウンド</span>
 
@@ -985,22 +1046,6 @@ export default function MatchCalendarPage() {
                   <option value="all">指定なし</option>
                   <option value="あり">あり</option>
                   <option value="なし">なし</option>
-                </select>
-              </label>
-
-              <label style={label}>
-                <span style={labelTitle}>駐輪場</span>
-
-                <select
-                  value={draftBikeFilter}
-                  onChange={(e) => setDraftBikeFilter(e.target.value as any)}
-                  className="sh-select"
-                  disabled={loading}
-                >
-                  <option value="all">指定なし</option>
-                  <option value="あり">あり</option>
-                  <option value="なし">なし</option>
-                  <option value="不明">不明</option>
                 </select>
               </label>
             </div>
@@ -1028,21 +1073,18 @@ export default function MatchCalendarPage() {
               </label>
 
               <label style={label}>
-                <span style={labelTitle}>チーム所属人数（以上）</span>
+                <span style={labelTitle}>駐輪場</span>
 
                 <select
-                  value={draftMemberCountMin}
-                  onChange={(e) => setDraftMemberCountMin(e.target.value)}
+                  value={draftBikeFilter}
+                  onChange={(e) => setDraftBikeFilter(e.target.value as any)}
                   className="sh-select"
                   disabled={loading}
                 >
-                  <option value="">指定なし</option>
-                  <option value="5">5人以上</option>
-                  <option value="10">10人以上</option>
-                  <option value="15">15人以上</option>
-                  <option value="20">20人以上</option>
-                  <option value="25">25人以上</option>
-                  <option value="30">30人以上</option>
+                  <option value="all">指定なし</option>
+                  <option value="あり">あり</option>
+                  <option value="なし">なし</option>
+                  <option value="不明">不明</option>
                 </select>
               </label>
             </div>
