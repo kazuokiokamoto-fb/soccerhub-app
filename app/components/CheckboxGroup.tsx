@@ -84,7 +84,7 @@ export function CheckboxGroup(props: {
                 aria-pressed={checked}
                 style={{
                   ...chip,
-                  ...(checked ? chipActive : null),
+                  ...(checked ? chipActive : chipInactive),
                   ...(disabled ? chipDisabled : null),
                 }}
               >
@@ -223,14 +223,29 @@ const chipWrap: React.CSSProperties = {
 };
 
 const chip: React.CSSProperties = {
+  appearance: "none",
+  WebkitAppearance: "none",
+  boxSizing: "border-box",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 42,
   padding: "10px 14px",
   borderRadius: 999,
-  border: "1px solid #d6eadb",
+  borderWidth: 1,
+  borderStyle: "solid",
   background: "#fff",
   cursor: "pointer",
   fontWeight: 800,
-  color: "#23412c",
   transition: "all 0.15s ease",
+  outline: "none",
+  boxShadow: "none",
+};
+
+const chipInactive: React.CSSProperties = {
+  borderColor: "#d6eadb",
+  color: "#23412c",
+  background: "#fff",
 };
 
 const chipActive: React.CSSProperties = {
