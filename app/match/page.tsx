@@ -204,6 +204,9 @@ const helpButton: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
+  boxShadow: "none",
+  WebkitAppearance: "none",
+  appearance: "none",
 };
 
 const strengthSimpleList: React.CSSProperties = {
@@ -216,14 +219,17 @@ const strengthSimpleButton: React.CSSProperties = {
   textAlign: "left",
   padding: "10px 12px",
   borderRadius: 12,
-  border: "1px solid #edf1ee",
-  background: "#fafcfb",
+  border: "1px solid #d6eadb",
+  background: "#fff",
   cursor: "pointer",
   transition: "all 0.15s ease",
   fontSize: 14,
   fontWeight: 800,
   color: "#23412c",
   lineHeight: 1.5,
+  boxShadow: "none",
+  WebkitAppearance: "none",
+  appearance: "none",
 };
 
 const strengthSimpleButtonActive: React.CSSProperties = {
@@ -1008,8 +1014,8 @@ export default function MatchCalendarPage() {
                       aria-pressed={active}
                       style={{
                         ...strengthSimpleButton,
-                        ...(active ? strengthSimpleButtonActive : null),
-                        ...(loading ? strengthSimpleButtonDisabled : null),
+                        ...(active ? strengthSimpleButtonActive : {}),
+                        ...(loading ? strengthSimpleButtonDisabled : {}),
                       }}
                     >
                       <span style={strengthSimpleCode}>{item.rank}</span>
