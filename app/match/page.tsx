@@ -194,36 +194,36 @@ const helpButton: React.CSSProperties = {
   width: 34,
   height: 34,
   borderRadius: 999,
-  border: "1px solid #cfd8d3",
+  border: "1px solid #d6eadb",
   background: "#fff",
-  color: "#1f5d30",
-  fontSize: 18,
-  fontWeight: 900,
+  color: "#23412c",
   cursor: "pointer",
+  fontWeight: 800,
+  fontSize: 18,
+  transition: "all 0.15s ease",
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
 };
 
 const strengthSimpleList: React.CSSProperties = {
-  marginTop: 12,
   display: "grid",
   gap: 8,
 };
 
 const strengthSimpleButton: React.CSSProperties = {
   width: "100%",
-  border: "1px solid #d6eadb",
-  borderRadius: 12,
-  background: "#fff",
-  padding: "10px 12px",
-  cursor: "pointer",
   textAlign: "left",
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid #edf1ee",
+  background: "#fafcfb",
+  cursor: "pointer",
+  transition: "all 0.15s ease",
   fontSize: 14,
   fontWeight: 800,
   color: "#23412c",
   lineHeight: 1.5,
-  transition: "all 0.15s ease",
 };
 
 const strengthSimpleButtonActive: React.CSSProperties = {
@@ -231,6 +231,11 @@ const strengthSimpleButtonActive: React.CSSProperties = {
   background: "#145c2a",
   color: "#fff",
   boxShadow: "0 6px 14px rgba(20,92,42,0.14)",
+};
+
+const strengthSimpleButtonDisabled: React.CSSProperties = {
+  opacity: 0.6,
+  cursor: "not-allowed",
 };
 
 const strengthSimpleCode: React.CSSProperties = {
@@ -1004,6 +1009,7 @@ export default function MatchCalendarPage() {
                       style={{
                         ...strengthSimpleButton,
                         ...(active ? strengthSimpleButtonActive : null),
+                        ...(loading ? strengthSimpleButtonDisabled : null),
                       }}
                     >
                       <span style={strengthSimpleCode}>{item.rank}</span>
@@ -1052,6 +1058,22 @@ export default function MatchCalendarPage() {
 
             <div style={twoCols}>
               <label style={label}>
+                <span style={labelTitle}>駐輪場</span>
+
+                <select
+                  value={draftBikeFilter}
+                  onChange={(e) => setDraftBikeFilter(e.target.value as any)}
+                  className="sh-select"
+                  disabled={loading}
+                >
+                  <option value="all">指定なし</option>
+                  <option value="あり">あり</option>
+                  <option value="なし">なし</option>
+                  <option value="不明">不明</option>
+                </select>
+              </label>
+
+              <label style={label}>
                 <span style={labelTitle}>駐輪場台数（以上）</span>
 
                 <select
@@ -1069,22 +1091,6 @@ export default function MatchCalendarPage() {
                   <option value="30">30台以上</option>
                   <option value="40">40台以上</option>
                   <option value="50">50台以上</option>
-                </select>
-              </label>
-
-              <label style={label}>
-                <span style={labelTitle}>駐輪場</span>
-
-                <select
-                  value={draftBikeFilter}
-                  onChange={(e) => setDraftBikeFilter(e.target.value as any)}
-                  className="sh-select"
-                  disabled={loading}
-                >
-                  <option value="all">指定なし</option>
-                  <option value="あり">あり</option>
-                  <option value="なし">なし</option>
-                  <option value="不明">不明</option>
                 </select>
               </label>
             </div>
