@@ -232,13 +232,6 @@ const strengthSimpleButton: React.CSSProperties = {
   appearance: "none",
 };
 
-const strengthSimpleButtonActive: React.CSSProperties = {
-  borderColor: "#145c2a",
-  background: "#145c2a",
-  color: "#fff",
-  boxShadow: "0 6px 14px rgba(20,92,42,0.14)",
-};
-
 const strengthSimpleButtonDisabled: React.CSSProperties = {
   opacity: 0.6,
   cursor: "not-allowed",
@@ -1014,7 +1007,10 @@ export default function MatchCalendarPage() {
                       aria-pressed={active}
                       style={{
                         ...strengthSimpleButton,
-                        ...(active ? strengthSimpleButtonActive : {}),
+                        border: active ? "1px solid #145c2a" : "1px solid #d6eadb",
+                        background: active ? "#145c2a" : "#fff",
+                        color: active ? "#fff" : "#23412c",
+                        boxShadow: active ? "0 6px 14px rgba(20,92,42,0.14)" : "none",
                         ...(loading ? strengthSimpleButtonDisabled : {}),
                       }}
                     >
