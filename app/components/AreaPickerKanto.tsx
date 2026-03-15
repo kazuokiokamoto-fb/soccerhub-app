@@ -440,7 +440,7 @@ export function AreaPickerKanto(props: {
                 disabled={disabled}
                 style={{
                   ...prefBtn,
-                  ...(!prefecture ? prefBtnActive : null),
+                  ...(!prefecture ? prefBtnActive : prefBtnInactive),
                   ...(disabled ? disabledBtn : null),
                 }}
               >
@@ -458,7 +458,7 @@ export function AreaPickerKanto(props: {
                   disabled={disabled}
                   style={{
                     ...prefBtn,
-                    ...(active ? prefBtnActive : null),
+                    ...(active ? prefBtnActive : prefBtnInactive),
                     ...(disabled ? disabledBtn : null),
                   }}
                 >
@@ -515,7 +515,7 @@ export function AreaPickerKanto(props: {
                         disabled={disabled}
                         style={{
                           ...rowBtn,
-                          ...(active ? rowBtnActive : null),
+                          ...(active ? rowBtnActive : rowBtnInactive),
                           ...(disabled ? disabledBtn : null),
                         }}
                       >
@@ -578,7 +578,7 @@ export function AreaPickerKanto(props: {
                         disabled={disabled}
                         style={{
                           ...rowBtn,
-                          ...(active ? rowBtnActive : null),
+                          ...(active ? rowBtnActive : rowBtnInactive),
                           ...(disabled ? disabledBtn : null),
                         }}
                       >
@@ -624,7 +624,7 @@ export function AreaPickerKanto(props: {
               disabled={disabled}
               style={{
                 ...prefBtn,
-                ...(!prefecture ? prefBtnActive : null),
+                ...(!prefecture ? prefBtnActive : prefBtnInactive),
                 ...(disabled ? disabledBtn : null),
               }}
             >
@@ -642,7 +642,7 @@ export function AreaPickerKanto(props: {
                 disabled={disabled}
                 style={{
                   ...prefBtn,
-                  ...(active ? prefBtnActive : null),
+                  ...(active ? prefBtnActive : prefBtnInactive),
                   ...(disabled ? disabledBtn : null),
                 }}
               >
@@ -749,7 +749,7 @@ export function AreaPickerKanto(props: {
                     disabled={disabled}
                     style={{
                       ...rowBtn,
-                      ...(active ? rowBtnActive : null),
+                      ...(active ? rowBtnActive : rowBtnInactive),
                       ...(disabled ? disabledBtn : null),
                     }}
                   >
@@ -842,7 +842,7 @@ export function AreaPickerKanto(props: {
                     disabled={disabled}
                     style={{
                       ...rowBtn,
-                      ...(active ? rowBtnActive : null),
+                      ...(active ? rowBtnActive : rowBtnInactive),
                       ...(disabled ? disabledBtn : null),
                     }}
                   >
@@ -921,14 +921,29 @@ const prefButtonsWrap: React.CSSProperties = {
 };
 
 const prefBtn: React.CSSProperties = {
+  appearance: "none",
+  WebkitAppearance: "none",
+  boxSizing: "border-box",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 42,
   padding: "10px 14px",
   borderRadius: 999,
-  border: "1px solid #d6eadb",
+  borderWidth: 1,
+  borderStyle: "solid",
   background: "#fff",
   cursor: "pointer",
   fontWeight: 800,
-  color: "#23412c",
   transition: "all 0.15s ease",
+  outline: "none",
+  boxShadow: "none",
+};
+
+const prefBtnInactive: React.CSSProperties = {
+  borderColor: "#d6eadb",
+  background: "#fff",
+  color: "#23412c",
 };
 
 const prefBtnActive: React.CSSProperties = {
@@ -964,14 +979,24 @@ const listBoxCompact: React.CSSProperties = {
 };
 
 const rowBtn: React.CSSProperties = {
+  appearance: "none",
+  WebkitAppearance: "none",
+  boxSizing: "border-box",
   width: "100%",
   textAlign: "left",
   padding: "10px 12px",
   borderRadius: 12,
-  border: "1px solid #edf1ee",
-  background: "#fafcfb",
+  borderWidth: 1,
+  borderStyle: "solid",
   cursor: "pointer",
   transition: "all 0.15s ease",
+  outline: "none",
+};
+
+const rowBtnInactive: React.CSSProperties = {
+  borderColor: "#edf1ee",
+  background: "#fafcfb",
+  boxShadow: "none",
 };
 
 const rowBtnActive: React.CSSProperties = {
