@@ -43,12 +43,83 @@ import {
   actionRow,
 } from "./styles/matchPageStyles";
 
-const STRENGTH_OPTIONS: { value: StrengthRank; label: string }[] = [
+type StrengthGuide = {
+  rank: StrengthRank;
+  short: string;
+  title: string;
+  bullets: string[];
+  note: string;
+};
+
+const STRENGTH_OPTIONS = [
   { value: "SS", label: "SS" },
   { value: "S", label: "S" },
   { value: "A", label: "A" },
   { value: "B", label: "B" },
   { value: "C", label: "C" },
+];
+
+const STRENGTH_GUIDES: StrengthGuide[] = [
+  {
+    rank: "SS",
+    short: "都・県リーグ 1・2部",
+    title: "公式戦上位レベルの強度を想定したカテゴリー",
+    bullets: [
+      "都・県リーグ上位所属",
+      "試合強度：★★★★★（非常に高い）",
+      "球際・切り替えが速く、戦術理解度が高い",
+      "公式戦同等レベルの緊張感ある試合を希望",
+    ],
+    note: "⭐︎ 「強度の高い実戦形式」を求めるチーム向け",
+  },
+  {
+    rank: "S",
+    short: "都・県リーグ 3・4部",
+    title: "公式戦基準の競争力を持つカテゴリー",
+    bullets: [
+      "都・県リーグ所属",
+      "試合強度：★★★★☆（高い）",
+      "基礎技術が安定し、組織的な守備・攻撃ができる",
+      "上位リーグ昇格を目指すレベル",
+    ],
+    note: "⭐︎ 「しっかり競り合える相手」を求めるチーム向け",
+  },
+  {
+    rank: "A",
+    short: "地域リーグ 1・2部",
+    title: "育成と競争のバランス型カテゴリー",
+    bullets: [
+      "地域リーグ上位所属",
+      "試合強度：★★★☆☆（中〜やや高）",
+      "個人技術向上＋チーム連携を重視",
+      "チャレンジマッチにも適したレベル",
+    ],
+    note: "⭐︎ 「公式戦を想定しつつ育成も重視」するチーム向け",
+  },
+  {
+    rank: "B",
+    short: "地域リーグ 3・4部",
+    title: "成長重視の実戦経験カテゴリー",
+    bullets: [
+      "地域リーグ所属",
+      "試合強度：★★☆☆☆（やや穏やか）",
+      "試合経験を積みながら基礎力を伸ばす段階",
+      "バランスの良いマッチング向き",
+    ],
+    note: "⭐︎「経験を積みたい」「自信をつけたい」チーム向け",
+  },
+  {
+    rank: "C",
+    short: "フレンドリー",
+    title: "交流・経験重視カテゴリー",
+    bullets: [
+      "リーグ所属問わず",
+      "試合強度：★☆☆☆☆（交流中心）",
+      "新チーム編成・初心者中心・交流目的",
+      "勝敗よりも経験や交流を重視",
+    ],
+    note: "⭐︎「楽しく真剣に」「幅広い交流」を希望するチーム向け",
+  },
 ];
 
 const summaryWrap: React.CSSProperties = {
@@ -74,6 +145,202 @@ const contentScrollBox: React.CSSProperties = {
   WebkitOverflowScrolling: "touch",
 };
 
+const strengthCard: React.CSSProperties = {
+  border: "1px solid #e5ece7",
+  borderRadius: 16,
+  padding: 14,
+  background: "#fff",
+};
+
+const strengthHead: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+  marginBottom: 12,
+};
+
+const strengthTitleWrap: React.CSSProperties = {
+  display: "grid",
+  gap: 4,
+};
+
+const strengthTitle: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 16,
+  color: "#1f5d30",
+};
+
+const strengthSubText: React.CSSProperties = {
+  fontSize: 12,
+  color: "#66756d",
+};
+
+const strengthHeadRight: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const helpButton: React.CSSProperties = {
+  width: 34,
+  height: 34,
+  borderRadius: 999,
+  border: "1px solid #cfd8d3",
+  background: "#fff",
+  color: "#1f5d30",
+  fontSize: 18,
+  fontWeight: 900,
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const strengthSimpleList: React.CSSProperties = {
+  marginTop: 12,
+  display: "grid",
+  gap: 6,
+};
+
+const strengthSimpleRow: React.CSSProperties = {
+  fontSize: 13,
+  color: "#47564d",
+  lineHeight: 1.6,
+};
+
+const modalOverlay: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.42)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
+  zIndex: 2000,
+};
+
+const modalCard: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 720,
+  maxHeight: "80vh",
+  overflowY: "auto",
+  background: "#fff",
+  borderRadius: 20,
+  border: "1px solid #e5ece7",
+  boxShadow: "0 18px 40px rgba(0,0,0,0.18)",
+  padding: 18,
+};
+
+const modalHeader: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  marginBottom: 12,
+  position: "sticky",
+  top: 0,
+  background: "#fff",
+  paddingBottom: 8,
+};
+
+const modalTitle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 20,
+  fontWeight: 900,
+  color: "#16391f",
+};
+
+const modalCloseButton: React.CSSProperties = {
+  border: "1px solid #d6ded9",
+  background: "#fff",
+  borderRadius: 12,
+  padding: "8px 12px",
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const guideList: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+};
+
+const guideCard: React.CSSProperties = {
+  border: "1px solid #e7ece9",
+  borderRadius: 16,
+  background: "#fafcfb",
+  padding: 14,
+};
+
+const guideTop: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const guideRank: React.CSSProperties = {
+  minWidth: 42,
+  height: 30,
+  padding: "0 12px",
+  borderRadius: 999,
+  background: "#145c2a",
+  color: "#fff",
+  fontWeight: 900,
+  fontSize: 14,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const guideShort: React.CSSProperties = {
+  fontWeight: 900,
+  color: "#16391f",
+  fontSize: 15,
+};
+
+const guideTitleText: React.CSSProperties = {
+  marginTop: 10,
+  fontWeight: 800,
+  color: "#314137",
+  lineHeight: 1.7,
+};
+
+const guideBulletList: React.CSSProperties = {
+  marginTop: 10,
+  display: "grid",
+  gap: 6,
+};
+
+const guideBulletRow: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "12px 1fr",
+  gap: 8,
+  alignItems: "start",
+  color: "#314137",
+  fontSize: 14,
+  lineHeight: 1.7,
+};
+
+const guideBulletMark: React.CSSProperties = {
+  fontWeight: 900,
+  color: "#1f5d30",
+};
+
+const guideNote: React.CSSProperties = {
+  marginTop: 10,
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid #e7d08a",
+  background: "#fff8dd",
+  color: "#4d3a00",
+  fontWeight: 800,
+  lineHeight: 1.7,
+  fontSize: 13,
+};
+
 export default function MatchCalendarPage() {
   const router = useRouter();
 
@@ -83,6 +350,7 @@ export default function MatchCalendarPage() {
 
   const [requestTeamId, setRequestTeamId] = useState<string>("");
   const [requestComment, setRequestComment] = useState<string>("");
+  const [showStrengthHelp, setShowStrengthHelp] = useState(false);
 
   const {
     draftKeyword,
@@ -230,20 +498,12 @@ export default function MatchCalendarPage() {
   const goToCreatePage = (ymd: string) => {
     const params = new URLSearchParams();
 
-    if (ymd) {
-      params.set("date", ymd);
-    }
+    if (ymd) params.set("date", ymd);
 
     const firstTeam = myTeams[0];
-    if (firstTeam?.id) {
-      params.set("hostTeamId", firstTeam.id);
-    }
-    if (firstTeam?.category) {
-      params.set("category", firstTeam.category);
-    }
-    if (firstTeam?.area) {
-      params.set("area", firstTeam.area);
-    }
+    if (firstTeam?.id) params.set("hostTeamId", firstTeam.id);
+    if (firstTeam?.category) params.set("category", firstTeam.category);
+    if (firstTeam?.area) params.set("area", firstTeam.area);
 
     const query = params.toString();
     router.push(query ? `/match/new?${query}` : "/match/new");
@@ -653,15 +913,64 @@ export default function MatchCalendarPage() {
               useChipUI={true}
             />
 
-            <CheckboxGroup
-              title="強さ"
-              options={STRENGTH_OPTIONS}
-              values={draftStrengthFilter}
-              onChange={(values) => setDraftStrengthFilter(values as StrengthRank[])}
-              columns={5}
-              disabled={loading}
-              useChipUI={true}
-            />
+            <div style={strengthCard}>
+              <div style={strengthHead}>
+                <div style={strengthTitleWrap}>
+                  <div style={strengthTitle}>強さ</div>
+                  <div style={strengthSubText}>複数選択できます</div>
+                </div>
+
+                <div style={strengthHeadRight}>
+                  <button
+                    type="button"
+                    className="sh-btn sh-btn--ghost"
+                    onClick={() =>
+                      setDraftStrengthFilter(STRENGTH_OPTIONS.map((o) => o.value as StrengthRank))
+                    }
+                    disabled={loading}
+                  >
+                    全選択
+                  </button>
+
+                  <button
+                    type="button"
+                    className="sh-btn"
+                    onClick={() => setDraftStrengthFilter([])}
+                    disabled={loading}
+                  >
+                    クリア
+                  </button>
+
+                  <button
+                    type="button"
+                    aria-label="強さの説明"
+                    title="強さの説明"
+                    style={helpButton}
+                    onClick={() => setShowStrengthHelp(true)}
+                    disabled={loading}
+                  >
+                    ?
+                  </button>
+                </div>
+              </div>
+
+              <CheckboxGroup
+                options={STRENGTH_OPTIONS}
+                values={draftStrengthFilter}
+                onChange={(values) => setDraftStrengthFilter(values as StrengthRank[])}
+                columns={5}
+                disabled={loading}
+                useChipUI={true}
+              />
+
+              <div style={strengthSimpleList}>
+                {STRENGTH_GUIDES.map((item) => (
+                  <div key={item.rank} style={strengthSimpleRow}>
+                    <strong>{item.rank}</strong>：{item.short}
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <div style={twoCols}>
               <label style={label}>
@@ -760,6 +1069,53 @@ export default function MatchCalendarPage() {
           </div>
         </section>
       </div>
+
+      {showStrengthHelp ? (
+        <div
+          style={modalOverlay}
+          onClick={() => setShowStrengthHelp(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="強さの説明"
+        >
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeader}>
+              <h3 style={modalTitle}>強さの説明</h3>
+              <button
+                type="button"
+                style={modalCloseButton}
+                onClick={() => setShowStrengthHelp(false)}
+              >
+                閉じる
+              </button>
+            </div>
+
+            <div style={guideList}>
+              {STRENGTH_GUIDES.map((item) => (
+                <div key={item.rank} style={guideCard}>
+                  <div style={guideTop}>
+                    <div style={guideRank}>{item.rank}</div>
+                    <div style={guideShort}>{item.short}</div>
+                  </div>
+
+                  <div style={guideTitleText}>{item.title}</div>
+
+                  <div style={guideBulletList}>
+                    {item.bullets.map((bullet) => (
+                      <div key={bullet} style={guideBulletRow}>
+                        <span style={guideBulletMark}>•</span>
+                        <span>{bullet}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={guideNote}>{item.note}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
