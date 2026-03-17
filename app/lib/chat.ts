@@ -1,21 +1,43 @@
-import { supabase } from "@/app/lib/supabase";
+import { supabase } from "./supabase";
 
-export const openDm = async (
-  myTeamId: string,
-  otherTeamId: string
-): Promise<string> => {
-  const { data, error } = await supabase.rpc(
-    "rpc_get_or_create_dm_thread",
-    {
-      my_team_id: myTeamId,
-      other_team_id: otherTeamId,
-    }
-  );
+export async function getOrCreateThread({
+  slotId,
+  teamAId,
+  teamBId,
+}: {
+  slotId: string;
+  teamAId: string;
+  teamBId: string;
+}) {
+  // 並び順を固定（A/B入れ替わり防止）
+  const [a, b] =
+    teamAId < teamBId ? [teamAId, teamBId] : [teamBId, teamAId];
 
-  if (error) {
-    console.error(error);
-    throw error;
+  // 既存検索
+  const { data: existing } = await supabase
+    .from("chat_threads")
+    .select("id")
+    .eq("slot_id", slotId)
+    .eq("team_a_id", a)
+    .eq("team_b_id", b)
+    .maybeSingle();
+
+  if (existing?.id) {
+    return existing.id;
   }
 
-  return data as string; // thread_id
-};
+  // 新規作成
+  const { data: thread, error } = await supabase
+    .from("chat_threads")
+    .insert({
+      slot_id: slotId,
+      team_a_id: a,
+      team_b_id: b,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return thread.id;
+}
