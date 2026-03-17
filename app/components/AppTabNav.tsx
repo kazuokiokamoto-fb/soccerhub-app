@@ -10,7 +10,7 @@ const TABS = [
   { href: "/match", label: "募集" },
   { href: "/teams/search", label: "チーム" },
   { href: "/chat", label: "チャット" },
-  { href: "/teams", label: "マイ" },
+  { href: "/mypage", label: "マイ" },
 ];
 
 function isActive(pathname: string, href: string) {
