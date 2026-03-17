@@ -8,7 +8,11 @@ import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 
 type TeamMini = { id: string; name: string | null; category?: string | null };
-type LastMsgMini = { thread_id: string; body: string | null; created_at: string };
+type LastMsgMini = {
+  thread_id: string;
+  body: string | null;
+  created_at: string;
+};
 
 type ThreadRow = {
   id: string;
@@ -28,19 +32,52 @@ type ThreadRow = {
   isUnread?: boolean;
 };
 
-function toJstLocal(dt?: string | null) {
+function clip(s?: string | null, n = 42) {
+  const v = (s ?? "").trim();
+  if (!v) return "";
+  return v.length > n ? `${v.slice(0, n)}…` : v;
+}
+
+function formatLineTime(dt?: string | null) {
   if (!dt) return "";
   try {
-    return new Date(dt).toLocaleString();
+    const d = new Date(dt);
+    const now = new Date();
+
+    const sameYear = d.getFullYear() === now.getFullYear();
+    const sameDate =
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate();
+
+    if (sameDate) {
+      return d.toLocaleTimeString("ja-JP", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+
+    if (sameYear) {
+      return d.toLocaleDateString("ja-JP", {
+        month: "numeric",
+        day: "numeric",
+      });
+    }
+
+    return d.toLocaleDateString("ja-JP", {
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+    });
   } catch {
     return "";
   }
 }
 
-function clip(s?: string | null, n = 34) {
-  const v = (s ?? "").trim();
-  if (!v) return "";
-  return v.length > n ? v.slice(0, n) + "…" : v;
+function buildInitial(name?: string | null) {
+  const v = (name ?? "").trim();
+  if (!v) return "？";
+  return v.slice(0, 1);
 }
 
 export default function ChatListPage() {
@@ -56,7 +93,10 @@ export default function ChatListPage() {
   }, []);
 
   useEffect(() => {
-    if (!meId) return;
+    if (!meId) {
+      setLoading(false);
+      return;
+    }
 
     (async () => {
       setLoading(true);
@@ -66,13 +106,16 @@ export default function ChatListPage() {
           .select("id")
           .eq("owner_id", meId);
 
-        const myTeamIds = new Set<string>((myTeamsRows ?? []).map((r: any) => r.id).filter(Boolean));
+        const myTeamIds = new Set<string>(
+          (myTeamsRows ?? []).map((r: any) => r.id).filter(Boolean)
+        );
 
         const { data: myMemberRows, error: cmErr } = await supabase
           .from("chat_members")
-          .select("thread_id, last_read_at, created_at")
+          .select("thread_id,last_read_at,created_at")
           .eq("user_id", meId)
-          .order("created_at", { ascending: false });
+          .order("created_at", { ascending: false })
+          .limit(50);
 
         if (cmErr) {
           console.error(cmErr);
@@ -80,12 +123,18 @@ export default function ChatListPage() {
           return;
         }
 
-        const threadIds = Array.from(new Set((myMemberRows ?? []).map((r: any) => r.thread_id).filter(Boolean)));
+        const threadIds = Array.from(
+          new Set(
+            (myMemberRows ?? []).map((r: any) => r.thread_id).filter(Boolean)
+          )
+        );
 
         const myLastReadMap = new Map<string, string | null>();
         for (const r of myMemberRows ?? []) {
           if (!r.thread_id) continue;
-          if (!myLastReadMap.has(r.thread_id)) myLastReadMap.set(r.thread_id, (r as any).last_read_at ?? null);
+          if (!myLastReadMap.has(r.thread_id)) {
+            myLastReadMap.set(r.thread_id, (r as any).last_read_at ?? null);
+          }
         }
 
         if (threadIds.length === 0) {
@@ -95,7 +144,7 @@ export default function ChatListPage() {
 
         const { data: thRows, error: thErr } = await supabase
           .from("chat_threads")
-          .select("id, created_at, updated_at")
+          .select("id,created_at,updated_at")
           .in("id", threadIds);
 
         if (thErr) {
@@ -106,7 +155,7 @@ export default function ChatListPage() {
 
         const { data: membersRows, error: membersErr } = await supabase
           .from("chat_members")
-          .select("thread_id, team_id")
+          .select("thread_id,team_id")
           .in("thread_id", threadIds);
 
         if (membersErr) {
@@ -122,48 +171,58 @@ export default function ChatListPage() {
           const tid = (r as any).thread_id as string;
           const teamId = (r as any).team_id as string;
           if (!tid || !teamId) continue;
-          if (!memberTeamsByThread.has(tid)) memberTeamsByThread.set(tid, []);
+
+          if (!memberTeamsByThread.has(tid)) {
+            memberTeamsByThread.set(tid, []);
+          }
           memberTeamsByThread.get(tid)!.push(teamId);
           allTeamIds.push(teamId);
         }
 
         const uniqTeamIds = Array.from(new Set(allTeamIds));
-
         const teamMap = new Map<string, TeamMini>();
+
         if (uniqTeamIds.length > 0) {
           const { data: teamRows, error: teamErr } = await supabase
             .from("teams")
-            .select("id, name, category")
+            .select("id,name,category")
             .in("id", uniqTeamIds);
 
           if (teamErr) {
             console.error(teamErr);
           } else {
             for (const t of (teamRows ?? []) as any[]) {
-              teamMap.set(t.id, { id: t.id, name: t.name ?? null, category: t.category ?? null });
+              teamMap.set(t.id, {
+                id: t.id,
+                name: t.name ?? null,
+                category: t.category ?? null,
+              });
             }
           }
         }
 
         const lastMsgByThread = new Map<string, LastMsgMini>();
-        {
-          const limit = Math.min(2000, Math.max(400, threadIds.length * 50));
-          const { data: msgRows, error: msgErr } = await supabase
-            .from("chat_messages")
-            .select("thread_id, body, created_at")
-            .in("thread_id", threadIds)
-            .order("created_at", { ascending: false })
-            .limit(limit);
+        const limit = Math.min(2000, Math.max(400, threadIds.length * 50));
 
-          if (msgErr) {
-            console.error(msgErr);
-          } else {
-            for (const m of (msgRows ?? []) as any[]) {
-              const tid = m.thread_id as string;
-              if (!tid) continue;
-              if (!lastMsgByThread.has(tid)) {
-                lastMsgByThread.set(tid, { thread_id: tid, body: m.body ?? null, created_at: m.created_at });
-              }
+        const { data: msgRows, error: msgErr } = await supabase
+          .from("chat_messages")
+          .select("thread_id,body,created_at")
+          .in("thread_id", threadIds)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+
+        if (msgErr) {
+          console.error(msgErr);
+        } else {
+          for (const m of (msgRows ?? []) as any[]) {
+            const tid = m.thread_id as string;
+            if (!tid) continue;
+            if (!lastMsgByThread.has(tid)) {
+              lastMsgByThread.set(tid, {
+                thread_id: tid,
+                body: m.body ?? null,
+                created_at: m.created_at,
+              });
             }
           }
         }
@@ -183,8 +242,13 @@ export default function ChatListPage() {
 
           let isUnread = false;
           if (last?.created_at) {
-            if (!myLastReadAt) isUnread = true;
-            else isUnread = new Date(last.created_at).getTime() > new Date(myLastReadAt).getTime();
+            if (!myLastReadAt) {
+              isUnread = true;
+            } else {
+              isUnread =
+                new Date(last.created_at).getTime() >
+                new Date(myLastReadAt).getTime();
+            }
           }
 
           return {
@@ -223,118 +287,217 @@ export default function ChatListPage() {
     })();
   }, [meId]);
 
-  const emptyText = useMemo(() => {
-    if (loading) return "";
-    if (threads.length > 0) return "";
-    return "スレッドがありません（マッチング詳細の「チャットを開く」から作成されます）";
-  }, [loading, threads.length]);
+  const unreadTotal = useMemo(() => {
+    return threads.reduce((sum, t) => sum + (t.isUnread ? 1 : 0), 0);
+  }, [threads]);
 
   return (
     <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
-      
       <AppTabNav />
-      
+
       <AppHero
         icon="💬"
         title="チャット"
         desc="相手チームとの連絡、日程調整、会場確認などをここでやり取りできます。"
       />
 
-      {loading ? <p style={{ color: "#666" }}>読み込み中…</p> : null}
-      {!loading && emptyText ? <p style={{ color: "#666" }}>{emptyText}</p> : null}
-
-      <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
-        {threads.map((t) => {
-          const title =
-            t.otherTeamName
-              ? `${t.otherTeamName}${t.otherTeamCategory ? `（${t.otherTeamCategory}）` : ""}`
-              : "相手チーム（未設定）";
-
-          const lastLine = t.lastMessageBody ? clip(t.lastMessageBody, 40) : "（まだメッセージがありません）";
-          const timeLine = t.lastMessageAt
-            ? `最終: ${toJstLocal(t.lastMessageAt)}`
-            : t.updated_at
-            ? `更新: ${toJstLocal(t.updated_at)}`
-            : t.created_at
-            ? `作成: ${toJstLocal(t.created_at)}`
-            : "";
-
-          return (
-            <Link
-              key={t.id}
-              href={`/chat/${t.id}`}
-              style={{
-                display: "block",
-                padding: 16,
-                borderRadius: 18,
-                border: t.isUnread ? "1px solid #cde7d4" : "1px solid #e5ece7",
-                background: t.isUnread ? "#f4fbf6" : "#fff",
-                textAlign: "left",
-                textDecoration: "none",
-                color: "#111",
-                boxShadow: t.isUnread ? "0 6px 18px rgba(20,92,42,0.06)" : "none",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                {t.isUnread ? <span style={dot} aria-label="未読">●</span> : <span style={{ width: 10 }} />}
-                <div style={{ fontWeight: t.isUnread ? 900 : 800, fontSize: 18, color: "#1f5d30" }}>{title}</div>
-              </div>
-
-              <div
-                style={{
-                  marginTop: 10,
-                  color: "#374151",
-                  fontSize: 14,
-                  lineHeight: 1.7,
-                  fontWeight: t.isUnread ? 700 : 400,
-                }}
-              >
-                {lastLine}
-              </div>
-
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 12,
-                  color: "#6b7280",
-                  display: "flex",
-                  gap: 10,
-                  flexWrap: "wrap",
-                }}
-              >
-                <span>{timeLine}</span>
-              </div>
-            </Link>
-          );
-        })}
+      <div style={summaryBox}>
+        <div style={summaryTitle}>チャット一覧</div>
+        <div style={summaryText}>
+          {loading
+            ? "読み込み中…"
+            : `スレッド ${threads.length}件 / 未読 ${unreadTotal}件`}
+        </div>
       </div>
+
+      {loading ? (
+        <div style={emptyBox}>読み込み中…</div>
+      ) : threads.length === 0 ? (
+        <div style={emptyBox}>
+          まだチャットはありません。
+          <br />
+          試合申込やオファー送信後に、ここへスレッドが表示されます。
+        </div>
+      ) : (
+        <div style={listWrap}>
+          {threads.map((t) => {
+            const title = t.otherTeamName || "相手チーム";
+            const category = t.otherTeamCategory || "";
+            const body = t.lastMessageBody
+              ? clip(t.lastMessageBody, 46)
+              : "まだメッセージがありません";
+            const time = formatLineTime(
+              t.lastMessageAt ?? t.updated_at ?? t.created_at
+            );
+
+            return (
+              <Link key={t.id} href={`/chat/${t.id}`} style={threadCard}>
+                <div style={avatar}>{buildInitial(title)}</div>
+
+                <div style={threadMain}>
+                  <div style={threadTopRow}>
+                    <div style={threadNameRow}>
+                      <div style={threadName}>{title}</div>
+                      {category ? (
+                        <div style={threadCategory}>{category}</div>
+                      ) : null}
+                    </div>
+
+                    <div style={threadMeta}>
+                      <span style={threadTime}>{time}</span>
+                      {t.isUnread ? <span style={unreadDot} /> : null}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      ...threadBody,
+                      ...(t.isUnread ? threadBodyUnread : null),
+                    }}
+                  >
+                    {body}
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </main>
   );
 }
 
-const heroBox: React.CSSProperties = {
-  borderRadius: 20,
-  background: "linear-gradient(135deg, #1e7f3c 0%, #145c2a 100%)",
-  color: "#fff",
-  padding: 18,
-  boxShadow: "0 10px 28px rgba(20,92,42,0.16)",
+const summaryBox: React.CSSProperties = {
+  marginTop: 12,
   marginBottom: 12,
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: "1px solid #e5ece7",
+  background: "#fff",
 };
 
-const heroTitle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 28,
+const summaryTitle: React.CSSProperties = {
+  fontSize: 14,
   fontWeight: 900,
+  color: "#1f5d30",
 };
 
-const heroDesc: React.CSSProperties = {
-  margin: "8px 0 0",
-  color: "rgba(255,255,255,0.92)",
-  lineHeight: 1.7,
+const summaryText: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 12,
+  color: "#66756d",
 };
 
-const dot: React.CSSProperties = {
-  color: "#16a34a",
-  fontSize: 10,
-  lineHeight: 1,
+const listWrap: React.CSSProperties = {
+  display: "grid",
+  gap: 0,
+  marginTop: 8,
+  borderRadius: 18,
+  overflow: "hidden",
+  border: "1px solid #e5ece7",
+  background: "#fff",
+};
+
+const threadCard: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "56px 1fr",
+  gap: 12,
+  alignItems: "center",
+  padding: "14px 14px",
+  textDecoration: "none",
+  color: "#111",
+  borderBottom: "1px solid #edf1ee",
+  background: "#fff",
+};
+
+const avatar: React.CSSProperties = {
+  width: 44,
+  height: 44,
+  borderRadius: 999,
+  background: "#e8f5eb",
+  color: "#145c2a",
+  fontWeight: 900,
+  fontSize: 18,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const threadMain: React.CSSProperties = {
+  minWidth: 0,
+  display: "grid",
+  gap: 6,
+};
+
+const threadTopRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 10,
+};
+
+const threadNameRow: React.CSSProperties = {
+  minWidth: 0,
+  display: "grid",
+  gap: 2,
+};
+
+const threadName: React.CSSProperties = {
+  fontSize: 16,
+  fontWeight: 900,
+  color: "#1f2937",
+  lineHeight: 1.3,
+};
+
+const threadCategory: React.CSSProperties = {
+  fontSize: 12,
+  color: "#6b7280",
+  lineHeight: 1.3,
+};
+
+const threadMeta: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  flexShrink: 0,
+};
+
+const threadTime: React.CSSProperties = {
+  fontSize: 11,
+  color: "#6b7280",
+  whiteSpace: "nowrap",
+};
+
+const unreadDot: React.CSSProperties = {
+  width: 9,
+  height: 9,
+  borderRadius: 999,
+  background: "#22c55e",
+  display: "inline-block",
+  flexShrink: 0,
+};
+
+const threadBody: React.CSSProperties = {
+  fontSize: 13,
+  color: "#6b7280",
+  lineHeight: 1.5,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const threadBodyUnread: React.CSSProperties = {
+  color: "#374151",
+  fontWeight: 700,
+};
+
+const emptyBox: React.CSSProperties = {
+  marginTop: 12,
+  padding: 20,
+  borderRadius: 16,
+  border: "1px solid #e5ece7",
+  background: "#fff",
+  color: "#666",
+  lineHeight: 1.8,
+  textAlign: "center",
 };
