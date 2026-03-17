@@ -5,29 +5,24 @@ import Link from "next/link";
 import { supabase } from "./lib/supabase";
 import AppTabNav from "@/app/components/AppTabNav";
 
-type MessageRow = {
+type TeamRow = {
   id: string;
-  thread_id: string;
-  sender_id: string | null;
-  body: string | null;
-  created_at: string;
-};
-
-type ThreadRow = {
-  id: string;
-  created_at: string;
-  updated_at: string | null;
+  owner_id: string | null;
+  name: string | null;
+  category: string | null;
 };
 
 type MatchSlotRow = {
   id: string;
-  owner_id: string | null;
   host_team_id: string;
   date: string;
   start_time: string;
   end_time: string;
+  area: string | null;
+  area_text?: string | null;
+  category: string | null;
   is_closed: boolean | null;
-  created_at?: string;
+  created_at: string;
 };
 
 type MatchRequestRow = {
@@ -35,53 +30,66 @@ type MatchRequestRow = {
   slot_id: string;
   requester_team_id: string;
   requester_user_id: string | null;
-  status: "pending" | "accepted" | "rejected" | "cancelled" | string;
-  created_at?: string;
+  status: "pending" | "accepted" | "rejected" | "cancelled";
+  comment: string | null;
+  created_at: string;
 };
 
-type TeamRow = {
+type MatchOfferRow = {
   id: string;
-  owner_id: string | null;
-  name: string | null;
+  slot_id: string | null;
+  from_team_id: string;
+  to_team_id: string;
+  status: "pending" | "accepted" | "rejected" | "cancelled";
+  message: string | null;
+  created_at: string;
 };
 
-type OfferSummary = {
-  sent: number;
-  received: number;
+type ChatMemberRow = {
+  thread_id: string;
+  last_read_at: string | null;
+};
+
+type ChatMessageRow = {
+  id: string;
+  thread_id: string;
+  body: string | null;
+  created_at: string;
 };
 
 type NextMatchCard = {
   date: string;
   start_time: string;
+  end_time: string;
+  area: string | null;
+  area_text?: string | null;
+  category: string | null;
   slot_id: string;
 };
 
+function fmtDate(ymd?: string | null) {
+  if (!ymd) return "";
+  return ymd;
+}
+
+function fmtTime(v?: string | null) {
+  if (!v) return "";
+  return String(v).slice(0, 5);
+}
+
 export default function HomePage() {
-  const [meId, setMeId] = useState<string>("");
-
+  const [meId, setMeId] = useState("");
   const [loading, setLoading] = useState(true);
-  const [loadingChat, setLoadingChat] = useState(true);
 
-  const [recruitingCount, setRecruitingCount] = useState(0);
+  const [myTeams, setMyTeams] = useState<TeamRow[]>([]);
+
+  const [openCount, setOpenCount] = useState(0);
   const [applyingCount, setApplyingCount] = useState(0);
-  const [offerSummary, setOfferSummary] = useState<OfferSummary>({
-    sent: 0,
-    received: 0,
-  });
+  const [offerSentCount, setOfferSentCount] = useState(0);
+  const [offerReceivedCount, setOfferReceivedCount] = useState(0);
 
+  const [unreadTotal, setUnreadTotal] = useState(0);
   const [nextMatch, setNextMatch] = useState<NextMatchCard | null>(null);
-
-  const [recentThreads, setRecentThreads] = useState<
-    Array<{
-      id: string;
-      last_message: MessageRow | null;
-      unread: boolean;
-    }>
-  >([]);
-
-  const unreadTotal = useMemo(() => {
-    return recentThreads.reduce((sum, t) => sum + (t.unread ? 1 : 0), 0);
-  }, [recentThreads]);
 
   useEffect(() => {
     (async () => {
@@ -99,234 +107,185 @@ export default function HomePage() {
     (async () => {
       setLoading(true);
 
-      try {
-        const today = new Date();
-        const yyyy = today.getFullYear();
-        const mm = String(today.getMonth() + 1).padStart(2, "0");
-        const dd = String(today.getDate()).padStart(2, "0");
-        const todayYmd = `${yyyy}-${mm}-${dd}`;
+      // 自分のチーム取得
+      const { data: teamRows, error: teamErr } = await supabase
+        .from("teams")
+        .select("id, owner_id, name, category")
+        .eq("owner_id", meId);
 
-        const { data: myTeamsData, error: myTeamsError } = await supabase
-          .from("teams")
-          .select("id,owner_id,name")
-          .eq("owner_id", meId);
+      if (teamErr) {
+        console.error(teamErr);
+        setLoading(false);
+        return;
+      }
 
-        if (myTeamsError) {
-          console.error(myTeamsError);
-          setLoading(false);
-          return;
+      const myTeamData = (teamRows ?? []) as TeamRow[];
+      setMyTeams(myTeamData);
+
+      const myTeamIds = myTeamData.map((t) => t.id).filter(Boolean);
+
+      if (myTeamIds.length === 0) {
+        setOpenCount(0);
+        setApplyingCount(0);
+        setOfferSentCount(0);
+        setOfferReceivedCount(0);
+        setUnreadTotal(0);
+        setNextMatch(null);
+        setLoading(false);
+        return;
+      }
+
+      // 募集中
+      const { data: mySlots, error: slotErr } = await supabase
+        .from("match_slots")
+        .select("id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at")
+        .in("host_team_id", myTeamIds);
+
+      if (slotErr) {
+        console.error(slotErr);
+      }
+
+      const mySlotRows = (mySlots ?? []) as MatchSlotRow[];
+      setOpenCount(mySlotRows.filter((s) => !s.is_closed).length);
+
+      // 申込中
+      const { data: myRequests, error: reqErr } = await supabase
+        .from("match_requests")
+        .select("id, slot_id, requester_team_id, requester_user_id, status, comment, created_at")
+        .in("requester_team_id", myTeamIds);
+
+      if (reqErr) {
+        console.error(reqErr);
+      }
+
+      const myRequestRows = (myRequests ?? []) as MatchRequestRow[];
+      setApplyingCount(myRequestRows.filter((r) => r.status === "pending").length);
+
+      // オファー送信
+      const { data: sentOffers, error: sentErr } = await supabase
+        .from("match_offers")
+        .select("id, slot_id, from_team_id, to_team_id, status, message, created_at")
+        .in("from_team_id", myTeamIds);
+
+      if (sentErr) {
+        console.error(sentErr);
+      }
+
+      const sentOfferRows = (sentOffers ?? []) as MatchOfferRow[];
+      setOfferSentCount(sentOfferRows.filter((o) => o.status === "pending").length);
+
+      // オファー受信
+      const { data: receivedOffers, error: recvErr } = await supabase
+        .from("match_offers")
+        .select("id, slot_id, from_team_id, to_team_id, status, message, created_at")
+        .in("to_team_id", myTeamIds);
+
+      if (recvErr) {
+        console.error(recvErr);
+      }
+
+      const receivedOfferRows = (receivedOffers ?? []) as MatchOfferRow[];
+      setOfferReceivedCount(receivedOfferRows.filter((o) => o.status === "pending").length);
+
+      // チャット未読
+      const { data: memberRows, error: memberErr } = await supabase
+        .from("chat_members")
+        .select("thread_id,last_read_at")
+        .eq("user_id", meId);
+
+      if (memberErr) {
+        console.error(memberErr);
+      }
+
+      const myMemberRows = (memberRows ?? []) as ChatMemberRow[];
+      const threadIds = myMemberRows.map((r) => r.thread_id).filter(Boolean);
+
+      if (threadIds.length > 0) {
+        const { data: msgRows, error: msgErr } = await supabase
+          .from("chat_messages")
+          .select("id,thread_id,body,created_at")
+          .in("thread_id", threadIds)
+          .order("created_at", { ascending: false })
+          .limit(2000);
+
+        if (msgErr) {
+          console.error(msgErr);
         }
 
-        const myTeams = (myTeamsData ?? []) as TeamRow[];
-        const myTeamIds = myTeams.map((t) => t.id);
+        const messages = (msgRows ?? []) as ChatMessageRow[];
+        const latestByThread = new Map<string, ChatMessageRow>();
 
-        if (myTeamIds.length === 0) {
-          setRecruitingCount(0);
-          setApplyingCount(0);
-          setOfferSummary({ sent: 0, received: 0 });
-          setNextMatch(null);
-          setLoading(false);
-          return;
-        }
-
-        const { data: mySlotsData, error: mySlotsError } = await supabase
-          .from("match_slots")
-          .select("id,owner_id,host_team_id,date,start_time,end_time,is_closed,created_at")
-          .in("host_team_id", myTeamIds)
-          .order("date", { ascending: true });
-
-        if (mySlotsError) {
-          console.error(mySlotsError);
-        }
-
-        const mySlots = (mySlotsData ?? []) as MatchSlotRow[];
-        const mySlotIds = mySlots.map((s) => s.id);
-
-        const recruiting = mySlots.filter((s) => !s.is_closed);
-        setRecruitingCount(recruiting.length);
-
-        const { data: myRequestsData, error: myRequestsError } = await supabase
-          .from("match_requests")
-          .select("id,slot_id,requester_team_id,requester_user_id,status,created_at")
-          .in("requester_team_id", myTeamIds)
-          .order("created_at", { ascending: false });
-
-        if (myRequestsError) {
-          console.error(myRequestsError);
-        }
-
-        const myRequests = (myRequestsData ?? []) as MatchRequestRow[];
-
-        const applying = myRequests.filter(
-          (r) => r.status === "pending" || r.status === "accepted"
-        );
-        setApplyingCount(applying.length);
-
-        let incomingOnMySlots: MatchRequestRow[] = [];
-        if (mySlotIds.length > 0) {
-          const { data: incomingReqData, error: incomingReqError } = await supabase
-            .from("match_requests")
-            .select("id,slot_id,requester_team_id,requester_user_id,status,created_at")
-            .in("slot_id", mySlotIds)
-            .order("created_at", { ascending: false });
-
-          if (incomingReqError) {
-            console.error(incomingReqError);
-          } else {
-            incomingOnMySlots = (incomingReqData ?? []) as MatchRequestRow[];
+        for (const m of messages) {
+          if (!latestByThread.has(m.thread_id)) {
+            latestByThread.set(m.thread_id, m);
           }
         }
 
-        const offerSent = myRequests.filter((r) => r.status === "pending").length;
-        const offerReceived = incomingOnMySlots.filter((r) => r.status === "pending").length;
+        let unread = 0;
+        for (const member of myMemberRows) {
+          const last = latestByThread.get(member.thread_id);
+          if (!last?.created_at) continue;
 
-        setOfferSummary({
-          sent: offerSent,
-          received: offerReceived,
+          if (!member.last_read_at) {
+            unread += 1;
+            continue;
+          }
+
+          if (new Date(last.created_at).getTime() > new Date(member.last_read_at).getTime()) {
+            unread += 1;
+          }
+        }
+
+        setUnreadTotal(unread);
+      } else {
+        setUnreadTotal(0);
+      }
+
+      // 次の試合（accepted になった request から最も近いもの）
+      const acceptedRequests = myRequestRows.filter((r) => r.status === "accepted");
+      const acceptedSlotIds = Array.from(new Set(acceptedRequests.map((r) => r.slot_id)));
+
+      if (acceptedSlotIds.length > 0) {
+        const { data: acceptedSlots, error: acceptedSlotsErr } = await supabase
+          .from("match_slots")
+          .select("id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at")
+          .in("id", acceptedSlotIds)
+          .order("date", { ascending: true })
+          .order("start_time", { ascending: true });
+
+        if (acceptedSlotsErr) {
+          console.error(acceptedSlotsErr);
+        }
+
+        const now = new Date();
+        const futureSlots = ((acceptedSlots ?? []) as MatchSlotRow[]).filter((s) => {
+          const dt = new Date(`${s.date}T${s.start_time}`);
+          return dt.getTime() >= now.getTime();
         });
 
-        const acceptedSentSlotIds = myRequests
-          .filter((r) => r.status === "accepted")
-          .map((r) => r.slot_id);
-
-        const acceptedReceivedSlotIds = incomingOnMySlots
-          .filter((r) => r.status === "accepted")
-          .map((r) => r.slot_id);
-
-        const nextCandidateIds = Array.from(
-          new Set([...acceptedSentSlotIds, ...acceptedReceivedSlotIds])
-        );
-
-        if (nextCandidateIds.length > 0) {
-          const { data: nextSlotsData, error: nextSlotsError } = await supabase
-            .from("match_slots")
-            .select("id,owner_id,host_team_id,date,start_time,end_time,is_closed,created_at")
-            .in("id", nextCandidateIds)
-            .gte("date", todayYmd)
-            .order("date", { ascending: true })
-            .order("start_time", { ascending: true })
-            .limit(1);
-
-          if (nextSlotsError) {
-            console.error(nextSlotsError);
-          } else {
-            const nextSlot = (nextSlotsData?.[0] ?? null) as MatchSlotRow | null;
-
-            if (nextSlot) {
-              setNextMatch({
-                date: nextSlot.date,
-                start_time: nextSlot.start_time,
-                slot_id: nextSlot.id,
-              });
-            } else {
-              setNextMatch(null);
-            }
-          }
+        if (futureSlots.length > 0) {
+          const s = futureSlots[0];
+          setNextMatch({
+            date: s.date,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            area: s.area,
+            area_text: s.area_text,
+            category: s.category,
+            slot_id: s.id,
+          });
         } else {
           setNextMatch(null);
         }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
+      } else {
+        setNextMatch(null);
       }
+
+      setLoading(false);
     })();
   }, [meId]);
 
-  useEffect(() => {
-    if (!meId) {
-      setLoadingChat(false);
-      return;
-    }
-
-    (async () => {
-      setLoadingChat(true);
-
-      try {
-        const { data: myMembers, error: memberError } = await supabase
-          .from("chat_members")
-          .select("thread_id,last_read_at")
-          .eq("user_id", meId)
-          .limit(50);
-
-        if (memberError) {
-          console.error(memberError);
-          setRecentThreads([]);
-          setLoadingChat(false);
-          return;
-        }
-
-        const threadIds = (myMembers ?? []).map((r: any) => r.thread_id);
-
-        if (threadIds.length === 0) {
-          setRecentThreads([]);
-          setLoadingChat(false);
-          return;
-        }
-
-        const { data: threads, error: threadsError } = await supabase
-          .from("chat_threads")
-          .select("id,created_at,updated_at")
-          .in("id", threadIds);
-
-        if (threadsError) {
-          console.error(threadsError);
-          setRecentThreads([]);
-          setLoadingChat(false);
-          return;
-        }
-
-        const { data: msgs, error: msgsError } = await supabase
-          .from("chat_messages")
-          .select("id,thread_id,sender_id,body,created_at")
-          .in("thread_id", threadIds)
-          .order("created_at", { ascending: false })
-          .limit(200);
-
-        if (msgsError) {
-          console.error(msgsError);
-          setRecentThreads([]);
-          setLoadingChat(false);
-          return;
-        }
-
-        const lastMap = new Map<string, MessageRow>();
-        (msgs ?? []).forEach((m: any) => {
-          if (!lastMap.has(m.thread_id)) {
-            lastMap.set(m.thread_id, m as MessageRow);
-          }
-        });
-
-        const memberMap = new Map<string, any>();
-        (myMembers ?? []).forEach((m: any) => {
-          memberMap.set(m.thread_id, m);
-        });
-
-        const merged = ((threads ?? []) as ThreadRow[]).map((t) => {
-          const lm = lastMap.get(t.id) ?? null;
-          const myMember = memberMap.get(t.id);
-          const lastReadAt = myMember?.last_read_at ?? null;
-          const unread =
-            !!lm &&
-            !!lm.created_at &&
-            (!lastReadAt || new Date(lm.created_at).getTime() > new Date(lastReadAt).getTime());
-
-          return {
-            id: t.id,
-            last_message: lm,
-            unread,
-          };
-        });
-
-        setRecentThreads(merged.slice(0, 5));
-      } catch (e) {
-        console.error(e);
-        setRecentThreads([]);
-      } finally {
-        setLoadingChat(false);
-      }
-    })();
-  }, [meId]);
+  const hasTeam = useMemo(() => myTeams.length > 0, [myTeams.length]);
 
   return (
     <main style={wrap}>
@@ -344,87 +303,63 @@ export default function HomePage() {
 
       <section style={dashboardGrid}>
         <div style={dashboardCard}>
-          <div style={dashboardTitleRow}>
-            <div style={dashboardIcon}>⚽</div>
-            <div style={dashboardTitle}>試合マッチング状況</div>
+          <div style={dashboardTitle}>⚽ 試合マッチング状況</div>
+
+          <div style={statusList}>
+            <DashboardLinkRow
+              href="/match/status/open"
+              label="募集中"
+              value={openCount}
+            />
+            <DashboardLinkRow
+              href="/match/status/applying"
+              label="申込中"
+              value={applyingCount}
+            />
+            <DashboardLinkRow
+              href="/match/status/offers"
+              label="オファー送信"
+              value={offerSentCount}
+            />
+            <DashboardLinkRow
+              href="/match/status/offers-received"
+              label="オファー受信"
+              value={offerReceivedCount}
+            />
           </div>
-
-          {loading ? (
-            <div style={dashboardLoading}>読み込み中…</div>
-          ) : (
-            <div style={statusList}>
-              <Link href="/match/recruiting" style={statusRowLink}>
-                <span style={statusLabel}>募集中</span>
-                <span style={statusValue}>{recruitingCount}</span>
-              </Link>
-
-              <Link href="/match/applying" style={statusRowLink}>
-                <span style={statusLabel}>申込中</span>
-                <span style={statusValue}>{applyingCount}</span>
-              </Link>
-
-              <Link href="/match/offers/sent" style={statusRowLink}>
-                <span style={statusLabel}>オファー送信</span>
-                <span style={statusValue}>{offerSummary.sent}</span>
-              </Link>
-
-              <Link href="/match/offers/received" style={statusRowLink}>
-                <span style={statusLabel}>オファー受信</span>
-                <span style={statusValue}>{offerSummary.received}</span>
-              </Link>
-            </div>
-          )}
         </div>
 
         <div style={dashboardCard}>
-          <div style={dashboardTitleRow}>
-            <div style={dashboardIcon}>💬</div>
-            <div style={dashboardTitle}>チャット</div>
+          <div style={dashboardTitle}>💬 チャット</div>
+
+          <div style={statusList}>
+            <DashboardLinkRow
+              href="/chat"
+              label="未読メッセージ"
+              value={unreadTotal}
+            />
           </div>
-
-          {loadingChat ? (
-            <div style={dashboardLoading}>読み込み中…</div>
-          ) : (
-            <div style={statusList}>
-              <Link href="/chat" style={statusRowLink}>
-                <span style={statusLabel}>未読メッセージ</span>
-                <span style={statusValue}>{unreadTotal}</span>
-              </Link>
-
-              {recentThreads.length > 0 ? (
-                <div style={recentMiniList}>
-                  {recentThreads.slice(0, 3).map((t) => (
-                    <div key={t.id} style={recentMiniRow}>
-                      {t.last_message?.body ?? "メッセージなし"}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={emptyMiniText}>チャットはまだありません</div>
-              )}
-            </div>
-          )}
         </div>
 
         <div style={dashboardCard}>
-          <div style={dashboardTitleRow}>
-            <div style={dashboardIcon}>📅</div>
-            <div style={dashboardTitle}>次の試合</div>
-          </div>
+          <div style={dashboardTitle}>📅 次の試合</div>
 
           {loading ? (
-            <div style={dashboardLoading}>読み込み中…</div>
+            <div style={mutedText}>読み込み中…</div>
           ) : nextMatch ? (
-            <div style={statusList}>
-              <Link href={`/match/slot/${nextMatch.slot_id}`} style={statusRowLink}>
-                <span style={statusLabel}>
-                  {formatDate(nextMatch.date)} {formatTime(nextMatch.start_time)}
-                </span>
-                <span style={statusValue}>詳細</span>
-              </Link>
-            </div>
+            <Link href="/match/status/applying" style={nextMatchLink}>
+              <div style={nextMatchDate}>
+                {fmtDate(nextMatch.date)} {fmtTime(nextMatch.start_time)}
+              </div>
+              <div style={nextMatchMeta}>
+                {nextMatch.area_text ?? nextMatch.area ?? "エリア未設定"}
+              </div>
+              <div style={nextMatchMeta}>
+                {nextMatch.category ?? "カテゴリ未設定"}
+              </div>
+            </Link>
           ) : (
-            <div style={emptyMiniText}>予定されている次の試合はありません</div>
+            <div style={mutedText}>予定されている次の試合はありません</div>
           )}
         </div>
       </section>
@@ -464,18 +399,76 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      <section style={qa}>
+        <div style={qaTitle}>Q&amp;A</div>
+
+        <div style={qaItem}>
+          <div style={qaQ}>Q. まず何をすればいいですか？</div>
+          <div style={qaA}>
+            A. まずはチーム登録です。登録情報があると、検索にも募集にもチャットにも進みやすくなります。
+          </div>
+        </div>
+
+        <div style={qaItem}>
+          <div style={qaQ}>Q. 相手チームにいきなり連絡できますか？</div>
+          <div style={qaA}>
+            A. はい。チーム検索や募集詳細からチャットに進んで連絡できます。
+          </div>
+        </div>
+
+        <div style={qaItem}>
+          <div style={qaQ}>Q. 募集するだけでなく、探すこともできますか？</div>
+          <div style={qaA}>
+            A. できます。カレンダー上で既存の募集枠を見ながら、条件で絞り込んで探せます。
+          </div>
+        </div>
+
+        <div style={qaItem}>
+          <div style={qaQ}>Q. チーム検索では何で絞り込めますか？</div>
+          <div style={qaA}>
+            A. エリア、カテゴリ、強さ、グラウンド提供、駐輪場、所属人数、キーワードなどで絞り込みできます。
+          </div>
+        </div>
+
+        <div style={qaItem}>
+          <div style={qaQ}>Q. まだ相手が少ない場合は？</div>
+          <div style={qaA}>
+            A. 先に自分で募集枠を出しておくと、相手から見つけてもらいやすくなります。
+          </div>
+        </div>
+
+        {!hasTeam ? (
+          <div style={startBox}>
+            <div style={startTitle}>まだチーム登録がありません</div>
+            <div style={startText}>
+              まずはマイページからチーム情報を登録すると、試合検索・募集・チャットが使いやすくなります。
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <Link href="/teams" className="sh-btn sh-btn--primary">
+                マイページへ
+              </Link>
+            </div>
+          </div>
+        ) : null}
+      </section>
     </main>
   );
 }
 
-function formatDate(ymd: string) {
-  const [y, m, d] = ymd.split("-");
-  return `${Number(m)}/${Number(d)}`;
-}
+function DashboardLinkRow(props: {
+  href: string;
+  label: string;
+  value: number;
+}) {
+  const { href, label, value } = props;
 
-function formatTime(hhmmss?: string | null) {
-  if (!hhmmss) return "";
-  return hhmmss.slice(0, 5);
+  return (
+    <Link href={href} style={dashboardLinkRow}>
+      <span style={dashboardLinkLabel}>{label}</span>
+      <span style={dashboardLinkValue}>{value}</span>
+    </Link>
+  );
 }
 
 const wrap: React.CSSProperties = {
@@ -485,7 +478,7 @@ const wrap: React.CSSProperties = {
 };
 
 const hero: React.CSSProperties = {
-  marginTop: 12,
+  marginTop: 4,
 };
 
 const heroInner: React.CSSProperties = {
@@ -514,17 +507,8 @@ const dashboardCard: React.CSSProperties = {
   borderRadius: 16,
   background: "#fff",
   padding: 16,
-};
-
-const dashboardTitleRow: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
+  display: "grid",
   gap: 10,
-  marginBottom: 12,
-};
-
-const dashboardIcon: React.CSSProperties = {
-  fontSize: 24,
 };
 
 const dashboardTitle: React.CSSProperties = {
@@ -533,59 +517,62 @@ const dashboardTitle: React.CSSProperties = {
   color: "#16391f",
 };
 
-const dashboardLoading: React.CSSProperties = {
-  fontSize: 13,
-  color: "#666",
-};
-
 const statusList: React.CSSProperties = {
   display: "grid",
   gap: 8,
 };
 
-const statusRowLink: React.CSSProperties = {
+const dashboardLinkRow: React.CSSProperties = {
   display: "flex",
-  justifyContent: "space-between",
   alignItems: "center",
+  justifyContent: "space-between",
   gap: 12,
-  padding: "12px 14px",
-  borderRadius: 12,
-  border: "1px solid #edf1ee",
-  background: "#fafcfb",
   textDecoration: "none",
+  color: "#111",
+  border: "1px solid #edf1ee",
+  borderRadius: 12,
+  background: "#fafcfb",
+  padding: "12px 14px",
 };
 
-const statusLabel: React.CSSProperties = {
-  fontSize: 14,
-  fontWeight: 700,
+const dashboardLinkLabel: React.CSSProperties = {
+  fontWeight: 800,
   color: "#2d3b31",
 };
 
-const statusValue: React.CSSProperties = {
-  fontSize: 14,
+const dashboardLinkValue: React.CSSProperties = {
   fontWeight: 900,
+  fontSize: 20,
   color: "#145c2a",
-  flexShrink: 0,
 };
 
-const recentMiniList: React.CSSProperties = {
-  marginTop: 4,
-  display: "grid",
-  gap: 6,
+const nextMatchLink: React.CSSProperties = {
+  display: "block",
+  textDecoration: "none",
+  color: "#111",
+  border: "1px solid #edf1ee",
+  borderRadius: 12,
+  background: "#fafcfb",
+  padding: "12px 14px",
 };
 
-const recentMiniRow: React.CSSProperties = {
-  fontSize: 12,
-  color: "#666",
-  lineHeight: 1.6,
-  padding: "0 2px",
-  wordBreak: "break-word",
+const nextMatchDate: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 20,
+  color: "#145c2a",
 };
 
-const emptyMiniText: React.CSSProperties = {
+const nextMatchMeta: React.CSSProperties = {
+  marginTop: 6,
   fontSize: 13,
   color: "#666",
   lineHeight: 1.6,
+};
+
+const mutedText: React.CSSProperties = {
+  fontSize: 13,
+  color: "#666",
+  lineHeight: 1.7,
 };
 
 const guide: React.CSSProperties = {
@@ -617,4 +604,55 @@ const guideText: React.CSSProperties = {
   fontSize: 14,
   color: "#444",
   lineHeight: 1.8,
+};
+
+const qa: React.CSSProperties = {
+  marginTop: 20,
+  border: "1px solid #eee",
+  borderRadius: 16,
+  padding: 16,
+  background: "#fff",
+};
+
+const qaTitle: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 18,
+  marginBottom: 12,
+};
+
+const qaItem: React.CSSProperties = {
+  padding: "10px 0",
+  borderBottom: "1px solid #f0f0f0",
+};
+
+const qaQ: React.CSSProperties = {
+  fontWeight: 800,
+  color: "#145c2a",
+  marginBottom: 4,
+};
+
+const qaA: React.CSSProperties = {
+  fontSize: 14,
+  color: "#444",
+  lineHeight: 1.8,
+};
+
+const startBox: React.CSSProperties = {
+  marginTop: 14,
+  padding: 14,
+  borderRadius: 14,
+  border: "1px solid #e5ece7",
+  background: "#fafcfb",
+};
+
+const startTitle: React.CSSProperties = {
+  fontWeight: 900,
+  color: "#16391f",
+};
+
+const startText: React.CSSProperties = {
+  marginTop: 6,
+  fontSize: 14,
+  color: "#444",
+  lineHeight: 1.7,
 };
