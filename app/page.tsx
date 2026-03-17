@@ -347,7 +347,7 @@ export default function HomePage() {
           {loading ? (
             <div style={mutedText}>読み込み中…</div>
           ) : nextMatch ? (
-            <Link href="/match/status/applying" style={nextMatchLink}>
+            <Link href="/match/next" style={nextMatchLink}>
               <div style={nextMatchDate}>
                 {fmtDate(nextMatch.date)} {fmtTime(nextMatch.start_time)}
               </div>
@@ -445,7 +445,7 @@ export default function HomePage() {
               まずはマイページからチーム情報を登録すると、試合検索・募集・チャットが使いやすくなります。
             </div>
             <div style={{ marginTop: 10 }}>
-              <Link href="/teams" className="sh-btn sh-btn--primary">
+              <Link href="/mypage" className="sh-btn sh-btn--primary">
                 マイページへ
               </Link>
             </div>
