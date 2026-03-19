@@ -4,8 +4,16 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
 import AppTabNav from "@/app/components/AppTabNav";
+import AppHero from "@/app/components/AppHero";
+import PageBackNav from "@/app/components/PageBackNav";
 
-type OfferRow = {
+type Team = {
+  id: string;
+  name: string | null;
+  category: string | null;
+};
+
+type Offer = {
   id: string;
   slot_id: string | null;
   from_team_id: string;
@@ -15,78 +23,16 @@ type OfferRow = {
   created_at: string;
 };
 
-type TeamRow = {
-  id: string;
-  name: string | null;
-  category: string | null;
-};
-
-function label(status: OfferRow["status"]) {
-  switch (status) {
-    case "pending":
-      return "送信中";
-    case "accepted":
-      return "承認";
-    case "rejected":
-      return "辞退";
-    case "cancelled":
-      return "取消";
-    default:
-      return status;
-  }
-}
-
-function badge(status: OfferRow["status"]): React.CSSProperties {
-  if (status === "accepted") {
-    return {
-      ...badgeBase,
-      background: "#ecfdf3",
-      color: "#166534",
-      border: "1px solid #bbf7d0",
-    };
-  }
-
-  if (status === "rejected") {
-    return {
-      ...badgeBase,
-      background: "#fef2f2",
-      color: "#991b1b",
-      border: "1px solid #fecaca",
-    };
-  }
-
-  if (status === "cancelled") {
-    return {
-      ...badgeBase,
-      background: "#f3f4f6",
-      color: "#4b5563",
-      border: "1px solid #e5e7eb",
-    };
-  }
-
-  return {
-    ...badgeBase,
-    background: "#eff6ff",
-    color: "#1d4ed8",
-    border: "1px solid #bfdbfe",
-  };
-}
-
-function formatDt(dt?: string | null) {
-  if (!dt) return "";
-  try {
-    return new Date(dt).toLocaleString("ja-JP");
-  } catch {
-    return dt;
-  }
-}
-
 export default function OfferSentPage() {
-  const [loading, setLoading] = useState(true);
   const [meId, setMeId] = useState("");
-  const [offers, setOffers] = useState<OfferRow[]>([]);
-  const [teamMap, setTeamMap] = useState<Map<string, TeamRow>>(new Map());
-  const [openId, setOpenId] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+
+  const [myTeams, setMyTeams] = useState<Team[]>([]);
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [teamMap, setTeamMap] = useState<Map<string, Team>>(new Map());
+
+  const [openId, setOpenId] = useState("");
+  const [updatingId, setUpdatingId] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -96,73 +42,77 @@ export default function OfferSentPage() {
   }, []);
 
   useEffect(() => {
-    if (!meId) {
-      setLoading(false);
-      return;
-    }
+    if (!meId) return;
 
     (async () => {
       setLoading(true);
 
-      const { data: myTeams, error: myTeamsErr } = await supabase
+      const { data: teams, error: teamsErr } = await supabase
         .from("teams")
-        .select("id")
+        .select("id,name,category")
         .eq("owner_id", meId);
 
-      if (myTeamsErr) {
-        console.error(myTeamsErr);
+      if (teamsErr) {
+        console.error(teamsErr);
+        setMyTeams([]);
         setOffers([]);
+        setTeamMap(new Map());
         setLoading(false);
         return;
       }
 
-      const myTeamIds = (myTeams ?? []).map((t: any) => t.id).filter(Boolean);
+      const myTeamRows = (teams ?? []) as Team[];
+      setMyTeams(myTeamRows);
+
+      const myTeamIds = myTeamRows.map((t) => t.id).filter(Boolean);
 
       if (myTeamIds.length === 0) {
         setOffers([]);
+        setTeamMap(new Map());
         setLoading(false);
         return;
       }
 
-      const { data: offerRows, error: offerErr } = await supabase
+      const { data: offerRows, error: offersErr } = await supabase
         .from("match_offers")
-        .select("id, slot_id, from_team_id, to_team_id, status, message, created_at")
+        .select("*")
         .in("from_team_id", myTeamIds)
         .order("created_at", { ascending: false });
 
-      if (offerErr) {
-        console.error(offerErr);
+      if (offersErr) {
+        console.error(offersErr);
         setOffers([]);
+        setTeamMap(new Map());
         setLoading(false);
         return;
       }
 
-      const normalizedOffers = (offerRows ?? []) as OfferRow[];
-      setOffers(normalizedOffers);
+      const offerData = (offerRows ?? []) as Offer[];
+      setOffers(offerData);
 
       const teamIds = Array.from(
-        new Set(
-          normalizedOffers
-            .flatMap((o) => [o.from_team_id, o.to_team_id])
-            .filter(Boolean)
-        )
+        new Set([
+          ...offerData.map((o) => o.from_team_id),
+          ...offerData.map((o) => o.to_team_id),
+        ].filter(Boolean))
       );
 
       if (teamIds.length > 0) {
         const { data: teamRows, error: teamErr } = await supabase
           .from("teams")
-          .select("id, name, category")
+          .select("id,name,category")
           .in("id", teamIds);
 
         if (teamErr) {
           console.error(teamErr);
+          setTeamMap(new Map());
         } else {
-          const nextMap = new Map<string, TeamRow>();
-          for (const t of (teamRows ?? []) as TeamRow[]) {
-            nextMap.set(t.id, t);
-          }
-          setTeamMap(nextMap);
+          const map = new Map<string, Team>();
+          ((teamRows ?? []) as Team[]).forEach((t) => map.set(t.id, t));
+          setTeamMap(map);
         }
+      } else {
+        setTeamMap(new Map());
       }
 
       setLoading(false);
@@ -181,99 +131,105 @@ export default function OfferSentPage() {
   return (
     <main style={wrap}>
       <AppTabNav />
+      <PageBackNav current="送ったオファー" />
 
-      <div style={topRow}>
-        <Link href="/" className="sh-btn">
-          ← 戻る
-        </Link>
+      <AppHero
+        icon="📥"
+        title="送ったオファー"
+        desc="こちらから送った試合オファー一覧です。"
+      />
+
+      <div style={summary}>
+        <Stat label="未対応" value={counts.pending} />
+        <Stat label="承認" value={counts.accepted} />
+        <Stat label="見送り" value={counts.rejected} />
+        <Stat label="取消" value={counts.cancelled} />
       </div>
 
-      <section style={hero}>
-        <div style={heroTitle}>送ったオファー</div>
-        <div style={heroDesc}>
-          こちらから送ったオファーの状況を確認できます。
-        </div>
-      </section>
+      {loading ? <div style={infoText}>読み込み中…</div> : null}
 
-      <section style={summaryCard}>
-        <div style={summaryTitle}>ステータス集計</div>
-        <div style={statsGrid}>
-          <Stat label="送信中" value={counts.pending} />
-          <Stat label="承認" value={counts.accepted} />
-          <Stat label="辞退" value={counts.rejected} />
-          <Stat label="取消" value={counts.cancelled} />
-        </div>
-      </section>
+      {!loading && myTeams.length === 0 ? (
+        <div style={empty}>自分のチームがまだ登録されていません</div>
+      ) : null}
 
-      {loading ? <div style={loadingText}>読み込み中…</div> : null}
-
-      {offers.length === 0 && !loading ? (
-        <div style={empty}>送ったオファーはまだありません。</div>
+      {!loading && myTeams.length > 0 && offers.length === 0 ? (
+        <div style={empty}>送ったオファーはまだありません</div>
       ) : null}
 
       <div style={list}>
         {offers.map((o) => {
-          const team = teamMap.get(o.to_team_id);
+          const fromTeam = teamMap.get(o.from_team_id);
+          const toTeam = teamMap.get(o.to_team_id);
           const expanded = openId === o.id;
 
           return (
             <div key={o.id} style={card}>
               <div style={titleRow}>
-                <div style={teamName}>
-                  {team?.name ?? "相手チーム"}
-                  {team?.category ? `（${team.category}）` : ""}
+                <div>
+                  <div style={teamName}>
+                    {toTeam?.name ?? "相手チーム"}
+                  </div>
+                  <div style={subText}>
+                    宛先：{fromTeam?.name ?? "自チーム"}
+                  </div>
                 </div>
 
-                <span style={badge(o.status)}>{label(o.status)}</span>
+                <span style={badge(o.status)}>
+                  {label(o.status)}
+                </span>
               </div>
 
-              <div style={meta}>
-                送信日時：{formatDt(o.created_at)}
-              </div>
+              <div style={meta}>送信日時：{fmt(o.created_at)}</div>
 
-              {o.message ? (
-                <div style={messagePreview}>
-                  {expanded ? o.message : `${o.message.slice(0, 80)}${o.message.length > 80 ? "…" : ""}`}
-                </div>
-              ) : (
-                <div style={messagePreviewMuted}>メッセージなし</div>
-              )}
-
-              <div style={buttonRow}>
+              <div style={btnRow}>
                 <button
-                  type="button"
                   className="sh-btn"
+                  type="button"
                   onClick={() => setOpenId(expanded ? "" : o.id)}
                 >
-                  {expanded ? "詳細を閉じる" : "詳細"}
+                  {expanded ? "閉じる" : "詳細"}
                 </button>
 
-                <Link
-                  href={team ? `/chat` : "/chat"}
-                  className="sh-btn sh-btn--primary"
-                >
+                <Link href="/chat" className="sh-btn sh-btn--primary">
                   チャット
                 </Link>
+
               </div>
 
               {expanded ? (
-                <div style={detailBox}>
-                  <div style={detailRow}>
-                    <strong>相手チーム：</strong>
-                    {team?.name ?? "未設定"}
+                <div style={detail}>
+                  <div style={detailBlock}>
+                    <div style={detailLabel}>送信チーム</div>
+                    <div style={detailValue}>
+                      {fromTeam?.name ?? "相手チーム"}
+                      {fromTeam?.category ? `（${fromTeam.category}）` : ""}
+                    </div>
                   </div>
-                  <div style={detailRow}>
-                    <strong>カテゴリ：</strong>
-                    {team?.category ?? "未設定"}
+
+                  <div style={detailBlock}>
+                    <div style={detailLabel}>受信チーム</div>
+                    <div style={detailValue}>
+                      {toTeam?.name ?? "自チーム"}
+                      {toTeam?.category ? `（${toTeam.category}）` : ""}
+                    </div>
                   </div>
-                  <div style={detailRow}>
-                    <strong>状態：</strong>
-                    {label(o.status)}
+
+                  <div style={detailBlock}>
+                    <div style={detailLabel}>メッセージ</div>
+                    <div style={detailValue}>{o.message || "なし"}</div>
                   </div>
-                  <div style={detailRow}>
-                    <strong>メッセージ：</strong>
+
+                  <div style={detailBlock}>
+                    <div style={detailLabel}>送信日時</div>
+                    <div style={detailValue}>{fmt(o.created_at)}</div>
                   </div>
-                  <div style={detailMessage}>{o.message ?? "（なし）"}</div>
+
+                  {o.slot_id ? (
+                    <div style={detailBlock}>
+                      <div style={detailLabel}>関連募集ID</div>
+                      <div style={detailValue}>{o.slot_id}</div>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -284,11 +240,49 @@ export default function OfferSentPage() {
   );
 }
 
-function Stat(props: { label: string; value: number }) {
+function label(s: string) {
+  switch (s) {
+    case "pending":
+      return "未対応";
+    case "accepted":
+      return "承認";
+    case "rejected":
+      return "見送り";
+    case "cancelled":
+      return "取消";
+    default:
+      return s;
+  }
+}
+
+function badge(s: string): React.CSSProperties {
+  const base: React.CSSProperties = {
+    padding: "4px 10px",
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 900,
+    whiteSpace: "nowrap",
+  };
+
+  if (s === "pending") return { ...base, background: "#fef3c7", color: "#92400e" };
+  if (s === "accepted") return { ...base, background: "#dcfce7", color: "#166534" };
+  if (s === "rejected") return { ...base, background: "#fee2e2", color: "#991b1b" };
+  return { ...base, background: "#eee", color: "#444" };
+}
+
+function fmt(dt: string) {
+  try {
+    return new Date(dt).toLocaleString("ja-JP");
+  } catch {
+    return dt;
+  }
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div style={statCard}>
-      <div style={statLabel}>{props.label}</div>
-      <div style={statValue}>{props.value}</div>
+    <div style={statBox}>
+      <div style={statLabel}>{label}</div>
+      <div style={statValue}>{value}</div>
     </div>
   );
 }
@@ -299,97 +293,49 @@ const wrap: React.CSSProperties = {
   margin: "0 auto",
 };
 
-const topRow: React.CSSProperties = {
-  marginTop: 8,
-  marginBottom: 10,
-};
-
-const hero: React.CSSProperties = {
-  border: "1px solid #e5ece7",
-  borderRadius: 16,
-  background: "#fff",
-  padding: 16,
-};
-
-const heroTitle: React.CSSProperties = {
-  fontSize: 24,
-  fontWeight: 900,
-  color: "#16391f",
-};
-
-const heroDesc: React.CSSProperties = {
-  marginTop: 8,
-  color: "#55635a",
-  lineHeight: 1.7,
-};
-
-const summaryCard: React.CSSProperties = {
-  marginTop: 12,
-  border: "1px solid #e5ece7",
-  borderRadius: 16,
-  background: "#fff",
-  padding: 16,
-};
-
-const summaryTitle: React.CSSProperties = {
-  fontSize: 16,
-  fontWeight: 900,
-  color: "#16391f",
-  marginBottom: 10,
-};
-
-const statsGrid: React.CSSProperties = {
+const summary: React.CSSProperties = {
   display: "grid",
-  gap: 10,
-  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+  gap: 8,
+  marginTop: 12,
 };
 
-const statCard: React.CSSProperties = {
-  border: "1px solid #edf1ee",
-  borderRadius: 14,
-  background: "#fafcfb",
-  padding: 12,
+const statBox: React.CSSProperties = {
+  background: "#fff",
+  padding: 10,
+  borderRadius: 12,
+  border: "1px solid #e5ece7",
 };
 
 const statLabel: React.CSSProperties = {
   fontSize: 12,
-  fontWeight: 800,
   color: "#5b6d61",
+  fontWeight: 800,
 };
 
 const statValue: React.CSSProperties = {
-  marginTop: 6,
-  fontSize: 22,
+  fontSize: 24,
   fontWeight: 900,
   color: "#145c2a",
+  marginTop: 4,
 };
 
-const loadingText: React.CSSProperties = {
-  marginTop: 14,
+const infoText: React.CSSProperties = {
+  marginTop: 16,
   color: "#666",
 };
 
-const empty: React.CSSProperties = {
-  marginTop: 14,
-  textAlign: "center" as const,
-  color: "#777",
-  padding: 20,
-  borderRadius: 14,
-  border: "1px solid #eee",
-  background: "#fff",
-};
-
 const list: React.CSSProperties = {
-  marginTop: 14,
+  marginTop: 16,
   display: "grid",
   gap: 12,
 };
 
 const card: React.CSSProperties = {
-  border: "1px solid #e5ece7",
+  border: "1px solid #eee",
   borderRadius: 16,
+  padding: 14,
   background: "#fff",
-  padding: 16,
 };
 
 const titleRow: React.CSSProperties = {
@@ -397,72 +343,66 @@ const titleRow: React.CSSProperties = {
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: 12,
-  flexWrap: "wrap" as const,
 };
 
 const teamName: React.CSSProperties = {
-  fontSize: 18,
   fontWeight: 900,
+  fontSize: 18,
   color: "#16391f",
 };
 
-const meta: React.CSSProperties = {
-  marginTop: 8,
+const subText: React.CSSProperties = {
+  marginTop: 4,
   fontSize: 12,
-  color: "#6b7280",
+  color: "#666",
 };
 
-const messagePreview: React.CSSProperties = {
-  marginTop: 10,
-  fontSize: 14,
-  color: "#374151",
-  lineHeight: 1.7,
-  whiteSpace: "pre-wrap" as const,
+const meta: React.CSSProperties = {
+  fontSize: 12,
+  color: "#666",
+  marginTop: 8,
 };
 
-const messagePreviewMuted: React.CSSProperties = {
-  marginTop: 10,
-  fontSize: 14,
-  color: "#9ca3af",
-};
-
-const buttonRow: React.CSSProperties = {
+const btnRow: React.CSSProperties = {
   marginTop: 12,
   display: "flex",
   gap: 8,
-  flexWrap: "wrap" as const,
+  flexWrap: "wrap",
 };
 
-const detailBox: React.CSSProperties = {
+const detail: React.CSSProperties = {
   marginTop: 12,
-  border: "1px solid #edf1ee",
-  borderRadius: 12,
-  background: "#fafcfb",
+  background: "#fafafa",
   padding: 12,
+  borderRadius: 12,
+  border: "1px solid #edf1ee",
   display: "grid",
-  gap: 8,
+  gap: 12,
 };
 
-const detailRow: React.CSSProperties = {
+const detailBlock: React.CSSProperties = {
+  display: "grid",
+  gap: 4,
+};
+
+const detailLabel: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#5b6d61",
+};
+
+const detailValue: React.CSSProperties = {
   fontSize: 14,
   color: "#374151",
   lineHeight: 1.7,
 };
 
-const detailMessage: React.CSSProperties = {
-  fontSize: 14,
-  color: "#111827",
-  lineHeight: 1.8,
-  whiteSpace: "pre-wrap" as const,
-};
-
-const badgeBase: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 30,
-  padding: "0 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: 900,
+const empty: React.CSSProperties = {
+  marginTop: 20,
+  textAlign: "center",
+  color: "#888",
+  padding: 20,
+  background: "#fff",
+  border: "1px solid #eee",
+  borderRadius: 16,
 };
