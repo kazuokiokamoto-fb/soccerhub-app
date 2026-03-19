@@ -166,11 +166,11 @@ export default function OfferReceivedPage() {
   return (
     <main style={wrap}>
       <AppTabNav />
-      <PageBackNav current="オファー受信" />
+      <PageBackNav current="届いたオファー" />
 
       <AppHero
         icon="📥"
-        title="オファー受信"
+        title="届いたオファー"
         desc="相手チームから届いた試合オファー一覧です。"
       />
 
@@ -188,7 +188,7 @@ export default function OfferReceivedPage() {
       ) : null}
 
       {!loading && myTeams.length > 0 && offers.length === 0 ? (
-        <div style={empty}>受信オファーはまだありません</div>
+        <div style={empty}>届いたオファーはまだありません</div>
       ) : null}
 
       <div style={list}>

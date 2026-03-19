@@ -189,9 +189,9 @@ export default function OfferSentPage() {
       </div>
 
       <section style={hero}>
-        <div style={heroTitle}>オファー送信</div>
+        <div style={heroTitle}>送ったオファー</div>
         <div style={heroDesc}>
-          こちらから送った試合オファーの状況を確認できます。
+          こちらから送ったオファーの状況を確認できます。
         </div>
       </section>
 
@@ -208,7 +208,7 @@ export default function OfferSentPage() {
       {loading ? <div style={loadingText}>読み込み中…</div> : null}
 
       {offers.length === 0 && !loading ? (
-        <div style={empty}>オファーはまだありません。</div>
+        <div style={empty}>送ったオファーはまだありません。</div>
       ) : null}
 
       <div style={list}>

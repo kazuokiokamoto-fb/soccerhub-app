@@ -230,11 +230,11 @@ export default function OpenMatchesPage() {
   return (
     <main style={wrap}>
       <AppTabNav />
-      <PageBackNav current="募集中" />
+      <PageBackNav current="募集中の試合" />
 
       <AppHero
         icon="📣"
-        title="募集中"
+        title="募集中の試合"
         desc="現在あなたが公開している募集一覧です。申込状況や詳細を確認できます。"
       />
 

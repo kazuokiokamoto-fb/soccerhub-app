@@ -61,7 +61,7 @@ function toJst(dt?: string | null) {
 function labelStatus(status: MatchRequestRow["status"]) {
   switch (status) {
     case "pending":
-      return "申込中";
+      return "申請中";
     case "accepted":
       return "成立";
     case "rejected":
@@ -246,17 +246,17 @@ export default function ApplyingMatchesPage() {
   return (
     <main style={wrap}>
       <AppTabNav />
-      <PageBackNav current="申込中" />
+      <PageBackNav current="申請中の試合" />
 
       <AppHero
         icon="📝"
-        title="申込中"
+        title="申請中の試合"
         desc="あなたのチームが送った申込一覧です。結果確認や取り消しができます。"
       />
 
       <div style={summaryBox}>
         <div style={summaryItem}>
-          <div style={summaryLabel}>申込中</div>
+          <div style={summaryLabel}>申請中</div>
           <div style={summaryValue}>{countPending}</div>
         </div>
         <div style={summaryItem}>
@@ -286,7 +286,7 @@ export default function ApplyingMatchesPage() {
       ) : null}
 
       {!loading && myTeams.length > 0 && sortedRequests.length === 0 ? (
-        <div style={emptyBox}>現在、申込中の試合はありません。</div>
+        <div style={emptyBox}>現在、申請中の試合はありません。</div>
       ) : null}
 
       {!loading && sortedRequests.length > 0 ? (

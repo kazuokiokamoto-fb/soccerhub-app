@@ -308,23 +308,23 @@ export default function HomePage() {
           <div style={statusList}>
             <DashboardLinkRow
               href="/match/status/open"
-              label="募集中"
+              label="募集中の試合"
               value={openCount}
             />
             <DashboardLinkRow
               href="/match/status/applying"
-              label="申込中"
+              label="申請中の試合"
               value={applyingCount}
             />
             <DashboardLinkRow
-              href="/match/status/offers"
-              label="オファー送信"
-              value={offerSentCount}
+              href="/match/status/offers-received"
+              label="届いたオファー"
+              value={offerReceivedCount}
             />
             <DashboardLinkRow
-              href="/match/status/offers-received"
-              label="オファー受信"
-              value={offerReceivedCount}
+              href="/match/status/offers"
+              label="送ったオファー"
+              value={offerSentCount}
             />
           </div>
         </div>
