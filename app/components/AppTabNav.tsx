@@ -7,10 +7,10 @@ import React from "react";
 
 const TABS = [
   { href: "/", label: "ホーム" },
-  { href: "/match", label: "募集" },
+  { href: "/match", label: "試合" },
   { href: "/teams/search", label: "チーム" },
-  { href: "/chat", label: "チャット" },
-  { href: "/mypage", label: "マイ" },
+  { href: "/chat", label: "連絡" },
+  { href: "/mypage", label: "設定" },
 ];
 
 function isActive(pathname: string, href: string) {
