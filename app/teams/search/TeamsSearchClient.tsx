@@ -590,122 +590,337 @@ export default function TeamsSearchClient() {
         </div>
       </div>
 
-    <div style={contentScrollBox}>
-      {/* 検索結果 */}
-      <div ref={resultsRef} style={dayListWrap}>
-        <div style={dayListHeaderRow}>
-          <h2 style={dayListTitle}>検索結果</h2>
+      <div style={contentScrollBox}>
+        <div ref={resultsRef} style={dayListWrap}>
+          <div style={dayListHeaderRow}>
+            <h2 style={dayListTitle}>検索結果</h2>
 
-          <button type="button" className="sh-btn" onClick={scrollToFilter}>
-            絞り込み
-          </button>
-        </div>
+            <button type="button" className="sh-btn" onClick={scrollToFilter}>
+              絞り込み
+            </button>
+          </div>
 
-        {loading ? (
-          <p style={{ color: "#777" }}>読み込み中...</p>
-        ) : filteredTeams.length === 0 ? (
-          <div style={emptyBox}>条件に合うチームがありません。</div>
-        ) : (
-          <div style={{ display: "grid", gap: 12 }}>
-            {filteredTeams.map((team) => {
-              const expanded = openTeamId === team.id;
-              const isMyTeam = myTeams.some((t) => t.id === team.id);
+          {loading ? (
+            <p style={{ color: "#777" }}>読み込み中...</p>
+          ) : filteredTeams.length === 0 ? (
+            <div style={emptyBox}>条件に合うチームがありません。</div>
+          ) : (
+            <div style={{ display: "grid", gap: 12 }}>
+              {filteredTeams.map((team) => {
+                const expanded = openTeamId === team.id;
+                const isMyTeam = myTeams.some((t) => t.id === team.id);
 
-              return (
-                <div key={team.id} style={resultCard}>
-                  <div style={resultHeader}>
-                    <div>
-                      <div style={resultTitle}>{team.name ?? "（名称未設定）"}</div>
-                      <div style={resultSub}>
-                        📍 {buildAreaText(team)}
-                        <br />
-                        🏷{" "}
-                        {Array.isArray(team.categories) && team.categories.length > 0
-                          ? team.categories.join(" / ")
-                          : team.category ?? "未設定"}
-                        {" / "}💪 強さ {getStrength(team)}
-                      </div>
-                    </div>
-
-                    <div style={resultHeaderRight}>
-                      <span style={strengthBadge}>{getStrength(team)}</span>
-                      <button
-                        type="button"
-                        className="sh-btn"
-                        onClick={() => setOpenTeamId(expanded ? "" : team.id)}
-                      >
-                        {expanded ? "詳細を閉じる" : "詳細"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {expanded && (
-                    <div style={detailWrap}>
-                      <div style={detailGrid}>
-                        <div style={detailBox}>
-                          <div style={detailLabel}>グラウンド・駐輪場</div>
-                          <div style={detailValue}>
-                            グラウンド {team.has_ground ? "あり" : "なし"} / 駐輪場 {formatBikeParking(team)}
-                          </div>
+                return (
+                  <div key={team.id} style={resultCard}>
+                    <div style={resultHeader}>
+                      <div>
+                        <div style={resultTitle}>{team.name ?? "（名称未設定）"}</div>
+                        <div style={resultSub}>
+                          📍 {buildAreaText(team)}
+                          <br />
+                          🏷{" "}
+                          {Array.isArray(team.categories) && team.categories.length > 0
+                            ? team.categories.join(" / ")
+                            : team.category ?? "未設定"}
+                          {" / "}💪 強さ {getStrength(team)}
                         </div>
-
-                        <div style={detailBox}>
-                          <div style={detailLabel}>所属人数</div>
-                          <div style={detailValue}>{getMemberCount(team)}人</div>
-                        </div>
-
-                        <div style={detailBox}>
-                          <div style={detailLabel}>ユニフォーム</div>
-                          <div style={detailValue}>
-                            {team.uniform_main ?? "不明"}（メイン） / {team.uniform_sub ?? "不明"}（サブ）
-                          </div>
-                        </div>
-
-                        {team.note && (
-                          <div style={detailBox}>
-                            <div style={detailLabel}>メモ</div>
-                            <div style={detailValue}>{team.note}</div>
-                          </div>
-                        )}
                       </div>
 
-                      <div style={buttonRow}>
-                        <button
-                          type="button"
-                          className="sh-btn sh-btn--primary"
-                          onClick={() => openDmAndGo(team.id)}
-                          disabled={loading || isMyTeam}
-                        >
-                          チャットを開く
-                        </button>
-
+                      <div style={resultHeaderRight}>
+                        <span style={strengthBadge}>{getStrength(team)}</span>
                         <button
                           type="button"
                           className="sh-btn"
-                          onClick={() => openOfferModal(team)}
-                          disabled={loading || isMyTeam}
+                          onClick={() => setOpenTeamId(expanded ? "" : team.id)}
                         >
-                          オファーを送る
+                          {expanded ? "詳細を閉じる" : "詳細"}
                         </button>
-
-                        <Link href="/match" className="sh-btn">
-                          試合を探すへ
-                        </Link>
                       </div>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
 
-      {/* 検索条件 */}
-      <section ref={filterRef} style={filterWrap}>
-        {/* ★ここは今のコードそのままコピペでOK */}
-      </section>
-    </div>
+                    {expanded ? (
+                      <div style={detailWrap}>
+                        <div style={detailGrid}>
+                          <div style={detailBox}>
+                            <div style={detailLabel}>グラウンド・駐輪場</div>
+                            <div style={detailValue}>
+                              グラウンド {team.has_ground ? "あり" : "なし"} / 駐輪場 {formatBikeParking(team)}
+                            </div>
+                          </div>
+
+                          <div style={detailBox}>
+                            <div style={detailLabel}>所属人数</div>
+                            <div style={detailValue}>{getMemberCount(team)}人</div>
+                          </div>
+
+                          <div style={detailBox}>
+                            <div style={detailLabel}>ユニフォーム</div>
+                            <div style={detailValue}>
+                              {team.uniform_main ?? "不明"}（メイン） / {team.uniform_sub ?? "不明"}（サブ）
+                            </div>
+                          </div>
+
+                          {team.note ? (
+                            <div style={detailBox}>
+                              <div style={detailLabel}>メモ</div>
+                              <div style={detailValue}>{team.note}</div>
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div style={buttonRow}>
+                          <button
+                            type="button"
+                            className="sh-btn sh-btn--primary"
+                            onClick={() => openDmAndGo(team.id)}
+                            disabled={loading || isMyTeam}
+                          >
+                            チャットを開く
+                          </button>
+
+                          <button
+                            type="button"
+                            className="sh-btn"
+                            onClick={() => openOfferModal(team)}
+                            disabled={loading || isMyTeam}
+                          >
+                            オファーを送る
+                          </button>
+
+                          <Link href="/match" className="sh-btn">
+                            試合を探すへ
+                          </Link>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <section ref={filterRef} style={filterWrap}>
+          <div style={{ display: "grid", gap: 12 }}>
+            <div style={filterHeaderRow}>
+              <h2 style={filterTitle}>検索条件</h2>
+
+              <button type="button" className="sh-btn" onClick={scrollToResults}>
+                検索結果へ
+              </button>
+            </div>
+
+            <label style={label}>
+              <span style={labelTitle}>キーワード</span>
+
+              <input
+                value={draftKeyword}
+                onChange={(e) => setDraftKeyword(e.target.value)}
+                className="sh-input"
+                disabled={loading}
+                placeholder="例：三宿 / 青 / 強度高め / U-12 / SS"
+              />
+            </label>
+
+            <AreaPickerKanto
+              title="エリア"
+              allowAll={true}
+              allLabel="関東（すべて）"
+              disabled={loading}
+              prefecture={draftPrefectureFilter}
+              setPrefecture={setDraftPrefectureFilter}
+              city={draftCityFilter}
+              setCity={setDraftCityFilter}
+              town={draftTownFilter}
+              setTown={setDraftTownFilter}
+              townOptional={true}
+              useChipUI={true}
+            />
+
+            <CheckboxGroup
+              title="カテゴリ"
+              options={CATEGORY_OPTIONS}
+              values={draftCategoryFilter}
+              onChange={setDraftCategoryFilter}
+              columns={3}
+              disabled={loading}
+              useChipUI={true}
+            />
+
+            <div style={strengthCard}>
+              <div style={strengthHead}>
+                <div style={strengthTitleWrap}>
+                  <div style={strengthTitleRow}>
+                    <div style={strengthTitle}>強さ</div>
+                    <button
+                      type="button"
+                      aria-label="強さの説明"
+                      title="強さの説明"
+                      style={helpButton}
+                      onClick={() => setShowStrengthHelp(true)}
+                      disabled={loading}
+                    >
+                      ?
+                    </button>
+                  </div>
+                  <div style={strengthSubText}>複数選択できます</div>
+                </div>
+
+                <div style={strengthHeadRight}>
+                  <button
+                    type="button"
+                    className="sh-btn sh-btn--ghost"
+                    onClick={() =>
+                      setDraftStrengthFilter(STRENGTH_OPTIONS.map((o) => o.value as StrengthRank))
+                    }
+                    disabled={loading}
+                  >
+                    全選択
+                  </button>
+
+                  <button
+                    type="button"
+                    className="sh-btn"
+                    onClick={() => setDraftStrengthFilter([])}
+                    disabled={loading}
+                  >
+                    クリア
+                  </button>
+                </div>
+              </div>
+
+              <div style={strengthSimpleList}>
+                {STRENGTH_GUIDES.map((item) => {
+                  const active = draftStrengthFilter.includes(item.rank);
+
+                  return (
+                    <button
+                      key={item.rank}
+                      type="button"
+                      disabled={loading}
+                      onClick={() => {
+                        setDraftStrengthFilter((prev) => {
+                          if (prev.includes(item.rank)) {
+                            return prev.filter((v) => v !== item.rank);
+                          }
+                          return [...prev, item.rank];
+                        });
+                      }}
+                      aria-pressed={active}
+                      style={{
+                        ...strengthSimpleButton,
+                        border: active ? "1px solid #145c2a" : "1px solid #d6eadb",
+                        background: active ? "#145c2a" : "#fff",
+                        color: active ? "#fff" : "#23412c",
+                        boxShadow: active ? "0 6px 14px rgba(20,92,42,0.14)" : "none",
+                        ...(loading ? strengthSimpleButtonDisabled : {}),
+                      }}
+                    >
+                      <span style={strengthSimpleCode}>{item.rank}</span>
+                      <span>{item.short}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={twoCols}>
+              <label style={label}>
+                <span style={labelTitle}>チーム所属人数（以上）</span>
+
+                <select
+                  value={draftMemberCountMin}
+                  onChange={(e) => setDraftMemberCountMin(e.target.value)}
+                  className="sh-select"
+                  disabled={loading}
+                >
+                  <option value="">指定なし</option>
+                  <option value="5">5人以上</option>
+                  <option value="10">10人以上</option>
+                  <option value="15">15人以上</option>
+                  <option value="20">20人以上</option>
+                  <option value="25">25人以上</option>
+                  <option value="30">30人以上</option>
+                </select>
+              </label>
+
+              <label style={label}>
+                <span style={labelTitle}>グラウンド</span>
+
+                <select
+                  value={draftGroundFilter}
+                  onChange={(e) => setDraftGroundFilter(e.target.value as any)}
+                  className="sh-select"
+                  disabled={loading}
+                >
+                  <option value="all">指定なし</option>
+                  <option value="あり">あり</option>
+                  <option value="なし">なし</option>
+                </select>
+              </label>
+            </div>
+
+            <div style={twoCols}>
+              <label style={label}>
+                <span style={labelTitle}>駐輪場</span>
+
+                <select
+                  value={draftBikeFilter}
+                  onChange={(e) => setDraftBikeFilter(e.target.value as any)}
+                  className="sh-select"
+                  disabled={loading}
+                >
+                  <option value="all">指定なし</option>
+                  <option value="あり">あり</option>
+                  <option value="なし">なし</option>
+                  <option value="不明">不明</option>
+                </select>
+              </label>
+
+              <label style={label}>
+                <span style={labelTitle}>駐輪場台数（以上）</span>
+
+                <select
+                  value={draftBikeCapacityMin}
+                  onChange={(e) => setDraftBikeCapacityMin(e.target.value)}
+                  className="sh-select"
+                  disabled={loading}
+                >
+                  <option value="">指定なし</option>
+                  <option value="5">5台以上</option>
+                  <option value="10">10台以上</option>
+                  <option value="15">15台以上</option>
+                  <option value="20">20台以上</option>
+                  <option value="25">25台以上</option>
+                  <option value="30">30台以上</option>
+                  <option value="40">40台以上</option>
+                  <option value="50">50台以上</option>
+                </select>
+              </label>
+            </div>
+
+            <div style={actionRow}>
+              <button
+                type="button"
+                className="sh-btn sh-btn--primary"
+                onClick={handleApplyAndJump}
+                disabled={!hasDraftChanges || loading}
+              >
+                この条件で一覧表示
+              </button>
+
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={handleResetFilters}
+                disabled={loading}
+              >
+                条件リセット
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
 
       {showStrengthHelp ? (
         <div
