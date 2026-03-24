@@ -287,7 +287,7 @@ export default function TeamEditPage() {
 
       setToast({ type: "success", text: "✅ 更新しました" });
       setSaving(false);
-      router.push("/teams");
+      router.push("/mypage");
       router.refresh();
     } catch (e: any) {
       console.error(e);
