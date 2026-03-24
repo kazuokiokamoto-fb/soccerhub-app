@@ -291,6 +291,14 @@ export default function HomePage() {
     <main style={wrap}>
       <AppTabNav />
 
+      <div style={{ fontSize: 12, color: "#666", marginTop: 8 }}>
+        DEBUG meId: {meId || "未取得"}
+      </div>
+      
+      <div style={{ fontSize: 12, color: "#666", marginTop: 4, whiteSpace: "pre-wrap" }}>
+        DEBUG myTeamIds: {JSON.stringify(myTeams.map((t) => t.id))}
+      </div>
+
       <header style={hero}>
         <div style={heroInner}>
           <p style={heroDesc}>

@@ -4,6 +4,7 @@ import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 
 type ProfileRow = {
@@ -23,6 +24,8 @@ type Toast = {
 };
 
 export default function AccountEditPage() {
+  const router = useRouter();
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -127,6 +130,7 @@ export default function AccountEditPage() {
       }
 
       setToast({ type: "success", text: "✅ アカウント情報を更新しました" });
+      router.push("/mypage");
     } catch (e: any) {
       console.error(e);
       setToast({ type: "error", text: e?.message ?? "保存に失敗しました" });
