@@ -262,6 +262,10 @@ export default function OpenMatchesPage() {
         desc="現在あなたが公開している募集一覧です。申込状況や詳細を確認できます。"
       />
 
+      <div style={{ fontSize: 14, color: "red", marginTop: 8, fontWeight: 700 }}>
+        OPEN PAGE DEBUG 20260324
+      </div>
+
       <div style={summaryBox}>
         <div style={summaryItem}>
           <div style={summaryLabel}>公開中</div>
