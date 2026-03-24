@@ -71,6 +71,9 @@ export default function OpenMatchesPage() {
   const [requests, setRequests] = useState<MatchRequestRow[]>([]);
   const [teamMap, setTeamMap] = useState<Map<string, TeamRow>>(new Map());
 
+  const [openCount, setOpenCount] = useState(0);
+  const [closedCount, setClosedCount] = useState(0);
+
   const [openDetailId, setOpenDetailId] = useState<string>("");
 
   useEffect(() => {
@@ -101,6 +104,8 @@ export default function OpenMatchesPage() {
         setSlots([]);
         setRequests([]);
         setTeamMap(new Map());
+        setOpenCount(0);
+        setClosedCount(0);
         setLoading(false);
         return;
       }
@@ -114,6 +119,8 @@ export default function OpenMatchesPage() {
         setSlots([]);
         setRequests([]);
         setTeamMap(new Map());
+        setOpenCount(0);
+        setClosedCount(0);
         setLoading(false);
         return;
       }
@@ -132,12 +139,18 @@ export default function OpenMatchesPage() {
         setSlots([]);
         setRequests([]);
         setTeamMap(new Map());
+        setOpenCount(0);
+        setClosedCount(0);
         setLoading(false);
         return;
       }
 
       const slotData = (slotRows ?? []) as MatchSlotRow[];
       setSlots(slotData);
+
+      // ホームと同じ考え方で件数を確定
+      setOpenCount(slotData.filter((s) => !s.is_closed).length);
+      setClosedCount(slotData.filter((s) => !!s.is_closed).length);
 
       const slotIds = slotData.map((s) => s.id);
 
@@ -152,9 +165,7 @@ export default function OpenMatchesPage() {
 
       const { data: reqRows, error: reqErr } = await supabase
         .from("match_requests")
-        .select(
-          "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
-        )
+        .select("id, slot_id, requester_team_id, requester_user_id, status, comment, created_at")
         .in("slot_id", slotIds)
         .order("created_at", { ascending: false });
 
@@ -166,7 +177,11 @@ export default function OpenMatchesPage() {
       }
 
       const requesterTeamIds = Array.from(
-        new Set(((reqRows ?? []) as MatchRequestRow[]).map((r) => r.requester_team_id).filter(Boolean))
+        new Set(
+          ((reqRows ?? []) as MatchRequestRow[])
+            .map((r) => r.requester_team_id)
+            .filter(Boolean)
+        )
       );
 
       const allNeedTeamIds = Array.from(new Set([...myTeamIds, ...requesterTeamIds]));
@@ -187,6 +202,10 @@ export default function OpenMatchesPage() {
           ((allTeamsRows ?? []) as TeamRow[]).forEach((t) => m.set(t.id, t));
           setTeamMap(m);
         }
+      } else {
+        const fallbackMap = new Map<string, TeamRow>();
+        myTeamRows.forEach((t) => fallbackMap.set(t.id, t));
+        setTeamMap(fallbackMap);
       }
 
       setLoading(false);
@@ -222,9 +241,14 @@ export default function OpenMatchesPage() {
       return;
     }
 
-    setSlots((prev) =>
-      prev.map((s) => (s.id === slotId ? { ...s, is_closed: nextClosed } : s))
-    );
+    setSlots((prev) => {
+      const updated = prev.map((s) =>
+        s.id === slotId ? { ...s, is_closed: nextClosed } : s
+      );
+      setOpenCount(updated.filter((s) => !s.is_closed).length);
+      setClosedCount(updated.filter((s) => !!s.is_closed).length);
+      return updated;
+    });
   };
 
   return (
@@ -241,11 +265,11 @@ export default function OpenMatchesPage() {
       <div style={summaryBox}>
         <div style={summaryItem}>
           <div style={summaryLabel}>公開中</div>
-          <div style={summaryValue}>{openSlots.length}</div>
+          <div style={summaryValue}>{openCount}</div>
         </div>
         <div style={summaryItem}>
           <div style={summaryLabel}>停止中</div>
-          <div style={summaryValue}>{closedSlots.length}</div>
+          <div style={summaryValue}>{closedCount}</div>
         </div>
         <div style={summaryItem}>
           <div style={summaryLabel}>総申込数</div>
@@ -289,9 +313,7 @@ export default function OpenMatchesPage() {
                 <div style={cardHead}>
                   <div style={{ minWidth: 0 }}>
                     <div style={cardTitleRow}>
-                      <div style={teamName}>
-                        {hostTeam?.name ?? "チーム未設定"}
-                      </div>
+                      <div style={teamName}>{hostTeam?.name ?? "チーム未設定"}</div>
 
                       <span
                         style={{
@@ -343,10 +365,7 @@ export default function OpenMatchesPage() {
                     {expanded ? "詳細を閉じる" : "詳細"}
                   </button>
 
-                  <Link
-                    href={`/match/new?slotId=${slot.id}`}
-                    className="sh-btn"
-                  >
+                  <Link href={`/match/new?slotId=${slot.id}`} className="sh-btn">
                     募集を編集
                   </Link>
 
@@ -398,10 +417,7 @@ export default function OpenMatchesPage() {
                                     </div>
                                   </div>
 
-                                  <Link
-                                    href="/chat"
-                                    className="sh-btn sh-btn--primary"
-                                  >
+                                  <Link href="/chat" className="sh-btn sh-btn--primary">
                                     チャット
                                   </Link>
                                 </div>

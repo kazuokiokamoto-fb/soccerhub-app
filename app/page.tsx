@@ -164,19 +164,22 @@ export default function HomePage() {
       const myRequestRows = (myRequests ?? []) as MatchRequestRow[];
       setApplyingCount(myRequestRows.filter((r) => r.status === "pending").length);
 
-      // オファー送信
-      // from_team_id ではなく from_user_id で集計して、一覧とのズレを防ぐ
-      const { data: sentOffers, error: sentErr } = await supabase
+      // オファー送信（送ったオファー詳細ページと同じロジック）
+      const { data: offerRows, error: offersErr } = await supabase
         .from("match_offers")
-        .select("id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at")
-        .in("from_team_id", myTeamIds);
+        .select("*")
+        .in("from_team_id", myTeamIds)
+        .order("created_at", { ascending: false });
 
-      if (sentErr) {
-        console.error("sentOffers error:", sentErr);
+      if (offersErr) {
+        console.error(offersErr);
+        setOfferSentCount(0);
+      } else {
+        const offerData = (offerRows ?? []) as MatchOfferRow[];
+        setOfferSentCount(
+          offerData.filter((o) => o.status === "pending").length
+        );
       }
-
-      const sentOfferRows = (sentOffers ?? []) as MatchOfferRow[];
-      setOfferSentCount(sentOfferRows.filter((o) => o.status === "pending").length);
 
       // オファー受信
       const { data: receivedOffers, error: recvErr } = await supabase
