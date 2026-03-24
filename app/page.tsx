@@ -169,7 +169,7 @@ export default function HomePage() {
       const { data: sentOffers, error: sentErr } = await supabase
         .from("match_offers")
         .select("id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at")
-        .eq("from_team_id", meId);
+        .in("from_team_id", myTeamIds);
 
       if (sentErr) {
         console.error("sentOffers error:", sentErr);
