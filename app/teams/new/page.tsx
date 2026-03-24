@@ -247,7 +247,7 @@ export default function TeamNewPage() {
       setToast({ type: "success", text: "✅ 登録しました" });
       const newId = (res.data as any)?.id;
 
-      router.push(`/teams?created=${newId}`);
+      router.push(`/mypage`);
       resetForm();
       setSaving(false);
     } catch (e: any) {
