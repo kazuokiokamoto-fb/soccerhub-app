@@ -266,6 +266,19 @@ export default function OpenMatchesPage() {
         OPEN PAGE DEBUG 20260324
       </div>
 
+      <div style={{ fontSize: 12, color: "#666", marginTop: 8 }}>
+        DEBUG meId: {meId || "未取得"}
+      </div>
+      <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+        DEBUG myTeams.length: {myTeams.length}
+      </div>
+      <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+        DEBUG openCount: {openCount}
+      </div>
+      <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
+        DEBUG slots.length: {slots.length}
+      </div>
+
       <div style={summaryBox}>
         <div style={summaryItem}>
           <div style={summaryLabel}>公開中</div>
