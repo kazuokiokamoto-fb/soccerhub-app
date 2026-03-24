@@ -38,6 +38,7 @@ type MatchRequestRow = {
 type MatchOfferRow = {
   id: string;
   slot_id: string | null;
+  from_user_id?: string | null;
   from_team_id: string;
   to_team_id: string;
   status: "pending" | "accepted" | "rejected" | "cancelled";
@@ -138,7 +139,9 @@ export default function HomePage() {
       // 募集中
       const { data: mySlots, error: slotErr } = await supabase
         .from("match_slots")
-        .select("id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at")
+        .select(
+          "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
+        )
         .in("host_team_id", myTeamIds);
 
       if (slotErr) {
@@ -162,13 +165,14 @@ export default function HomePage() {
       setApplyingCount(myRequestRows.filter((r) => r.status === "pending").length);
 
       // オファー送信
+      // from_team_id ではなく from_user_id で集計して、一覧とのズレを防ぐ
       const { data: sentOffers, error: sentErr } = await supabase
         .from("match_offers")
-        .select("id, slot_id, from_team_id, to_team_id, status, message, created_at")
-        .in("from_team_id", myTeamIds);
+        .select("id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at")
+        .eq("from_user_id", meId);
 
       if (sentErr) {
-        console.error(sentErr);
+        console.error("sentOffers error:", sentErr);
       }
 
       const sentOfferRows = (sentOffers ?? []) as MatchOfferRow[];
@@ -177,11 +181,11 @@ export default function HomePage() {
       // オファー受信
       const { data: receivedOffers, error: recvErr } = await supabase
         .from("match_offers")
-        .select("id, slot_id, from_team_id, to_team_id, status, message, created_at")
+        .select("id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at")
         .in("to_team_id", myTeamIds);
 
       if (recvErr) {
-        console.error(recvErr);
+        console.error("receivedOffers error:", recvErr);
       }
 
       const receivedOfferRows = (receivedOffers ?? []) as MatchOfferRow[];
@@ -248,7 +252,9 @@ export default function HomePage() {
       if (acceptedSlotIds.length > 0) {
         const { data: acceptedSlots, error: acceptedSlotsErr } = await supabase
           .from("match_slots")
-          .select("id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at")
+          .select(
+            "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
+          )
           .in("id", acceptedSlotIds)
           .order("date", { ascending: true })
           .order("start_time", { ascending: true });
@@ -306,11 +312,7 @@ export default function HomePage() {
           <div style={dashboardTitle}>⚽ 試合マッチング状況</div>
 
           <div style={statusList}>
-            <DashboardLinkRow
-              href="/match/status/open"
-              label="募集中の試合"
-              value={openCount}
-            />
+            <DashboardLinkRow href="/match/status/open" label="募集中の試合" value={openCount} />
             <DashboardLinkRow
               href="/match/status/applying"
               label="申請中の試合"
@@ -333,11 +335,7 @@ export default function HomePage() {
           <div style={dashboardTitle}>💬 チャット</div>
 
           <div style={statusList}>
-            <DashboardLinkRow
-              href="/chat"
-              label="未読メッセージ"
-              value={unreadTotal}
-            />
+            <DashboardLinkRow href="/chat" label="未読メッセージ" value={unreadTotal} />
           </div>
         </div>
 
@@ -354,9 +352,7 @@ export default function HomePage() {
               <div style={nextMatchMeta}>
                 {nextMatch.area_text ?? nextMatch.area ?? "エリア未設定"}
               </div>
-              <div style={nextMatchMeta}>
-                {nextMatch.category ?? "カテゴリ未設定"}
-              </div>
+              <div style={nextMatchMeta}>{nextMatch.category ?? "カテゴリ未設定"}</div>
             </Link>
           ) : (
             <div style={mutedText}>予定されている次の試合はありません</div>
