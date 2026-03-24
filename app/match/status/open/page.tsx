@@ -96,7 +96,9 @@ export default function OpenMatchesPage() {
         .from("teams")
         .select("id, owner_id, name, category")
         .eq("owner_id", meId)
-        .order("created_at", { ascending: false });
+
+      console.log("OPEN teamErr:", teamErr);
+      console.log("OPEN teamRows:", teamRows);
 
       if (teamErr) {
         console.error(teamErr);
