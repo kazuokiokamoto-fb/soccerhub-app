@@ -70,6 +70,7 @@ export default function ChatThreadPage() {
   const threadId = params.threadId;
 
   const [meId, setMeId] = useState<string>("");
+  const [myTeamId, setMyTeamId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [isMember, setIsMember] = useState<boolean>(false);
 
@@ -87,8 +88,15 @@ export default function ChatThreadPage() {
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const canSend = useMemo(() => {
-    return !!meId && !!threadId && isMember && text.trim().length > 0 && !sending;
-  }, [meId, threadId, isMember, text, sending]);
+    return (
+      !!meId &&
+      !!threadId &&
+      !!myTeamId &&
+      isMember &&
+      text.trim().length > 0 &&
+      !sending
+    );
+  }, [meId, threadId, myTeamId, isMember, text, sending]);
 
   const scrollToBottom = (smooth = true) => {
     requestAnimationFrame(() =>
@@ -163,6 +171,8 @@ export default function ChatThreadPage() {
     (async () => {
       setLoading(true);
       setIsMember(false);
+      setMyTeamId("");
+      setSendError("");
 
       const { data: mem, error: memErr } = await supabase
         .from("chat_members")
@@ -203,6 +213,9 @@ export default function ChatThreadPage() {
           const myTeamIds = new Set<string>(
             (myTeams ?? []).map((r: any) => r.id).filter(Boolean)
           );
+
+          const mine = teamIds.find((id) => myTeamIds.has(id)) ?? "";
+          setMyTeamId(mine);
 
           const otherTeamId =
             teamIds.find((id) => !myTeamIds.has(id)) ?? teamIds[0] ?? null;
@@ -261,8 +274,17 @@ export default function ChatThreadPage() {
           const row = payload.new as Msg;
 
           setMessages((prev) => {
-            if (prev.some((m) => m.id === row.id)) return prev;
-            return [...prev, row];
+            if (prev.some((m) => m.id === row.id)) {
+              return prev.filter((m) => !String(m.id).startsWith("optimistic-"));
+            }
+
+            const withoutOptimistic = prev.filter(
+              (m) => !(m.sender_id === row.sender_id && m.body === row.body && String(m.id).startsWith("optimistic-"))
+            );
+
+            return [...withoutOptimistic, row].sort((a, b) =>
+              a.created_at > b.created_at ? 1 : -1
+            );
           });
 
           scrollToBottom(true);
@@ -288,6 +310,7 @@ export default function ChatThreadPage() {
     if (!meId) return alert("ログインが必要です");
     if (!threadId) return alert("threadId がありません");
     if (!isMember) return alert("このスレッドに参加していません");
+    if (!myTeamId) return alert("送信元チームが取得できません");
     if (sending) return;
 
     setSending(true);
@@ -298,7 +321,7 @@ export default function ChatThreadPage() {
       id: optimisticId,
       thread_id: threadId,
       sender_id: meId,
-      sender_team_id: null,
+      sender_team_id: myTeamId,
       body,
       created_at: nowIso(),
     };
@@ -309,7 +332,7 @@ export default function ChatThreadPage() {
     const payload: any = {
       thread_id: threadId,
       sender_id: meId,
-      sender_team_id: null,
+      sender_team_id: myTeamId,
       body,
     };
 
@@ -428,9 +451,7 @@ export default function ChatThreadPage() {
                       }}
                     >
                       {!mine ? (
-                        <div style={senderName}>
-                          {otherTeamName}
-                        </div>
+                        <div style={senderName}>{otherTeamName}</div>
                       ) : null}
 
                       <div
@@ -571,8 +592,7 @@ const chatBody: React.CSSProperties = {
   flex: 1,
   overflowY: "auto",
   padding: 14,
-  background:
-    "linear-gradient(180deg, #eef8f0 0%, #f8fcf9 100%)",
+  background: "linear-gradient(180deg, #eef8f0 0%, #f8fcf9 100%)",
 };
 
 const messageList: React.CSSProperties = {
