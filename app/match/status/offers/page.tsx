@@ -131,12 +131,12 @@ export default function OfferSentPage() {
   return (
     <main style={wrap}>
       <AppTabNav />
-      <PageBackNav current="送ったオファー" />
+      <PageBackNav current="送った招待" />
 
       <AppHero
         icon="📥"
-        title="送ったオファー"
-        desc="こちらから送った試合オファー一覧です。"
+        title="送った招待"
+        desc="こちらから送った試合招待一覧です。"
       />
 
       <div style={summary}>
@@ -153,7 +153,7 @@ export default function OfferSentPage() {
       ) : null}
 
       {!loading && myTeams.length > 0 && offers.length === 0 ? (
-        <div style={empty}>送ったオファーはまだありません</div>
+        <div style={empty}>送った招待はまだありません</div>
       ) : null}
 
       <div style={list}>

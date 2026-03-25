@@ -134,8 +134,8 @@ export default function OfferReceivedPage() {
   ) => {
     const confirmText =
       nextStatus === "accepted"
-        ? "このオファーを承認しますか？"
-        : "このオファーを見送りしますか？";
+        ? "この招待を承認しますか？"
+        : "この招待を見送りしますか？";
 
     if (!window.confirm(confirmText)) return;
 
@@ -166,12 +166,12 @@ export default function OfferReceivedPage() {
   return (
     <main style={wrap}>
       <AppTabNav />
-      <PageBackNav current="届いたオファー" />
+      <PageBackNav current="届いた招待" />
 
       <AppHero
         icon="📥"
-        title="届いたオファー"
-        desc="相手チームから届いた試合オファー一覧です。"
+        title="届いた招待"
+        desc="相手チームから届いた試合招待一覧です。"
       />
 
       <div style={summary}>
@@ -188,7 +188,7 @@ export default function OfferReceivedPage() {
       ) : null}
 
       {!loading && myTeams.length > 0 && offers.length === 0 ? (
-        <div style={empty}>届いたオファーはまだありません</div>
+        <div style={empty}>届いた招待はまだありません</div>
       ) : null}
 
       <div style={list}>

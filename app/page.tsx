@@ -108,7 +108,6 @@ export default function HomePage() {
     (async () => {
       setLoading(true);
 
-      // 自分のチーム取得
       const { data: teamRows, error: teamErr } = await supabase
         .from("teams")
         .select("id, owner_id, name, category")
@@ -151,7 +150,7 @@ export default function HomePage() {
       const mySlotRows = (mySlots ?? []) as MatchSlotRow[];
       setOpenCount(mySlotRows.filter((s) => !s.is_closed).length);
 
-      // 申込中の試合（自分）
+      // 申込中の試合
       const { data: myRequests, error: reqErr } = await supabase
         .from("match_requests")
         .select("id, slot_id, requester_team_id, requester_user_id, status, comment, created_at")
@@ -246,7 +245,7 @@ export default function HomePage() {
         setUnreadTotal(0);
       }
 
-      // 次の試合（accepted になった request から最も近いもの）
+      // 次の試合
       const acceptedRequests = myRequestRows.filter((r) => r.status === "accepted");
       const acceptedSlotIds = Array.from(new Set(acceptedRequests.map((r) => r.slot_id)));
 
@@ -314,7 +313,7 @@ export default function HomePage() {
           <div style={ctaText}>
             チームを登録すると、試合の募集・申込・招待・チャットが使えるようになります。
           </div>
-          <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={ctaActions}>
             <Link href="/teams/new" className="sh-btn sh-btn--primary">
               チームを登録する
             </Link>
@@ -329,7 +328,7 @@ export default function HomePage() {
           <div style={ctaText}>
             試合を探すか、自分で募集を出して相手チームとつながりましょう。
           </div>
-          <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={ctaActions}>
             <Link href="/match" className="sh-btn">
               試合を探す
             </Link>
@@ -342,28 +341,32 @@ export default function HomePage() {
 
       <section style={dashboardGrid}>
         <div style={dashboardCard}>
-          <div style={dashboardTitle}>⚽ 試合マッチング状況</div>
+          <div style={dashboardTitle}>⚽ あなたの試合状況</div>
 
           <div style={statusList}>
             <DashboardLinkRow
               href="/match/status/open"
               label="募集中の試合（自分）"
               value={openCount}
+              helper={openCount === 0 ? "まだ募集していません" : "現在公開中の募集です"}
             />
             <DashboardLinkRow
               href="/match/status/applying"
               label="申込中の試合"
               value={applyingCount}
+              helper={applyingCount === 0 ? "まだ申込していません" : "返答待ちの試合があります"}
             />
             <DashboardLinkRow
               href="/match/status/offers-received"
               label="届いた招待"
               value={offerReceivedCount}
+              helper={offerReceivedCount === 0 ? "新しい招待はありません" : "確認待ちの招待があります"}
             />
             <DashboardLinkRow
               href="/match/status/offers"
               label="送った招待"
               value={offerSentCount}
+              helper={offerSentCount === 0 ? "まだ招待を送っていません" : "相手の返答待ちです"}
             />
           </div>
         </div>
@@ -372,7 +375,12 @@ export default function HomePage() {
           <div style={dashboardTitle}>💬 チャット</div>
 
           <div style={statusList}>
-            <DashboardLinkRow href="/chat" label="未読メッセージ" value={unreadTotal} />
+            <DashboardLinkRow
+              href="/chat"
+              label="未読メッセージ"
+              value={unreadTotal}
+              helper={unreadTotal === 0 ? "新しいメッセージはありません" : "未読があります"}
+            />
           </div>
         </div>
 
@@ -395,7 +403,17 @@ export default function HomePage() {
               </Link>
             </>
           ) : (
-            <div style={mutedText}>予定されている次の試合はありません</div>
+            <div style={emptyActionBox}>
+              <div style={mutedText}>まだ試合は成立していません</div>
+              <div style={emptyActionRow}>
+                <Link href="/match" className="sh-btn">
+                  試合を探す
+                </Link>
+                <Link href="/match/new" className="sh-btn sh-btn--primary">
+                  募集を作る
+                </Link>
+              </div>
+            </div>
           )}
         </div>
       </section>
@@ -496,12 +514,16 @@ function DashboardLinkRow(props: {
   href: string;
   label: string;
   value: number;
+  helper?: string;
 }) {
-  const { href, label, value } = props;
+  const { href, label, value, helper } = props;
 
   return (
     <Link href={href} style={dashboardLinkRow}>
-      <span style={dashboardLinkLabel}>{label}</span>
+      <div style={{ minWidth: 0 }}>
+        <div style={dashboardLinkLabel}>{label}</div>
+        {helper ? <div style={dashboardLinkHelper}>{helper}</div> : null}
+      </div>
       <span style={dashboardLinkValue}>{value}</span>
     </Link>
   );
@@ -553,6 +575,13 @@ const ctaText: React.CSSProperties = {
   lineHeight: 1.7,
 };
 
+const ctaActions: React.CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
 const dashboardGrid: React.CSSProperties = {
   marginTop: 20,
   display: "grid",
@@ -597,10 +626,18 @@ const dashboardLinkLabel: React.CSSProperties = {
   color: "#2d3b31",
 };
 
+const dashboardLinkHelper: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 12,
+  color: "#6b7280",
+  lineHeight: 1.6,
+};
+
 const dashboardLinkValue: React.CSSProperties = {
   fontWeight: 900,
   fontSize: 20,
   color: "#145c2a",
+  whiteSpace: "nowrap",
 };
 
 const successBadge: React.CSSProperties = {
@@ -635,6 +672,20 @@ const nextMatchMeta: React.CSSProperties = {
   fontSize: 13,
   color: "#666",
   lineHeight: 1.6,
+};
+
+const emptyActionBox: React.CSSProperties = {
+  border: "1px solid #edf1ee",
+  borderRadius: 12,
+  background: "#fafcfb",
+  padding: "12px 14px",
+};
+
+const emptyActionRow: React.CSSProperties = {
+  marginTop: 10,
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
 };
 
 const mutedText: React.CSSProperties = {

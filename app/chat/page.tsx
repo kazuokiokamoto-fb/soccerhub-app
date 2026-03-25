@@ -316,7 +316,7 @@ export default function ChatListPage() {
         <div style={emptyBox}>
           まだチャットはありません。
           <br />
-          試合申込やオファー送信後に、ここへスレッドが表示されます。
+          試合申込や招待送信後に、ここへスレッドが表示されます。
         </div>
       ) : (
         <div style={listWrap}>

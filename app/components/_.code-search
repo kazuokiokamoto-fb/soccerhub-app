@@ -1,0 +1,41 @@
+# Query: オファー
+
+28 件の結果 - 5 ファイル
+
+app/match/offers/received/page.tsx:
+  150:     const ok = window.confirm("この招待を承認しますか？");
+  213:     const ok = window.confirm("この招待を辞退しますか？");
+  235:         title="招待受信"
+  236:         desc="相手チームから届いた試合招待を確認し、承認または辞退できます。"
+  243:           <div style={emptyText}>現在、受信中の招待はありません。</div>
+  250:                     {requesterTeam?.name ?? "チーム未設定"} からの招待
+
+app/match/offers/sent/page.tsx:
+  145:     const ok = window.confirm("この招待を取り消しますか？");
+  156:         alert(`招待取消に失敗しました: ${error.message}`);
+  163:       alert(e?.message ?? "招待取消に失敗しました");
+  209:         title="招待送信"
+  210:         desc="自分が送った試合招待の状況を確認できます。"
+  217:           <div style={emptyText}>現在、送信中の招待はありません。</div>
+  224:                     {hostTeam?.name ?? "相手チーム未設定"} への招待
+  250:                       招待取消
+
+app/match/status/received/page.tsx:
+  12:       <PageBackNav current="招待受信" />
+  16:         title="招待受信"
+  17:         desc="届いている試合招待一覧です。"
+  21:         <div style={empty}>※ここに受信招待一覧</div>
+
+app/teams/page.tsx:
+  290:   {/* 招待 */}
+
+app/teams/search/TeamsSearchClient.tsx:
+   490:         alert("この相手にはすでに有効な招待を送っています");
+   505:         alert(`招待送信に失敗しました: ${error.message}`);
+   518:             "【試合招待】",
+   532:       setToast({ type: "success", text: "招待を送信しました" });
+   537:       alert(e?.message ?? "招待送信に失敗しました");
+   687:                             招待を送る
+   983:           aria-label="招待送信"
+   987:               <h3 style={modalTitle}>招待送信</h3>
+  1053:                   {sendingOffer ? "送信中…" : "招待を送信"}
