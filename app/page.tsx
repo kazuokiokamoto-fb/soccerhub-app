@@ -136,7 +136,7 @@ export default function HomePage() {
         return;
       }
 
-      // 募集中
+      // 募集中の試合（自分）
       const { data: mySlots, error: slotErr } = await supabase
         .from("match_slots")
         .select(
@@ -151,7 +151,7 @@ export default function HomePage() {
       const mySlotRows = (mySlots ?? []) as MatchSlotRow[];
       setOpenCount(mySlotRows.filter((s) => !s.is_closed).length);
 
-      // 申込中
+      // 申込中の試合（自分）
       const { data: myRequests, error: reqErr } = await supabase
         .from("match_requests")
         .select("id, slot_id, requester_team_id, requester_user_id, status, comment, created_at")
@@ -164,7 +164,7 @@ export default function HomePage() {
       const myRequestRows = (myRequests ?? []) as MatchRequestRow[];
       setApplyingCount(myRequestRows.filter((r) => r.status === "pending").length);
 
-      // オファー送信（送ったオファー詳細ページと同じロジック）
+      // 送った招待
       const { data: offerRows, error: offersErr } = await supabase
         .from("match_offers")
         .select("*")
@@ -176,12 +176,10 @@ export default function HomePage() {
         setOfferSentCount(0);
       } else {
         const offerData = (offerRows ?? []) as MatchOfferRow[];
-        setOfferSentCount(
-          offerData.filter((o) => o.status === "pending").length
-        );
+        setOfferSentCount(offerData.filter((o) => o.status === "pending").length);
       }
 
-      // オファー受信
+      // 届いた招待
       const { data: receivedOffers, error: recvErr } = await supabase
         .from("match_offers")
         .select("id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at")
@@ -310,25 +308,61 @@ export default function HomePage() {
         </div>
       </header>
 
+      {!hasTeam ? (
+        <div style={ctaBox}>
+          <div style={ctaTitle}>まずはチーム登録から始めましょう</div>
+          <div style={ctaText}>
+            チームを登録すると、試合の募集・申込・招待・チャットが使えるようになります。
+          </div>
+          <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/teams/new" className="sh-btn sh-btn--primary">
+              チームを登録する
+            </Link>
+            <Link href="/mypage" className="sh-btn">
+              設定を見る
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <div style={ctaBox}>
+          <div style={ctaTitle}>次のアクション</div>
+          <div style={ctaText}>
+            試合を探すか、自分で募集を出して相手チームとつながりましょう。
+          </div>
+          <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/match" className="sh-btn">
+              試合を探す
+            </Link>
+            <Link href="/match/new" className="sh-btn sh-btn--primary">
+              募集を作る
+            </Link>
+          </div>
+        </div>
+      )}
+
       <section style={dashboardGrid}>
         <div style={dashboardCard}>
           <div style={dashboardTitle}>⚽ 試合マッチング状況</div>
 
           <div style={statusList}>
-            <DashboardLinkRow href="/match/status/open" label="募集中の試合" value={openCount} />
+            <DashboardLinkRow
+              href="/match/status/open"
+              label="募集中の試合（自分）"
+              value={openCount}
+            />
             <DashboardLinkRow
               href="/match/status/applying"
-              label="申請中の試合"
+              label="申込中の試合"
               value={applyingCount}
             />
             <DashboardLinkRow
               href="/match/status/offers-received"
-              label="届いたオファー"
+              label="届いた招待"
               value={offerReceivedCount}
             />
             <DashboardLinkRow
               href="/match/status/offers"
-              label="送ったオファー"
+              label="送った招待"
               value={offerSentCount}
             />
           </div>
@@ -348,15 +382,18 @@ export default function HomePage() {
           {loading ? (
             <div style={mutedText}>読み込み中…</div>
           ) : nextMatch ? (
-            <Link href="/match/next" style={nextMatchLink}>
-              <div style={nextMatchDate}>
-                {fmtDate(nextMatch.date)} {fmtTime(nextMatch.start_time)}
-              </div>
-              <div style={nextMatchMeta}>
-                {nextMatch.area_text ?? nextMatch.area ?? "エリア未設定"}
-              </div>
-              <div style={nextMatchMeta}>{nextMatch.category ?? "カテゴリ未設定"}</div>
-            </Link>
+            <>
+              <div style={successBadge}>✅ 試合成立</div>
+              <Link href="/match/next" style={nextMatchLink}>
+                <div style={nextMatchDate}>
+                  {fmtDate(nextMatch.date)} {fmtTime(nextMatch.start_time)}
+                </div>
+                <div style={nextMatchMeta}>
+                  {nextMatch.area_text ?? nextMatch.area ?? "エリア未設定"}
+                </div>
+                <div style={nextMatchMeta}>{nextMatch.category ?? "カテゴリ未設定"}</div>
+              </Link>
+            </>
           ) : (
             <div style={mutedText}>予定されている次の試合はありません</div>
           )}
@@ -412,7 +449,7 @@ export default function HomePage() {
         <div style={qaItem}>
           <div style={qaQ}>Q. 相手チームにいきなり連絡できますか？</div>
           <div style={qaA}>
-            A. はい。チーム検索や募集詳細からチャットに進んで連絡できます。
+            A. はい。チーム検索や募集詳細からチャットで連絡できます。
           </div>
         </div>
 
@@ -441,11 +478,11 @@ export default function HomePage() {
           <div style={startBox}>
             <div style={startTitle}>まだチーム登録がありません</div>
             <div style={startText}>
-              まずはマイページからチーム情報を登録すると、試合検索・募集・チャットが使いやすくなります。
+              まずは設定ページからチーム情報を登録すると、試合検索・募集・チャットが使いやすくなります。
             </div>
             <div style={{ marginTop: 10 }}>
               <Link href="/mypage" className="sh-btn sh-btn--primary">
-                マイページへ
+                設定ページへ
               </Link>
             </div>
           </div>
@@ -492,6 +529,27 @@ const heroInner: React.CSSProperties = {
 const heroDesc: React.CSSProperties = {
   margin: "8px 0 0",
   color: "rgba(255,255,255,0.92)",
+  lineHeight: 1.7,
+};
+
+const ctaBox: React.CSSProperties = {
+  marginTop: 16,
+  padding: 16,
+  borderRadius: 16,
+  border: "1px solid #e5ece7",
+  background: "#f5fbf6",
+};
+
+const ctaTitle: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 16,
+  color: "#16391f",
+};
+
+const ctaText: React.CSSProperties = {
+  marginTop: 6,
+  fontSize: 14,
+  color: "#444",
   lineHeight: 1.7,
 };
 
@@ -543,6 +601,17 @@ const dashboardLinkValue: React.CSSProperties = {
   fontWeight: 900,
   fontSize: 20,
   color: "#145c2a",
+};
+
+const successBadge: React.CSSProperties = {
+  display: "inline-block",
+  background: "#dcfce7",
+  color: "#166534",
+  fontWeight: 900,
+  padding: "4px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  marginBottom: 6,
 };
 
 const nextMatchLink: React.CSSProperties = {
