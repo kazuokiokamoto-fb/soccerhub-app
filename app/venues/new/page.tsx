@@ -14,8 +14,21 @@ type RecentVenue = {
   address: string | null;
   has_parking: boolean | null;
   has_bike_parking: boolean | null;
+  parking_capacity?: number | null;
+  bike_parking_capacity?: number | null;
   note: string | null;
 };
+
+function isMissingColumnError(err: any) {
+  const msg = String(err?.message ?? "");
+  return (
+    msg.includes("does not exist") ||
+    msg.includes("Could not find") ||
+    msg.includes("schema cache") ||
+    (msg.includes("column") &&
+      (msg.includes("parking_capacity") || msg.includes("bike_parking_capacity")))
+  );
+}
 
 export default function VenueNewPage() {
   const router = useRouter();
@@ -29,6 +42,8 @@ export default function VenueNewPage() {
   const [address, setAddress] = useState("");
   const [hasParking, setHasParking] = useState(false);
   const [hasBikeParking, setHasBikeParking] = useState(false);
+  const [parkingCapacity, setParkingCapacity] = useState("");
+  const [bikeParkingCapacity, setBikeParkingCapacity] = useState("");
   const [note, setNote] = useState("");
 
   const [recentVenues, setRecentVenues] = useState<RecentVenue[]>([]);
@@ -49,25 +64,57 @@ export default function VenueNewPage() {
 
   async function loadRecentVenues() {
     setLoading(true);
+
     try {
-      const { data, error } = await supabase
+      const primaryRes = await supabase
         .from("venues")
-        .select("id,name,area,address,has_parking,has_bike_parking,note")
+        .select(
+          "id,name,area,address,has_parking,has_bike_parking,parking_capacity,bike_parking_capacity,note"
+        )
         .order("updated_at", { ascending: false })
         .limit(10);
 
-      if (error) {
-        console.error(error);
-        setToast({ type: "error", text: `グラウンド読込失敗: ${error.message}` });
+      if (primaryRes.error && isMissingColumnError(primaryRes.error)) {
+        const fallbackRes = await supabase
+          .from("venues")
+          .select("id,name,area,address,has_parking,has_bike_parking,note")
+          .order("updated_at", { ascending: false })
+          .limit(10);
+
+        if (fallbackRes.error) {
+          console.error(fallbackRes.error);
+          setToast({
+            type: "error",
+            text: `グラウンド読込失敗: ${fallbackRes.error.message}`,
+          });
+          setRecentVenues([]);
+          setLoading(false);
+          return;
+        }
+
+        setRecentVenues((fallbackRes.data ?? []) as RecentVenue[]);
+        setLoading(false);
+        return;
+      }
+
+      if (primaryRes.error) {
+        console.error(primaryRes.error);
+        setToast({
+          type: "error",
+          text: `グラウンド読込失敗: ${primaryRes.error.message}`,
+        });
         setRecentVenues([]);
         setLoading(false);
         return;
       }
 
-      setRecentVenues((data ?? []) as RecentVenue[]);
+      setRecentVenues((primaryRes.data ?? []) as RecentVenue[]);
     } catch (e: any) {
       console.error(e);
-      setToast({ type: "error", text: e?.message ?? "グラウンド読込に失敗しました" });
+      setToast({
+        type: "error",
+        text: e?.message ?? "グラウンド読込に失敗しました",
+      });
     } finally {
       setLoading(false);
     }
@@ -79,6 +126,12 @@ export default function VenueNewPage() {
     setAddress(v.address ?? "");
     setHasParking(!!v.has_parking);
     setHasBikeParking(!!v.has_bike_parking);
+    setParkingCapacity(
+      v.parking_capacity == null ? "" : String(v.parking_capacity)
+    );
+    setBikeParkingCapacity(
+      v.bike_parking_capacity == null ? "" : String(v.bike_parking_capacity)
+    );
     setNote(v.note ?? "");
     setToast({ type: "info", text: "過去のグラウンド情報を入力欄に反映しました" });
   }
@@ -93,18 +146,41 @@ export default function VenueNewPage() {
     setToast({ type: "info", text: "保存中…" });
 
     try {
-      const { error } = await supabase.from("venues").insert({
+      const basePayload: any = {
         name: name.trim(),
         area: area.trim(),
         address: address.trim() || null,
         has_parking: hasParking,
         has_bike_parking: hasBikeParking,
+        parking_capacity:
+          hasParking && parkingCapacity.trim() !== ""
+            ? Math.max(0, Number(parkingCapacity) || 0)
+            : null,
+        bike_parking_capacity:
+          hasBikeParking && bikeParkingCapacity.trim() !== ""
+            ? Math.max(0, Number(bikeParkingCapacity) || 0)
+            : null,
         note: note.trim() || null,
-      });
+      };
 
-      if (error) {
-        console.error(error);
-        setToast({ type: "error", text: `保存失敗: ${error.message}` });
+      let res = await supabase.from("venues").insert(basePayload);
+
+      if (res.error && isMissingColumnError(res.error)) {
+        const fallbackPayload = {
+          name: name.trim(),
+          area: area.trim(),
+          address: address.trim() || null,
+          has_parking: hasParking,
+          has_bike_parking: hasBikeParking,
+          note: note.trim() || null,
+        };
+
+        res = await supabase.from("venues").insert(fallbackPayload);
+      }
+
+      if (res.error) {
+        console.error(res.error);
+        setToast({ type: "error", text: `保存失敗: ${res.error.message}` });
         setSaving(false);
         return;
       }
@@ -116,6 +192,8 @@ export default function VenueNewPage() {
       setAddress("");
       setHasParking(false);
       setHasBikeParking(false);
+      setParkingCapacity("");
+      setBikeParkingCapacity("");
       setNote("");
 
       router.push("/venues");
@@ -185,6 +263,15 @@ export default function VenueNewPage() {
                     {v.area ?? "エリア未設定"}
                     {v.address ? ` / ${v.address}` : ""}
                   </div>
+                  <div style={recentSub}>
+                    🚗 {v.has_parking ? "あり" : "なし"}
+                    {v.parking_capacity != null ? `（${v.parking_capacity}台）` : ""}
+                    {" / "}
+                    🚲 {v.has_bike_parking ? "あり" : "なし"}
+                    {v.bike_parking_capacity != null
+                      ? `（${v.bike_parking_capacity}台）`
+                      : ""}
+                  </div>
                 </div>
 
                 <button
@@ -241,7 +328,11 @@ export default function VenueNewPage() {
               <input
                 type="checkbox"
                 checked={hasParking}
-                onChange={(e) => setHasParking(e.target.checked)}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setHasParking(checked);
+                  if (!checked) setParkingCapacity("");
+                }}
                 disabled={saving}
               />
               🚗 駐車場あり
@@ -251,10 +342,42 @@ export default function VenueNewPage() {
               <input
                 type="checkbox"
                 checked={hasBikeParking}
-                onChange={(e) => setHasBikeParking(e.target.checked)}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setHasBikeParking(checked);
+                  if (!checked) setBikeParkingCapacity("");
+                }}
                 disabled={saving}
               />
               🚲 駐輪場あり
+            </label>
+          </div>
+
+          <div style={twoCols}>
+            <label style={label}>
+              <span>駐車台数（任意）</span>
+              <input
+                type="number"
+                min="0"
+                value={parkingCapacity}
+                onChange={(e) => setParkingCapacity(e.target.value)}
+                style={input}
+                placeholder="例：8"
+                disabled={saving || !hasParking}
+              />
+            </label>
+
+            <label style={label}>
+              <span>駐輪台数（任意）</span>
+              <input
+                type="number"
+                min="0"
+                value={bikeParkingCapacity}
+                onChange={(e) => setBikeParkingCapacity(e.target.value)}
+                style={input}
+                placeholder="例：20"
+                disabled={saving || !hasBikeParking}
+              />
             </label>
           </div>
 
@@ -355,6 +478,12 @@ const recentSub: React.CSSProperties = {
   color: "#66756d",
   fontSize: 13,
   lineHeight: 1.6,
+};
+
+const twoCols: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  gridTemplateColumns: "1fr 1fr",
 };
 
 const actionRow: React.CSSProperties = {

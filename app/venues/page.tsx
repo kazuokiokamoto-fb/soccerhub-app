@@ -11,11 +11,24 @@ type VenueRow = {
   address: string | null;
   has_parking: boolean | null;
   has_bike_parking: boolean | null;
+  parking_capacity?: number | null;
+  bike_parking_capacity?: number | null;
   note: string | null;
   updated_at?: string | null;
 };
 
 type Toast = { type: "success" | "error" | "info"; text: string };
+
+function isMissingColumnError(err: any) {
+  const msg = String(err?.message ?? "");
+  return (
+    msg.includes("does not exist") ||
+    msg.includes("Could not find") ||
+    msg.includes("schema cache") ||
+    (msg.includes("column") &&
+      (msg.includes("parking_capacity") || msg.includes("bike_parking_capacity")))
+  );
+}
 
 export default function VenuesPage() {
   const [venues, setVenues] = useState<VenueRow[]>([]);
@@ -38,24 +51,55 @@ export default function VenuesPage() {
     setToast(null);
 
     try {
-      const { data, error } = await supabase
+      const primaryRes = await supabase
         .from("venues")
-        .select("id,name,area,address,has_parking,has_bike_parking,note,updated_at")
+        .select(
+          "id,name,area,address,has_parking,has_bike_parking,parking_capacity,bike_parking_capacity,note,updated_at"
+        )
         .order("updated_at", { ascending: false })
         .order("name", { ascending: true });
 
-      if (error) {
-        console.error(error);
-        setToast({ type: "error", text: `グラウンド読込失敗: ${error.message}` });
+      if (primaryRes.error && isMissingColumnError(primaryRes.error)) {
+        const fallbackRes = await supabase
+          .from("venues")
+          .select("id,name,area,address,has_parking,has_bike_parking,note,updated_at")
+          .order("updated_at", { ascending: false })
+          .order("name", { ascending: true });
+
+        if (fallbackRes.error) {
+          console.error(fallbackRes.error);
+          setToast({
+            type: "error",
+            text: `グラウンド読込失敗: ${fallbackRes.error.message}`,
+          });
+          setVenues([]);
+          setLoading(false);
+          return;
+        }
+
+        setVenues((fallbackRes.data ?? []) as VenueRow[]);
+        setLoading(false);
+        return;
+      }
+
+      if (primaryRes.error) {
+        console.error(primaryRes.error);
+        setToast({
+          type: "error",
+          text: `グラウンド読込失敗: ${primaryRes.error.message}`,
+        });
         setVenues([]);
         setLoading(false);
         return;
       }
 
-      setVenues((data ?? []) as VenueRow[]);
+      setVenues((primaryRes.data ?? []) as VenueRow[]);
     } catch (e: any) {
       console.error(e);
-      setToast({ type: "error", text: e?.message ?? "グラウンド読込に失敗しました" });
+      setToast({
+        type: "error",
+        text: e?.message ?? "グラウンド読込に失敗しました",
+      });
     } finally {
       setLoading(false);
     }
@@ -176,8 +220,13 @@ export default function VenuesPage() {
                 </div>
 
                 <div style={metaRow}>
-                  🚗 {v.has_parking ? "駐車場あり" : "駐車場なし"} / 🚲{" "}
-                  {v.has_bike_parking ? "駐輪場あり" : "駐輪場なし"}
+                  🚗 {v.has_parking ? "駐車場あり" : "駐車場なし"}
+                  {v.parking_capacity != null ? `（${v.parking_capacity}台）` : ""}
+                  {" / "}
+                  🚲 {v.has_bike_parking ? "駐輪場あり" : "駐輪場なし"}
+                  {v.bike_parking_capacity != null
+                    ? `（${v.bike_parking_capacity}台）`
+                    : ""}
                 </div>
 
                 {v.note?.trim() ? (

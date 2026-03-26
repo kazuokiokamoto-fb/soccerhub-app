@@ -9,29 +9,17 @@ import { supabase } from "@/app/lib/supabase";
 import { CATEGORY_OPTIONS, categoryLabels } from "@/app/lib/categories";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
 import {
-  StrengthRankPicker,
   StrengthRank,
   strengthRankToLegacyLevel,
 } from "@/app/components/StrengthRankPicker";
-import { CheckboxGroup } from "@/app/components/CheckboxGroup";
-import { BikeParkingField } from "@/app/components/BikeParkingField";
-import { MemberCountField } from "@/app/components/MemberCountField";
-
-const BIKE_CAPACITY_OPTIONS = [
-  { value: "5", label: "5台" },
-  { value: "10", label: "10台" },
-  { value: "15", label: "15台" },
-  { value: "20", label: "20台" },
-  { value: "25", label: "25台" },
-  { value: "30", label: "30台" },
-  { value: "35", label: "35台" },
-  { value: "40", label: "40台" },
-  { value: "45", label: "45台" },
-  { value: "50+", label: "50台以上" },
-  { value: "不明", label: "不明" },
-] as const;
 
 type Toast = { type: "success" | "error" | "info"; text: string };
+
+type CategoryProfile = {
+  category: string;
+  strength_rank: StrengthRank;
+  member_count: string;
+};
 
 function isMissingColumnError(err: any) {
   const msg = String(err?.message ?? "");
@@ -43,10 +31,52 @@ function isMissingColumnError(err: any) {
       (msg.includes("contact_") ||
         msg.includes("address_detail") ||
         msg.includes("strength_rank") ||
-        msg.includes("bike_parking_capacity") ||
         msg.includes("uniform_gk") ||
-        msg.includes("categories")))
+        msg.includes("categories") ||
+        msg.includes("category_profiles") ||
+        msg.includes("member_count")))
   );
+}
+
+function buildInitialProfiles(categories: string[]): CategoryProfile[] {
+  return categories.map((category) => ({
+    category,
+    strength_rank: "A" as StrengthRank,
+    member_count: "",
+  }));
+}
+
+function syncProfilesWithCategories(
+  prev: CategoryProfile[],
+  categories: string[]
+): CategoryProfile[] {
+  const map = new Map(prev.map((p) => [p.category, p]));
+  return categories.map((category) => {
+    const found = map.get(category);
+    if (found) return found;
+    return {
+      category,
+      strength_rank: "A" as StrengthRank,
+      member_count: "",
+    };
+  });
+}
+
+function rankLabel(rank: StrengthRank) {
+  switch (rank) {
+    case "SS":
+      return "SS";
+    case "S":
+      return "S";
+    case "A":
+      return "A";
+    case "B":
+      return "B";
+    case "C":
+      return "C";
+    default:
+      return rank;
+  }
 }
 
 export default function TeamNewPage() {
@@ -59,11 +89,9 @@ export default function TeamNewPage() {
   const [name, setName] = useState("");
 
   const [categories, setCategories] = useState<string[]>([]);
-  const [strengthRank, setStrengthRank] = useState<StrengthRank>("A");
-  const [hasGround, setHasGround] = useState(false);
+  const [categoryProfiles, setCategoryProfiles] = useState<CategoryProfile[]>([]);
 
-  const [bikeParking, setBikeParking] = useState<"なし" | "あり">("なし");
-  const [bikeParkingCapacity, setBikeParkingCapacity] = useState<string>("");
+  const [hasGround, setHasGround] = useState(false);
 
   const [uniformMain, setUniformMain] = useState("");
   const [uniformSub, setUniformSub] = useState("");
@@ -74,37 +102,53 @@ export default function TeamNewPage() {
   const [town, setTown] = useState("");
   const [addressDetail, setAddressDetail] = useState("");
 
-  const [memberCount, setMemberCount] = useState("");
   const [note, setNote] = useState("");
 
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [contactLineId, setContactLineId] = useState("");
 
-  const primaryCategory = useMemo(() => categories[0] ?? "", [categories]);
+  useEffect(() => {
+    setCategoryProfiles((prev) => syncProfilesWithCategories(prev, categories));
+  }, [categories]);
+
+  const primaryProfile = useMemo(() => {
+    return categoryProfiles[0] ?? null;
+  }, [categoryProfiles]);
+
+  const primaryCategory = useMemo(() => {
+    return primaryProfile?.category ?? categories[0] ?? "";
+  }, [primaryProfile, categories]);
+
+  const totalMemberCount = useMemo(() => {
+    return categoryProfiles.reduce((sum, p) => {
+      const n = Number(p.member_count || 0);
+      return sum + (Number.isFinite(n) ? Math.max(0, n) : 0);
+    }, 0);
+  }, [categoryProfiles]);
 
   const canSave = useMemo(() => {
-    const bikeOk =
-      bikeParking === "なし" || (bikeParking === "あり" && !!bikeParkingCapacity);
+    if (!name.trim()) return false;
+    if (!prefecture) return false;
+    if (!city) return false;
+    if (categories.length === 0) return false;
+    if (loadingDefaults || saving) return false;
 
-    return (
-      !!name.trim() &&
-      !!prefecture &&
-      !!city &&
-      categories.length > 0 &&
-      bikeOk &&
-      !saving &&
-      !loadingDefaults
-    );
+    const allFilled = categoryProfiles.length > 0 &&
+      categoryProfiles.every((p) => {
+        const count = p.member_count.trim();
+        return !!p.category && !!p.strength_rank && count !== "";
+      });
+
+    return allFilled;
   }, [
     name,
     prefecture,
     city,
     categories,
-    bikeParking,
-    bikeParkingCapacity,
-    saving,
+    categoryProfiles,
     loadingDefaults,
+    saving,
   ]);
 
   useEffect(() => {
@@ -165,16 +209,22 @@ export default function TeamNewPage() {
   const resetForm = () => {
     setName("");
     setCategories([]);
-    setStrengthRank("A");
+    setCategoryProfiles([]);
     setHasGround(false);
-    setBikeParking("なし");
-    setBikeParkingCapacity("");
     setPrefecture("東京都");
     setCity("");
     setTown("");
     setAddressDetail("");
-    setMemberCount("");
     setNote("");
+  };
+
+  const updateProfile = (
+    category: string,
+    patch: Partial<CategoryProfile>
+  ) => {
+    setCategoryProfiles((prev) =>
+      prev.map((p) => (p.category === category ? { ...p, ...patch } : p))
+    );
   };
 
   const save = async () => {
@@ -195,24 +245,36 @@ export default function TeamNewPage() {
 
       const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
       const addrDetail = addressDetail.trim();
-      const memberCountNum =
-        memberCount.trim() === "" ? 0 : Math.max(0, Number(memberCount) || 0);
+
+      const normalizedProfiles = categoryProfiles.map((p) => ({
+        category: p.category,
+        strength_rank: p.strength_rank,
+        member_count: Math.max(0, Number(p.member_count || 0) || 0),
+      }));
+
+      const primary = normalizedProfiles[0] ?? null;
 
       const basePayload: any = {
         owner_id: auth.user.id,
         name: name.trim(),
-        categories,
-        category: primaryCategory || null,
-        level: strengthRankToLegacyLevel(strengthRank),
-        strength_rank: strengthRank,
+
+        category: primary?.category ?? null,
+        categories: normalizedProfiles.map((p) => p.category),
+        category_profiles: normalizedProfiles,
+
+        level: primary
+          ? strengthRankToLegacyLevel(primary.strength_rank)
+          : strengthRankToLegacyLevel("A"),
+        strength_rank: primary?.strength_rank ?? "A",
+        member_count: totalMemberCount,
+        roster_by_grade: { TOTAL: totalMemberCount },
+
         has_ground: hasGround,
-        bike_parking: bikeParking,
-        bike_parking_capacity:
-          bikeParking === "あり" ? bikeParkingCapacity || "不明" : null,
+
         uniform_main: uniformMain.trim() || "不明",
         uniform_sub: uniformSub.trim() || "不明",
         uniform_gk: uniformGk.trim() || "不明",
-        roster_by_grade: { TOTAL: memberCountNum },
+
         note: note || "",
         prefecture,
         city,
@@ -236,20 +298,28 @@ export default function TeamNewPage() {
 
       if (res.error && isMissingColumnError(res.error)) {
         console.warn(
-          "missing columns. retry without optional/multi-category fields:",
+          "missing columns. retry without optional/new fields:",
           res.error.message
         );
 
         const fallbackPayload: any = {
           owner_id: auth.user.id,
           name: name.trim(),
-          category: primaryCategory || null,
-          level: strengthRankToLegacyLevel(strengthRank),
+
+          category: primary?.category ?? null,
+          categories: normalizedProfiles.map((p) => p.category),
+
+          level: primary
+            ? strengthRankToLegacyLevel(primary.strength_rank)
+            : strengthRankToLegacyLevel("A"),
+
           has_ground: hasGround,
-          bike_parking: bikeParking,
+
           uniform_main: uniformMain.trim() || "不明",
           uniform_sub: uniformSub.trim() || "不明",
-          roster_by_grade: { TOTAL: memberCountNum },
+
+          roster_by_grade: { TOTAL: totalMemberCount },
+
           note: note || "",
           prefecture,
           city,
@@ -332,8 +402,8 @@ export default function TeamNewPage() {
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href="/teams" className="sh-btn">
-              一覧へ
+            <Link href="/mypage" className="sh-btn">
+              マイページへ
             </Link>
           </div>
         </div>
@@ -345,9 +415,9 @@ export default function TeamNewPage() {
             <div style={noticeTitle}>登録について</div>
             <div style={helperText}>
               ※ 1アカウントで複数チームを登録できます。<br />
-              例：キッズ、U12、U10、女子チームなどを別々に登録可能です。<br />
               ※ 1チーム内で複数カテゴリを登録できます。<br />
-              ※ 先頭のカテゴリを互換用の代表カテゴリとして保存します。
+              ※ 各カテゴリごとに「強さ」「人数」を設定できます。<br />
+              ※ 先頭カテゴリは互換用の代表カテゴリとして保存します。
             </div>
           </div>
 
@@ -392,15 +462,35 @@ export default function TeamNewPage() {
           </label>
 
           <div style={subSection}>
-            <CheckboxGroup
-              title="カテゴリ（必須・複数選択可）"
-              options={CATEGORY_OPTIONS}
-              values={categories}
-              onChange={setCategories}
-              columns={3}
-              disabled={saving}
-              useChipUI={true}
-            />
+            <div style={blockTitle}>カテゴリ（必須・複数選択可）</div>
+
+            <div style={chipWrap}>
+              {CATEGORY_OPTIONS.map((opt) => {
+                const active = categories.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      setCategories((prev) =>
+                        prev.includes(opt.value)
+                          ? prev.filter((v) => v !== opt.value)
+                          : [...prev, opt.value]
+                      );
+                    }}
+                    disabled={saving}
+                    style={{
+                      ...chip,
+                      ...(active ? chipActive : null),
+                      ...(saving ? chipDisabled : null),
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+
             <div style={{ marginTop: 8, ...helperText }}>
               選択中：
               {categories.length > 0
@@ -409,17 +499,63 @@ export default function TeamNewPage() {
             </div>
           </div>
 
-          <div style={subSection}>
-            <StrengthRankPicker
-              value={strengthRank}
-              onChange={(rank) => {
-                if (rank !== "") setStrengthRank(rank);
-              }}
-              disabled={saving}
-              title="強さ（ランク選択）"
-              allowEmpty={false}
-            />
-          </div>
+          {categories.length > 0 ? (
+            <div style={subSection}>
+              <div style={blockTitle}>カテゴリごとの強さ・人数</div>
+
+              <div style={{ display: "grid", gap: 12 }}>
+                {categoryProfiles.map((profile) => (
+                  <div key={profile.category} style={profileCard}>
+                    <div style={profileTitle}>
+                      {categoryLabels([profile.category])[0] ?? profile.category}
+                    </div>
+
+                    <div style={twoCols}>
+                      <label style={label}>
+                        <span style={labelTitle}>強さ</span>
+                        <select
+                          value={profile.strength_rank}
+                          onChange={(e) =>
+                            updateProfile(profile.category, {
+                              strength_rank: e.target.value as StrengthRank,
+                            })
+                          }
+                          className="sh-select"
+                          disabled={saving}
+                        >
+                          <option value="SS">SS</option>
+                          <option value="S">S</option>
+                          <option value="A">A</option>
+                          <option value="B">B</option>
+                          <option value="C">C</option>
+                        </select>
+                      </label>
+
+                      <label style={label}>
+                        <span style={labelTitle}>人数</span>
+                        <input
+                          value={profile.member_count}
+                          onChange={(e) =>
+                            updateProfile(profile.category, {
+                              member_count: e.target.value.replace(/[^\d]/g, ""),
+                            })
+                          }
+                          className="sh-input"
+                          disabled={saving}
+                          placeholder="例：18"
+                          inputMode="numeric"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginTop: 8, ...helperText }}>
+                合計人数：{totalMemberCount}人
+              </div>
+            </div>
+          ) : null}
 
           <label style={{ ...checkLabel, opacity: saving ? 0.7 : 1 }}>
             <input
@@ -430,15 +566,6 @@ export default function TeamNewPage() {
             />
             自チームでグラウンド提供できる
           </label>
-
-          <BikeParkingField
-            bikeParking={bikeParking}
-            setBikeParking={setBikeParking}
-            bikeParkingCapacity={bikeParkingCapacity}
-            setBikeParkingCapacity={setBikeParkingCapacity}
-            capacityOptions={BIKE_CAPACITY_OPTIONS}
-            disabled={saving}
-          />
 
           <div style={threeCols}>
             <label style={label}>
@@ -474,12 +601,6 @@ export default function TeamNewPage() {
               />
             </label>
           </div>
-
-          <MemberCountField
-            value={memberCount}
-            onChange={setMemberCount}
-            disabled={saving}
-          />
 
           <div style={softCard}>
             <div style={blockTitle}>連絡先（任意）</div>
@@ -523,7 +644,7 @@ export default function TeamNewPage() {
               ※ 以前登録したチームの連絡先がある場合、自動で初期入力されます。<br />
               ※ DBに contact_email / contact_phone / contact_line_id が無い環境でも保存できるようにしています。<br />
               ※ DBに uniform_gk が無い環境でも保存できるように自動フォールバックしています。<br />
-              ※ DBに categories が無い環境では category に代表カテゴリのみ保存します。
+              ※ DBに category_profiles / categories が無い環境では旧形式に自動フォールバックします。
             </div>
           </div>
 
@@ -554,11 +675,8 @@ export default function TeamNewPage() {
             <div style={faqItem}>
               <div style={faqQ}>Q. 1チームで複数カテゴリを持てますか？</div>
               <div style={faqA}>
-                A. はい。複数カテゴリを登録できます。内部的には
-                <code> categories </code>
-                に配列で保存し、代表カテゴリとして先頭1件を
-                <code> category </code>
-                にも保存します。
+                A. はい。複数カテゴリを登録できます。さらに各カテゴリごとに
+                強さと人数を設定できます。
               </div>
             </div>
           </div>
@@ -573,7 +691,7 @@ export default function TeamNewPage() {
               {saving ? "保存中..." : "保存"}
             </button>
 
-            <Link href="/teams" className="sh-btn sh-btn--ghost">
+            <Link href="/mypage" className="sh-btn sh-btn--ghost">
               キャンセル
             </Link>
           </div>
@@ -696,6 +814,53 @@ const threeCols: React.CSSProperties = {
   display: "grid",
   gap: 12,
   gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+};
+
+const twoCols: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  gridTemplateColumns: "1fr 1fr",
+};
+
+const profileCard: React.CSSProperties = {
+  padding: 12,
+  borderRadius: 12,
+  border: "1px solid #dfe7e2",
+  background: "#fff",
+};
+
+const profileTitle: React.CSSProperties = {
+  fontWeight: 900,
+  color: "#1f5d30",
+  marginBottom: 10,
+};
+
+const chipWrap: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const chip: React.CSSProperties = {
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #d6eadb",
+  background: "#fff",
+  color: "#23412c",
+  fontWeight: 800,
+  fontSize: 13,
+  cursor: "pointer",
+};
+
+const chipActive: React.CSSProperties = {
+  background: "#145c2a",
+  color: "#fff",
+  border: "1px solid #145c2a",
+};
+
+const chipDisabled: React.CSSProperties = {
+  opacity: 0.6,
+  cursor: "not-allowed",
 };
 
 const actionRow: React.CSSProperties = {

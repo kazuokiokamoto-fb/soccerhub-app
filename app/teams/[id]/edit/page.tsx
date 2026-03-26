@@ -9,30 +9,19 @@ import { supabase } from "@/app/lib/supabase";
 import { CATEGORY_OPTIONS, categoryLabels } from "@/app/lib/categories";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
 import {
-  StrengthRankPicker,
   StrengthRank,
   strengthRankToLegacyLevel,
   legacyLevelToStrengthRank,
 } from "@/app/components/StrengthRankPicker";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
-import { BikeParkingField } from "@/app/components/BikeParkingField";
-import { MemberCountField } from "@/app/components/MemberCountField";
-
-const BIKE_CAPACITY_OPTIONS = [
-  { value: "5", label: "5台" },
-  { value: "10", label: "10台" },
-  { value: "15", label: "15台" },
-  { value: "20", label: "20台" },
-  { value: "25", label: "25台" },
-  { value: "30", label: "30台" },
-  { value: "35", label: "35台" },
-  { value: "40", label: "40台" },
-  { value: "45", label: "45台" },
-  { value: "50+", label: "50台以上" },
-  { value: "不明", label: "不明" },
-] as const;
 
 type Toast = { type: "success" | "error" | "info"; text: string };
+
+type CategoryProfile = {
+  category: string;
+  strength_rank: StrengthRank;
+  member_count: string;
+};
 
 function isMissingColumnError(err: any) {
   const msg = String(err?.message ?? "");
@@ -44,11 +33,34 @@ function isMissingColumnError(err: any) {
       (msg.includes("contact_") ||
         msg.includes("address_detail") ||
         msg.includes("strength_rank") ||
-        msg.includes("bike_parking_capacity") ||
         msg.includes("member_count") ||
         msg.includes("uniform_gk") ||
-        msg.includes("categories")))
+        msg.includes("categories") ||
+        msg.includes("category_profiles")))
   );
+}
+
+function buildProfilesFromCategories(
+  categories: string[],
+  prevProfiles: CategoryProfile[]
+): CategoryProfile[] {
+  return categories.map((category) => {
+    const hit = prevProfiles.find((p) => p.category === category);
+    if (hit) return hit;
+
+    return {
+      category,
+      strength_rank: "A",
+      member_count: "",
+    };
+  });
+}
+
+function sumMemberCount(profiles: CategoryProfile[]) {
+  return profiles.reduce((sum, p) => {
+    const n = Number(p.member_count || 0);
+    return sum + (Number.isFinite(n) ? n : 0);
+  }, 0);
 }
 
 export default function TeamEditPage() {
@@ -63,11 +75,9 @@ export default function TeamEditPage() {
   const [name, setName] = useState("");
 
   const [categories, setCategories] = useState<string[]>([]);
-  const [strengthRank, setStrengthRank] = useState<StrengthRank>("A");
-  const [hasGround, setHasGround] = useState(false);
+  const [categoryProfiles, setCategoryProfiles] = useState<CategoryProfile[]>([]);
 
-  const [bikeParking, setBikeParking] = useState<"なし" | "あり">("なし");
-  const [bikeParkingCapacity, setBikeParkingCapacity] = useState<string>("");
+  const [hasGround, setHasGround] = useState(false);
 
   const [uniformMain, setUniformMain] = useState("");
   const [uniformSub, setUniformSub] = useState("");
@@ -78,8 +88,6 @@ export default function TeamEditPage() {
   const [town, setTown] = useState("");
 
   const [addressDetail, setAddressDetail] = useState("");
-  const [memberCount, setMemberCount] = useState("");
-
   const [note, setNote] = useState("");
 
   const [contactEmail, setContactEmail] = useState("");
@@ -88,35 +96,39 @@ export default function TeamEditPage() {
 
   const primaryCategory = useMemo(() => categories[0] ?? "", [categories]);
 
-  const canSave = useMemo(() => {
-    const bikeOk =
-      bikeParking === "なし" || (bikeParking === "あり" && !!bikeParkingCapacity);
+  const totalMemberCount = useMemo(() => {
+    return sumMemberCount(categoryProfiles);
+  }, [categoryProfiles]);
 
+  const primaryStrengthRank = useMemo<StrengthRank>(() => {
+    const first = categoryProfiles.find((p) => p.category === primaryCategory);
+    return first?.strength_rank ?? "A";
+  }, [categoryProfiles, primaryCategory]);
+
+  const canSave = useMemo(() => {
     return (
       !!teamId &&
       !!name.trim() &&
       !!prefecture &&
       !!city &&
       categories.length > 0 &&
-      bikeOk &&
+      categoryProfiles.length > 0 &&
+      categoryProfiles.every(
+        (p) => !!p.category && !!p.strength_rank && p.member_count !== ""
+      ) &&
       !saving
     );
-  }, [
-    teamId,
-    name,
-    prefecture,
-    city,
-    categories,
-    bikeParking,
-    bikeParkingCapacity,
-    saving,
-  ]);
+  }, [teamId, name, prefecture, city, categories, categoryProfiles, saving]);
 
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3000);
     return () => clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    setCategoryProfiles((prev) => buildProfilesFromCategories(categories, prev));
+  }, [categories]);
 
   useEffect(() => {
     if (!teamId) return;
@@ -135,7 +147,7 @@ export default function TeamEditPage() {
         let res = await supabase
           .from("teams")
           .select(
-            "id,owner_id,name,category,categories,level,strength_rank,has_ground,bike_parking,bike_parking_capacity,uniform_main,uniform_sub,uniform_gk,prefecture,city,town,area,address_detail,member_count,note,contact_email,contact_phone,contact_line_id"
+            "id,owner_id,name,category,categories,category_profiles,level,strength_rank,has_ground,uniform_main,uniform_sub,uniform_gk,prefecture,city,town,area,address_detail,note,contact_email,contact_phone,contact_line_id,member_count,roster_by_grade"
           )
           .eq("id", teamId)
           .single();
@@ -144,7 +156,7 @@ export default function TeamEditPage() {
           res = await supabase
             .from("teams")
             .select(
-              "id,owner_id,name,category,level,has_ground,bike_parking,uniform_main,uniform_sub,prefecture,city,town,area,note,contact_email,contact_phone,contact_line_id,roster_by_grade"
+              "id,owner_id,name,category,level,has_ground,uniform_main,uniform_sub,prefecture,city,town,area,note,contact_email,contact_phone,contact_line_id,member_count,roster_by_grade"
             )
             .eq("id", teamId)
             .single();
@@ -170,24 +182,43 @@ export default function TeamEditPage() {
 
         setName(data.name ?? "");
 
-        if (Array.isArray(data.categories) && data.categories.length > 0) {
-          setCategories(data.categories);
-        } else if (data.category) {
-          setCategories([data.category]);
+        const loadedCategories: string[] =
+          Array.isArray(data.categories) && data.categories.length > 0
+            ? data.categories
+            : data.category
+            ? [data.category]
+            : [];
+
+        setCategories(loadedCategories);
+
+        if (Array.isArray(data.category_profiles) && data.category_profiles.length > 0) {
+          setCategoryProfiles(
+            data.category_profiles.map((p: any) => ({
+              category: p.category ?? "",
+              strength_rank:
+                (p.strength_rank as StrengthRank) ??
+                legacyLevelToStrengthRank(data.level ?? 5),
+              member_count: String(p.member_count ?? ""),
+            }))
+          );
         } else {
-          setCategories([]);
+          const roster = data.roster_by_grade ?? {};
+          const fallbackMemberCount =
+            data.member_count ?? roster.TOTAL ?? null;
+
+          setCategoryProfiles(
+            loadedCategories.map((cat: string, index: number) => ({
+              category: cat,
+              strength_rank: legacyLevelToStrengthRank(data.level ?? 5),
+              member_count:
+                index === 0 && fallbackMemberCount != null
+                  ? String(fallbackMemberCount)
+                  : "",
+            }))
+          );
         }
 
-        setStrengthRank(
-          data.strength_rank
-            ? data.strength_rank
-            : legacyLevelToStrengthRank(data.level ?? 5)
-        );
-
         setHasGround(!!data.has_ground);
-
-        setBikeParking(data.bike_parking === "あり" ? "あり" : "なし");
-        setBikeParkingCapacity(data.bike_parking_capacity ?? "");
 
         setUniformMain(data.uniform_main ?? "");
         setUniformSub(data.uniform_sub ?? "");
@@ -198,14 +229,6 @@ export default function TeamEditPage() {
         setTown(data.town ?? "");
 
         setAddressDetail(data.address_detail ?? "");
-
-        const roster = data.roster_by_grade ?? {};
-        const fallbackMemberCount = data.member_count ?? roster.TOTAL ?? null;
-
-        setMemberCount(
-          fallbackMemberCount == null ? "" : String(fallbackMemberCount)
-        );
-
         setNote(data.note ?? "");
 
         setContactEmail(data.contact_email ?? "");
@@ -221,6 +244,15 @@ export default function TeamEditPage() {
     })();
   }, [teamId, router]);
 
+  const updateProfile = (
+    category: string,
+    patch: Partial<Omit<CategoryProfile, "category">>
+  ) => {
+    setCategoryProfiles((prev) =>
+      prev.map((p) => (p.category === category ? { ...p, ...patch } : p))
+    );
+  };
+
   const save = async () => {
     if (!canSave || !teamId) return;
 
@@ -229,23 +261,36 @@ export default function TeamEditPage() {
 
     try {
       const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
-      const memberCountNum =
-        memberCount.trim() === "" ? null : Math.max(0, Number(memberCount) || 0);
+
+      const normalizedProfiles = categories.map((category) => {
+        const hit = categoryProfiles.find((p) => p.category === category);
+        return {
+          category,
+          strength_rank: (hit?.strength_rank ?? "A") as StrengthRank,
+          member_count: Math.max(0, Number(hit?.member_count || 0)),
+        };
+      });
+
+      const totalMembers = normalizedProfiles.reduce(
+        (sum, p) => sum + (Number(p.member_count) || 0),
+        0
+      );
+
+      const firstProfile = normalizedProfiles[0];
 
       const basePayload: any = {
         name: name.trim(),
         category: primaryCategory || null,
         categories,
-        level: strengthRankToLegacyLevel(strengthRank),
-        strength_rank: strengthRank,
+        category_profiles: normalizedProfiles,
+        level: strengthRankToLegacyLevel(firstProfile?.strength_rank ?? "A"),
+        strength_rank: firstProfile?.strength_rank ?? "A",
         has_ground: hasGround,
-        bike_parking: bikeParking,
-        bike_parking_capacity:
-          bikeParking === "あり" ? bikeParkingCapacity || "不明" : null,
         uniform_main: uniformMain.trim() || "不明",
         uniform_sub: uniformSub.trim() || "不明",
         uniform_gk: uniformGk.trim() || "不明",
-        member_count: memberCountNum,
+        member_count: totalMembers,
+        roster_by_grade: { TOTAL: totalMembers },
         note: note || "",
         prefecture,
         city,
@@ -272,9 +317,8 @@ export default function TeamEditPage() {
         const fallbackPayload: any = {
           name: name.trim(),
           category: primaryCategory || null,
-          level: strengthRankToLegacyLevel(strengthRank),
+          level: strengthRankToLegacyLevel(primaryStrengthRank),
           has_ground: hasGround,
-          bike_parking: bikeParking,
           uniform_main: uniformMain.trim() || "不明",
           uniform_sub: uniformSub.trim() || "不明",
           note: note || "",
@@ -374,7 +418,7 @@ export default function TeamEditPage() {
             <div style={helperText}>
               ※ 1アカウントで複数チームを登録できます。<br />
               ※ 1チーム内で複数カテゴリを管理できます。<br />
-              ※ キッズカテゴリにも対応しています。
+              ※ カテゴリごとに強さと人数を設定できます。
             </div>
           </div>
 
@@ -436,16 +480,67 @@ export default function TeamEditPage() {
             </div>
           </div>
 
-          <div style={subSection}>
-            <StrengthRankPicker
-              value={strengthRank}
-              onChange={(rank) => {
-                if (rank !== "") setStrengthRank(rank);
-              }}
-              disabled={saving}
-              title="強さ（ランク選択）"
-            />
-          </div>
+          {categories.length > 0 ? (
+            <div style={subSection}>
+              <div style={blockTitle}>カテゴリごとの設定</div>
+
+              <div style={{ display: "grid", gap: 12 }}>
+                {categories.map((category) => {
+                  const profile = categoryProfiles.find((p) => p.category === category);
+
+                  return (
+                    <div key={category} style={profileCard}>
+                      <div style={profileTitle}>{category}</div>
+
+                      <div style={twoCols}>
+                        <label style={label}>
+                          <span style={labelTitle}>強さ</span>
+                          <select
+                            className="sh-select"
+                            value={profile?.strength_rank ?? "A"}
+                            disabled={saving}
+                            onChange={(e) =>
+                              updateProfile(category, {
+                                strength_rank: e.target.value as StrengthRank,
+                              })
+                            }
+                          >
+                            <option value="SS">SS</option>
+                            <option value="S">S</option>
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="C">C</option>
+                          </select>
+                        </label>
+
+                        <label style={label}>
+                          <span style={labelTitle}>人数</span>
+                          <input
+                            type="number"
+                            min={0}
+                            inputMode="numeric"
+                            className="sh-input"
+                            value={profile?.member_count ?? ""}
+                            disabled={saving}
+                            placeholder="例：15"
+                            onChange={(e) =>
+                              updateProfile(category, {
+                                member_count: e.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ marginTop: 8, ...helperText }}>
+                合計人数：{totalMemberCount}人
+              </div>
+            </div>
+          ) : null}
 
           <label style={{ ...checkLabel, opacity: saving ? 0.7 : 1 }}>
             <input
@@ -456,15 +551,6 @@ export default function TeamEditPage() {
             />
             自チームでグラウンド提供できる
           </label>
-
-          <BikeParkingField
-            bikeParking={bikeParking}
-            setBikeParking={setBikeParking}
-            bikeParkingCapacity={bikeParkingCapacity}
-            setBikeParkingCapacity={setBikeParkingCapacity}
-            capacityOptions={BIKE_CAPACITY_OPTIONS}
-            disabled={saving}
-          />
 
           <div style={threeCols}>
             <label style={label}>
@@ -500,12 +586,6 @@ export default function TeamEditPage() {
               />
             </label>
           </div>
-
-          <MemberCountField
-            value={memberCount}
-            onChange={setMemberCount}
-            disabled={saving}
-          />
 
           <div style={softCard}>
             <div style={blockTitle}>連絡先（任意）</div>
@@ -548,8 +628,7 @@ export default function TeamEditPage() {
             <div style={{ marginTop: 8, ...helperText }}>
               ※ 連絡先はこのチームごとに編集できます。<br />
               ※ DBに contact_email / contact_phone / contact_line_id が無い環境でも保存できるようにしています。<br />
-              ※ DBに uniform_gk が無い環境でも保存できるように自動フォールバックしています。<br />
-              ※ DBに categories が無い環境では category のみ更新します。
+              ※ DBに category_profiles / categories が無い環境では代表カテゴリのみ更新します。
             </div>
           </div>
 
@@ -673,6 +752,25 @@ const threeCols: React.CSSProperties = {
   display: "grid",
   gap: 12,
   gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+};
+
+const twoCols: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+};
+
+const profileCard: React.CSSProperties = {
+  padding: 12,
+  borderRadius: 12,
+  border: "1px solid #dfe7e2",
+  background: "#fff",
+};
+
+const profileTitle: React.CSSProperties = {
+  fontWeight: 900,
+  color: "#1f5d30",
+  marginBottom: 10,
 };
 
 const actionRow: React.CSSProperties = {
