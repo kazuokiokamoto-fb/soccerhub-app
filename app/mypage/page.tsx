@@ -29,7 +29,10 @@ type TeamRow = {
   city?: string | null;
   town?: string | null;
   has_ground?: boolean | null;
-  category_meta?: Record<string, { strength_rank?: string | null; member_count?: number | null }> | null;
+  category_meta?: Record<
+    string,
+    { strength_rank?: string | null; member_count?: number | null }
+  > | null;
   uniform_main?: string | null;
   uniform_sub?: string | null;
   uniform_gk?: string | null;
@@ -64,7 +67,9 @@ function areaText(team?: TeamRow | null) {
   if (!team) return "未設定";
   const area = (team.area ?? "").trim();
   if (area) return area;
-  const text = `${team.prefecture ?? ""} ${team.city ?? ""}${team.town ? "・" + team.town : ""}`.trim();
+  const text = `${team.prefecture ?? ""} ${team.city ?? ""}${
+    team.town ? "・" + team.town : ""
+  }`.trim();
   return text || "未設定";
 }
 
@@ -81,7 +86,6 @@ function categoryText(team?: TeamRow | null) {
 
 function categoryMetaEntries(team?: TeamRow | null) {
   if (!team?.category_meta || typeof team.category_meta !== "object") return [];
-
   return Object.entries(team.category_meta).filter(([key]) => !!key);
 }
 
@@ -91,6 +95,7 @@ export default function MyPage() {
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [deletingTeamId, setDeletingTeamId] = useState("");
 
   const mainTeam = useMemo(() => teams[0] ?? null, [teams]);
 
@@ -100,7 +105,7 @@ export default function MyPage() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2800);
+    const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -115,7 +120,10 @@ export default function MyPage() {
 
     if (userErr) {
       console.error(userErr);
-      setToast({ type: "error", text: `ユーザー取得失敗: ${userErr.message}` });
+      setToast({
+        type: "error",
+        text: `ユーザー取得失敗: ${userErr.message}`,
+      });
       setLoading(false);
       return;
     }
@@ -141,7 +149,10 @@ export default function MyPage() {
 
     if (profileErr) {
       console.error(profileErr);
-      setToast({ type: "error", text: `プロフィール読込失敗: ${profileErr.message}` });
+      setToast({
+        type: "error",
+        text: `プロフィール読込失敗: ${profileErr.message}`,
+      });
     }
 
     setProfile((profileRow as ProfileRow | null) ?? null);
@@ -165,7 +176,10 @@ export default function MyPage() {
 
       if (fallbackRes.error) {
         console.error(fallbackRes.error);
-        setToast({ type: "error", text: `チーム読込失敗: ${fallbackRes.error.message}` });
+        setToast({
+          type: "error",
+          text: `チーム読込失敗: ${fallbackRes.error.message}`,
+        });
         setTeams([]);
         setLoading(false);
         return;
@@ -178,7 +192,10 @@ export default function MyPage() {
 
     if (primaryRes.error) {
       console.error(primaryRes.error);
-      setToast({ type: "error", text: `チーム読込失敗: ${primaryRes.error.message}` });
+      setToast({
+        type: "error",
+        text: `チーム読込失敗: ${primaryRes.error.message}`,
+      });
       setTeams([]);
       setLoading(false);
       return;
@@ -186,6 +203,130 @@ export default function MyPage() {
 
     setTeams(((primaryRes.data ?? []) as TeamRow[]) || []);
     setLoading(false);
+  }
+
+  async function existsRow(table: string, column: string, teamId: string) {
+    const res = await supabase.from(table).select("id", { count: "exact", head: true }).eq(column, teamId);
+    if (res.error) {
+      throw res.error;
+    }
+    return (res.count ?? 0) > 0;
+  }
+
+  async function canDeleteTeamSafely(teamId: string) {
+    const blockers: string[] = [];
+
+    const checks = [
+      {
+        label: "募集枠",
+        run: () => existsRow("match_slots", "host_team_id", teamId),
+      },
+      {
+        label: "試合申込",
+        run: () => existsRow("match_requests", "requester_team_id", teamId),
+      },
+      {
+        label: "送った招待",
+        run: () => existsRow("match_offers", "from_team_id", teamId),
+      },
+      {
+        label: "届いた招待",
+        run: () => existsRow("match_offers", "to_team_id", teamId),
+      },
+      {
+        label: "チャット参加情報",
+        run: () => existsRow("chat_members", "team_id", teamId),
+      },
+      {
+        label: "チャット送信履歴",
+        run: () => existsRow("chat_messages", "sender_team_id", teamId),
+      },
+    ];
+
+    for (const check of checks) {
+      try {
+        const hit = await check.run();
+        if (hit) blockers.push(check.label);
+      } catch (e: any) {
+        console.error(`delete-check failed: ${check.label}`, e);
+        throw new Error(
+          `削除前チェックに失敗しました（${check.label}）: ${e?.message ?? "unknown error"}`
+        );
+      }
+    }
+
+    return {
+      ok: blockers.length === 0,
+      blockers,
+    };
+  }
+
+  async function deleteTeam(team: TeamRow) {
+    if (!me?.id) {
+      setToast({ type: "error", text: "ログインが必要です" });
+      return;
+    }
+
+    if (team.owner_id !== me.id) {
+      setToast({ type: "error", text: "自分のチームのみ削除できます" });
+      return;
+    }
+
+    const ok = window.confirm(
+      `「${team.name}」を削除しますか？\n\n` +
+        "安全のため、募集・申込・招待・チャット履歴などの関連データがあるチームは削除できません。"
+    );
+    if (!ok) return;
+
+    setDeletingTeamId(team.id);
+    setToast({ type: "info", text: "削除チェック中…" });
+
+    try {
+      const result = await canDeleteTeamSafely(team.id);
+
+      if (!result.ok) {
+        setToast({
+          type: "error",
+          text:
+            "このチームはまだ削除できません。\n" +
+            `関連データがあります: ${result.blockers.join(" / ")}`,
+        });
+        setDeletingTeamId("");
+        return;
+      }
+
+      setToast({ type: "info", text: "削除中…" });
+
+      const { error } = await supabase
+        .from("teams")
+        .delete()
+        .eq("id", team.id)
+        .eq("owner_id", me.id);
+
+      if (error) {
+        console.error(error);
+        setToast({
+          type: "error",
+          text: `チーム削除失敗: ${error.message}`,
+        });
+        setDeletingTeamId("");
+        return;
+      }
+
+      setTeams((prev) => prev.filter((t) => t.id !== team.id));
+      setToast({
+        type: "success",
+        text: `✅ 「${team.name}」を削除しました`,
+      });
+    } catch (e: any) {
+      console.error(e);
+      setToast({
+        type: "error",
+        text: e?.message ?? "チーム削除に失敗しました",
+      });
+    } finally {
+      setDeletingTeamId("");
+    }
   }
 
   if (loading) {
@@ -226,7 +367,9 @@ export default function MyPage() {
       />
 
       {!me ? (
-        <div style={{ marginTop: 16, color: "#991b1b" }}>ログインが必要です。</div>
+        <div style={{ marginTop: 16, color: "#991b1b" }}>
+          ログインが必要です。
+        </div>
       ) : null}
 
       <section style={box}>
@@ -274,7 +417,10 @@ export default function MyPage() {
             </Link>
 
             {mainTeam ? (
-              <Link href={`/teams/${mainTeam.id}/edit`} className="sh-btn sh-btn--primary">
+              <Link
+                href={`/teams/${mainTeam.id}/edit`}
+                className="sh-btn sh-btn--primary"
+              >
                 チーム編集
               </Link>
             ) : null}
@@ -285,72 +431,91 @@ export default function MyPage() {
           <div style={{ color: "#666" }}>まだチーム登録がありません。</div>
         ) : (
           <div style={{ display: "grid", gap: 12 }}>
-            {teams.map((team) => (
-              <div key={team.id} style={card}>
-                <div style={cardHead}>
-                  <div>
-                    <div style={{ fontWeight: 900, fontSize: 18 }}>{team.name}</div>
-                    <div style={subText}>{categoryText(team)}</div>
-                  </div>
+            {teams.map((team) => {
+              const isDeleting = deletingTeamId === team.id;
 
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <Link href={`/teams/${team.id}`} className="sh-btn">
-                      詳細
-                    </Link>
-                    <Link href={`/teams/${team.id}/edit`} className="sh-btn sh-btn--primary">
-                      編集
-                    </Link>
-                  </div>
-                </div>
+              return (
+                <div key={team.id} style={card}>
+                  <div style={cardHead}>
+                    <div>
+                      <div style={{ fontWeight: 900, fontSize: 18 }}>
+                        {team.name}
+                      </div>
+                      <div style={subText}>{categoryText(team)}</div>
+                    </div>
 
-                <div style={{ color: "#555", marginTop: 10, lineHeight: 1.8 }}>
-                  エリア : {areaText(team)}
-                  <br />
-                  カテゴリ : {categoryText(team)}
-                  <br />
-                  グラウンド提供 : {team.has_ground ? "あり" : "なし"}
-                  <br />
-                  ユニフォーム : {team.uniform_main ?? "不明"} / {team.uniform_sub ?? "不明"} / GK:{" "}
-                  {team.uniform_gk ?? "不明"}
-                </div>
-
-                {categoryMetaEntries(team).length > 0 ? (
-                  <div style={metaBox}>
-                    <div style={noteTitle}>カテゴリ別設定</div>
-                    <div style={{ display: "grid", gap: 8 }}>
-                      {categoryMetaEntries(team).map(([cat, meta]) => (
-                        <div key={cat} style={metaRow}>
-                          <div style={{ fontWeight: 800 }}>
-                            {categoryLabel(cat) || cat}
-                          </div>
-                          <div style={{ color: "#555", lineHeight: 1.7 }}>
-                            強さ : {meta?.strength_rank || "未設定"}
-                            <br />
-                            所属人数 : {meta?.member_count ?? "未設定"}
-                          </div>
-                        </div>
-                      ))}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <Link href={`/teams/${team.id}`} className="sh-btn">
+                        詳細
+                      </Link>
+                      <Link
+                        href={`/teams/${team.id}/edit`}
+                        className="sh-btn sh-btn--primary"
+                      >
+                        編集
+                      </Link>
+                      <button
+                        type="button"
+                        className="sh-btn"
+                        onClick={() => deleteTeam(team)}
+                        disabled={isDeleting}
+                        style={deleteBtn}
+                      >
+                        {isDeleting ? "削除中…" : "削除"}
+                      </button>
                     </div>
                   </div>
-                ) : (
-                  <div style={metaBox}>
-                    <div style={noteTitle}>カテゴリ別設定</div>
-                    <div style={{ color: "#555", lineHeight: 1.7 }}>
-                      強さ : {team.strength_rank || rankLabel(team.level)}
-                      <br />
-                      所属人数 : 未設定
-                    </div>
-                  </div>
-                )}
 
-                {team.note?.trim() ? (
-                  <div style={noteBox}>
-                    <div style={noteTitle}>メモ</div>
-                    <div style={noteBody}>{team.note}</div>
+                  <div style={{ color: "#555", marginTop: 10, lineHeight: 1.8 }}>
+                    エリア : {areaText(team)}
+                    <br />
+                    カテゴリ : {categoryText(team)}
+                    <br />
+                    グラウンド提供 : {team.has_ground ? "あり" : "なし"}
+                    <br />
+                    ユニフォーム : {team.uniform_main ?? "不明"} /{" "}
+                    {team.uniform_sub ?? "不明"} / GK:{" "}
+                    {team.uniform_gk ?? "不明"}
                   </div>
-                ) : null}
-              </div>
-            ))}
+
+                  {categoryMetaEntries(team).length > 0 ? (
+                    <div style={metaBox}>
+                      <div style={noteTitle}>カテゴリ別設定</div>
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {categoryMetaEntries(team).map(([cat, meta]) => (
+                          <div key={cat} style={metaRow}>
+                            <div style={{ fontWeight: 800 }}>
+                              {categoryLabel(cat) || cat}
+                            </div>
+                            <div style={{ color: "#555", lineHeight: 1.7 }}>
+                              強さ : {meta?.strength_rank || "未設定"}
+                              <br />
+                              所属人数 : {meta?.member_count ?? "未設定"}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={metaBox}>
+                      <div style={noteTitle}>カテゴリ別設定</div>
+                      <div style={{ color: "#555", lineHeight: 1.7 }}>
+                        強さ : {team.strength_rank || rankLabel(team.level)}
+                        <br />
+                        所属人数 : 未設定
+                      </div>
+                    </div>
+                  )}
+
+                  {team.note?.trim() ? (
+                    <div style={noteBox}>
+                      <div style={noteTitle}>メモ</div>
+                      <div style={noteBody}>{team.note}</div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
@@ -369,7 +534,8 @@ export default function MyPage() {
         </div>
 
         <div style={{ color: "#555", lineHeight: 1.8 }}>
-          登録済みグラウンドを管理できます。<br />
+          登録済みグラウンドを管理できます。
+          <br />
           今後、募集枠作成時に登録済みグラウンドから選択しやすくなります。
         </div>
       </section>
@@ -469,6 +635,12 @@ const infoRow: React.CSSProperties = {
   display: "grid",
   gap: 4,
   color: "#333",
+};
+
+const deleteBtn: React.CSSProperties = {
+  borderColor: "#fecaca",
+  color: "#991b1b",
+  background: "#fff",
 };
 
 const toastBox: React.CSSProperties = {

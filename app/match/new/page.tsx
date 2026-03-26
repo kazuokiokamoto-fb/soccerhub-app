@@ -509,11 +509,11 @@ function MatchCreatePageInner() {
                 disabled={saving}
               >
                 <option value="">指定なし</option>
-                <option value="1">C</option>
-                <option value="3">B</option>
-                <option value="5">A</option>
-                <option value="7">S</option>
                 <option value="9">SS</option>
+                <option value="7">S</option>
+                <option value="5">A</option>
+                <option value="3">B</option>
+                <option value="1">C</option>
               </select>
             </label>
 
@@ -526,11 +526,11 @@ function MatchCreatePageInner() {
                 disabled={saving}
               >
                 <option value="">指定なし</option>
-                <option value="1">C</option>
-                <option value="3">B</option>
-                <option value="5">A</option>
-                <option value="7">S</option>
                 <option value="9">SS</option>
+                <option value="7">S</option>
+                <option value="5">A</option>
+                <option value="3">B</option>
+                <option value="1">C</option>
               </select>
             </label>
           </div>

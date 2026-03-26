@@ -70,7 +70,10 @@ export default function TeamEditPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
+
+  const [ownerId, setOwnerId] = useState<string>("");
 
   const [name, setName] = useState("");
 
@@ -116,13 +119,23 @@ export default function TeamEditPage() {
       categoryProfiles.every(
         (p) => !!p.category && !!p.strength_rank && p.member_count !== ""
       ) &&
-      !saving
+      !saving &&
+      !deleting
     );
-  }, [teamId, name, prefecture, city, categories, categoryProfiles, saving]);
+  }, [
+    teamId,
+    name,
+    prefecture,
+    city,
+    categories,
+    categoryProfiles,
+    saving,
+    deleting,
+  ]);
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3000);
+    const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -180,6 +193,7 @@ export default function TeamEditPage() {
           return;
         }
 
+        setOwnerId(data.owner_id ?? "");
         setName(data.name ?? "");
 
         const loadedCategories: string[] =
@@ -191,7 +205,10 @@ export default function TeamEditPage() {
 
         setCategories(loadedCategories);
 
-        if (Array.isArray(data.category_profiles) && data.category_profiles.length > 0) {
+        if (
+          Array.isArray(data.category_profiles) &&
+          data.category_profiles.length > 0
+        ) {
           setCategoryProfiles(
             data.category_profiles.map((p: any) => ({
               category: p.category ?? "",
@@ -203,8 +220,7 @@ export default function TeamEditPage() {
           );
         } else {
           const roster = data.roster_by_grade ?? {};
-          const fallbackMemberCount =
-            data.member_count ?? roster.TOTAL ?? null;
+          const fallbackMemberCount = data.member_count ?? roster.TOTAL ?? null;
 
           setCategoryProfiles(
             loadedCategories.map((cat: string, index: number) => ({
@@ -238,7 +254,10 @@ export default function TeamEditPage() {
         setLoading(false);
       } catch (e) {
         console.error(e);
-        setToast({ type: "error", text: "チーム情報の読み込みに失敗しました" });
+        setToast({
+          type: "error",
+          text: "チーム情報の読み込みに失敗しました",
+        });
         setLoading(false);
       }
     })();
@@ -251,6 +270,131 @@ export default function TeamEditPage() {
     setCategoryProfiles((prev) =>
       prev.map((p) => (p.category === category ? { ...p, ...patch } : p))
     );
+  };
+
+  async function existsRow(table: string, column: string, value: string) {
+    const res = await supabase
+      .from(table)
+      .select("id", { count: "exact", head: true })
+      .eq(column, value);
+
+    if (res.error) throw res.error;
+    return (res.count ?? 0) > 0;
+  }
+
+  async function canDeleteTeamSafely(targetTeamId: string) {
+    const blockers: string[] = [];
+
+    const checks = [
+      {
+        label: "募集枠",
+        run: () => existsRow("match_slots", "host_team_id", targetTeamId),
+      },
+      {
+        label: "試合申込",
+        run: () => existsRow("match_requests", "requester_team_id", targetTeamId),
+      },
+      {
+        label: "送った招待",
+        run: () => existsRow("match_offers", "from_team_id", targetTeamId),
+      },
+      {
+        label: "届いた招待",
+        run: () => existsRow("match_offers", "to_team_id", targetTeamId),
+      },
+      {
+        label: "チャット参加情報",
+        run: () => existsRow("chat_members", "team_id", targetTeamId),
+      },
+      {
+        label: "チャット送信履歴",
+        run: () => existsRow("chat_messages", "sender_team_id", targetTeamId),
+      },
+    ];
+
+    for (const check of checks) {
+      try {
+        const hit = await check.run();
+        if (hit) blockers.push(check.label);
+      } catch (e: any) {
+        console.error(`delete-check failed: ${check.label}`, e);
+        throw new Error(
+          `削除前チェックに失敗しました（${check.label}）: ${e?.message ?? "unknown error"}`
+        );
+      }
+    }
+
+    return {
+      ok: blockers.length === 0,
+      blockers,
+    };
+  }
+
+  const deleteTeam = async () => {
+    if (!teamId) return;
+
+    const { data: auth } = await supabase.auth.getUser();
+    const meId = auth?.user?.id ?? "";
+
+    if (!meId) {
+      setToast({ type: "error", text: "ログインが必要です" });
+      return;
+    }
+
+    if (ownerId && ownerId !== meId) {
+      setToast({ type: "error", text: "自分のチームのみ削除できます" });
+      return;
+    }
+
+    const ok = window.confirm(
+      `「${name || "このチーム"}」を削除しますか？\n\n` +
+        "安全のため、募集・申込・招待・チャット履歴などの関連データがあるチームは削除できません。"
+    );
+    if (!ok) return;
+
+    setDeleting(true);
+    setToast({ type: "info", text: "削除チェック中…" });
+
+    try {
+      const result = await canDeleteTeamSafely(teamId);
+
+      if (!result.ok) {
+        setToast({
+          type: "error",
+          text:
+            "このチームはまだ削除できません。\n" +
+            `関連データがあります: ${result.blockers.join(" / ")}`,
+        });
+        setDeleting(false);
+        return;
+      }
+
+      setToast({ type: "info", text: "削除中…" });
+
+      const { error } = await supabase
+        .from("teams")
+        .delete()
+        .eq("id", teamId)
+        .eq("owner_id", meId);
+
+      if (error) {
+        console.error(error);
+        setToast({ type: "error", text: `チーム削除失敗: ${error.message}` });
+        setDeleting(false);
+        return;
+      }
+
+      setToast({ type: "success", text: "✅ チームを削除しました" });
+      router.push("/mypage");
+      router.refresh();
+    } catch (e: any) {
+      console.error(e);
+      setToast({
+        type: "error",
+        text: e?.message ?? "チーム削除に失敗しました",
+      });
+      setDeleting(false);
+    }
   };
 
   const save = async () => {
@@ -428,13 +572,13 @@ export default function TeamEditPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="sh-input"
-              disabled={saving}
+              disabled={saving || deleting}
               placeholder="例：三宿FC"
             />
           </label>
 
           <AreaPickerKanto
-            disabled={saving}
+            disabled={saving || deleting}
             prefecture={prefecture}
             setPrefecture={setPrefecture}
             city={city}
@@ -452,7 +596,7 @@ export default function TeamEditPage() {
               value={addressDetail}
               onChange={(e) => setAddressDetail(e.target.value)}
               className="sh-input"
-              disabled={saving}
+              disabled={saving || deleting}
               placeholder="例：1-2-3（丁目・番地・号）"
               inputMode="text"
               autoComplete="street-address"
@@ -469,7 +613,7 @@ export default function TeamEditPage() {
               values={categories}
               onChange={setCategories}
               columns={3}
-              disabled={saving}
+              disabled={saving || deleting}
               useChipUI={true}
             />
             <div style={{ marginTop: 8, ...helperText }}>
@@ -498,7 +642,7 @@ export default function TeamEditPage() {
                           <select
                             className="sh-select"
                             value={profile?.strength_rank ?? "A"}
-                            disabled={saving}
+                            disabled={saving || deleting}
                             onChange={(e) =>
                               updateProfile(category, {
                                 strength_rank: e.target.value as StrengthRank,
@@ -521,7 +665,7 @@ export default function TeamEditPage() {
                             inputMode="numeric"
                             className="sh-input"
                             value={profile?.member_count ?? ""}
-                            disabled={saving}
+                            disabled={saving || deleting}
                             placeholder="例：15"
                             onChange={(e) =>
                               updateProfile(category, {
@@ -542,12 +686,12 @@ export default function TeamEditPage() {
             </div>
           ) : null}
 
-          <label style={{ ...checkLabel, opacity: saving ? 0.7 : 1 }}>
+          <label style={{ ...checkLabel, opacity: saving || deleting ? 0.7 : 1 }}>
             <input
               type="checkbox"
               checked={hasGround}
               onChange={(e) => setHasGround(e.target.checked)}
-              disabled={saving}
+              disabled={saving || deleting}
             />
             自チームでグラウンド提供できる
           </label>
@@ -559,7 +703,7 @@ export default function TeamEditPage() {
                 value={uniformMain}
                 onChange={(e) => setUniformMain(e.target.value)}
                 className="sh-input"
-                disabled={saving}
+                disabled={saving || deleting}
                 placeholder="例：青"
               />
             </label>
@@ -570,7 +714,7 @@ export default function TeamEditPage() {
                 value={uniformSub}
                 onChange={(e) => setUniformSub(e.target.value)}
                 className="sh-input"
-                disabled={saving}
+                disabled={saving || deleting}
                 placeholder="例：白"
               />
             </label>
@@ -581,7 +725,7 @@ export default function TeamEditPage() {
                 value={uniformGk}
                 onChange={(e) => setUniformGk(e.target.value)}
                 className="sh-input"
-                disabled={saving}
+                disabled={saving || deleting}
                 placeholder="例：黄"
               />
             </label>
@@ -597,7 +741,7 @@ export default function TeamEditPage() {
                   value={contactEmail}
                   onChange={(e) => setContactEmail(e.target.value)}
                   className="sh-input"
-                  disabled={saving}
+                  disabled={saving || deleting}
                   placeholder="example@mail.com"
                 />
               </label>
@@ -608,7 +752,7 @@ export default function TeamEditPage() {
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
                   className="sh-input"
-                  disabled={saving}
+                  disabled={saving || deleting}
                   placeholder="09012345678"
                 />
               </label>
@@ -619,7 +763,7 @@ export default function TeamEditPage() {
                   value={contactLineId}
                   onChange={(e) => setContactLineId(e.target.value)}
                   className="sh-input"
-                  disabled={saving}
+                  disabled={saving || deleting}
                   placeholder="line_id"
                 />
               </label>
@@ -639,7 +783,7 @@ export default function TeamEditPage() {
               onChange={(e) => setNote(e.target.value)}
               className="sh-textarea"
               style={{ minHeight: 100 }}
-              disabled={saving}
+              disabled={saving || deleting}
               placeholder="対戦希望条件、活動方針など"
             />
           </label>
@@ -652,6 +796,16 @@ export default function TeamEditPage() {
               disabled={!canSave}
             >
               {saving ? "保存中..." : "更新"}
+            </button>
+
+            <button
+              type="button"
+              className="sh-btn"
+              onClick={deleteTeam}
+              disabled={saving || deleting}
+              style={deleteBtn}
+            >
+              {deleting ? "削除中…" : "このチームを削除"}
             </button>
 
             <Link href="/mypage" className="sh-btn sh-btn--ghost">
@@ -777,6 +931,12 @@ const actionRow: React.CSSProperties = {
   display: "flex",
   gap: 10,
   flexWrap: "wrap",
+};
+
+const deleteBtn: React.CSSProperties = {
+  borderColor: "#fecaca",
+  color: "#991b1b",
+  background: "#fff",
 };
 
 const toastBox: React.CSSProperties = {
