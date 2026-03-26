@@ -16,19 +16,12 @@ type ProfileRow = {
   notify_line: boolean | null;
 };
 
-type CategoryProfileRow = {
-  category: string;
-  strength_rank?: string | null;
-  member_count?: number | null;
-};
-
 type TeamRow = {
   id: string;
   owner_id: string | null;
   name: string;
   category: string | null;
   categories?: string[] | null;
-  category_profiles?: CategoryProfileRow[] | null;
   level: number | null;
   strength_rank?: string | null;
   area: string | null;
@@ -36,7 +29,7 @@ type TeamRow = {
   city?: string | null;
   town?: string | null;
   has_ground?: boolean | null;
-  member_count?: number | null;
+  category_meta?: Record<string, { strength_rank?: string | null; member_count?: number | null }> | null;
   uniform_main?: string | null;
   uniform_sub?: string | null;
   uniform_gk?: string | null;
@@ -44,6 +37,19 @@ type TeamRow = {
 };
 
 type Toast = { type: "success" | "error" | "info"; text: string };
+
+function isMissingColumnError(err: any) {
+  const msg = String(err?.message ?? "");
+  return (
+    msg.includes("does not exist") ||
+    msg.includes("Could not find") ||
+    msg.includes("schema cache") ||
+    (msg.includes("column") &&
+      (msg.includes("uniform_gk") ||
+        msg.includes("category_meta") ||
+        msg.includes("categories")))
+  );
+}
 
 function rankLabel(level?: number | null) {
   const n = Number(level ?? 0);
@@ -58,9 +64,7 @@ function areaText(team?: TeamRow | null) {
   if (!team) return "未設定";
   const area = (team.area ?? "").trim();
   if (area) return area;
-  const text = `${team.prefecture ?? ""} ${team.city ?? ""}${
-    team.town ? "・" + team.town : ""
-  }`.trim();
+  const text = `${team.prefecture ?? ""} ${team.city ?? ""}${team.town ? "・" + team.town : ""}`.trim();
   return text || "未設定";
 }
 
@@ -75,29 +79,10 @@ function categoryText(team?: TeamRow | null) {
   return categoryLabel(team.category) || team.category || "未設定";
 }
 
-function normalizedCategoryProfiles(team: TeamRow): CategoryProfileRow[] {
-  if (Array.isArray(team.category_profiles) && team.category_profiles.length > 0) {
-    return team.category_profiles.map((p) => ({
-      category: p.category,
-      strength_rank: p.strength_rank ?? null,
-      member_count: p.member_count ?? null,
-    }));
-  }
+function categoryMetaEntries(team?: TeamRow | null) {
+  if (!team?.category_meta || typeof team.category_meta !== "object") return [];
 
-  const categories =
-    Array.isArray(team.categories) && team.categories.length > 0
-      ? team.categories
-      : team.category
-      ? [team.category]
-      : [];
-
-  if (categories.length === 0) return [];
-
-  return categories.map((category, index) => ({
-    category,
-    strength_rank: team.strength_rank || rankLabel(team.level),
-    member_count: index === 0 ? team.member_count ?? null : null,
-  }));
+  return Object.entries(team.category_meta).filter(([key]) => !!key);
 }
 
 export default function MyPage() {
@@ -161,23 +146,45 @@ export default function MyPage() {
 
     setProfile((profileRow as ProfileRow | null) ?? null);
 
-    const { data: myTeamsRows, error: teamsErr } = await supabase
+    const primaryRes = await supabase
       .from("teams")
       .select(
-        "id,owner_id,name,category,categories,category_profiles,level,strength_rank,area,prefecture,city,town,has_ground,member_count,uniform_main,uniform_sub,uniform_gk,note"
+        "id,owner_id,name,category,categories,level,strength_rank,area,prefecture,city,town,has_ground,category_meta,uniform_main,uniform_sub,uniform_gk,note"
       )
       .eq("owner_id", user.id)
       .order("updated_at", { ascending: false });
 
-    if (teamsErr) {
-      console.error(teamsErr);
-      setToast({ type: "error", text: `チーム読込失敗: ${teamsErr.message}` });
+    if (primaryRes.error && isMissingColumnError(primaryRes.error)) {
+      const fallbackRes = await supabase
+        .from("teams")
+        .select(
+          "id,owner_id,name,category,categories,level,strength_rank,area,prefecture,city,town,has_ground,uniform_main,uniform_sub,note"
+        )
+        .eq("owner_id", user.id)
+        .order("updated_at", { ascending: false });
+
+      if (fallbackRes.error) {
+        console.error(fallbackRes.error);
+        setToast({ type: "error", text: `チーム読込失敗: ${fallbackRes.error.message}` });
+        setTeams([]);
+        setLoading(false);
+        return;
+      }
+
+      setTeams(((fallbackRes.data ?? []) as TeamRow[]) || []);
+      setLoading(false);
+      return;
+    }
+
+    if (primaryRes.error) {
+      console.error(primaryRes.error);
+      setToast({ type: "error", text: `チーム読込失敗: ${primaryRes.error.message}` });
       setTeams([]);
       setLoading(false);
       return;
     }
 
-    setTeams(((myTeamsRows ?? []) as TeamRow[]) || []);
+    setTeams(((primaryRes.data ?? []) as TeamRow[]) || []);
     setLoading(false);
   }
 
@@ -278,71 +285,72 @@ export default function MyPage() {
           <div style={{ color: "#666" }}>まだチーム登録がありません。</div>
         ) : (
           <div style={{ display: "grid", gap: 12 }}>
-            {teams.map((team) => {
-              const profiles = normalizedCategoryProfiles(team);
-
-              return (
-                <div key={team.id} style={card}>
-                  <div style={cardHead}>
-                    <div>
-                      <div style={{ fontWeight: 900, fontSize: 18 }}>{team.name}</div>
-                      <div style={subText}>{categoryText(team)}</div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <Link href={`/teams/${team.id}`} className="sh-btn">
-                        詳細
-                      </Link>
-                      <Link href={`/teams/${team.id}/edit`} className="sh-btn sh-btn--primary">
-                        編集
-                      </Link>
-                    </div>
+            {teams.map((team) => (
+              <div key={team.id} style={card}>
+                <div style={cardHead}>
+                  <div>
+                    <div style={{ fontWeight: 900, fontSize: 18 }}>{team.name}</div>
+                    <div style={subText}>{categoryText(team)}</div>
                   </div>
 
-                  <div style={{ color: "#555", marginTop: 10, lineHeight: 1.8 }}>
-                    エリア : {areaText(team)}
-                    <br />
-                    グラウンド提供 : {team.has_ground ? "あり" : "なし"}
-                    <br />
-                    ユニフォーム : {team.uniform_main ?? "不明"} / {team.uniform_sub ?? "不明"} / GK:{" "}
-                    {team.uniform_gk ?? "不明"}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <Link href={`/teams/${team.id}`} className="sh-btn">
+                      詳細
+                    </Link>
+                    <Link href={`/teams/${team.id}/edit`} className="sh-btn sh-btn--primary">
+                      編集
+                    </Link>
                   </div>
+                </div>
 
-                  {profiles.length > 0 ? (
-                    <div style={profileBox}>
-                      <div style={profileTitle}>カテゴリごとの設定</div>
+                <div style={{ color: "#555", marginTop: 10, lineHeight: 1.8 }}>
+                  エリア : {areaText(team)}
+                  <br />
+                  カテゴリ : {categoryText(team)}
+                  <br />
+                  グラウンド提供 : {team.has_ground ? "あり" : "なし"}
+                  <br />
+                  ユニフォーム : {team.uniform_main ?? "不明"} / {team.uniform_sub ?? "不明"} / GK:{" "}
+                  {team.uniform_gk ?? "不明"}
+                </div>
 
-                      <div style={{ display: "grid", gap: 8 }}>
-                        {profiles.map((p) => (
-                          <div key={p.category} style={profileRow}>
-                            <div style={profileCategory}>
-                              {categoryLabel(p.category) || p.category}
-                            </div>
-                            <div style={profileMeta}>
-                              強さ：{p.strength_rank || "未設定"} / 人数：
-                              {p.member_count != null ? p.member_count : "未設定"}
-                            </div>
+                {categoryMetaEntries(team).length > 0 ? (
+                  <div style={metaBox}>
+                    <div style={noteTitle}>カテゴリ別設定</div>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {categoryMetaEntries(team).map(([cat, meta]) => (
+                        <div key={cat} style={metaRow}>
+                          <div style={{ fontWeight: 800 }}>
+                            {categoryLabel(cat) || cat}
                           </div>
-                        ))}
-                      </div>
+                          <div style={{ color: "#555", lineHeight: 1.7 }}>
+                            強さ : {meta?.strength_rank || "未設定"}
+                            <br />
+                            所属人数 : {meta?.member_count ?? "未設定"}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ) : (
-                    <div style={{ color: "#555", marginTop: 10, lineHeight: 1.8 }}>
+                  </div>
+                ) : (
+                  <div style={metaBox}>
+                    <div style={noteTitle}>カテゴリ別設定</div>
+                    <div style={{ color: "#555", lineHeight: 1.7 }}>
                       強さ : {team.strength_rank || rankLabel(team.level)}
                       <br />
-                      所属人数 : {team.member_count ?? "未設定"}
+                      所属人数 : 未設定
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {team.note?.trim() ? (
-                    <div style={noteBox}>
-                      <div style={noteTitle}>メモ</div>
-                      <div style={noteBody}>{team.note}</div>
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
+                {team.note?.trim() ? (
+                  <div style={noteBox}>
+                    <div style={noteTitle}>メモ</div>
+                    <div style={noteBody}>{team.note}</div>
+                  </div>
+                ) : null}
+              </div>
+            ))}
           </div>
         )}
       </section>
@@ -362,7 +370,7 @@ export default function MyPage() {
 
         <div style={{ color: "#555", lineHeight: 1.8 }}>
           登録済みグラウンドを管理できます。<br />
-          募集枠作成時に登録済みグラウンドから選択しやすくなります。
+          今後、募集枠作成時に登録済みグラウンドから選択しやすくなります。
         </div>
       </section>
     </main>
@@ -415,7 +423,7 @@ const subText: React.CSSProperties = {
   lineHeight: 1.6,
 };
 
-const profileBox: React.CSSProperties = {
+const metaBox: React.CSSProperties = {
   marginTop: 10,
   padding: 10,
   borderRadius: 10,
@@ -423,30 +431,11 @@ const profileBox: React.CSSProperties = {
   background: "#fff",
 };
 
-const profileTitle: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 800,
-  color: "#5b6d61",
-  marginBottom: 8,
-};
-
-const profileRow: React.CSSProperties = {
-  padding: "8px 10px",
+const metaRow: React.CSSProperties = {
+  padding: 8,
   borderRadius: 8,
   background: "#fafafa",
-  border: "1px solid #edf1ee",
-};
-
-const profileCategory: React.CSSProperties = {
-  fontWeight: 800,
-  color: "#1f5d30",
-};
-
-const profileMeta: React.CSSProperties = {
-  marginTop: 4,
-  fontSize: 13,
-  color: "#4b5563",
-  lineHeight: 1.6,
+  border: "1px solid #f0f0f0",
 };
 
 const noteBox: React.CSSProperties = {
