@@ -43,7 +43,8 @@ function isMissingColumnError(err: any) {
       (msg.includes("contact_") ||
         msg.includes("address_detail") ||
         msg.includes("strength_rank") ||
-        msg.includes("bike_parking_capacity")))
+        msg.includes("bike_parking_capacity") ||
+        msg.includes("uniform_gk")))
   );
 }
 
@@ -73,6 +74,7 @@ export default function TeamNewPage() {
 
   const [uniformMain, setUniformMain] = useState("");
   const [uniformSub, setUniformSub] = useState("");
+  const [uniformGk, setUniformGk] = useState("");
 
   const [prefecture, setPrefecture] = useState("東京都");
   const [city, setCity] = useState("");
@@ -87,7 +89,10 @@ export default function TeamNewPage() {
   const [contactLineId, setContactLineId] = useState("");
 
   const categoryOptions = useMemo(
-    () => normalizeCategoryOptions(CATEGORY_OPTIONS as Array<string | { value: string; label: string }>),
+    () =>
+      normalizeCategoryOptions(
+        CATEGORY_OPTIONS as Array<string | { value: string; label: string }>
+      ),
     []
   );
 
@@ -104,7 +109,16 @@ export default function TeamNewPage() {
       !saving &&
       !loadingDefaults
     );
-  }, [name, prefecture, city, category, bikeParking, bikeParkingCapacity, saving, loadingDefaults]);
+  }, [
+    name,
+    prefecture,
+    city,
+    category,
+    bikeParking,
+    bikeParkingCapacity,
+    saving,
+    loadingDefaults,
+  ]);
 
   useEffect(() => {
     if (!toast) return;
@@ -125,7 +139,9 @@ export default function TeamNewPage() {
 
         let res = await supabase
           .from("teams")
-          .select("contact_email,contact_phone,contact_line_id,uniform_main,uniform_sub")
+          .select(
+            "contact_email,contact_phone,contact_line_id,uniform_main,uniform_sub,uniform_gk"
+          )
           .eq("owner_id", auth.user.id)
           .order("updated_at", { ascending: false })
           .limit(1)
@@ -149,6 +165,7 @@ export default function TeamNewPage() {
           setContactLineId(row.contact_line_id ?? "");
           setUniformMain(row.uniform_main ?? "");
           setUniformSub(row.uniform_sub ?? "");
+          setUniformGk(row.uniform_gk ?? "");
         }
       } catch (e) {
         console.error("load defaults error:", e);
@@ -191,7 +208,8 @@ export default function TeamNewPage() {
 
       const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
       const addrDetail = addressDetail.trim();
-      const memberCountNum = memberCount.trim() === "" ? 0 : Math.max(0, Number(memberCount) || 0);
+      const memberCountNum =
+        memberCount.trim() === "" ? 0 : Math.max(0, Number(memberCount) || 0);
 
       const basePayload: any = {
         owner_id: auth.user.id,
@@ -202,9 +220,11 @@ export default function TeamNewPage() {
         strength_rank: strengthRank,
         has_ground: hasGround,
         bike_parking: bikeParking,
-        bike_parking_capacity: bikeParking === "あり" ? bikeParkingCapacity || "不明" : null,
+        bike_parking_capacity:
+          bikeParking === "あり" ? bikeParkingCapacity || "不明" : null,
         uniform_main: uniformMain.trim() || "不明",
         uniform_sub: uniformSub.trim() || "不明",
+        uniform_gk: uniformGk.trim() || "不明",
         roster_by_grade: { TOTAL: memberCountNum },
         note: note || "",
         prefecture,
@@ -221,10 +241,17 @@ export default function TeamNewPage() {
         contact_line_id: contactLineId.trim() || null,
       };
 
-      let res = await supabase.from("teams").insert(withContact).select("id").single();
+      let res = await supabase
+        .from("teams")
+        .insert(withContact)
+        .select("id")
+        .single();
 
       if (res.error && isMissingColumnError(res.error)) {
-        console.warn("missing columns. retry without optional fields:", res.error.message);
+        console.warn(
+          "missing columns. retry without optional fields:",
+          res.error.message
+        );
 
         const fallbackPayload: any = {
           ...basePayload,
@@ -233,8 +260,13 @@ export default function TeamNewPage() {
         delete fallbackPayload.address_detail;
         delete fallbackPayload.strength_rank;
         delete fallbackPayload.bike_parking_capacity;
+        delete fallbackPayload.uniform_gk;
 
-        res = await supabase.from("teams").insert(fallbackPayload).select("id").single();
+        res = await supabase
+          .from("teams")
+          .insert(fallbackPayload)
+          .select("id")
+          .single();
       }
 
       if (res.error) {
@@ -245,7 +277,6 @@ export default function TeamNewPage() {
       }
 
       setToast({ type: "success", text: "✅ 登録しました" });
-      const newId = (res.data as any)?.id;
 
       router.push(`/mypage`);
       resetForm();
@@ -297,7 +328,9 @@ export default function TeamNewPage() {
           }}
         >
           <div>
-            <h1 style={{ margin: 0, fontSize: 30, fontWeight: 900 }}>チーム登録</h1>
+            <h1 style={{ margin: 0, fontSize: 30, fontWeight: 900 }}>
+              チーム登録
+            </h1>
             <p style={heroText}>
               チーム情報を登録して、練習試合マッチングを始めましょう。
             </p>
@@ -317,8 +350,8 @@ export default function TeamNewPage() {
             <div style={noticeTitle}>登録について</div>
             <div style={helperText}>
               ※ 1アカウントで複数チームを登録できます。<br />
-              例：U12、U10、女子チームなどを別々に登録可能です。<br />
-              ※ 1チームにつき1カテゴリで登録してください。
+              例：キッズ、U12、U10、女子チームなどを別々に登録可能です。<br />
+              ※ 現在は1チームにつき1カテゴリで登録してください。
             </div>
           </div>
 
@@ -401,7 +434,7 @@ export default function TeamNewPage() {
             disabled={saving}
           />
 
-          <div style={twoCols}>
+          <div style={threeCols}>
             <label style={label}>
               <span style={labelTitle}>ユニフォーム（メイン）</span>
               <input
@@ -421,6 +454,17 @@ export default function TeamNewPage() {
                 className="sh-input"
                 disabled={saving}
                 placeholder="例：白"
+              />
+            </label>
+
+            <label style={label}>
+              <span style={labelTitle}>ユニフォーム（GK）</span>
+              <input
+                value={uniformGk}
+                onChange={(e) => setUniformGk(e.target.value)}
+                className="sh-input"
+                disabled={saving}
+                placeholder="例：黄"
               />
             </label>
           </div>
@@ -471,7 +515,8 @@ export default function TeamNewPage() {
 
             <div style={{ marginTop: 8, ...helperText }}>
               ※ 以前登録したチームの連絡先がある場合、自動で初期入力されます。<br />
-              ※ DBに contact_email / contact_phone / contact_line_id が無い環境でも保存できるようにしています（自動フォールバック）。
+              ※ DBに contact_email / contact_phone / contact_line_id が無い環境でも保存できるようにしています。<br />
+              ※ DBに uniform_gk が無い環境でも保存できるように自動フォールバックしています。
             </div>
           </div>
 
@@ -491,10 +536,12 @@ export default function TeamNewPage() {
             <div style={blockTitle}>Q&A</div>
 
             <div style={faqItem}>
-              <div style={faqQ}>Q. 1つのアカウントで複数チームを登録できますか？</div>
+              <div style={faqQ}>
+                Q. 1つのアカウントで複数チームを登録できますか？
+              </div>
               <div style={faqA}>
                 A. はい、登録できます。カテゴリごとに別チームとして登録してください。
-                例：U12、U10、女子チームなど。
+                例：キッズ、U12、U10、女子チームなど。
               </div>
             </div>
 
@@ -635,10 +682,10 @@ const checkLabel: React.CSSProperties = {
   fontWeight: 700,
 };
 
-const twoCols: React.CSSProperties = {
+const threeCols: React.CSSProperties = {
   display: "grid",
   gap: 12,
-  gridTemplateColumns: "1fr 1fr",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
 };
 
 const actionRow: React.CSSProperties = {

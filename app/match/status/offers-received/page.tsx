@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
 import AppTabNav from "@/app/components/AppTabNav";
 import AppHero from "@/app/components/AppHero";
 import PageBackNav from "@/app/components/PageBackNav";
+import { categoryLabel } from "@/app/lib/categories";
 
 type Team = {
   id: string;
@@ -16,11 +17,22 @@ type Team = {
 type Offer = {
   id: string;
   slot_id: string | null;
+  from_user_id?: string | null;
   from_team_id: string;
   to_team_id: string;
   status: "pending" | "accepted" | "rejected" | "cancelled";
   message: string | null;
   created_at: string;
+};
+
+type SlotMini = {
+  id: string;
+  date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  area: string | null;
+  area_text?: string | null;
+  category: string | null;
 };
 
 export default function OfferReceivedPage() {
@@ -30,6 +42,7 @@ export default function OfferReceivedPage() {
   const [myTeams, setMyTeams] = useState<Team[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [teamMap, setTeamMap] = useState<Map<string, Team>>(new Map());
+  const [slotMap, setSlotMap] = useState<Map<string, SlotMini>>(new Map());
 
   const [openId, setOpenId] = useState("");
   const [updatingId, setUpdatingId] = useState("");
@@ -41,83 +54,146 @@ export default function OfferReceivedPage() {
     })();
   }, []);
 
+  const loadPage = useCallback(async () => {
+    if (!meId) return;
+
+    setLoading(true);
+
+    const { data: teams, error: teamsErr } = await supabase
+      .from("teams")
+      .select("id,name,category")
+      .eq("owner_id", meId);
+
+    if (teamsErr) {
+      console.error(teamsErr);
+      setMyTeams([]);
+      setOffers([]);
+      setTeamMap(new Map());
+      setSlotMap(new Map());
+      setLoading(false);
+      return;
+    }
+
+    const myTeamRows = (teams ?? []) as Team[];
+    setMyTeams(myTeamRows);
+
+    const myTeamIds = myTeamRows.map((t) => t.id).filter(Boolean);
+
+    if (myTeamIds.length === 0) {
+      setOffers([]);
+      setTeamMap(new Map());
+      setSlotMap(new Map());
+      setLoading(false);
+      return;
+    }
+
+    const { data: offerRows, error: offersErr } = await supabase
+      .from("match_offers")
+      .select("id,slot_id,from_user_id,from_team_id,to_team_id,status,message,created_at")
+      .in("to_team_id", myTeamIds)
+      .order("created_at", { ascending: false });
+
+    if (offersErr) {
+      console.error(offersErr);
+      setOffers([]);
+      setTeamMap(new Map());
+      setSlotMap(new Map());
+      setLoading(false);
+      return;
+    }
+
+    const offerData = (offerRows ?? []) as Offer[];
+    setOffers(offerData);
+
+    const teamIds = Array.from(
+      new Set(
+        [
+          ...offerData.map((o) => o.from_team_id),
+          ...offerData.map((o) => o.to_team_id),
+        ].filter(Boolean)
+      )
+    );
+
+    if (teamIds.length > 0) {
+      const { data: teamRows, error: teamErr } = await supabase
+        .from("teams")
+        .select("id,name,category")
+        .in("id", teamIds);
+
+      if (teamErr) {
+        console.error(teamErr);
+        setTeamMap(new Map());
+      } else {
+        const map = new Map<string, Team>();
+        ((teamRows ?? []) as Team[]).forEach((t) => map.set(t.id, t));
+        setTeamMap(map);
+      }
+    } else {
+      setTeamMap(new Map());
+    }
+
+    const slotIds = Array.from(
+      new Set(offerData.map((o) => o.slot_id).filter(Boolean) as string[])
+    );
+
+    if (slotIds.length > 0) {
+      const { data: slotRows, error: slotErr } = await supabase
+        .from("match_slots")
+        .select("id,date,start_time,end_time,area,area_text,category")
+        .in("id", slotIds);
+
+      if (slotErr) {
+        console.error(slotErr);
+        setSlotMap(new Map());
+      } else {
+        const map = new Map<string, SlotMini>();
+        ((slotRows ?? []) as SlotMini[]).forEach((s) => map.set(s.id, s));
+        setSlotMap(map);
+      }
+    } else {
+      setSlotMap(new Map());
+    }
+
+    setLoading(false);
+  }, [meId]);
+
+  useEffect(() => {
+    if (!meId) return;
+    loadPage();
+  }, [meId, loadPage]);
+
   useEffect(() => {
     if (!meId) return;
 
-    (async () => {
-      setLoading(true);
-
-      const { data: teams, error: teamsErr } = await supabase
-        .from("teams")
-        .select("id,name,category")
-        .eq("owner_id", meId);
-
-      if (teamsErr) {
-        console.error(teamsErr);
-        setMyTeams([]);
-        setOffers([]);
-        setTeamMap(new Map());
-        setLoading(false);
-        return;
-      }
-
-      const myTeamRows = (teams ?? []) as Team[];
-      setMyTeams(myTeamRows);
-
-      const myTeamIds = myTeamRows.map((t) => t.id).filter(Boolean);
-
-      if (myTeamIds.length === 0) {
-        setOffers([]);
-        setTeamMap(new Map());
-        setLoading(false);
-        return;
-      }
-
-      const { data: offerRows, error: offersErr } = await supabase
-        .from("match_offers")
-        .select("*")
-        .in("to_team_id", myTeamIds)
-        .order("created_at", { ascending: false });
-
-      if (offersErr) {
-        console.error(offersErr);
-        setOffers([]);
-        setTeamMap(new Map());
-        setLoading(false);
-        return;
-      }
-
-      const offerData = (offerRows ?? []) as Offer[];
-      setOffers(offerData);
-
-      const teamIds = Array.from(
-        new Set([
-          ...offerData.map((o) => o.from_team_id),
-          ...offerData.map((o) => o.to_team_id),
-        ].filter(Boolean))
-      );
-
-      if (teamIds.length > 0) {
-        const { data: teamRows, error: teamErr } = await supabase
-          .from("teams")
-          .select("id,name,category")
-          .in("id", teamIds);
-
-        if (teamErr) {
-          console.error(teamErr);
-          setTeamMap(new Map());
-        } else {
-          const map = new Map<string, Team>();
-          ((teamRows ?? []) as Team[]).forEach((t) => map.set(t.id, t));
-          setTeamMap(map);
+    const channel = supabase
+      .channel(`offers-received:${meId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "match_offers" },
+        () => {
+          loadPage();
         }
-      } else {
-        setTeamMap(new Map());
-      }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "match_slots" },
+        () => {
+          loadPage();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "teams" },
+        () => {
+          loadPage();
+        }
+      )
+      .subscribe();
 
-      setLoading(false);
-    })();
-  }, [meId]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [meId, loadPage]);
 
   const counts = useMemo(() => {
     return {
@@ -135,7 +211,7 @@ export default function OfferReceivedPage() {
     const confirmText =
       nextStatus === "accepted"
         ? "この招待を承認しますか？"
-        : "この招待を見送りしますか？";
+        : "この招待を見送りますか？";
 
     if (!window.confirm(confirmText)) return;
 
@@ -160,6 +236,7 @@ export default function OfferReceivedPage() {
     setOffers((prev) =>
       prev.map((o) => (o.id === offerId ? { ...o, status: nextStatus } : o))
     );
+
     setUpdatingId("");
   };
 
@@ -195,6 +272,7 @@ export default function OfferReceivedPage() {
         {offers.map((o) => {
           const fromTeam = teamMap.get(o.from_team_id);
           const toTeam = teamMap.get(o.to_team_id);
+          const slot = o.slot_id ? slotMap.get(o.slot_id) : null;
           const expanded = openId === o.id;
           const isPending = o.status === "pending";
           const busy = updatingId === o.id;
@@ -208,15 +286,32 @@ export default function OfferReceivedPage() {
                   </div>
                   <div style={subText}>
                     宛先：{toTeam?.name ?? "自チーム"}
+                    {fromTeam?.category
+                      ? ` / ${categoryLabel(fromTeam.category) || fromTeam.category}`
+                      : ""}
                   </div>
                 </div>
 
-                <span style={badge(o.status)}>
-                  {label(o.status)}
-                </span>
+                <span style={badge(o.status)}>{label(o.status)}</span>
               </div>
 
               <div style={meta}>受信日時：{fmt(o.created_at)}</div>
+
+              {slot ? (
+                <div style={slotBox}>
+                  <div style={slotTitle}>関連募集</div>
+                  <div style={slotText}>
+                    {slot.date || "日付未設定"}{" "}
+                    {slot.start_time ? String(slot.start_time).slice(0, 5) : ""}
+                    {slot.end_time ? ` - ${String(slot.end_time).slice(0, 5)}` : ""}
+                  </div>
+                  <div style={slotSub}>
+                    {slot.area_text ?? slot.area ?? "エリア未設定"}
+                    {" / "}
+                    {slot.category ?? "カテゴリ未設定"}
+                  </div>
+                </div>
+              ) : null}
 
               <div style={btnRow}>
                 <button
@@ -226,6 +321,10 @@ export default function OfferReceivedPage() {
                 >
                   {expanded ? "閉じる" : "詳細"}
                 </button>
+
+                <Link href={`/teams/${o.from_team_id}`} className="sh-btn">
+                  チーム詳細
+                </Link>
 
                 <Link href="/chat" className="sh-btn sh-btn--primary">
                   チャット
@@ -260,7 +359,9 @@ export default function OfferReceivedPage() {
                     <div style={detailLabel}>送信チーム</div>
                     <div style={detailValue}>
                       {fromTeam?.name ?? "相手チーム"}
-                      {fromTeam?.category ? `（${fromTeam.category}）` : ""}
+                      {fromTeam?.category
+                        ? `（${categoryLabel(fromTeam.category) || fromTeam.category}）`
+                        : ""}
                     </div>
                   </div>
 
@@ -268,7 +369,9 @@ export default function OfferReceivedPage() {
                     <div style={detailLabel}>受信チーム</div>
                     <div style={detailValue}>
                       {toTeam?.name ?? "自チーム"}
-                      {toTeam?.category ? `（${toTeam.category}）` : ""}
+                      {toTeam?.category
+                        ? `（${categoryLabel(toTeam.category) || toTeam.category}）`
+                        : ""}
                     </div>
                   </div>
 
@@ -282,7 +385,20 @@ export default function OfferReceivedPage() {
                     <div style={detailValue}>{fmt(o.created_at)}</div>
                   </div>
 
-                  {o.slot_id ? (
+                  {slot ? (
+                    <div style={detailBlock}>
+                      <div style={detailLabel}>関連募集</div>
+                      <div style={detailValue}>
+                        {slot.date || "日付未設定"}{" "}
+                        {slot.start_time ? String(slot.start_time).slice(0, 5) : ""}
+                        {slot.end_time ? ` - ${String(slot.end_time).slice(0, 5)}` : ""}
+                        <br />
+                        {slot.area_text ?? slot.area ?? "エリア未設定"}
+                        {" / "}
+                        {slot.category ?? "カテゴリ未設定"}
+                      </div>
+                    </div>
+                  ) : o.slot_id ? (
                     <div style={detailBlock}>
                       <div style={detailLabel}>関連募集ID</div>
                       <div style={detailValue}>{o.slot_id}</div>
@@ -413,12 +529,42 @@ const subText: React.CSSProperties = {
   marginTop: 4,
   fontSize: 12,
   color: "#666",
+  lineHeight: 1.6,
 };
 
 const meta: React.CSSProperties = {
   fontSize: 12,
   color: "#666",
   marginTop: 8,
+};
+
+const slotBox: React.CSSProperties = {
+  marginTop: 10,
+  padding: 10,
+  borderRadius: 12,
+  border: "1px solid #edf1ee",
+  background: "#fafcfb",
+};
+
+const slotTitle: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#5b6d61",
+};
+
+const slotText: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 14,
+  fontWeight: 800,
+  color: "#16391f",
+  lineHeight: 1.6,
+};
+
+const slotSub: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 13,
+  color: "#666",
+  lineHeight: 1.6,
 };
 
 const btnRow: React.CSSProperties = {
@@ -453,6 +599,7 @@ const detailValue: React.CSSProperties = {
   fontSize: 14,
   color: "#374151",
   lineHeight: 1.7,
+  whiteSpace: "pre-wrap",
 };
 
 const empty: React.CSSProperties = {

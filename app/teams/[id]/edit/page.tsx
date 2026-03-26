@@ -45,7 +45,8 @@ function isMissingColumnError(err: any) {
         msg.includes("address_detail") ||
         msg.includes("strength_rank") ||
         msg.includes("bike_parking_capacity") ||
-        msg.includes("member_count")))
+        msg.includes("member_count") ||
+        msg.includes("uniform_gk")))
   );
 }
 
@@ -77,6 +78,7 @@ export default function TeamEditPage() {
 
   const [uniformMain, setUniformMain] = useState("");
   const [uniformSub, setUniformSub] = useState("");
+  const [uniformGk, setUniformGk] = useState("");
 
   const [prefecture, setPrefecture] = useState("東京都");
   const [city, setCity] = useState("");
@@ -112,7 +114,16 @@ export default function TeamEditPage() {
       bikeOk &&
       !saving
     );
-  }, [teamId, name, prefecture, city, category, bikeParking, bikeParkingCapacity, saving]);
+  }, [
+    teamId,
+    name,
+    prefecture,
+    city,
+    category,
+    bikeParking,
+    bikeParkingCapacity,
+    saving,
+  ]);
 
   useEffect(() => {
     if (!toast) return;
@@ -137,7 +148,7 @@ export default function TeamEditPage() {
         let res = await supabase
           .from("teams")
           .select(
-            "id,owner_id,name,category,categories,level,strength_rank,has_ground,bike_parking,bike_parking_capacity,uniform_main,uniform_sub,prefecture,city,town,area,address_detail,member_count,note,contact_email,contact_phone,contact_line_id"
+            "id,owner_id,name,category,categories,level,strength_rank,has_ground,bike_parking,bike_parking_capacity,uniform_main,uniform_sub,uniform_gk,prefecture,city,town,area,address_detail,member_count,note,contact_email,contact_phone,contact_line_id"
           )
           .eq("id", teamId)
           .single();
@@ -183,13 +194,12 @@ export default function TeamEditPage() {
 
         setHasGround(!!data.has_ground);
 
-        setBikeParking(
-          data.bike_parking === "あり" ? "あり" : "なし"
-        );
+        setBikeParking(data.bike_parking === "あり" ? "あり" : "なし");
         setBikeParkingCapacity(data.bike_parking_capacity ?? "");
 
         setUniformMain(data.uniform_main ?? "");
         setUniformSub(data.uniform_sub ?? "");
+        setUniformGk(data.uniform_gk ?? "");
 
         setPrefecture(data.prefecture ?? "東京都");
         setCity(data.city ?? "");
@@ -198,10 +208,7 @@ export default function TeamEditPage() {
         setAddressDetail(data.address_detail ?? "");
 
         const roster = data.roster_by_grade ?? {};
-        const fallbackMemberCount =
-          data.member_count ??
-          roster.TOTAL ??
-          null;
+        const fallbackMemberCount = data.member_count ?? roster.TOTAL ?? null;
 
         setMemberCount(
           fallbackMemberCount == null ? "" : String(fallbackMemberCount)
@@ -245,6 +252,7 @@ export default function TeamEditPage() {
           bikeParking === "あり" ? bikeParkingCapacity || "不明" : null,
         uniform_main: uniformMain.trim() || "不明",
         uniform_sub: uniformSub.trim() || "不明",
+        uniform_gk: uniformGk.trim() || "不明",
         member_count: memberCountNum,
         note: note || "",
         prefecture,
@@ -264,7 +272,10 @@ export default function TeamEditPage() {
       let res = await supabase.from("teams").update(withContact).eq("id", teamId);
 
       if (res.error && isMissingColumnError(res.error)) {
-        console.warn("missing columns. retry without optional fields:", res.error.message);
+        console.warn(
+          "missing columns. retry without optional fields:",
+          res.error.message
+        );
 
         const fallbackPayload: any = {
           ...basePayload,
@@ -274,6 +285,7 @@ export default function TeamEditPage() {
         delete fallbackPayload.strength_rank;
         delete fallbackPayload.bike_parking_capacity;
         delete fallbackPayload.member_count;
+        delete fallbackPayload.uniform_gk;
 
         res = await supabase.from("teams").update(fallbackPayload).eq("id", teamId);
       }
@@ -297,7 +309,11 @@ export default function TeamEditPage() {
   };
 
   if (loading) {
-    return <main className="sh-page-wrap" style={{ padding: 24 }}>読み込み中…</main>;
+    return (
+      <main className="sh-page-wrap" style={{ padding: 24 }}>
+        読み込み中…
+      </main>
+    );
   }
 
   return (
@@ -340,10 +356,10 @@ export default function TeamEditPage() {
           }}
         >
           <div>
-            <h1 style={{ margin: 0, fontSize: 30, fontWeight: 900 }}>チーム編集</h1>
-            <p style={heroText}>
-              登録済みのチーム情報を更新できます。
-            </p>
+            <h1 style={{ margin: 0, fontSize: 30, fontWeight: 900 }}>
+              チーム編集
+            </h1>
+            <p style={heroText}>登録済みのチーム情報を更新できます。</p>
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -360,7 +376,8 @@ export default function TeamEditPage() {
             <div style={noticeTitle}>編集について</div>
             <div style={helperText}>
               ※ 1アカウントで複数チームを登録できます。<br />
-              ※ 1チームにつき1カテゴリで管理してください。
+              ※ 現在は1チームにつき1カテゴリで管理してください。<br />
+              ※ キッズカテゴリにも対応しています。
             </div>
           </div>
 
@@ -442,7 +459,7 @@ export default function TeamEditPage() {
             disabled={saving}
           />
 
-          <div style={twoCols}>
+          <div style={threeCols}>
             <label style={label}>
               <span style={labelTitle}>ユニフォーム（メイン）</span>
               <input
@@ -462,6 +479,17 @@ export default function TeamEditPage() {
                 className="sh-input"
                 disabled={saving}
                 placeholder="例：白"
+              />
+            </label>
+
+            <label style={label}>
+              <span style={labelTitle}>ユニフォーム（GK）</span>
+              <input
+                value={uniformGk}
+                onChange={(e) => setUniformGk(e.target.value)}
+                className="sh-input"
+                disabled={saving}
+                placeholder="例：黄"
               />
             </label>
           </div>
@@ -512,7 +540,8 @@ export default function TeamEditPage() {
 
             <div style={{ marginTop: 8, ...helperText }}>
               ※ 連絡先はこのチームごとに編集できます。<br />
-              ※ DBに contact_email / contact_phone / contact_line_id が無い環境でも保存できるようにしています。
+              ※ DBに contact_email / contact_phone / contact_line_id が無い環境でも保存できるようにしています。<br />
+              ※ DBに uniform_gk が無い環境でも保存できるように自動フォールバックしています。
             </div>
           </div>
 
@@ -632,10 +661,10 @@ const checkLabel: React.CSSProperties = {
   fontWeight: 700,
 };
 
-const twoCols: React.CSSProperties = {
+const threeCols: React.CSSProperties = {
   display: "grid",
   gap: 12,
-  gridTemplateColumns: "1fr 1fr",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
 };
 
 const actionRow: React.CSSProperties = {

@@ -2,9 +2,10 @@
 
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
+import { categoryLabel, categoryLabels } from "@/app/lib/categories";
 
 type ProfileRow = {
   user_id: string;
@@ -31,6 +32,9 @@ type TeamRow = {
   bike_parking?: string | null;
   bike_parking_capacity?: string | null;
   member_count?: number | null;
+  uniform_main?: string | null;
+  uniform_sub?: string | null;
+  uniform_gk?: string | null;
   note?: string | null;
 };
 
@@ -49,8 +53,21 @@ function areaText(team?: TeamRow | null) {
   if (!team) return "未設定";
   const area = (team.area ?? "").trim();
   if (area) return area;
-  const text = `${team.prefecture ?? ""} ${team.city ?? ""}${team.town ? "・" + team.town : ""}`.trim();
+  const text = `${team.prefecture ?? ""} ${team.city ?? ""}${
+    team.town ? "・" + team.town : ""
+  }`.trim();
   return text || "未設定";
+}
+
+function categoryText(team?: TeamRow | null) {
+  if (!team) return "未設定";
+
+  if (Array.isArray(team.categories) && team.categories.length > 0) {
+    const labels = categoryLabels(team.categories);
+    return labels.length > 0 ? labels.join(" / ") : team.categories.join(" / ");
+  }
+
+  return categoryLabel(team.category) || team.category || "未設定";
 }
 
 export default function MyPage() {
@@ -60,7 +77,7 @@ export default function MyPage() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
 
-  const mainTeam = teams[0] ?? null;
+  const mainTeam = useMemo(() => teams[0] ?? null, [teams]);
 
   useEffect(() => {
     load();
@@ -117,7 +134,7 @@ export default function MyPage() {
     const { data: myTeamsRows, error: teamsErr } = await supabase
       .from("teams")
       .select(
-        "id,owner_id,name,category,categories,level,strength_rank,area,prefecture,city,town,has_ground,bike_parking,bike_parking_capacity,member_count,note"
+        "id,owner_id,name,category,categories,level,strength_rank,area,prefecture,city,town,has_ground,bike_parking,bike_parking_capacity,member_count,uniform_main,uniform_sub,uniform_gk,note"
       )
       .eq("owner_id", user.id)
       .order("updated_at", { ascending: false });
@@ -168,7 +185,7 @@ export default function MyPage() {
       <AppHero
         icon="⚙️"
         title="マイページ"
-        desc="アカウント情報とチーム情報を確認・編集できます。"
+        desc="アカウント情報、チーム情報、グラウンド情報を確認・編集できます。"
       />
 
       {!me ? (
@@ -205,10 +222,8 @@ export default function MyPage() {
           </div>
 
           <div style={infoRow}>
-            <b>通知設定</b>
-            <span>
-              メール: {profile?.notify_email ? "ON" : "OFF"} / LINE: {profile?.notify_line ? "ON" : "OFF"}
-            </span>
+            <b>通知</b>
+            <span>アプリ内通知を使用</span>
           </div>
         </div>
       </section>
@@ -235,21 +250,71 @@ export default function MyPage() {
           <div style={{ display: "grid", gap: 12 }}>
             {teams.map((team) => (
               <div key={team.id} style={card}>
-                <div style={{ fontWeight: 900, fontSize: 18 }}>{team.name}</div>
+                <div style={cardHead}>
+                  <div>
+                    <div style={{ fontWeight: 900, fontSize: 18 }}>{team.name}</div>
+                    <div style={subText}>
+                      {categoryText(team)} / {team.strength_rank || rankLabel(team.level)}
+                    </div>
+                  </div>
 
-                <div style={{ color: "#555", marginTop: 8, lineHeight: 1.8 }}>
-                  カテゴリ : {team.category || "未設定"}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <Link href={`/teams/${team.id}`} className="sh-btn">
+                      詳細
+                    </Link>
+                    <Link href={`/teams/${team.id}/edit`} className="sh-btn sh-btn--primary">
+                      編集
+                    </Link>
+                  </div>
+                </div>
+
+                <div style={{ color: "#555", marginTop: 10, lineHeight: 1.8 }}>
+                  エリア : {areaText(team)}
+                  <br />
+                  カテゴリ : {categoryText(team)}
                   <br />
                   強さ : {team.strength_rank || rankLabel(team.level)}
                   <br />
-                  エリア : {areaText(team)}
+                  グラウンド : {team.has_ground ? "あり" : "なし"}
                   <br />
-                  グラウンド : {team.has_ground ? "あり" : "なし"} / 駐輪場 : {team.bike_parking ?? "不明"}
+                  駐輪場 : {team.bike_parking ?? "不明"}
+                  {team.bike_parking_capacity ? `（${team.bike_parking_capacity}）` : ""}
+                  <br />
+                  所属人数 : {team.member_count ?? "未設定"}
+                  <br />
+                  ユニフォーム : {team.uniform_main ?? "不明"} / {team.uniform_sub ?? "不明"} / GK:{" "}
+                  {team.uniform_gk ?? "不明"}
                 </div>
+
+                {team.note?.trim() ? (
+                  <div style={noteBox}>
+                    <div style={noteTitle}>メモ</div>
+                    <div style={noteBody}>{team.note}</div>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
         )}
+      </section>
+
+      <section style={box}>
+        <div style={sectionHead}>
+          <h2 style={sectionTitle}>グラウンド</h2>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Link href="/venues/new" className="sh-btn">
+              ＋グラウンド登録
+            </Link>
+            <Link href="/venues" className="sh-btn sh-btn--primary">
+              グラウンド管理
+            </Link>
+          </div>
+        </div>
+
+        <div style={{ color: "#555", lineHeight: 1.8 }}>
+          登録済みグラウンドを管理できます。<br />
+          今後、募集枠作成時に登録済みグラウンドから選択しやすくなります。
+        </div>
       </section>
     </main>
   );
@@ -284,6 +349,43 @@ const card: React.CSSProperties = {
   borderRadius: 12,
   marginTop: 10,
   background: "#fafafa",
+};
+
+const cardHead: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const subText: React.CSSProperties = {
+  marginTop: 4,
+  color: "#66756d",
+  fontSize: 13,
+  lineHeight: 1.6,
+};
+
+const noteBox: React.CSSProperties = {
+  marginTop: 10,
+  padding: 10,
+  borderRadius: 10,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+};
+
+const noteTitle: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#5b6d61",
+  marginBottom: 4,
+};
+
+const noteBody: React.CSSProperties = {
+  fontSize: 14,
+  color: "#2d3b31",
+  lineHeight: 1.7,
+  whiteSpace: "pre-wrap",
 };
 
 const infoGrid: React.CSSProperties = {

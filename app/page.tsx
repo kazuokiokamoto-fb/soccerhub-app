@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "./lib/supabase";
 import AppTabNav from "@/app/components/AppTabNav";
@@ -78,6 +78,12 @@ function fmtTime(v?: string | null) {
   return String(v).slice(0, 5);
 }
 
+function toDateTimeMs(date?: string | null, time?: string | null) {
+  if (!date || !time) return 0;
+  const dt = new Date(`${date}T${time}`);
+  return dt.getTime();
+}
+
 export default function HomePage() {
   const [meId, setMeId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -86,8 +92,8 @@ export default function HomePage() {
 
   const [openCount, setOpenCount] = useState(0);
   const [applyingCount, setApplyingCount] = useState(0);
-  const [offerSentCount, setOfferSentCount] = useState(0);
-  const [offerReceivedCount, setOfferReceivedCount] = useState(0);
+  const [inviteSentCount, setInviteSentCount] = useState(0);
+  const [inviteReceivedCount, setInviteReceivedCount] = useState(0);
 
   const [unreadTotal, setUnreadTotal] = useState(0);
   const [nextMatch, setNextMatch] = useState<NextMatchCard | null>(null);
@@ -99,197 +105,285 @@ export default function HomePage() {
     })();
   }, []);
 
+  const loadHome = useCallback(async () => {
+    if (!meId) {
+      setLoading(false);
+      setMyTeams([]);
+      setOpenCount(0);
+      setApplyingCount(0);
+      setInviteSentCount(0);
+      setInviteReceivedCount(0);
+      setUnreadTotal(0);
+      setNextMatch(null);
+      return;
+    }
+
+    setLoading(true);
+
+    const { data: teamRows, error: teamErr } = await supabase
+      .from("teams")
+      .select("id, owner_id, name, category")
+      .eq("owner_id", meId);
+
+    if (teamErr) {
+      console.error(teamErr);
+      setLoading(false);
+      return;
+    }
+
+    const myTeamData = (teamRows ?? []) as TeamRow[];
+    setMyTeams(myTeamData);
+
+    const myTeamIds = myTeamData.map((t) => t.id).filter(Boolean);
+
+    if (myTeamIds.length === 0) {
+      setOpenCount(0);
+      setApplyingCount(0);
+      setInviteSentCount(0);
+      setInviteReceivedCount(0);
+      setUnreadTotal(0);
+      setNextMatch(null);
+      setLoading(false);
+      return;
+    }
+
+    const { data: mySlots, error: slotErr } = await supabase
+      .from("match_slots")
+      .select(
+        "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
+      )
+      .in("host_team_id", myTeamIds);
+
+    if (slotErr) {
+      console.error(slotErr);
+    }
+
+    const mySlotRows = (mySlots ?? []) as MatchSlotRow[];
+    setOpenCount(mySlotRows.filter((s) => !s.is_closed).length);
+
+    const { data: myRequests, error: reqErr } = await supabase
+      .from("match_requests")
+      .select("id, slot_id, requester_team_id, requester_user_id, status, comment, created_at")
+      .in("requester_team_id", myTeamIds);
+
+    if (reqErr) {
+      console.error(reqErr);
+    }
+
+    const myRequestRows = (myRequests ?? []) as MatchRequestRow[];
+    setApplyingCount(myRequestRows.filter((r) => r.status === "pending").length);
+
+    const { data: offerRows, error: offersErr } = await supabase
+      .from("match_offers")
+      .select("*")
+      .in("from_team_id", myTeamIds)
+      .order("created_at", { ascending: false });
+
+    if (offersErr) {
+      console.error(offersErr);
+      setInviteSentCount(0);
+    } else {
+      const offerData = (offerRows ?? []) as MatchOfferRow[];
+      setInviteSentCount(offerData.filter((o) => o.status === "pending").length);
+    }
+
+    const { data: receivedOffers, error: recvErr } = await supabase
+      .from("match_offers")
+      .select("id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at")
+      .in("to_team_id", myTeamIds);
+
+    if (recvErr) {
+      console.error("receivedOffers error:", recvErr);
+    }
+
+    const receivedOfferRows = (receivedOffers ?? []) as MatchOfferRow[];
+    setInviteReceivedCount(
+      receivedOfferRows.filter((o) => o.status === "pending").length
+    );
+
+    const { data: memberRows, error: memberErr } = await supabase
+      .from("chat_members")
+      .select("thread_id,last_read_at")
+      .eq("user_id", meId);
+
+    if (memberErr) {
+      console.error(memberErr);
+    }
+
+    const myMemberRows = (memberRows ?? []) as ChatMemberRow[];
+    const threadIds = myMemberRows.map((r) => r.thread_id).filter(Boolean);
+
+    if (threadIds.length > 0) {
+      const { data: msgRows, error: msgErr } = await supabase
+        .from("chat_messages")
+        .select("id,thread_id,body,created_at")
+        .in("thread_id", threadIds)
+        .order("created_at", { ascending: false })
+        .limit(2000);
+
+      if (msgErr) {
+        console.error(msgErr);
+      }
+
+      const messages = (msgRows ?? []) as ChatMessageRow[];
+      const latestByThread = new Map<string, ChatMessageRow>();
+
+      for (const m of messages) {
+        if (!latestByThread.has(m.thread_id)) {
+          latestByThread.set(m.thread_id, m);
+        }
+      }
+
+      let unread = 0;
+      for (const member of myMemberRows) {
+        const last = latestByThread.get(member.thread_id);
+        if (!last?.created_at) continue;
+
+        if (!member.last_read_at) {
+          unread += 1;
+          continue;
+        }
+
+        if (
+          new Date(last.created_at).getTime() >
+          new Date(member.last_read_at).getTime()
+        ) {
+          unread += 1;
+        }
+      }
+
+      setUnreadTotal(unread);
+    } else {
+      setUnreadTotal(0);
+    }
+
+    const acceptedRequests = myRequestRows.filter((r) => r.status === "accepted");
+    const acceptedSlotIds = Array.from(new Set(acceptedRequests.map((r) => r.slot_id)));
+
+    const inviteAcceptedSlotIds = receivedOfferRows
+      .filter((o) => o.status === "accepted" && o.slot_id)
+      .map((o) => o.slot_id as string);
+
+    const mergedAcceptedSlotIds = Array.from(
+      new Set([...acceptedSlotIds, ...inviteAcceptedSlotIds])
+    );
+
+    if (mergedAcceptedSlotIds.length > 0) {
+      const { data: acceptedSlots, error: acceptedSlotsErr } = await supabase
+        .from("match_slots")
+        .select(
+          "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
+        )
+        .in("id", mergedAcceptedSlotIds)
+        .order("date", { ascending: true })
+        .order("start_time", { ascending: true });
+
+      if (acceptedSlotsErr) {
+        console.error(acceptedSlotsErr);
+      }
+
+      const now = Date.now();
+      const futureSlots = ((acceptedSlots ?? []) as MatchSlotRow[])
+        .filter((s) => toDateTimeMs(s.date, s.start_time) >= now)
+        .sort((a, b) => {
+          const aMs = toDateTimeMs(a.date, a.start_time);
+          const bMs = toDateTimeMs(b.date, b.start_time);
+          return aMs - bMs;
+        });
+
+      if (futureSlots.length > 0) {
+        const s = futureSlots[0];
+        setNextMatch({
+          date: s.date,
+          start_time: s.start_time,
+          end_time: s.end_time,
+          area: s.area,
+          area_text: s.area_text,
+          category: s.category,
+          slot_id: s.id,
+        });
+      } else {
+        setNextMatch(null);
+      }
+    } else {
+      setNextMatch(null);
+    }
+
+    setLoading(false);
+  }, [meId]);
+
   useEffect(() => {
     if (!meId) {
       setLoading(false);
       return;
     }
+    loadHome();
+  }, [meId, loadHome]);
 
-    (async () => {
-      setLoading(true);
+  useEffect(() => {
+    if (!meId) return;
 
-      const { data: teamRows, error: teamErr } = await supabase
-        .from("teams")
-        .select("id, owner_id, name, category")
-        .eq("owner_id", meId);
-
-      if (teamErr) {
-        console.error(teamErr);
-        setLoading(false);
-        return;
-      }
-
-      const myTeamData = (teamRows ?? []) as TeamRow[];
-      setMyTeams(myTeamData);
-
-      const myTeamIds = myTeamData.map((t) => t.id).filter(Boolean);
-
-      if (myTeamIds.length === 0) {
-        setOpenCount(0);
-        setApplyingCount(0);
-        setOfferSentCount(0);
-        setOfferReceivedCount(0);
-        setUnreadTotal(0);
-        setNextMatch(null);
-        setLoading(false);
-        return;
-      }
-
-      // 募集中の試合（自分）
-      const { data: mySlots, error: slotErr } = await supabase
-        .from("match_slots")
-        .select(
-          "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
+    const channels = [
+      supabase
+        .channel(`home-match-requests:${meId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "match_requests" },
+          () => {
+            loadHome();
+          }
         )
-        .in("host_team_id", myTeamIds);
+        .subscribe(),
 
-      if (slotErr) {
-        console.error(slotErr);
-      }
-
-      const mySlotRows = (mySlots ?? []) as MatchSlotRow[];
-      setOpenCount(mySlotRows.filter((s) => !s.is_closed).length);
-
-      // 申込中の試合
-      const { data: myRequests, error: reqErr } = await supabase
-        .from("match_requests")
-        .select("id, slot_id, requester_team_id, requester_user_id, status, comment, created_at")
-        .in("requester_team_id", myTeamIds);
-
-      if (reqErr) {
-        console.error(reqErr);
-      }
-
-      const myRequestRows = (myRequests ?? []) as MatchRequestRow[];
-      setApplyingCount(myRequestRows.filter((r) => r.status === "pending").length);
-
-      // 送った招待
-      const { data: offerRows, error: offersErr } = await supabase
-        .from("match_offers")
-        .select("*")
-        .in("from_team_id", myTeamIds)
-        .order("created_at", { ascending: false });
-
-      if (offersErr) {
-        console.error(offersErr);
-        setOfferSentCount(0);
-      } else {
-        const offerData = (offerRows ?? []) as MatchOfferRow[];
-        setOfferSentCount(offerData.filter((o) => o.status === "pending").length);
-      }
-
-      // 届いた招待
-      const { data: receivedOffers, error: recvErr } = await supabase
-        .from("match_offers")
-        .select("id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at")
-        .in("to_team_id", myTeamIds);
-
-      if (recvErr) {
-        console.error("receivedOffers error:", recvErr);
-      }
-
-      const receivedOfferRows = (receivedOffers ?? []) as MatchOfferRow[];
-      setOfferReceivedCount(receivedOfferRows.filter((o) => o.status === "pending").length);
-
-      // チャット未読
-      const { data: memberRows, error: memberErr } = await supabase
-        .from("chat_members")
-        .select("thread_id,last_read_at")
-        .eq("user_id", meId);
-
-      if (memberErr) {
-        console.error(memberErr);
-      }
-
-      const myMemberRows = (memberRows ?? []) as ChatMemberRow[];
-      const threadIds = myMemberRows.map((r) => r.thread_id).filter(Boolean);
-
-      if (threadIds.length > 0) {
-        const { data: msgRows, error: msgErr } = await supabase
-          .from("chat_messages")
-          .select("id,thread_id,body,created_at")
-          .in("thread_id", threadIds)
-          .order("created_at", { ascending: false })
-          .limit(2000);
-
-        if (msgErr) {
-          console.error(msgErr);
-        }
-
-        const messages = (msgRows ?? []) as ChatMessageRow[];
-        const latestByThread = new Map<string, ChatMessageRow>();
-
-        for (const m of messages) {
-          if (!latestByThread.has(m.thread_id)) {
-            latestByThread.set(m.thread_id, m);
+      supabase
+        .channel(`home-match-offers:${meId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "match_offers" },
+          () => {
+            loadHome();
           }
-        }
+        )
+        .subscribe(),
 
-        let unread = 0;
-        for (const member of myMemberRows) {
-          const last = latestByThread.get(member.thread_id);
-          if (!last?.created_at) continue;
-
-          if (!member.last_read_at) {
-            unread += 1;
-            continue;
+      supabase
+        .channel(`home-match-slots:${meId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "match_slots" },
+          () => {
+            loadHome();
           }
+        )
+        .subscribe(),
 
-          if (new Date(last.created_at).getTime() > new Date(member.last_read_at).getTime()) {
-            unread += 1;
+      supabase
+        .channel(`home-chat-messages:${meId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "chat_messages" },
+          () => {
+            loadHome();
           }
-        }
+        )
+        .subscribe(),
 
-        setUnreadTotal(unread);
-      } else {
-        setUnreadTotal(0);
-      }
+      supabase
+        .channel(`home-chat-members:${meId}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "chat_members" },
+          () => {
+            loadHome();
+          }
+        )
+        .subscribe(),
+    ];
 
-      // 次の試合
-      const acceptedRequests = myRequestRows.filter((r) => r.status === "accepted");
-      const acceptedSlotIds = Array.from(new Set(acceptedRequests.map((r) => r.slot_id)));
-
-      if (acceptedSlotIds.length > 0) {
-        const { data: acceptedSlots, error: acceptedSlotsErr } = await supabase
-          .from("match_slots")
-          .select(
-            "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
-          )
-          .in("id", acceptedSlotIds)
-          .order("date", { ascending: true })
-          .order("start_time", { ascending: true });
-
-        if (acceptedSlotsErr) {
-          console.error(acceptedSlotsErr);
-        }
-
-        const now = new Date();
-        const futureSlots = ((acceptedSlots ?? []) as MatchSlotRow[]).filter((s) => {
-          const dt = new Date(`${s.date}T${s.start_time}`);
-          return dt.getTime() >= now.getTime();
-        });
-
-        if (futureSlots.length > 0) {
-          const s = futureSlots[0];
-          setNextMatch({
-            date: s.date,
-            start_time: s.start_time,
-            end_time: s.end_time,
-            area: s.area,
-            area_text: s.area_text,
-            category: s.category,
-            slot_id: s.id,
-          });
-        } else {
-          setNextMatch(null);
-        }
-      } else {
-        setNextMatch(null);
-      }
-
-      setLoading(false);
-    })();
-  }, [meId]);
+    return () => {
+      channels.forEach((ch) => supabase.removeChannel(ch));
+    };
+  }, [meId, loadHome]);
 
   const hasTeam = useMemo(() => myTeams.length > 0, [myTeams.length]);
 
@@ -333,7 +427,7 @@ export default function HomePage() {
               試合を探す
             </Link>
             <Link href="/match/new" className="sh-btn sh-btn--primary">
-              募集を作る
+              募集枠を作る
             </Link>
           </div>
         </div>
@@ -359,14 +453,14 @@ export default function HomePage() {
             <DashboardLinkRow
               href="/match/status/offers-received"
               label="届いた招待"
-              value={offerReceivedCount}
-              helper={offerReceivedCount === 0 ? "新しい招待はありません" : "確認待ちの招待があります"}
+              value={inviteReceivedCount}
+              helper={inviteReceivedCount === 0 ? "新しい招待はありません" : "確認待ちの招待があります"}
             />
             <DashboardLinkRow
               href="/match/status/offers"
               label="送った招待"
-              value={offerSentCount}
-              helper={offerSentCount === 0 ? "まだ招待を送っていません" : "相手の返答待ちです"}
+              value={inviteSentCount}
+              helper={inviteSentCount === 0 ? "まだ招待を送っていません" : "相手の返答待ちです"}
             />
           </div>
         </div>
@@ -399,7 +493,9 @@ export default function HomePage() {
                 <div style={nextMatchMeta}>
                   {nextMatch.area_text ?? nextMatch.area ?? "エリア未設定"}
                 </div>
-                <div style={nextMatchMeta}>{nextMatch.category ?? "カテゴリ未設定"}</div>
+                <div style={nextMatchMeta}>
+                  {nextMatch.category ?? "カテゴリ未設定"}
+                </div>
               </Link>
             </>
           ) : (
@@ -410,7 +506,7 @@ export default function HomePage() {
                   試合を探す
                 </Link>
                 <Link href="/match/new" className="sh-btn sh-btn--primary">
-                  募集を作る
+                  募集枠を作る
                 </Link>
               </div>
             </div>

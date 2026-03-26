@@ -4,6 +4,10 @@ import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
+import AppTabNav from "@/app/components/AppTabNav";
+import AppHero from "@/app/components/AppHero";
+import PageBackNav from "@/app/components/PageBackNav";
+import { CATEGORY_OPTIONS, categoryLabel } from "@/app/lib/categories";
 
 type DbTeam = {
   id: string;
@@ -32,6 +36,25 @@ function levelLabelFromValue(v: string) {
   return "指定なし";
 }
 
+function getDefaultCategories(team?: DbTeam | null) {
+  if (!team) return [] as string[];
+  if (Array.isArray(team.categories) && team.categories.length > 0) {
+    return team.categories.filter(Boolean);
+  }
+  if (team.category) return [team.category];
+  return [];
+}
+
+function isMissingColumnError(err: any) {
+  const msg = String(err?.message ?? "");
+  return (
+    msg.includes("does not exist") ||
+    msg.includes("Could not find") ||
+    msg.includes("schema cache") ||
+    (msg.includes("column") && msg.includes("categories"))
+  );
+}
+
 function MatchCreatePageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -48,8 +71,13 @@ function MatchCreatePageInner() {
   const [startTime, setStartTime] = useState("13:00");
   const [endTime, setEndTime] = useState("15:00");
   const [slotArea, setSlotArea] = useState("");
-  const [slotCategory, setSlotCategory] = useState("U-12");
+  const [slotCategories, setSlotCategories] = useState<string[]>([]);
+
+  const [venueMode, setVenueMode] = useState<"existing" | "new">("existing");
   const [venueId, setVenueId] = useState("");
+  const [newVenueName, setNewVenueName] = useState("");
+  const [newVenueArea, setNewVenueArea] = useState("");
+
   const [wantedLevelMin, setWantedLevelMin] = useState("");
   const [wantedLevelMax, setWantedLevelMax] = useState("");
 
@@ -62,11 +90,23 @@ function MatchCreatePageInner() {
     const hostTeamIdParam = searchParams.get("hostTeamId") ?? "";
     const areaParam = searchParams.get("area") ?? "";
     const categoryParam = searchParams.get("category") ?? "";
+    const categoriesParam = searchParams.get("categories") ?? "";
 
     if (date) setSlotDate(date);
     if (hostTeamIdParam) setHostTeamId(hostTeamIdParam);
     if (areaParam) setSlotArea(areaParam);
-    if (categoryParam) setSlotCategory(categoryParam);
+
+    const incomingCategories = [
+      ...categoriesParam
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean),
+      ...(categoryParam ? [categoryParam] : []),
+    ];
+
+    if (incomingCategories.length > 0) {
+      setSlotCategories(Array.from(new Set(incomingCategories)));
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -78,6 +118,30 @@ function MatchCreatePageInner() {
   const selectedHostTeam = useMemo(() => {
     return myTeams.find((t) => t.id === hostTeamId) ?? null;
   }, [myTeams, hostTeamId]);
+
+  useEffect(() => {
+    if (!selectedHostTeam) return;
+
+    if (!slotArea && selectedHostTeam.area) {
+      setSlotArea(selectedHostTeam.area);
+    }
+
+    if (slotCategories.length === 0) {
+      const defaults = getDefaultCategories(selectedHostTeam);
+      if (defaults.length > 0) {
+        setSlotCategories(defaults);
+      }
+    }
+
+    if (!newVenueArea) {
+      const areaText =
+        selectedHostTeam.area ||
+        `${selectedHostTeam.prefecture ?? ""} ${selectedHostTeam.city ?? ""}${
+          selectedHostTeam.town ? "・" + selectedHostTeam.town : ""
+        }`.trim();
+      if (areaText) setNewVenueArea(areaText);
+    }
+  }, [selectedHostTeam, slotArea, slotCategories.length, newVenueArea]);
 
   async function load() {
     setLoading(true);
@@ -111,9 +175,20 @@ function MatchCreatePageInner() {
         setSlotDate(`${y}-${m}-${d}`);
       }
 
-      if (!hostTeamId && teams[0]?.id) setHostTeamId(teams[0].id);
-      if (!slotArea && teams[0]?.area) setSlotArea(teams[0].area ?? "");
-      if (!slotCategory && teams[0]?.category) setSlotCategory(teams[0].category ?? "U-12");
+      if (!hostTeamId && teams[0]?.id) {
+        setHostTeamId(teams[0].id);
+      }
+
+      if (!slotArea && teams[0]?.area) {
+        setSlotArea(teams[0].area ?? "");
+      }
+
+      if (slotCategories.length === 0) {
+        const defaults = getDefaultCategories(teams[0]);
+        if (defaults.length > 0) {
+          setSlotCategories(defaults);
+        }
+      }
     } catch (e) {
       console.error(e);
       alert("読み込みに失敗しました");
@@ -133,14 +208,80 @@ function MatchCreatePageInner() {
   ) {
     const fromTeam =
       (team?.area ?? "").trim() ||
-      `${team?.prefecture ?? ""} ${team?.city ?? ""}${team?.town ? "・" + team.town : ""}`.trim();
+      `${team?.prefecture ?? ""} ${team?.city ?? ""}${
+        team?.town ? "・" + team.town : ""
+      }`.trim();
 
     return fromTeam || (fallback ?? "").trim() || null;
   }
 
+  function toggleCategory(value: string) {
+    setSlotCategories((prev) => {
+      if (prev.includes(value)) {
+        return prev.filter((v) => v !== value);
+      }
+      return [...prev, value];
+    });
+  }
+
+  async function ensureVenueId(): Promise<string | null> {
+    if (venueMode === "existing") {
+      return venueId || null;
+    }
+
+    const name = newVenueName.trim();
+    const area =
+      newVenueArea.trim() ||
+      slotArea.trim() ||
+      buildAreaText(selectedHostTeam, slotArea) ||
+      "";
+
+    if (!name) {
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from("venues")
+      .insert({
+        name,
+        area: area || null,
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return (data as any)?.id ?? null;
+  }
+
   const canSave = useMemo(() => {
-    return !!slotDate && !!hostTeamId && !!startTime && !!endTime && !saving && !loading;
-  }, [slotDate, hostTeamId, startTime, endTime, saving, loading]);
+    const categoryOk = slotCategories.length > 0;
+    const venueOk =
+      venueMode === "existing" ? true : newVenueName.trim().length > 0;
+
+    return (
+      !!slotDate &&
+      !!hostTeamId &&
+      !!startTime &&
+      !!endTime &&
+      categoryOk &&
+      venueOk &&
+      !saving &&
+      !loading
+    );
+  }, [
+    slotDate,
+    hostTeamId,
+    startTime,
+    endTime,
+    slotCategories,
+    venueMode,
+    newVenueName,
+    saving,
+    loading,
+  ]);
 
   async function createSlot() {
     if (!slotDate) {
@@ -159,7 +300,15 @@ function MatchCreatePageInner() {
       alert("終了時刻は開始時刻より後にしてください");
       return;
     }
-    if (wantedLevelMin && wantedLevelMax && Number(wantedLevelMin) > Number(wantedLevelMax)) {
+    if (slotCategories.length === 0) {
+      alert("カテゴリを1つ以上選んでください");
+      return;
+    }
+    if (
+      wantedLevelMin &&
+      wantedLevelMax &&
+      Number(wantedLevelMin) > Number(wantedLevelMax)
+    ) {
       alert("希望相手の強さは、下限が上限を超えないようにしてください");
       return;
     }
@@ -178,18 +327,20 @@ function MatchCreatePageInner() {
 
     try {
       const builtArea = buildAreaText(hostTeam, slotArea);
+      const finalVenueId = await ensureVenueId();
 
-      const payload = {
+      const basePayload: any = {
         owner_id: meId,
         host_team_id: hostTeamId,
         date: slotDate,
         start_time: startTime,
         end_time: endTime,
-        venue_id: venueId || null,
+        venue_id: finalVenueId,
         area: builtArea,
         area_text: builtArea,
         area_detail: null,
-        category: slotCategory || hostTeam.category || "U-12",
+        category: slotCategories[0] ?? null,
+        categories: slotCategories,
         prefecture: hostTeam.prefecture ?? null,
         city: hostTeam.city ?? null,
         town: hostTeam.town ?? null,
@@ -199,11 +350,19 @@ function MatchCreatePageInner() {
         is_closed: false,
       };
 
-      const { error } = await supabase.from("match_slots").insert(payload);
+      let { error } = await supabase.from("match_slots").insert(basePayload);
+
+      if (error && isMissingColumnError(error)) {
+        const fallbackPayload = { ...basePayload };
+        delete fallbackPayload.categories;
+
+        const retry = await supabase.from("match_slots").insert(fallbackPayload);
+        error = retry.error;
+      }
 
       if (error) {
         console.error(error);
-        alert(`募集作成に失敗しました: ${error.message}`);
+        alert(`募集枠の作成に失敗しました: ${error.message}`);
         setSaving(false);
         return;
       }
@@ -212,26 +371,37 @@ function MatchCreatePageInner() {
       router.refresh();
     } catch (e: any) {
       console.error(e);
-      alert(e?.message ?? "募集作成に失敗しました");
+      alert(e?.message ?? "募集枠の作成に失敗しました");
       setSaving(false);
+      return;
     }
+
+    setSaving(false);
   }
 
   if (loading) {
-    return <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>読み込み中…</main>;
+    return (
+      <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
+        読み込み中…
+      </main>
+    );
   }
 
   return (
     <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
-      <section style={heroBox}>
-        <h1 style={heroTitle}>募集枠を作る</h1>
-        <p style={heroDesc}>日付・時間・カテゴリ・希望相手の強さレンジを設定して募集を作成します。</p>
-      </section>
+      <AppTabNav />
+      <PageBackNav current="募集枠を作る" />
+
+      <AppHero
+        icon="🗓️"
+        title="募集枠を作る"
+        desc="日付・時間・カテゴリ・希望相手の強さを設定して募集を作成します。"
+      />
 
       <section style={card}>
-        <div style={{ display: "grid", gap: 12 }}>
+        <div style={{ display: "grid", gap: 14 }}>
           <label style={label}>
-            <span>日付</span>
+            <span style={labelTitle}>日付</span>
             <input
               type="date"
               value={slotDate}
@@ -242,7 +412,7 @@ function MatchCreatePageInner() {
           </label>
 
           <label style={label}>
-            <span>ホストチーム</span>
+            <span style={labelTitle}>ホストチーム</span>
             <select
               value={hostTeamId}
               onChange={(e) => setHostTeamId(e.target.value)}
@@ -259,7 +429,7 @@ function MatchCreatePageInner() {
 
           <div style={twoCols}>
             <label style={label}>
-              <span>開始</span>
+              <span style={labelTitle}>開始</span>
               <input
                 type="time"
                 value={startTime}
@@ -270,7 +440,7 @@ function MatchCreatePageInner() {
             </label>
 
             <label style={label}>
-              <span>終了</span>
+              <span style={labelTitle}>終了</span>
               <input
                 type="time"
                 value={endTime}
@@ -282,7 +452,7 @@ function MatchCreatePageInner() {
           </div>
 
           <label style={label}>
-            <span>エリア</span>
+            <span style={labelTitle}>エリア</span>
             <input
               value={slotArea}
               onChange={(e) => setSlotArea(e.target.value)}
@@ -292,25 +462,46 @@ function MatchCreatePageInner() {
             />
           </label>
 
-          <label style={label}>
-            <span>カテゴリ</span>
-            <select
-              value={slotCategory}
-              onChange={(e) => setSlotCategory(e.target.value)}
-              style={input}
-              disabled={saving}
-            >
-              <option value="U-10">U-10</option>
-              <option value="U-11">U-11</option>
-              <option value="U-12">U-12</option>
-              <option value="U-15">U-15</option>
-              <option value="社会人">社会人</option>
-            </select>
-          </label>
+          <div style={sectionBox}>
+            <div style={sectionTitle}>カテゴリ（複数選択可）</div>
+            <div style={sectionSubText}>
+              複数選択した場合は OR 条件で募集されます。
+            </div>
+
+            <div style={chipWrap}>
+              {CATEGORY_OPTIONS.map((opt) => {
+                const active = slotCategories.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => toggleCategory(opt.value)}
+                    disabled={saving}
+                    aria-pressed={active}
+                    style={{
+                      ...chip,
+                      ...(active ? chipActive : null),
+                      ...(saving ? chipDisabled : null),
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {slotCategories.length > 0 ? (
+              <div style={helperText}>
+                選択中: {slotCategories.map((v) => categoryLabel(v)).join(" / ")}
+              </div>
+            ) : (
+              <div style={helperText}>カテゴリを1つ以上選択してください。</div>
+            )}
+          </div>
 
           <div style={twoCols}>
             <label style={label}>
-              <span>希望相手の強さ（下限）</span>
+              <span style={labelTitle}>希望相手の強さ（下限）</span>
               <select
                 value={wantedLevelMin}
                 onChange={(e) => setWantedLevelMin(e.target.value)}
@@ -327,7 +518,7 @@ function MatchCreatePageInner() {
             </label>
 
             <label style={label}>
-              <span>希望相手の強さ（上限）</span>
+              <span style={labelTitle}>希望相手の強さ（上限）</span>
               <select
                 value={wantedLevelMax}
                 onChange={(e) => setWantedLevelMax(e.target.value)}
@@ -349,23 +540,79 @@ function MatchCreatePageInner() {
             <b>{levelLabelFromValue(wantedLevelMax)}</b>
           </div>
 
-          <label style={label}>
-            <span>グラウンド（任意）</span>
-            <select
-              value={venueId}
-              onChange={(e) => setVenueId(e.target.value)}
-              style={input}
-              disabled={saving}
-            >
-              <option value="">（未設定）</option>
-              {venues.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                  {v.area ? ` / ${v.area}` : ""}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div style={sectionBox}>
+            <div style={sectionTitle}>グラウンド</div>
+
+            <div style={toggleRow}>
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={() => setVenueMode("existing")}
+                disabled={saving}
+                style={venueMode === "existing" ? activeModeBtn : undefined}
+              >
+                既存から選ぶ
+              </button>
+
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={() => setVenueMode("new")}
+                disabled={saving}
+                style={venueMode === "new" ? activeModeBtn : undefined}
+              >
+                新しく登録する
+              </button>
+            </div>
+
+            {venueMode === "existing" ? (
+              <label style={label}>
+                <span style={labelTitle}>既存グラウンド</span>
+                <select
+                  value={venueId}
+                  onChange={(e) => setVenueId(e.target.value)}
+                  style={input}
+                  disabled={saving}
+                >
+                  <option value="">（未設定）</option>
+                  {venues.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                      {v.area ? ` / ${v.area}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <div style={{ display: "grid", gap: 12 }}>
+                <label style={label}>
+                  <span style={labelTitle}>新規グラウンド名</span>
+                  <input
+                    value={newVenueName}
+                    onChange={(e) => setNewVenueName(e.target.value)}
+                    style={input}
+                    placeholder="例：世田谷公園 サッカー場"
+                    disabled={saving}
+                  />
+                </label>
+
+                <label style={label}>
+                  <span style={labelTitle}>新規グラウンドのエリア</span>
+                  <input
+                    value={newVenueArea}
+                    onChange={(e) => setNewVenueArea(e.target.value)}
+                    style={input}
+                    placeholder="例：世田谷区 池尻"
+                    disabled={saving}
+                  />
+                </label>
+
+                <div style={helperText}>
+                  作成時に `venues` に保存されるので、次回以降も候補に表示されます。
+                </div>
+              </div>
+            )}
+          </div>
 
           <div style={actionRow}>
             <Link href="/match" className="sh-btn">
@@ -378,7 +625,7 @@ function MatchCreatePageInner() {
               onClick={createSlot}
               disabled={!canSave}
             >
-              {saving ? "作成中…" : "作成"}
+              {saving ? "作成中…" : "募集枠を作成"}
             </button>
           </div>
 
@@ -387,6 +634,11 @@ function MatchCreatePageInner() {
               ホストチーム: {selectedHostTeam.name ?? "未設定"}
               <br />
               エリア初期値: {selectedHostTeam.area ?? "未設定"}
+              <br />
+              カテゴリ初期値:{" "}
+              {getDefaultCategories(selectedHostTeam)
+                .map((v) => categoryLabel(v))
+                .join(" / ") || "未設定"}
             </div>
           ) : null}
         </div>
@@ -397,32 +649,17 @@ function MatchCreatePageInner() {
 
 export default function MatchCreatePage() {
   return (
-    <Suspense fallback={<main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>読み込み中…</main>}>
+    <Suspense
+      fallback={
+        <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
+          読み込み中…
+        </main>
+      }
+    >
       <MatchCreatePageInner />
     </Suspense>
   );
 }
-
-const heroBox: React.CSSProperties = {
-  borderRadius: 20,
-  background: "linear-gradient(135deg, #1e7f3c 0%, #145c2a 100%)",
-  color: "#fff",
-  padding: 20,
-  boxShadow: "0 10px 28px rgba(20,92,42,0.20)",
-};
-
-const heroTitle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 28,
-  fontWeight: 900,
-};
-
-const heroDesc: React.CSSProperties = {
-  margin: "8px 0 0",
-  fontSize: 14,
-  lineHeight: 1.7,
-  color: "rgba(255,255,255,0.92)",
-};
 
 const card: React.CSSProperties = {
   marginTop: 14,
@@ -435,6 +672,11 @@ const card: React.CSSProperties = {
 const label: React.CSSProperties = {
   display: "grid",
   gap: 6,
+};
+
+const labelTitle: React.CSSProperties = {
+  fontWeight: 800,
+  color: "#2d3b31",
 };
 
 const input: React.CSSProperties = {
@@ -469,4 +711,65 @@ const hintBox: React.CSSProperties = {
   background: "#fafafa",
   color: "#374151",
   fontSize: 14,
+};
+
+const sectionBox: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 16,
+  border: "1px solid #edf1ee",
+  background: "#fafcfb",
+  display: "grid",
+  gap: 10,
+};
+
+const sectionTitle: React.CSSProperties = {
+  fontWeight: 900,
+  color: "#1f5d30",
+  fontSize: 16,
+};
+
+const sectionSubText: React.CSSProperties = {
+  fontSize: 12,
+  color: "#66756d",
+  lineHeight: 1.6,
+};
+
+const chipWrap: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const chip: React.CSSProperties = {
+  padding: "8px 12px",
+  borderRadius: 999,
+  border: "1px solid #d6eadb",
+  background: "#fff",
+  color: "#23412c",
+  fontWeight: 800,
+  fontSize: 13,
+  cursor: "pointer",
+};
+
+const chipActive: React.CSSProperties = {
+  background: "#145c2a",
+  color: "#fff",
+  border: "1px solid #145c2a",
+};
+
+const chipDisabled: React.CSSProperties = {
+  opacity: 0.6,
+  cursor: "not-allowed",
+};
+
+const toggleRow: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const activeModeBtn: React.CSSProperties = {
+  borderColor: "#145c2a",
+  background: "#ecfdf3",
+  color: "#166534",
 };

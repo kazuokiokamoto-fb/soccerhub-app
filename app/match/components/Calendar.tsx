@@ -98,6 +98,17 @@ export function Calendar(props: {
           );
         })}
       </div>
+
+      <div style={bottomRow}>
+        <button
+          type="button"
+          className="sh-btn sh-btn--primary"
+          onClick={() => onCreateForDate(selectedYmd)}
+          disabled={loading || disableCreate}
+        >
+          ＋募集枠を作る
+        </button>
+      </div>
     </section>
   );
 }

@@ -139,21 +139,39 @@ export function includesKeyword(
 
   if (!q) return true;
 
+  const slotCategories: string[] =
+    Array.isArray(slot?.categories) && slot.categories.length > 0
+      ? slot.categories.map((v: unknown) => String(v).trim()).filter(Boolean)
+      : slot?.category
+      ? [String(slot.category).trim()]
+      : [];
+
+  const teamCategories: string[] =
+    Array.isArray(team?.categories) && team.categories.length > 0
+      ? team.categories.map((v: unknown) => String(v).trim()).filter(Boolean)
+      : team?.category
+      ? [String(team.category).trim()]
+      : [];
+
   const hay = [
     team?.name,
     team?.area,
     team?.category,
-    ...(team?.categories ?? []),
+    ...teamCategories,
+    ...slotCategories,
     team?.note,
     team?.uniform_main,
     team?.uniform_sub,
     team?.bike_parking,
     team?.bike_parking_capacity,
-    slot.area,
-    slot.category,
+    slot?.area,
+    slot?.area_text,
+    slot?.category,
+    team?.strength_rank,
     levelLabel(Number(team?.level ?? 0)),
     String(team?.member_count ?? sumRoster(team?.roster_by_grade)),
   ]
+    .map((v) => String(v ?? ""))
     .join(" ")
     .toLowerCase();
 
@@ -167,19 +185,21 @@ export function matchesSlotFilters(
 ) {
   const team = teamMap.get(slot.host_team_id);
 
-  const cats =
-    Array.isArray(team?.categories) && team?.categories.length > 0
-      ? team.categories
+  const cats: string[] =
+    Array.isArray(slot?.categories) && slot.categories.length > 0
+      ? slot.categories.map((v: unknown) => String(v).trim()).filter(Boolean)
+      : slot?.category
+      ? [String(slot.category).trim()]
+      : Array.isArray(team?.categories) && team.categories.length > 0
+      ? team.categories.map((v: unknown) => String(v).trim()).filter(Boolean)
       : team?.category
-        ? [team.category]
-        : slot.category
-          ? [slot.category]
-          : [];
+      ? [String(team.category).trim()]
+      : [];
 
   if (filters.categoryFilter.length > 0) {
     if (cats.length === 0) return false;
 
-    if (!cats.some((c) => c && filters.categoryFilter.includes(String(c).trim()))) {
+    if (!cats.some((c: string) => filters.categoryFilter.includes(c))) {
       return false;
     }
   }
@@ -216,7 +236,8 @@ export function matchesSlotFilters(
   }
 
   if (filters.strengthFilter.length > 0) {
-    const rank = levelLabel(Number(team?.level ?? 0));
+    const rank = (team?.strength_rank?.trim() as StrengthRank) ||
+      levelLabel(Number(team?.level ?? 0));
 
     if (!filters.strengthFilter.includes(rank)) {
       return false;

@@ -1,5 +1,7 @@
 // app/lib/categories.ts
+
 export type CategoryValue =
+  | "KIDS" // 👈 追加（未就学・キッズ）
   | "G1"
   | "G2"
   | "G3"
@@ -13,9 +15,17 @@ export type CategoryValue =
   | "O40"
   | "O50";
 
-export type CategoryOption = { value: CategoryValue; label: string };
+export type CategoryOption = {
+  value: CategoryValue;
+  label: string;
+};
 
+/**
+ * カテゴリ一覧
+ * 👉 表示順もここで管理
+ */
 export const CATEGORY_OPTIONS: CategoryOption[] = [
+  { value: "KIDS", label: "キッズ（未就学）" }, // 👈 追加
   { value: "G1", label: "小学1年" },
   { value: "G2", label: "小学2年" },
   { value: "G3", label: "小学3年" },
@@ -30,19 +40,43 @@ export const CATEGORY_OPTIONS: CategoryOption[] = [
   { value: "O50", label: "シニアO50" },
 ];
 
-// UI表示の順番をグルーピングしたいとき用（任意）
-export const CATEGORY_GROUPS: { title: string; values: CategoryValue[] }[] = [
-  { title: "小学生", values: ["G1", "G2", "G3", "G4", "G5", "G6"] },
-  { title: "ユース", values: ["U15", "U18", "U23"] },
-  { title: "一般・シニア", values: ["OPEN", "O40", "O50"] },
+/**
+ * UI用グルーピング
+ */
+export const CATEGORY_GROUPS: {
+  title: string;
+  values: CategoryValue[];
+}[] = [
+  {
+    title: "キッズ",
+    values: ["KIDS"], // 👈 追加
+  },
+  {
+    title: "小学生",
+    values: ["G1", "G2", "G3", "G4", "G5", "G6"],
+  },
+  {
+    title: "ユース",
+    values: ["U15", "U18", "U23"],
+  },
+  {
+    title: "一般・シニア",
+    values: ["OPEN", "O40", "O50"],
+  },
 ];
 
+/**
+ * 単体ラベル取得
+ */
 export function categoryLabel(v: string | null | undefined) {
   if (!v) return "";
   const hit = CATEGORY_OPTIONS.find((o) => o.value === v);
   return hit?.label ?? v;
 }
 
+/**
+ * 複数ラベル取得
+ */
 export function categoryLabels(values: string[] | null | undefined) {
   const arr = Array.isArray(values) ? values : [];
   return arr.map(categoryLabel).filter(Boolean);

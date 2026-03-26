@@ -1,4 +1,3 @@
-// app/match/page.tsx
 "use client";
 
 import AppHero from "@/app/components/AppHero";
@@ -10,7 +9,7 @@ import { useRouter } from "next/navigation";
 import { Calendar } from "./components/Calendar";
 import { DaySlotList } from "./components/DaySlotList";
 
-import { CATEGORY_OPTIONS } from "@/app/lib/categories";
+import { CATEGORY_OPTIONS, categoryLabel } from "@/app/lib/categories";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
 import type { StrengthRank } from "@/app/components/StrengthRankPicker";
@@ -373,10 +372,25 @@ const guideNote: React.CSSProperties = {
   fontSize: 13,
 };
 
+function teamStrengthLabel(team: any) {
+  if (!team) return "未設定";
+  if (team.strength_rank) return team.strength_rank;
+
+  const level = Number(team.level ?? 0);
+  if (!Number.isFinite(level)) return "未設定";
+  if (level >= 9) return "SS";
+  if (level >= 7) return "S";
+  if (level >= 5) return "A";
+  if (level >= 3) return "B";
+  return "C";
+}
+
 export default function MatchCalendarPage() {
   const router = useRouter();
 
-  const [monthDate, setMonthDate] = useState<Date>(() => startOfMonth(new Date()));
+  const [monthDate, setMonthDate] = useState<Date>(() =>
+    startOfMonth(new Date())
+  );
   const [selectedYmd, setSelectedYmd] = useState<string>(ymdToday());
   const [selectedSlotId, setSelectedSlotId] = useState<string>("");
 
@@ -616,7 +630,10 @@ export default function MatchCalendarPage() {
     }
 
     const already = requestsForMonth.some(
-      (r) => r.slot_id === slotId && r.requester_user_id === uid && r.status !== "cancelled"
+      (r) =>
+        r.slot_id === slotId &&
+        r.requester_user_id === uid &&
+        r.status !== "cancelled"
     );
     if (already) {
       alert("すでに申込み済みです");
@@ -649,15 +666,20 @@ export default function MatchCalendarPage() {
     const requesterTeam = myTeams.find((t) => t.id === requestTeamId);
 
     try {
-      const threadId = await getOrCreateDmThread(requestTeamId, slot.host_team_id);
+      const threadId = await getOrCreateDmThread(
+        requestTeamId,
+        slot.host_team_id
+      );
 
       const bodyLines = [
         "【試合申込】",
         `${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
-        `カテゴリ: ${slot.category ?? "未設定"}`,
+        `カテゴリ: ${categoryLabel(slot.category) || slot.category || "未設定"}`,
         `エリア: ${slot.area_text ?? slot.area ?? "未設定"}`,
         `申込チーム: ${requesterTeam?.name ?? "未設定"}`,
+        `申込チーム強さ: ${teamStrengthLabel(requesterTeam)}`,
         `募集チーム: ${hostTeam?.name ?? "未設定"}`,
+        `募集チーム強さ: ${teamStrengthLabel(hostTeam)}`,
         requestComment.trim() ? `コメント: ${requestComment.trim()}` : "",
       ].filter(Boolean);
 
@@ -699,7 +721,10 @@ export default function MatchCalendarPage() {
     }
 
     if (status === "accepted") {
-      await supabase.from("match_slots").update({ is_closed: true }).eq("id", target.slot_id);
+      await supabase
+        .from("match_slots")
+        .update({ is_closed: true })
+        .eq("id", target.slot_id);
 
       try {
         const { data: u } = await supabase.auth.getUser();
@@ -714,6 +739,8 @@ export default function MatchCalendarPage() {
             requestTeamNameMap.get(target.requester_team_id) ?? "相手チーム";
           const hostTeamName =
             requestTeamNameMap.get(slot.host_team_id) ?? "募集チーム";
+          const requesterTeam = teamMap.get(target.requester_team_id);
+          const hostTeam = teamMap.get(slot.host_team_id);
 
           await insertChatMessage({
             threadId,
@@ -722,8 +749,11 @@ export default function MatchCalendarPage() {
             body: [
               "【試合申込 承認】",
               `${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
+              `カテゴリ: ${categoryLabel(slot.category) || slot.category || "未設定"}`,
               `募集チーム: ${hostTeamName}`,
+              `募集チーム強さ: ${teamStrengthLabel(hostTeam)}`,
               `申込チーム: ${requesterTeamName}`,
+              `申込チーム強さ: ${teamStrengthLabel(requesterTeam)}`,
               "申込が承認されました。詳細はこのチャットで調整してください。",
             ].join("\n"),
           });
@@ -770,7 +800,10 @@ export default function MatchCalendarPage() {
       const { data: u } = await supabase.auth.getUser();
       const uid = u?.user?.id;
       if (slot && uid) {
-        const threadId = await getOrCreateDmThread(req.requester_team_id, slot.host_team_id);
+        const threadId = await getOrCreateDmThread(
+          req.requester_team_id,
+          slot.host_team_id
+        );
         const requesterTeamName =
           requestTeamNameMap.get(req.requester_team_id) ?? "申込チーム";
 
@@ -839,7 +872,8 @@ export default function MatchCalendarPage() {
             <div>
               <div style={stickySummaryDate}>📅 {selectedYmd}</div>
               <div style={stickySummaryCount}>
-                入力中の募集（{draftSlotsOnSelectedDate.length}件／{slotsOnSelectedDate.length}件）
+                入力中の募集（{draftSlotsOnSelectedDate.length}件／
+                {slotsOnSelectedDate.length}件）
               </div>
             </div>
 
@@ -850,7 +884,7 @@ export default function MatchCalendarPage() {
               onClick={() => goToCreatePage(selectedYmd)}
               disabled={loading || myTeams.length === 0}
             >
-              ＋募集を作る
+              ＋募集枠を作る
             </button>
           </div>
         </div>
@@ -903,7 +937,11 @@ export default function MatchCalendarPage() {
             <div style={filterHeaderRow}>
               <h2 style={filterTitle}>絞り込み条件</h2>
 
-              <button type="button" className="sh-btn" onClick={scrollToDayList}>
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={scrollToDayList}
+              >
                 募集一覧へ
               </button>
             </div>
@@ -916,7 +954,7 @@ export default function MatchCalendarPage() {
                 onChange={(e) => setDraftKeyword(e.target.value)}
                 className="sh-input"
                 disabled={loading}
-                placeholder="例：三宿 / 青 / 強度高め / U-12 / SS"
+                placeholder="例：三宿 / 青 / 強度高め / 小学5年 / キッズ / SS"
               />
             </label>
 
@@ -969,7 +1007,9 @@ export default function MatchCalendarPage() {
                     type="button"
                     className="sh-btn sh-btn--ghost"
                     onClick={() =>
-                      setDraftStrengthFilter(STRENGTH_OPTIONS.map((o) => o.value as StrengthRank))
+                      setDraftStrengthFilter(
+                        STRENGTH_OPTIONS.map((o) => o.value as StrengthRank)
+                      )
                     }
                     disabled={loading}
                   >
@@ -1007,10 +1047,14 @@ export default function MatchCalendarPage() {
                       aria-pressed={active}
                       style={{
                         ...strengthSimpleButton,
-                        border: active ? "1px solid #145c2a" : "1px solid #d6eadb",
+                        border: active
+                          ? "1px solid #145c2a"
+                          : "1px solid #d6eadb",
                         background: active ? "#145c2a" : "#fff",
                         color: active ? "#fff" : "#23412c",
-                        boxShadow: active ? "0 6px 14px rgba(20,92,42,0.14)" : "none",
+                        boxShadow: active
+                          ? "0 6px 14px rgba(20,92,42,0.14)"
+                          : "none",
                         ...(loading ? strengthSimpleButtonDisabled : {}),
                       }}
                     >

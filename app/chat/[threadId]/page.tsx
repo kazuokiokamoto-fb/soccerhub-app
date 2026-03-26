@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
+import { categoryLabel } from "@/app/lib/categories";
 
 type Msg = {
   id: string;
@@ -71,6 +72,7 @@ export default function ChatThreadPage() {
 
   const [meId, setMeId] = useState<string>("");
   const [myTeamId, setMyTeamId] = useState<string>("");
+  const [otherTeamId, setOtherTeamId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [isMember, setIsMember] = useState<boolean>(false);
 
@@ -86,6 +88,7 @@ export default function ChatThreadPage() {
     useState<NotificationPermission | "unsupported">("default");
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const chatBodyRef = useRef<HTMLDivElement | null>(null);
 
   const canSend = useMemo(() => {
     return (
@@ -99,9 +102,22 @@ export default function ChatThreadPage() {
   }, [meId, threadId, myTeamId, isMember, text, sending]);
 
   const scrollToBottom = (smooth = true) => {
-    requestAnimationFrame(() =>
-      bottomRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" })
-    );
+    requestAnimationFrame(() => {
+      if (bottomRef.current) {
+        bottomRef.current.scrollIntoView({
+          behavior: smooth ? "smooth" : "auto",
+          block: "end",
+        });
+        return;
+      }
+
+      if (chatBodyRef.current) {
+        chatBodyRef.current.scrollTo({
+          top: chatBodyRef.current.scrollHeight,
+          behavior: smooth ? "smooth" : "auto",
+        });
+      }
+    });
   };
 
   const markRead = async () => {
@@ -172,6 +188,7 @@ export default function ChatThreadPage() {
       setLoading(true);
       setIsMember(false);
       setMyTeamId("");
+      setOtherTeamId("");
       setSendError("");
 
       const { data: mem, error: memErr } = await supabase
@@ -217,20 +234,22 @@ export default function ChatThreadPage() {
           const mine = teamIds.find((id) => myTeamIds.has(id)) ?? "";
           setMyTeamId(mine);
 
-          const otherTeamId =
-            teamIds.find((id) => !myTeamIds.has(id)) ?? teamIds[0] ?? null;
+          const otherTeamIdValue =
+            teamIds.find((id) => !myTeamIds.has(id)) ?? teamIds[0] ?? "";
 
-          if (otherTeamId) {
+          if (otherTeamIdValue) {
+            setOtherTeamId(otherTeamIdValue);
+
             const { data: teamRow } = await supabase
               .from("teams")
               .select("id,name,category")
-              .eq("id", otherTeamId)
+              .eq("id", otherTeamIdValue)
               .maybeSingle();
 
             if (teamRow) {
               const team = teamRow as TeamMini;
               setOtherTeamName(team.name ?? "相手チーム");
-              setOtherTeamCategory(team.category ?? "");
+              setOtherTeamCategory(categoryLabel(team.category) || team.category || "");
             }
           }
         }
@@ -252,10 +271,21 @@ export default function ChatThreadPage() {
       setMessages(((data ?? []) as any[]).filter(Boolean) as Msg[]);
       setLoading(false);
 
-      scrollToBottom(false);
+      requestAnimationFrame(() => {
+        scrollToBottom(false);
+      });
+
       await markRead();
     })();
   }, [meId, threadId]);
+
+  useEffect(() => {
+    if (!loading) {
+      requestAnimationFrame(() => {
+        scrollToBottom(false);
+      });
+    }
+  }, [loading]);
 
   useEffect(() => {
     if (!meId || !threadId || !isMember) return;
@@ -279,7 +309,12 @@ export default function ChatThreadPage() {
             }
 
             const withoutOptimistic = prev.filter(
-              (m) => !(m.sender_id === row.sender_id && m.body === row.body && String(m.id).startsWith("optimistic-"))
+              (m) =>
+                !(
+                  m.sender_id === row.sender_id &&
+                  m.body === row.body &&
+                  String(m.id).startsWith("optimistic-")
+                )
             );
 
             return [...withoutOptimistic, row].sort((a, b) =>
@@ -287,7 +322,9 @@ export default function ChatThreadPage() {
             );
           });
 
-          scrollToBottom(true);
+          requestAnimationFrame(() => {
+            scrollToBottom(true);
+          });
 
           if (row.sender_id && row.sender_id !== meId) {
             notifyIncomingMessage(row.body);
@@ -316,7 +353,10 @@ export default function ChatThreadPage() {
     setSending(true);
     setText("");
 
-    const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const optimisticId = `optimistic-${Date.now()}-${Math.random()
+      .toString(16)
+      .slice(2)}`;
+
     const optimistic: Msg = {
       id: optimisticId,
       thread_id: threadId,
@@ -327,7 +367,10 @@ export default function ChatThreadPage() {
     };
 
     setMessages((prev) => [...prev, optimistic]);
-    scrollToBottom(true);
+
+    requestAnimationFrame(() => {
+      scrollToBottom(true);
+    });
 
     const payload: any = {
       thread_id: threadId,
@@ -354,19 +397,24 @@ export default function ChatThreadPage() {
     setMessages((prev) => {
       const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
       const real = data as any as Msg;
-      if (withoutOptimistic.some((m) => m.id === real.id)) return withoutOptimistic;
+      if (withoutOptimistic.some((m) => m.id === real.id)) {
+        return withoutOptimistic;
+      }
       return [...withoutOptimistic, real].sort((a, b) =>
         a.created_at > b.created_at ? 1 : -1
       );
     });
 
-    scrollToBottom(true);
+    requestAnimationFrame(() => {
+      scrollToBottom(true);
+    });
+
     await markRead();
     setSending(false);
   };
 
   const onKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       if (canSend) send();
     }
@@ -374,39 +422,45 @@ export default function ChatThreadPage() {
 
   return (
     <main style={pageWrap}>
-      <header style={headerWrap}>
-        <div style={headerLeft}>
-          <Link href="/chat" className="sh-btn">
-            ← 一覧
-          </Link>
+      <section style={chatPanel}>
+        <header style={panelHeader}>
+          <div style={headerLeft}>
+            <Link href="/chat" className="sh-btn">
+              ← 一覧
+            </Link>
 
-          <div>
-            <div style={threadTitle}>{otherTeamName}</div>
-            <div style={threadSubTitle}>
-              {otherTeamCategory || "チャット"}
+            <div style={titleWrap}>
+              <div style={threadTitle}>{otherTeamName}</div>
+              <div style={threadSubTitle}>
+                {otherTeamCategory || "チャット"}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div style={headerRight}>
-          {notificationPermission === "granted" ? (
-            <span style={notifyBadgeGranted}>通知ON</span>
-          ) : notificationPermission === "unsupported" ? (
-            <span style={notifyBadgeMuted}>通知非対応</span>
-          ) : (
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={requestNotificationPermission}
-            >
-              通知をON
-            </button>
-          )}
-        </div>
-      </header>
+          <div style={headerRight}>
+            {otherTeamId ? (
+              <Link href={`/teams/${otherTeamId}`} className="sh-btn">
+                チーム詳細
+              </Link>
+            ) : null}
 
-      <section style={chatPanel}>
-        <div style={chatBody}>
+            {notificationPermission === "granted" ? (
+              <span style={notifyBadgeGranted}>通知ON</span>
+            ) : notificationPermission === "unsupported" ? (
+              <span style={notifyBadgeMuted}>通知非対応</span>
+            ) : (
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={requestNotificationPermission}
+              >
+                通知をON
+              </button>
+            )}
+          </div>
+        </header>
+
+        <div ref={chatBodyRef} style={chatBody}>
           {loading ? <p style={{ color: "#666" }}>読み込み中…</p> : null}
 
           {!loading && !isMember ? (
@@ -504,7 +558,7 @@ export default function ChatThreadPage() {
           </div>
 
           <div style={inputHint}>
-            Enterで送信 / Shift+Enterで改行
+            Enterで改行 / Ctrl+Enter または Cmd+Enter で送信
           </div>
         </div>
       </section>
@@ -516,14 +570,32 @@ const pageWrap: React.CSSProperties = {
   padding: 12,
   maxWidth: 860,
   margin: "0 auto",
+  height: "100dvh",
+  boxSizing: "border-box",
 };
 
-const headerWrap: React.CSSProperties = {
+const chatPanel: React.CSSProperties = {
+  border: "1px solid #e5ece7",
+  borderRadius: 20,
+  background: "#f6fbf7",
+  overflow: "hidden",
+  display: "grid",
+  gridTemplateRows: "auto 1fr auto",
+  height: "calc(100dvh - 24px)",
+  minHeight: 0,
+};
+
+const panelHeader: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
   gap: 12,
-  marginBottom: 12,
+  padding: 12,
+  borderBottom: "1px solid #e5ece7",
+  background: "#ffffff",
+  position: "sticky",
+  top: 0,
+  zIndex: 2,
   flexWrap: "wrap",
 };
 
@@ -534,16 +606,22 @@ const headerLeft: React.CSSProperties = {
   minWidth: 0,
 };
 
+const titleWrap: React.CSSProperties = {
+  minWidth: 0,
+};
+
 const headerRight: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 8,
+  flexWrap: "wrap",
 };
 
 const threadTitle: React.CSSProperties = {
   fontSize: 18,
   fontWeight: 900,
   color: "#16391f",
+  lineHeight: 1.3,
 };
 
 const threadSubTitle: React.CSSProperties = {
@@ -578,18 +656,8 @@ const notifyBadgeMuted: React.CSSProperties = {
   fontWeight: 900,
 };
 
-const chatPanel: React.CSSProperties = {
-  border: "1px solid #e5ece7",
-  borderRadius: 20,
-  background: "#f6fbf7",
-  overflow: "hidden",
-  display: "flex",
-  flexDirection: "column",
-  minHeight: "calc(100vh - 180px)",
-};
-
 const chatBody: React.CSSProperties = {
-  flex: 1,
+  minHeight: 0,
   overflowY: "auto",
   padding: 14,
   background: "linear-gradient(180deg, #eef8f0 0%, #f8fcf9 100%)",

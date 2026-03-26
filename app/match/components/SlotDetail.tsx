@@ -2,7 +2,9 @@
 "use client";
 
 import React, { useMemo } from "react";
+import Link from "next/link";
 import type { DbRequest, DbSlot, DbTeam, DbVenue } from "../types";
+import { categoryLabel, categoryLabels } from "@/app/lib/categories";
 
 function hhmm(v: string) {
   if (!v) return "";
@@ -19,6 +21,7 @@ function levelLabel(level: number) {
 
 function levelToRankLabel(level?: number | null) {
   const n = Number(level ?? 0);
+  if (!Number.isFinite(n)) return "";
   if (n >= 9) return "SS";
   if (n >= 7) return "S";
   if (n >= 5) return "A";
@@ -37,6 +40,21 @@ function formatDesiredDates(desiredDates?: string[] | null) {
   return arr.join(" / ");
 }
 
+function requestStatusLabel(status: DbRequest["status"]) {
+  switch (status) {
+    case "pending":
+      return "申込中";
+    case "accepted":
+      return "成立";
+    case "rejected":
+      return "見送り";
+    case "cancelled":
+      return "取消";
+    default:
+      return status;
+  }
+}
+
 function badgeStyle(status: DbRequest["status"]): React.CSSProperties {
   return {
     padding: "2px 8px",
@@ -46,18 +64,18 @@ function badgeStyle(status: DbRequest["status"]): React.CSSProperties {
       status === "accepted"
         ? "#ecfdf3"
         : status === "rejected"
-          ? "#fef2f2"
-          : status === "cancelled"
-            ? "#f3f4f6"
-            : "#eff6ff",
+        ? "#fef2f2"
+        : status === "cancelled"
+        ? "#f3f4f6"
+        : "#eff6ff",
     color:
       status === "accepted"
         ? "#166534"
         : status === "rejected"
-          ? "#991b1b"
-          : status === "cancelled"
-            ? "#374151"
-            : "#1e3a8a",
+        ? "#991b1b"
+        : status === "cancelled"
+        ? "#374151"
+        : "#1e3a8a",
     fontSize: 12,
     fontWeight: 800,
   };
@@ -75,7 +93,20 @@ function buildGoogleMapUrl(venue: DbVenue | null, slot: DbSlot) {
     .join(" ");
 
   if (!q) return "";
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    q
+  )}`;
+}
+
+function categoryTextFromTeam(team: DbTeam | null) {
+  if (!team) return "未設定";
+
+  if (Array.isArray(team.categories) && team.categories.length > 0) {
+    const labels = categoryLabels(team.categories);
+    return labels.length > 0 ? labels.join(" / ") : team.categories.join(" / ");
+  }
+
+  return categoryLabel(team.category) || team.category || "未設定";
 }
 
 export function SlotDetail(props: {
@@ -134,7 +165,9 @@ export function SlotDetail(props: {
   const acceptedReq = useMemo(() => {
     const accepted = requests.filter((r) => r.status === "accepted");
     if (accepted.length === 0) return null;
-    return accepted.sort((a, b) => (a.created_at > b.created_at ? -1 : 1))[0] || null;
+    return (
+      accepted.sort((a, b) => (a.created_at > b.created_at ? -1 : 1))[0] || null
+    );
   }, [requests]);
 
   const otherTeamIdForChat = useMemo(() => {
@@ -145,7 +178,8 @@ export function SlotDetail(props: {
 
   const canShowChatButton = useMemo(() => {
     if (!acceptedReq) return false;
-    const isParticipant = !!meId && (meId === slot.owner_id || meId === acceptedReq.requester_user_id);
+    const isParticipant =
+      !!meId && (meId === slot.owner_id || meId === acceptedReq.requester_user_id);
     return isParticipant && !!otherTeamIdForChat;
   }, [acceptedReq, meId, slot.owner_id, otherTeamIdForChat]);
 
@@ -156,31 +190,68 @@ export function SlotDetail(props: {
 
   const hostArea =
     (hostTeam?.area ?? "").trim() ||
-    `${hostTeam?.prefecture ?? ""} ${hostTeam?.city ?? ""}${hostTeam?.town ? "・" + hostTeam.town : ""}`.trim() ||
+    `${hostTeam?.prefecture ?? ""} ${hostTeam?.city ?? ""}${
+      hostTeam?.town ? "・" + hostTeam.town : ""
+    }`.trim() ||
     "未設定";
 
   const requesterTeamName = (teamId: string) => {
-    return allTeams.find((t) => t.id === teamId)?.name ?? teamId;
+    return allTeams.find((t) => t.id === teamId)?.name ?? "チーム未設定";
   };
+
+  const hostStrength =
+    hostTeam?.strength_rank?.trim() ||
+    levelToRankLabel(hostTeam?.level) ||
+    "未設定";
+
+  const slotCategoryText =
+    categoryLabel(slot.category) || slot.category || "未設定";
+
+  const hostCategoryText = categoryTextFromTeam(hostTeam);
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div>
-        <div style={{ fontWeight: 900, fontSize: 16, color: "#1f5d30", marginBottom: 8 }}>
+        <div
+          style={{
+            fontWeight: 900,
+            fontSize: 16,
+            color: "#1f5d30",
+            marginBottom: 8,
+          }}
+        >
           募集詳細
         </div>
 
         <div style={{ color: "#555", lineHeight: 1.8 }}>
           日付：<b>{slot.date}</b>
           <br />
-          時間：<b>{hhmm(slot.start_time)}–{hhmm(slot.end_time)}</b>
+          時間：
+          <b>
+            {hhmm(slot.start_time)}–{hhmm(slot.end_time)}
+          </b>
           <br />
-          エリア：{slot.area || "—"} / カテゴリ：{slot.category || "—"}
+          エリア：{slot.area_text ?? slot.area ?? "—"} / カテゴリ：
+          {slotCategoryText}
           <br />
           グラウンド：
-          {venue ? `${venue.name}${venue.address ? ` / ${venue.address}` : ""}` : "未設定"}
+          {venue
+            ? `${venue.name}${venue.address ? ` / ${venue.address}` : ""}`
+            : "未設定"}
           <br />
           募集状態：<b>{slot.is_closed ? "締切" : "募集中"}</b>
+          <br />
+          希望相手：
+          <b>
+            {(() => {
+              const min = levelToRankLabel(slot.level_min);
+              const max = levelToRankLabel(slot.level_max);
+              if (min && max) return `${min}〜${max}`;
+              if (min) return `${min}以上`;
+              if (max) return `${max}以下`;
+              return "指定なし";
+            })()}
+          </b>
         </div>
 
         {googleMapUrl ? (
@@ -199,25 +270,62 @@ export function SlotDetail(props: {
       </div>
 
       <div style={sectionBox}>
-        <div style={sectionTitle}>相手チーム情報</div>
+        <div style={sectionHeader}>
+          <div style={sectionTitle}>相手チーム情報</div>
+          {hostTeam?.id ? (
+            <Link href={`/teams/${hostTeam.id}`} className="sh-btn">
+              チーム詳細
+            </Link>
+          ) : null}
+        </div>
 
         <div style={{ display: "grid", gap: 8 }}>
-          <div><b>チーム名：</b>{hostTeam?.name || "未設定"}</div>
-          <div><b>エリア：</b>{hostArea}</div>
+          <div>
+            <b>チーム名：</b>
+            {hostTeam?.name || "未設定"}
+          </div>
+          <div>
+            <b>エリア：</b>
+            {hostArea}
+          </div>
           <div>
             <b>カテゴリ：</b>
-            {Array.isArray(hostTeam?.categories) && hostTeam.categories.length > 0
-              ? hostTeam.categories.join(" / ")
-              : hostTeam?.category || "未設定"}
+            {hostCategoryText}
           </div>
-          <div><b>強さ：</b>{levelLabel(Number(hostTeam?.level ?? 0))}</div>
-          <div><b>グラウンド提供：</b>{hostTeam?.has_ground ? "あり" : "なし"}</div>
-          <div><b>駐輪場：</b>{hostTeam?.bike_parking ?? "不明"}</div>
-          <div><b>駐輪場台数：</b>{hostTeam?.bike_parking_capacity ?? "未設定"}</div>
-          <div><b>所属人数：</b>{memberCount || 0}人</div>
-          <div><b>ユニフォーム：</b>{hostTeam?.uniform_main ?? "不明"}（メイン） / {hostTeam?.uniform_sub ?? "不明"}（サブ）</div>
-          <div><b>希望枠：</b>{formatDesiredDates(hostTeam?.desired_dates)}</div>
-          <div><b>メモ：</b>{hostTeam?.note?.trim() || "なし"}</div>
+          <div>
+            <b>強さ：</b>
+            {hostStrength}
+          </div>
+          <div>
+            <b>グラウンド提供：</b>
+            {hostTeam?.has_ground ? "あり" : "なし"}
+          </div>
+          <div>
+            <b>駐輪場：</b>
+            {hostTeam?.bike_parking ?? "不明"}
+          </div>
+          <div>
+            <b>駐輪場台数：</b>
+            {hostTeam?.bike_parking_capacity ?? "未設定"}
+          </div>
+          <div>
+            <b>所属人数：</b>
+            {memberCount || 0}人
+          </div>
+          <div>
+            <b>ユニフォーム：</b>
+            {hostTeam?.uniform_main ?? "不明"}（メイン） /{" "}
+            {hostTeam?.uniform_sub ?? "不明"}（サブ） /{" "}
+            {hostTeam?.uniform_gk ?? "不明"}（GK）
+          </div>
+          <div>
+            <b>希望枠：</b>
+            {formatDesiredDates(hostTeam?.desired_dates)}
+          </div>
+          <div>
+            <b>メモ：</b>
+            {hostTeam?.note?.trim() || "なし"}
+          </div>
         </div>
       </div>
 
@@ -231,12 +339,24 @@ export function SlotDetail(props: {
             </div>
           ) : myRequest ? (
             <div style={{ display: "grid", gap: 10 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  flexWrap: "wrap",
+                }}
+              >
                 <span>現在の申込状況：</span>
-                <span style={badgeStyle(myRequest.status)}>{myRequest.status}</span>
+                <span style={badgeStyle(myRequest.status)}>
+                  {requestStatusLabel(myRequest.status)}
+                </span>
               </div>
 
-              <div><b>申込チーム：</b>{requesterTeamName(myRequest.requester_team_id)}</div>
+              <div>
+                <b>申込チーム：</b>
+                {requesterTeamName(myRequest.requester_team_id)}
+              </div>
 
               {myRequest.comment?.trim() ? (
                 <div style={commentBox}>
@@ -281,7 +401,7 @@ export function SlotDetail(props: {
                 <textarea
                   value={requestComment}
                   onChange={(e) => onChangeRequestComment(e.target.value)}
-                  placeholder="例：6年主体です。交流重視でぜひお願いします。"
+                  placeholder="例：交流重視でぜひお願いします。"
                   style={textarea}
                   disabled={!!loading}
                 />
@@ -317,7 +437,11 @@ export function SlotDetail(props: {
 
       {canShowChatButton ? (
         <div>
-          <button className="sh-btn" type="button" onClick={() => onOpenChat(otherTeamIdForChat)}>
+          <button
+            className="sh-btn"
+            type="button"
+            onClick={() => onOpenChat(otherTeamIdForChat)}
+          >
             💬 チャットを開く
           </button>
         </div>
@@ -333,13 +457,29 @@ export function SlotDetail(props: {
             <div style={{ display: "grid", gap: 8 }}>
               {requests.map((r) => (
                 <div key={r.id} style={requestRow}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        flexWrap: "wrap",
+                      }}
+                    >
                       <b>{requesterTeamName(r.requester_team_id)}</b>
-                      <span style={badgeStyle(r.status)}>{r.status}</span>
+                      <span style={badgeStyle(r.status)}>
+                        {requestStatusLabel(r.status)}
+                      </span>
                     </div>
                     <div style={{ color: "#777", fontSize: 12 }}>
-                      {new Date(r.created_at).toLocaleString()}
+                      {new Date(r.created_at).toLocaleString("ja-JP")}
                     </div>
                   </div>
 
@@ -350,7 +490,14 @@ export function SlotDetail(props: {
                     </div>
                   ) : null}
 
-                  <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <div
+                    style={{
+                      marginTop: 10,
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                    }}
+                  >
                     <button
                       className="sh-btn"
                       type="button"
@@ -385,9 +532,17 @@ const sectionBox: React.CSSProperties = {
   background: "#fff",
 };
 
+const sectionHeader: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+  marginBottom: 10,
+};
+
 const sectionTitle: React.CSSProperties = {
   fontWeight: 900,
-  marginBottom: 10,
   color: "#1f5d30",
 };
 

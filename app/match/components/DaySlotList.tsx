@@ -2,8 +2,10 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import type { DbSlot, DbTeam, DbVenue, DbRequest } from "../types";
 import { SlotDetail } from "./SlotDetail";
+import { categoryLabel } from "@/app/lib/categories";
 
 function hhmm(v: string) {
   if (!v) return "";
@@ -38,6 +40,21 @@ function renderWantedLevelRange(slot: DbSlot) {
   return "指定なし";
 }
 
+function statusLabel(status: DbRequest["status"]) {
+  switch (status) {
+    case "pending":
+      return "申込中";
+    case "accepted":
+      return "成立";
+    case "rejected":
+      return "見送り";
+    case "cancelled":
+      return "取消";
+    default:
+      return status;
+  }
+}
+
 function statusBadgeStyle(status: DbRequest["status"]) {
   return {
     marginLeft: 8,
@@ -49,18 +66,18 @@ function statusBadgeStyle(status: DbRequest["status"]) {
       status === "accepted"
         ? "#ecfdf3"
         : status === "rejected"
-          ? "#fef2f2"
-          : status === "cancelled"
-            ? "#f3f4f6"
-            : "#eff6ff",
+        ? "#fef2f2"
+        : status === "cancelled"
+        ? "#f3f4f6"
+        : "#eff6ff",
     color:
       status === "accepted"
         ? "#166534"
         : status === "rejected"
-          ? "#991b1b"
-          : status === "cancelled"
-            ? "#374151"
-            : "#1e3a8a",
+        ? "#991b1b"
+        : status === "cancelled"
+        ? "#374151"
+        : "#1e3a8a",
   } as React.CSSProperties;
 }
 
@@ -128,17 +145,17 @@ export function DaySlotList(props: {
       <h2 style={h2}>{selectedYmd} の募集中</h2>
 
       {slots.length === 0 ? (
-        <p style={{ margin: "10px 0 0", color: "#777" }}>この日はまだ募集がありません。</p>
+        <p style={{ margin: "10px 0 0", color: "#777" }}>
+          この日はまだ募集がありません。
+        </p>
       ) : (
         <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
           {slots.map((s) => {
             const isMine = !!meId && s.owner_id === meId;
 
-            const hostTeam =
-              allTeams.find((t) => t.id === s.host_team_id) ?? null;
+            const hostTeam = allTeams.find((t) => t.id === s.host_team_id) ?? null;
 
-            const hostTeamName =
-              hostTeam?.name?.trim() || "チーム未設定";
+            const hostTeamName = hostTeam?.name?.trim() || "チーム未設定";
 
             const rankText =
               hostTeam?.strength_rank?.trim() ||
@@ -151,26 +168,50 @@ export function DaySlotList(props: {
                 r.status !== "cancelled"
             );
 
+            const categoryText = categoryLabel(s.category) || s.category || "カテゴリ未設定";
+
             return (
               <div
                 key={s.id}
                 style={{
                   padding: 12,
                   borderRadius: 12,
-                  border: selectedSlotId === s.id ? "2px solid #86efac" : "1px solid #eee",
-                  background: selectedSlotId === s.id ? "#f0fdf4" : "#fafafa",
+                  border:
+                    selectedSlotId === s.id
+                      ? "2px solid #86efac"
+                      : "1px solid #eee",
+                  background:
+                    selectedSlotId === s.id ? "#f0fdf4" : "#fafafa",
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    alignItems: "flex-start",
+                    flexWrap: "wrap",
+                  }}
+                >
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontWeight: 900, lineHeight: 1.35 }}>
-                      {hhmm(s.start_time)}–{hhmm(s.end_time)} / {s.area_text ?? s.area ?? "エリア未設定"} /{" "}
-                      {s.category || "カテゴリ未設定"} {isMine ? "（あなた）" : ""}
+                    <div style={{ fontWeight: 900, lineHeight: 1.5 }}>
+                      {hhmm(s.start_time)}–{hhmm(s.end_time)} /{" "}
+                      {s.area_text ?? s.area ?? "エリア未設定"} / {categoryText}
+                      {isMine ? "（あなた）" : ""}
                       {s.is_closed ? (
-                        <span style={{ ...statusBadgeStyle("cancelled"), marginLeft: 8 }}>締切</span>
+                        <span
+                          style={{
+                            ...statusBadgeStyle("cancelled"),
+                            marginLeft: 8,
+                          }}
+                        >
+                          締切
+                        </span>
                       ) : null}
                       {!isMine && myReq ? (
-                        <span style={statusBadgeStyle(myReq.status)}>{myReq.status}</span>
+                        <span style={statusBadgeStyle(myReq.status)}>
+                          {statusLabel(myReq.status)}
+                        </span>
                       ) : null}
                     </div>
 
@@ -187,15 +228,38 @@ export function DaySlotList(props: {
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    <button className="sh-btn" type="button" onClick={() => onToggleDetail(s.id)}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
+                  >
+                    {hostTeam?.id ? (
+                      <Link href={`/teams/${hostTeam.id}`} className="sh-btn">
+                        チーム詳細
+                      </Link>
+                    ) : null}
+
+                    <button
+                      className="sh-btn"
+                      type="button"
+                      onClick={() => onToggleDetail(s.id)}
+                    >
                       {selectedSlotId === s.id ? "閉じる" : "詳細"}
                     </button>
                   </div>
                 </div>
 
                 {selectedSlotId === s.id ? (
-                  <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #eaeaea" }}>
+                  <div
+                    style={{
+                      marginTop: 12,
+                      paddingTop: 12,
+                      borderTop: "1px solid #eaeaea",
+                    }}
+                  >
                     <SlotDetail
                       slot={selectedSlot}
                       hostTeam={selectedHostTeam}
