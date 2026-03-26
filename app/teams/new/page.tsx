@@ -6,14 +6,14 @@ import { useRouter } from "next/navigation";
 
 import { supabase } from "@/app/lib/supabase";
 
-import { CATEGORY_OPTIONS } from "@/app/lib/categories";
+import { CATEGORY_OPTIONS, categoryLabels } from "@/app/lib/categories";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
 import {
   StrengthRankPicker,
   StrengthRank,
   strengthRankToLegacyLevel,
 } from "@/app/components/StrengthRankPicker";
-import { CategorySinglePicker } from "@/app/components/CategorySinglePicker";
+import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { BikeParkingField } from "@/app/components/BikeParkingField";
 import { MemberCountField } from "@/app/components/MemberCountField";
 
@@ -44,15 +44,8 @@ function isMissingColumnError(err: any) {
         msg.includes("address_detail") ||
         msg.includes("strength_rank") ||
         msg.includes("bike_parking_capacity") ||
-        msg.includes("uniform_gk")))
-  );
-}
-
-function normalizeCategoryOptions(
-  options: Array<string | { value: string; label: string }>
-): Array<{ value: string; label: string }> {
-  return options.map((opt) =>
-    typeof opt === "string" ? { value: opt, label: opt } : opt
+        msg.includes("uniform_gk") ||
+        msg.includes("categories")))
   );
 }
 
@@ -65,7 +58,7 @@ export default function TeamNewPage() {
 
   const [name, setName] = useState("");
 
-  const [category, setCategory] = useState("");
+  const [categories, setCategories] = useState<string[]>([]);
   const [strengthRank, setStrengthRank] = useState<StrengthRank>("A");
   const [hasGround, setHasGround] = useState(false);
 
@@ -88,13 +81,7 @@ export default function TeamNewPage() {
   const [contactPhone, setContactPhone] = useState("");
   const [contactLineId, setContactLineId] = useState("");
 
-  const categoryOptions = useMemo(
-    () =>
-      normalizeCategoryOptions(
-        CATEGORY_OPTIONS as Array<string | { value: string; label: string }>
-      ),
-    []
-  );
+  const primaryCategory = useMemo(() => categories[0] ?? "", [categories]);
 
   const canSave = useMemo(() => {
     const bikeOk =
@@ -104,7 +91,7 @@ export default function TeamNewPage() {
       !!name.trim() &&
       !!prefecture &&
       !!city &&
-      !!category &&
+      categories.length > 0 &&
       bikeOk &&
       !saving &&
       !loadingDefaults
@@ -113,7 +100,7 @@ export default function TeamNewPage() {
     name,
     prefecture,
     city,
-    category,
+    categories,
     bikeParking,
     bikeParkingCapacity,
     saving,
@@ -177,7 +164,7 @@ export default function TeamNewPage() {
 
   const resetForm = () => {
     setName("");
-    setCategory("");
+    setCategories([]);
     setStrengthRank("A");
     setHasGround(false);
     setBikeParking("なし");
@@ -214,8 +201,8 @@ export default function TeamNewPage() {
       const basePayload: any = {
         owner_id: auth.user.id,
         name: name.trim(),
-        categories: [category],
-        category,
+        categories,
+        category: primaryCategory || null,
         level: strengthRankToLegacyLevel(strengthRank),
         strength_rank: strengthRank,
         has_ground: hasGround,
@@ -249,18 +236,26 @@ export default function TeamNewPage() {
 
       if (res.error && isMissingColumnError(res.error)) {
         console.warn(
-          "missing columns. retry without optional fields:",
+          "missing columns. retry without optional/multi-category fields:",
           res.error.message
         );
 
         const fallbackPayload: any = {
-          ...basePayload,
+          owner_id: auth.user.id,
+          name: name.trim(),
+          category: primaryCategory || null,
+          level: strengthRankToLegacyLevel(strengthRank),
+          has_ground: hasGround,
+          bike_parking: bikeParking,
+          uniform_main: uniformMain.trim() || "不明",
+          uniform_sub: uniformSub.trim() || "不明",
+          roster_by_grade: { TOTAL: memberCountNum },
+          note: note || "",
+          prefecture,
+          city,
+          town: town || null,
+          area: areaText,
         };
-
-        delete fallbackPayload.address_detail;
-        delete fallbackPayload.strength_rank;
-        delete fallbackPayload.bike_parking_capacity;
-        delete fallbackPayload.uniform_gk;
 
         res = await supabase
           .from("teams")
@@ -278,7 +273,7 @@ export default function TeamNewPage() {
 
       setToast({ type: "success", text: "✅ 登録しました" });
 
-      router.push(`/mypage`);
+      router.push("/mypage");
       resetForm();
       setSaving(false);
     } catch (e: any) {
@@ -351,7 +346,8 @@ export default function TeamNewPage() {
             <div style={helperText}>
               ※ 1アカウントで複数チームを登録できます。<br />
               例：キッズ、U12、U10、女子チームなどを別々に登録可能です。<br />
-              ※ 現在は1チームにつき1カテゴリで登録してください。
+              ※ 1チーム内で複数カテゴリを登録できます。<br />
+              ※ 先頭のカテゴリを互換用の代表カテゴリとして保存します。
             </div>
           </div>
 
@@ -362,7 +358,7 @@ export default function TeamNewPage() {
               onChange={(e) => setName(e.target.value)}
               className="sh-input"
               disabled={saving}
-              placeholder="例：三宿FC U-12"
+              placeholder="例：三宿FC"
             />
           </label>
 
@@ -395,13 +391,23 @@ export default function TeamNewPage() {
             </span>
           </label>
 
-          <CategorySinglePicker
-            title="カテゴリ（必須）"
-            options={categoryOptions}
-            value={category}
-            onChange={setCategory}
-            disabled={saving}
-          />
+          <div style={subSection}>
+            <CheckboxGroup
+              title="カテゴリ（必須・複数選択可）"
+              options={CATEGORY_OPTIONS}
+              values={categories}
+              onChange={setCategories}
+              columns={3}
+              disabled={saving}
+              useChipUI={true}
+            />
+            <div style={{ marginTop: 8, ...helperText }}>
+              選択中：
+              {categories.length > 0
+                ? ` ${categoryLabels(categories).join(" / ")}`
+                : " 未選択"}
+            </div>
+          </div>
 
           <div style={subSection}>
             <StrengthRankPicker
@@ -516,7 +522,8 @@ export default function TeamNewPage() {
             <div style={{ marginTop: 8, ...helperText }}>
               ※ 以前登録したチームの連絡先がある場合、自動で初期入力されます。<br />
               ※ DBに contact_email / contact_phone / contact_line_id が無い環境でも保存できるようにしています。<br />
-              ※ DBに uniform_gk が無い環境でも保存できるように自動フォールバックしています。
+              ※ DBに uniform_gk が無い環境でも保存できるように自動フォールバックしています。<br />
+              ※ DBに categories が無い環境では category に代表カテゴリのみ保存します。
             </div>
           </div>
 
@@ -540,15 +547,18 @@ export default function TeamNewPage() {
                 Q. 1つのアカウントで複数チームを登録できますか？
               </div>
               <div style={faqA}>
-                A. はい、登録できます。カテゴリごとに別チームとして登録してください。
-                例：キッズ、U12、U10、女子チームなど。
+                A. はい、登録できます。必要に応じてチームを分けて登録してください。
               </div>
             </div>
 
             <div style={faqItem}>
               <div style={faqQ}>Q. 1チームで複数カテゴリを持てますか？</div>
               <div style={faqA}>
-                A. 現在は1チームにつき1カテゴリです。複数カテゴリがある場合は、チームを分けて登録してください。
+                A. はい。複数カテゴリを登録できます。内部的には
+                <code> categories </code>
+                に配列で保存し、代表カテゴリとして先頭1件を
+                <code> category </code>
+                にも保存します。
               </div>
             </div>
           </div>

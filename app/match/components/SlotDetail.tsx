@@ -1,4 +1,3 @@
-// app/match/components/SlotDetail.tsx
 "use client";
 
 import React, { useMemo } from "react";
@@ -98,15 +97,22 @@ function buildGoogleMapUrl(venue: DbVenue | null, slot: DbSlot) {
   )}`;
 }
 
-function categoryTextFromTeam(team: DbTeam | null) {
-  if (!team) return "未設定";
-
-  if (Array.isArray(team.categories) && team.categories.length > 0) {
-    const labels = categoryLabels(team.categories);
-    return labels.length > 0 ? labels.join(" / ") : team.categories.join(" / ");
+function categoryTextFromValues(values?: string[] | null, fallback?: string | null) {
+  if (Array.isArray(values) && values.length > 0) {
+    const labels = categoryLabels(values);
+    return labels.length > 0 ? labels.join(" / ") : values.join(" / ");
   }
 
-  return categoryLabel(team.category) || team.category || "未設定";
+  return categoryLabel(fallback) || fallback || "未設定";
+}
+
+function slotCategoryText(slot: any) {
+  return categoryTextFromValues(slot?.categories, slot?.category);
+}
+
+function categoryTextFromTeam(team: DbTeam | null) {
+  if (!team) return "未設定";
+  return categoryTextFromValues(team.categories, team.category);
 }
 
 export function SlotDetail(props: {
@@ -204,9 +210,7 @@ export function SlotDetail(props: {
     levelToRankLabel(hostTeam?.level) ||
     "未設定";
 
-  const slotCategoryText =
-    categoryLabel(slot.category) || slot.category || "未設定";
-
+  const slotCategoryDisplay = slotCategoryText(slot);
   const hostCategoryText = categoryTextFromTeam(hostTeam);
 
   return (
@@ -232,7 +236,7 @@ export function SlotDetail(props: {
           </b>
           <br />
           エリア：{slot.area_text ?? slot.area ?? "—"} / カテゴリ：
-          {slotCategoryText}
+          {slotCategoryDisplay}
           <br />
           グラウンド：
           {venue

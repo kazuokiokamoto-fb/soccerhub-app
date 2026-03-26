@@ -20,6 +20,7 @@ export type DbTeam = {
 
   uniform_main: string | null;
   uniform_sub: string | null;
+  uniform_gk?: string | null;
 
   roster_by_grade: Record<string, number> | null;
   member_count?: number | null;
@@ -54,6 +55,7 @@ export type DbSlot = {
   area_detail?: string | null;
 
   category: string | null;
+  categories?: string[] | null;
 
   level_min?: number | null;
   level_max?: number | null;

@@ -1,11 +1,10 @@
-// app/match/components/DaySlotList.tsx
 "use client";
 
 import React from "react";
 import Link from "next/link";
 import type { DbSlot, DbTeam, DbVenue, DbRequest } from "../types";
 import { SlotDetail } from "./SlotDetail";
-import { categoryLabel } from "@/app/lib/categories";
+import { categoryLabel, categoryLabels } from "@/app/lib/categories";
 
 function hhmm(v: string) {
   if (!v) return "";
@@ -79,6 +78,15 @@ function statusBadgeStyle(status: DbRequest["status"]) {
         ? "#374151"
         : "#1e3a8a",
   } as React.CSSProperties;
+}
+
+function slotCategoryText(slot: any) {
+  if (Array.isArray(slot?.categories) && slot.categories.length > 0) {
+    const labels = categoryLabels(slot.categories);
+    return labels.length > 0 ? labels.join(" / ") : slot.categories.join(" / ");
+  }
+
+  return categoryLabel(slot?.category) || slot?.category || "カテゴリ未設定";
 }
 
 export function DaySlotList(props: {
@@ -168,7 +176,7 @@ export function DaySlotList(props: {
                 r.status !== "cancelled"
             );
 
-            const categoryText = categoryLabel(s.category) || s.category || "カテゴリ未設定";
+            const categoryText = slotCategoryText(s);
 
             return (
               <div

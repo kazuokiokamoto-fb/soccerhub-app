@@ -6,7 +6,7 @@ import { useRouter, useParams } from "next/navigation";
 
 import { supabase } from "@/app/lib/supabase";
 
-import { CATEGORY_OPTIONS } from "@/app/lib/categories";
+import { CATEGORY_OPTIONS, categoryLabels } from "@/app/lib/categories";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
 import {
   StrengthRankPicker,
@@ -14,7 +14,7 @@ import {
   strengthRankToLegacyLevel,
   legacyLevelToStrengthRank,
 } from "@/app/components/StrengthRankPicker";
-import { CategorySinglePicker } from "@/app/components/CategorySinglePicker";
+import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { BikeParkingField } from "@/app/components/BikeParkingField";
 import { MemberCountField } from "@/app/components/MemberCountField";
 
@@ -46,15 +46,8 @@ function isMissingColumnError(err: any) {
         msg.includes("strength_rank") ||
         msg.includes("bike_parking_capacity") ||
         msg.includes("member_count") ||
-        msg.includes("uniform_gk")))
-  );
-}
-
-function normalizeCategoryOptions(
-  options: Array<string | { value: string; label: string }>
-): Array<{ value: string; label: string }> {
-  return options.map((opt) =>
-    typeof opt === "string" ? { value: opt, label: opt } : opt
+        msg.includes("uniform_gk") ||
+        msg.includes("categories")))
   );
 }
 
@@ -69,7 +62,7 @@ export default function TeamEditPage() {
 
   const [name, setName] = useState("");
 
-  const [category, setCategory] = useState("");
+  const [categories, setCategories] = useState<string[]>([]);
   const [strengthRank, setStrengthRank] = useState<StrengthRank>("A");
   const [hasGround, setHasGround] = useState(false);
 
@@ -93,13 +86,7 @@ export default function TeamEditPage() {
   const [contactPhone, setContactPhone] = useState("");
   const [contactLineId, setContactLineId] = useState("");
 
-  const categoryOptions = useMemo(
-    () =>
-      normalizeCategoryOptions(
-        CATEGORY_OPTIONS as Array<string | { value: string; label: string }>
-      ),
-    []
-  );
+  const primaryCategory = useMemo(() => categories[0] ?? "", [categories]);
 
   const canSave = useMemo(() => {
     const bikeOk =
@@ -110,7 +97,7 @@ export default function TeamEditPage() {
       !!name.trim() &&
       !!prefecture &&
       !!city &&
-      !!category &&
+      categories.length > 0 &&
       bikeOk &&
       !saving
     );
@@ -119,7 +106,7 @@ export default function TeamEditPage() {
     name,
     prefecture,
     city,
-    category,
+    categories,
     bikeParking,
     bikeParkingCapacity,
     saving,
@@ -157,7 +144,7 @@ export default function TeamEditPage() {
           res = await supabase
             .from("teams")
             .select(
-              "id,owner_id,name,category,categories,level,has_ground,bike_parking,uniform_main,uniform_sub,prefecture,city,town,area,note,contact_email,contact_phone,contact_line_id,roster_by_grade"
+              "id,owner_id,name,category,level,has_ground,bike_parking,uniform_main,uniform_sub,prefecture,city,town,area,note,contact_email,contact_phone,contact_line_id,roster_by_grade"
             )
             .eq("id", teamId)
             .single();
@@ -165,7 +152,10 @@ export default function TeamEditPage() {
 
         if (res.error || !res.data) {
           console.error(res.error);
-          setToast({ type: "error", text: "チーム情報の読み込みに失敗しました" });
+          setToast({
+            type: "error",
+            text: "チーム情報の読み込みに失敗しました",
+          });
           setLoading(false);
           return;
         }
@@ -179,12 +169,14 @@ export default function TeamEditPage() {
         }
 
         setName(data.name ?? "");
-        setCategory(
-          data.category ??
-            (Array.isArray(data.categories) && data.categories.length > 0
-              ? data.categories[0]
-              : "")
-        );
+
+        if (Array.isArray(data.categories) && data.categories.length > 0) {
+          setCategories(data.categories);
+        } else if (data.category) {
+          setCategories([data.category]);
+        } else {
+          setCategories([]);
+        }
 
         setStrengthRank(
           data.strength_rank
@@ -242,8 +234,8 @@ export default function TeamEditPage() {
 
       const basePayload: any = {
         name: name.trim(),
-        category,
-        categories: [category],
+        category: primaryCategory || null,
+        categories,
         level: strengthRankToLegacyLevel(strengthRank),
         strength_rank: strengthRank,
         has_ground: hasGround,
@@ -273,19 +265,24 @@ export default function TeamEditPage() {
 
       if (res.error && isMissingColumnError(res.error)) {
         console.warn(
-          "missing columns. retry without optional fields:",
+          "missing columns. retry without optional/multi-category fields:",
           res.error.message
         );
 
         const fallbackPayload: any = {
-          ...basePayload,
+          name: name.trim(),
+          category: primaryCategory || null,
+          level: strengthRankToLegacyLevel(strengthRank),
+          has_ground: hasGround,
+          bike_parking: bikeParking,
+          uniform_main: uniformMain.trim() || "不明",
+          uniform_sub: uniformSub.trim() || "不明",
+          note: note || "",
+          prefecture,
+          city,
+          town: town || null,
+          area: areaText,
         };
-
-        delete fallbackPayload.address_detail;
-        delete fallbackPayload.strength_rank;
-        delete fallbackPayload.bike_parking_capacity;
-        delete fallbackPayload.member_count;
-        delete fallbackPayload.uniform_gk;
 
         res = await supabase.from("teams").update(fallbackPayload).eq("id", teamId);
       }
@@ -376,7 +373,7 @@ export default function TeamEditPage() {
             <div style={noticeTitle}>編集について</div>
             <div style={helperText}>
               ※ 1アカウントで複数チームを登録できます。<br />
-              ※ 現在は1チームにつき1カテゴリで管理してください。<br />
+              ※ 1チーム内で複数カテゴリを管理できます。<br />
               ※ キッズカテゴリにも対応しています。
             </div>
           </div>
@@ -388,7 +385,7 @@ export default function TeamEditPage() {
               onChange={(e) => setName(e.target.value)}
               className="sh-input"
               disabled={saving}
-              placeholder="例：三宿FC U-12"
+              placeholder="例：三宿FC"
             />
           </label>
 
@@ -421,13 +418,23 @@ export default function TeamEditPage() {
             </span>
           </label>
 
-          <CategorySinglePicker
-            title="カテゴリ（必須）"
-            options={categoryOptions}
-            value={category}
-            onChange={setCategory}
-            disabled={saving}
-          />
+          <div style={subSection}>
+            <CheckboxGroup
+              title="カテゴリ（必須・複数選択可）"
+              options={CATEGORY_OPTIONS}
+              values={categories}
+              onChange={setCategories}
+              columns={3}
+              disabled={saving}
+              useChipUI={true}
+            />
+            <div style={{ marginTop: 8, ...helperText }}>
+              選択中：
+              {categories.length > 0
+                ? ` ${categoryLabels(categories).join(" / ")}`
+                : " 未選択"}
+            </div>
+          </div>
 
           <div style={subSection}>
             <StrengthRankPicker
@@ -541,7 +548,8 @@ export default function TeamEditPage() {
             <div style={{ marginTop: 8, ...helperText }}>
               ※ 連絡先はこのチームごとに編集できます。<br />
               ※ DBに contact_email / contact_phone / contact_line_id が無い環境でも保存できるようにしています。<br />
-              ※ DBに uniform_gk が無い環境でも保存できるように自動フォールバックしています。
+              ※ DBに uniform_gk が無い環境でも保存できるように自動フォールバックしています。<br />
+              ※ DBに categories が無い環境では category のみ更新します。
             </div>
           </div>
 
