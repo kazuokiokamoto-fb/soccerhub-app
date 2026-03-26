@@ -24,6 +24,16 @@ type Offer = {
   created_at: string;
 };
 
+type MatchRequest = {
+  id: string;
+  slot_id: string;
+  requester_team_id: string;
+  requester_user_id: string | null;
+  status: "pending" | "accepted" | "rejected" | "cancelled";
+  comment: string | null;
+  created_at: string;
+};
+
 type SlotMini = {
   id: string;
   date: string | null;
@@ -32,14 +42,37 @@ type SlotMini = {
   area: string | null;
   area_text?: string | null;
   category: string | null;
+  host_team_id?: string | null;
 };
+
+type SentItem =
+  | {
+      kind: "offer";
+      id: string;
+      created_at: string;
+      status: "pending" | "accepted" | "rejected" | "cancelled";
+      from_team_id: string;
+      to_team_id: string;
+      slot_id: string | null;
+      message: string | null;
+    }
+  | {
+      kind: "request";
+      id: string;
+      created_at: string;
+      status: "pending" | "accepted" | "rejected" | "cancelled";
+      from_team_id: string;
+      to_team_id: string;
+      slot_id: string;
+      message: string | null;
+    };
 
 export default function OfferSentPage() {
   const [meId, setMeId] = useState("");
   const [loading, setLoading] = useState(true);
 
   const [myTeams, setMyTeams] = useState<Team[]>([]);
-  const [offers, setOffers] = useState<Offer[]>([]);
+  const [items, setItems] = useState<SentItem[]>([]);
   const [teamMap, setTeamMap] = useState<Map<string, Team>>(new Map());
   const [slotMap, setSlotMap] = useState<Map<string, SlotMini>>(new Map());
 
@@ -65,7 +98,7 @@ export default function OfferSentPage() {
     if (teamsErr) {
       console.error(teamsErr);
       setMyTeams([]);
-      setOffers([]);
+      setItems([]);
       setTeamMap(new Map());
       setSlotMap(new Map());
       setLoading(false);
@@ -78,7 +111,7 @@ export default function OfferSentPage() {
     const myTeamIds = myTeamRows.map((t) => t.id).filter(Boolean);
 
     if (myTeamIds.length === 0) {
-      setOffers([]);
+      setItems([]);
       setTeamMap(new Map());
       setSlotMap(new Map());
       setLoading(false);
@@ -87,28 +120,81 @@ export default function OfferSentPage() {
 
     const { data: offerRows, error: offersErr } = await supabase
       .from("match_offers")
-      .select("*")
+      .select("id,slot_id,from_team_id,to_team_id,status,message,created_at")
       .in("from_team_id", myTeamIds)
       .order("created_at", { ascending: false });
 
     if (offersErr) {
       console.error(offersErr);
-      setOffers([]);
-      setTeamMap(new Map());
-      setSlotMap(new Map());
-      setLoading(false);
-      return;
     }
 
-    const offerData = (offerRows ?? []) as Offer[];
-    setOffers(offerData);
+    const { data: allSlots, error: slotsErr } = await supabase
+      .from("match_slots")
+      .select("id,date,start_time,end_time,area,area_text,category,host_team_id")
+      .order("created_at", { ascending: false });
+
+    if (slotsErr) {
+      console.error(slotsErr);
+    }
+
+    const allSlotRows = (allSlots ?? []) as SlotMini[];
+    const otherSlotIds = allSlotRows
+      .filter((s) => s.host_team_id && !myTeamIds.includes(s.host_team_id))
+      .map((s) => s.id);
+
+    let requestRows: MatchRequest[] = [];
+    if (otherSlotIds.length > 0) {
+      const { data: requests, error: requestsErr } = await supabase
+        .from("match_requests")
+        .select("id,slot_id,requester_team_id,requester_user_id,status,comment,created_at")
+        .in("requester_team_id", myTeamIds)
+        .in("slot_id", otherSlotIds)
+        .order("created_at", { ascending: false });
+
+      if (requestsErr) {
+        console.error(requestsErr);
+      } else {
+        requestRows = (requests ?? []) as MatchRequest[];
+      }
+    }
+
+    const offerItems: SentItem[] = ((offerRows ?? []) as Offer[]).map((o) => ({
+      kind: "offer",
+      id: o.id,
+      created_at: o.created_at,
+      status: o.status,
+      from_team_id: o.from_team_id,
+      to_team_id: o.to_team_id,
+      slot_id: o.slot_id,
+      message: o.message,
+    }));
+
+    const requestItems: SentItem[] = requestRows.map((r) => {
+      const slot = allSlotRows.find((s) => s.id === r.slot_id);
+      return {
+        kind: "request",
+        id: r.id,
+        created_at: r.created_at,
+        status: r.status,
+        from_team_id: r.requester_team_id,
+        to_team_id: slot?.host_team_id ?? "",
+        slot_id: r.slot_id,
+        message: r.comment,
+      };
+    });
+
+    const merged = [...offerItems, ...requestItems].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    setItems(merged);
 
     const teamIds = Array.from(
       new Set(
-        [
-          ...offerData.map((o) => o.from_team_id),
-          ...offerData.map((o) => o.to_team_id),
-        ].filter(Boolean)
+        merged
+          .flatMap((x) => [x.from_team_id, x.to_team_id])
+          .filter(Boolean)
       )
     );
 
@@ -131,13 +217,13 @@ export default function OfferSentPage() {
     }
 
     const slotIds = Array.from(
-      new Set(offerData.map((o) => o.slot_id).filter(Boolean) as string[])
+      new Set(merged.map((x) => x.slot_id).filter(Boolean) as string[])
     );
 
     if (slotIds.length > 0) {
       const { data: slotRows, error: slotErr } = await supabase
         .from("match_slots")
-        .select("id,date,start_time,end_time,area,area_text,category")
+        .select("id,date,start_time,end_time,area,area_text,category,host_team_id")
         .in("id", slotIds);
 
       if (slotErr) {
@@ -174,6 +260,13 @@ export default function OfferSentPage() {
       )
       .on(
         "postgres_changes",
+        { event: "*", schema: "public", table: "match_requests" },
+        () => {
+          loadPage();
+        }
+      )
+      .on(
+        "postgres_changes",
         { event: "*", schema: "public", table: "match_slots" },
         () => {
           loadPage();
@@ -195,22 +288,22 @@ export default function OfferSentPage() {
 
   const counts = useMemo(() => {
     return {
-      pending: offers.filter((o) => o.status === "pending").length,
-      accepted: offers.filter((o) => o.status === "accepted").length,
-      rejected: offers.filter((o) => o.status === "rejected").length,
-      cancelled: offers.filter((o) => o.status === "cancelled").length,
+      pending: items.filter((o) => o.status === "pending").length,
+      accepted: items.filter((o) => o.status === "accepted").length,
+      rejected: items.filter((o) => o.status === "rejected").length,
+      cancelled: items.filter((o) => o.status === "cancelled").length,
     };
-  }, [offers]);
+  }, [items]);
 
   return (
     <main style={wrap}>
       <AppTabNav />
-      <PageBackNav current="送った招待" />
+      <PageBackNav current="送ったオファー" />
 
       <AppHero
         icon="📤"
-        title="送った招待"
-        desc="こちらから送った試合招待一覧です。"
+        title="送ったオファー"
+        desc="こちらから送った招待と、自分が相手募集に出した申込み一覧です。"
       />
 
       <div style={summary}>
@@ -226,25 +319,28 @@ export default function OfferSentPage() {
         <div style={empty}>自分のチームがまだ登録されていません</div>
       ) : null}
 
-      {!loading && myTeams.length > 0 && offers.length === 0 ? (
-        <div style={empty}>送った招待はまだありません</div>
+      {!loading && myTeams.length > 0 && items.length === 0 ? (
+        <div style={empty}>送ったオファーはまだありません</div>
       ) : null}
 
       <div style={list}>
-        {offers.map((o) => {
-          const fromTeam = teamMap.get(o.from_team_id);
-          const toTeam = teamMap.get(o.to_team_id);
-          const slot = o.slot_id ? slotMap.get(o.slot_id) : null;
-          const expanded = openId === o.id;
+        {items.map((item) => {
+          const fromTeam = teamMap.get(item.from_team_id);
+          const toTeam = teamMap.get(item.to_team_id);
+          const slot = item.slot_id ? slotMap.get(item.slot_id) : null;
+          const rowId = `${item.kind}:${item.id}`;
+          const expanded = openId === rowId;
 
           return (
-            <div key={o.id} style={card}>
+            <div key={rowId} style={card}>
               <div style={titleRow}>
                 <div>
                   <div style={teamName}>
                     {toTeam?.name ?? "相手チーム"}
                   </div>
                   <div style={subText}>
+                    {item.kind === "offer" ? "招待" : "申込み"}
+                    {" / "}
                     送信元：{fromTeam?.name ?? "自チーム"}
                     {toTeam?.category
                       ? ` / ${categoryLabel(toTeam.category) || toTeam.category}`
@@ -252,12 +348,10 @@ export default function OfferSentPage() {
                   </div>
                 </div>
 
-                <span style={badge(o.status)}>
-                  {label(o.status)}
-                </span>
+                <span style={badge(item.status)}>{label(item.status)}</span>
               </div>
 
-              <div style={meta}>送信日時：{fmt(o.created_at)}</div>
+              <div style={meta}>送信日時：{fmt(item.created_at)}</div>
 
               {slot ? (
                 <div style={slotBox}>
@@ -279,12 +373,12 @@ export default function OfferSentPage() {
                 <button
                   className="sh-btn"
                   type="button"
-                  onClick={() => setOpenId(expanded ? "" : o.id)}
+                  onClick={() => setOpenId(expanded ? "" : rowId)}
                 >
                   {expanded ? "閉じる" : "詳細"}
                 </button>
 
-                <Link href={`/teams/${o.to_team_id}`} className="sh-btn">
+                <Link href={`/teams/${item.to_team_id}`} className="sh-btn">
                   チーム詳細
                 </Link>
 
@@ -295,6 +389,13 @@ export default function OfferSentPage() {
 
               {expanded ? (
                 <div style={detail}>
+                  <div style={detailBlock}>
+                    <div style={detailLabel}>種別</div>
+                    <div style={detailValue}>
+                      {item.kind === "offer" ? "招待" : "申込み"}
+                    </div>
+                  </div>
+
                   <div style={detailBlock}>
                     <div style={detailLabel}>送信チーム</div>
                     <div style={detailValue}>
@@ -316,13 +417,15 @@ export default function OfferSentPage() {
                   </div>
 
                   <div style={detailBlock}>
-                    <div style={detailLabel}>メッセージ</div>
-                    <div style={detailValue}>{o.message || "なし"}</div>
+                    <div style={detailLabel}>
+                      {item.kind === "offer" ? "メッセージ" : "コメント"}
+                    </div>
+                    <div style={detailValue}>{item.message || "なし"}</div>
                   </div>
 
                   <div style={detailBlock}>
                     <div style={detailLabel}>送信日時</div>
-                    <div style={detailValue}>{fmt(o.created_at)}</div>
+                    <div style={detailValue}>{fmt(item.created_at)}</div>
                   </div>
 
                   {slot ? (
@@ -338,10 +441,10 @@ export default function OfferSentPage() {
                         {slot.category ?? "カテゴリ未設定"}
                       </div>
                     </div>
-                  ) : o.slot_id ? (
+                  ) : item.slot_id ? (
                     <div style={detailBlock}>
                       <div style={detailLabel}>関連募集ID</div>
-                      <div style={detailValue}>{o.slot_id}</div>
+                      <div style={detailValue}>{item.slot_id}</div>
                     </div>
                   ) : null}
                 </div>

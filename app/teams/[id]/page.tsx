@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { categoryLabel, categoryLabels } from "@/app/lib/categories";
 
 function levelToRankLabel(level?: number | null) {
@@ -20,6 +20,9 @@ export default function TeamDetail() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const threadId = searchParams.get("threadId") ?? "";
 
   const [team, setTeam] = useState<any>(null);
   const [comment, setComment] = useState("");
@@ -158,7 +161,7 @@ export default function TeamDetail() {
         return;
       }
 
-      const { data: threadId, error: threadErr } = await supabase.rpc(
+      const { data: createdThreadId, error: threadErr } = await supabase.rpc(
         "rpc_get_or_create_dm_thread",
         {
           my_team_id: myTeam.id,
@@ -166,7 +169,7 @@ export default function TeamDetail() {
         }
       );
 
-      if (!threadErr && threadId) {
+      if (!threadErr && createdThreadId) {
         const bodyLines = [
           "【試合申込】",
           `${slot.date} ${slot.start_time?.slice(0, 5)}-${slot.end_time?.slice(0, 5)}`,
@@ -179,14 +182,14 @@ export default function TeamDetail() {
         ].filter(Boolean);
 
         await supabase.from("chat_messages").insert({
-          thread_id: threadId,
+          thread_id: createdThreadId,
           sender_id: user.id,
           sender_team_id: myTeam.id,
           body: bodyLines.join("\n"),
         });
 
         alert("試合申込しました");
-        router.push(`/chat/${threadId}`);
+        router.push(`/chat/${createdThreadId}`);
         return;
       }
 
@@ -219,6 +222,12 @@ export default function TeamDetail() {
   return (
     <main style={pageWrap}>
       <div style={topRow}>
+        {threadId ? (
+          <Link href={`/chat/${threadId}`} className="sh-btn sh-btn--primary">
+            ← チャットへ戻る
+          </Link>
+        ) : null}
+
         <Link href="/teams/search" className="sh-btn">
           ← チーム検索へ
         </Link>

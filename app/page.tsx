@@ -91,9 +91,8 @@ export default function HomePage() {
   const [myTeams, setMyTeams] = useState<TeamRow[]>([]);
 
   const [openCount, setOpenCount] = useState(0);
-  const [applyingCount, setApplyingCount] = useState(0);
-  const [inviteSentCount, setInviteSentCount] = useState(0);
-  const [inviteReceivedCount, setInviteReceivedCount] = useState(0);
+  const [receivedOfferCount, setReceivedOfferCount] = useState(0);
+  const [sentOfferCount, setSentOfferCount] = useState(0);
 
   const [unreadTotal, setUnreadTotal] = useState(0);
   const [nextMatch, setNextMatch] = useState<NextMatchCard | null>(null);
@@ -110,9 +109,8 @@ export default function HomePage() {
       setLoading(false);
       setMyTeams([]);
       setOpenCount(0);
-      setApplyingCount(0);
-      setInviteSentCount(0);
-      setInviteReceivedCount(0);
+      setReceivedOfferCount(0);
+      setSentOfferCount(0);
       setUnreadTotal(0);
       setNextMatch(null);
       return;
@@ -138,9 +136,8 @@ export default function HomePage() {
 
     if (myTeamIds.length === 0) {
       setOpenCount(0);
-      setApplyingCount(0);
-      setInviteSentCount(0);
-      setInviteReceivedCount(0);
+      setReceivedOfferCount(0);
+      setSentOfferCount(0);
       setUnreadTotal(0);
       setNextMatch(null);
       setLoading(false);
@@ -159,47 +156,79 @@ export default function HomePage() {
     }
 
     const mySlotRows = (mySlots ?? []) as MatchSlotRow[];
+    const mySlotIds = mySlotRows.map((s) => s.id).filter(Boolean);
+
     setOpenCount(mySlotRows.filter((s) => !s.is_closed).length);
 
-    const { data: myRequests, error: reqErr } = await supabase
+    const { data: outgoingRequests, error: outgoingReqErr } = await supabase
       .from("match_requests")
-      .select("id, slot_id, requester_team_id, requester_user_id, status, comment, created_at")
+      .select(
+        "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
+      )
       .in("requester_team_id", myTeamIds);
 
-    if (reqErr) {
-      console.error(reqErr);
+    if (outgoingReqErr) {
+      console.error(outgoingReqErr);
     }
 
-    const myRequestRows = (myRequests ?? []) as MatchRequestRow[];
-    setApplyingCount(myRequestRows.filter((r) => r.status === "pending").length);
+    const outgoingRequestRows = (outgoingRequests ?? []) as MatchRequestRow[];
 
-    const { data: offerRows, error: offersErr } = await supabase
-      .from("match_offers")
-      .select("*")
-      .in("from_team_id", myTeamIds)
-      .order("created_at", { ascending: false });
+    let incomingRequestRows: MatchRequestRow[] = [];
+    if (mySlotIds.length > 0) {
+      const { data: incomingRequests, error: incomingReqErr } = await supabase
+        .from("match_requests")
+        .select(
+          "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
+        )
+        .in("slot_id", mySlotIds);
 
-    if (offersErr) {
-      console.error(offersErr);
-      setInviteSentCount(0);
-    } else {
-      const offerData = (offerRows ?? []) as MatchOfferRow[];
-      setInviteSentCount(offerData.filter((o) => o.status === "pending").length);
+      if (incomingReqErr) {
+        console.error(incomingReqErr);
+      } else {
+        incomingRequestRows = (incomingRequests ?? []) as MatchRequestRow[];
+      }
     }
 
-    const { data: receivedOffers, error: recvErr } = await supabase
+    const { data: sentOffers, error: sentOffersErr } = await supabase
       .from("match_offers")
-      .select("id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at")
+      .select(
+        "id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at"
+      )
+      .in("from_team_id", myTeamIds);
+
+    if (sentOffersErr) {
+      console.error("sentOffers error:", sentOffersErr);
+    }
+
+    const sentOfferRows = (sentOffers ?? []) as MatchOfferRow[];
+
+    const { data: receivedOffers, error: receivedOffersErr } = await supabase
+      .from("match_offers")
+      .select(
+        "id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at"
+      )
       .in("to_team_id", myTeamIds);
 
-    if (recvErr) {
-      console.error("receivedOffers error:", recvErr);
+    if (receivedOffersErr) {
+      console.error("receivedOffers error:", receivedOffersErr);
     }
 
     const receivedOfferRows = (receivedOffers ?? []) as MatchOfferRow[];
-    setInviteReceivedCount(
-      receivedOfferRows.filter((o) => o.status === "pending").length
-    );
+
+    const pendingReceivedOffers =
+      receivedOfferRows.filter((o) => o.status === "pending").length +
+      incomingRequestRows.filter(
+        (r) =>
+          r.status === "pending" &&
+          !myTeamIds.includes(r.requester_team_id)
+      ).length;
+
+    const pendingSentOffers =
+      sentOfferRows.filter((o) => o.status === "pending").length +
+      outgoingRequestRows.filter((r) => r.status === "pending").length;
+
+    setReceivedOfferCount(pendingReceivedOffers);
+    setSentOfferCount(pendingSentOffers);
 
     const { data: memberRows, error: memberErr } = await supabase
       .from("chat_members")
@@ -257,15 +286,29 @@ export default function HomePage() {
       setUnreadTotal(0);
     }
 
-    const acceptedRequests = myRequestRows.filter((r) => r.status === "accepted");
-    const acceptedSlotIds = Array.from(new Set(acceptedRequests.map((r) => r.slot_id)));
+    const acceptedOutgoingRequestSlotIds = outgoingRequestRows
+      .filter((r) => r.status === "accepted")
+      .map((r) => r.slot_id);
 
-    const inviteAcceptedSlotIds = receivedOfferRows
+    const acceptedIncomingRequestSlotIds = incomingRequestRows
+      .filter((r) => r.status === "accepted")
+      .map((r) => r.slot_id);
+
+    const acceptedReceivedOfferSlotIds = receivedOfferRows
+      .filter((o) => o.status === "accepted" && o.slot_id)
+      .map((o) => o.slot_id as string);
+
+    const acceptedSentOfferSlotIds = sentOfferRows
       .filter((o) => o.status === "accepted" && o.slot_id)
       .map((o) => o.slot_id as string);
 
     const mergedAcceptedSlotIds = Array.from(
-      new Set([...acceptedSlotIds, ...inviteAcceptedSlotIds])
+      new Set([
+        ...acceptedOutgoingRequestSlotIds,
+        ...acceptedIncomingRequestSlotIds,
+        ...acceptedReceivedOfferSlotIds,
+        ...acceptedSentOfferSlotIds,
+      ].filter(Boolean))
     );
 
     if (mergedAcceptedSlotIds.length > 0) {
@@ -440,27 +483,21 @@ export default function HomePage() {
           <div style={statusList}>
             <DashboardLinkRow
               href="/match/status/open"
-              label="募集中の試合（自分）"
+              label="募集中の試合"
               value={openCount}
               helper={openCount === 0 ? "まだ募集していません" : "現在公開中の募集です"}
             />
             <DashboardLinkRow
-              href="/match/status/applying"
-              label="申込中の試合"
-              value={applyingCount}
-              helper={applyingCount === 0 ? "まだ申込していません" : "返答待ちの試合があります"}
-            />
-            <DashboardLinkRow
               href="/match/status/offers-received"
-              label="届いた招待"
-              value={inviteReceivedCount}
-              helper={inviteReceivedCount === 0 ? "新しい招待はありません" : "確認待ちの招待があります"}
+              label="届いたオファー"
+              value={receivedOfferCount}
+              helper={receivedOfferCount === 0 ? "新しいオファーはありません" : "確認待ちのオファーがあります"}
             />
             <DashboardLinkRow
               href="/match/status/offers"
-              label="送った招待"
-              value={inviteSentCount}
-              helper={inviteSentCount === 0 ? "まだ招待を送っていません" : "相手の返答待ちです"}
+              label="送ったオファー"
+              value={sentOfferCount}
+              helper={sentOfferCount === 0 ? "まだオファーを送っていません" : "返答待ちのオファーがあります"}
             />
           </div>
         </div>
@@ -520,7 +557,7 @@ export default function HomePage() {
         <div style={guideBlock}>
           <div style={guideStep}>1. チームを登録する</div>
           <div style={guideText}>
-            まずはチーム名、エリア、カテゴリ、強さ、グラウンド提供可否、駐輪場、人数などを登録します。
+            まずはチーム名、エリア、カテゴリ、強さ、グラウンド提供可否、人数などを登録します。
             相手に見てもらう前提で、なるべく分かりやすく入力しておくとマッチしやすくなります。
           </div>
         </div>
@@ -544,7 +581,7 @@ export default function HomePage() {
         <div style={guideBlock}>
           <div style={guideStep}>4. 条件を細かく活用する</div>
           <div style={guideText}>
-            エリア、カテゴリ、強さ、グラウンド提供、駐輪場、所属人数などを使うと、
+            エリア、カテゴリ、強さ、グラウンド提供、所属人数などを使うと、
             より希望に近い相手を探しやすくなります。
           </div>
         </div>
@@ -577,7 +614,7 @@ export default function HomePage() {
         <div style={qaItem}>
           <div style={qaQ}>Q. チーム検索では何で絞り込めますか？</div>
           <div style={qaA}>
-            A. エリア、カテゴリ、強さ、グラウンド提供、駐輪場、所属人数、キーワードなどで絞り込みできます。
+            A. エリア、カテゴリ、強さ、グラウンド提供、所属人数、キーワードなどで絞り込みできます。
           </div>
         </div>
 

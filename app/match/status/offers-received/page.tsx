@@ -25,6 +25,16 @@ type Offer = {
   created_at: string;
 };
 
+type MatchRequest = {
+  id: string;
+  slot_id: string;
+  requester_team_id: string;
+  requester_user_id: string | null;
+  status: "pending" | "accepted" | "rejected" | "cancelled";
+  comment: string | null;
+  created_at: string;
+};
+
 type SlotMini = {
   id: string;
   date: string | null;
@@ -33,14 +43,37 @@ type SlotMini = {
   area: string | null;
   area_text?: string | null;
   category: string | null;
+  host_team_id?: string | null;
 };
+
+type ReceivedItem =
+  | {
+      kind: "offer";
+      id: string;
+      created_at: string;
+      status: "pending" | "accepted" | "rejected" | "cancelled";
+      from_team_id: string;
+      to_team_id: string;
+      slot_id: string | null;
+      message: string | null;
+    }
+  | {
+      kind: "request";
+      id: string;
+      created_at: string;
+      status: "pending" | "accepted" | "rejected" | "cancelled";
+      from_team_id: string;
+      to_team_id: string;
+      slot_id: string;
+      message: string | null;
+    };
 
 export default function OfferReceivedPage() {
   const [meId, setMeId] = useState("");
   const [loading, setLoading] = useState(true);
 
   const [myTeams, setMyTeams] = useState<Team[]>([]);
-  const [offers, setOffers] = useState<Offer[]>([]);
+  const [items, setItems] = useState<ReceivedItem[]>([]);
   const [teamMap, setTeamMap] = useState<Map<string, Team>>(new Map());
   const [slotMap, setSlotMap] = useState<Map<string, SlotMini>>(new Map());
 
@@ -67,7 +100,7 @@ export default function OfferReceivedPage() {
     if (teamsErr) {
       console.error(teamsErr);
       setMyTeams([]);
-      setOffers([]);
+      setItems([]);
       setTeamMap(new Map());
       setSlotMap(new Map());
       setLoading(false);
@@ -80,12 +113,24 @@ export default function OfferReceivedPage() {
     const myTeamIds = myTeamRows.map((t) => t.id).filter(Boolean);
 
     if (myTeamIds.length === 0) {
-      setOffers([]);
+      setItems([]);
       setTeamMap(new Map());
       setSlotMap(new Map());
       setLoading(false);
       return;
     }
+
+    const { data: mySlots, error: mySlotsErr } = await supabase
+      .from("match_slots")
+      .select("id,date,start_time,end_time,area,area_text,category,host_team_id")
+      .in("host_team_id", myTeamIds);
+
+    if (mySlotsErr) {
+      console.error(mySlotsErr);
+    }
+
+    const mySlotRows = (mySlots ?? []) as SlotMini[];
+    const mySlotIds = mySlotRows.map((s) => s.id).filter(Boolean);
 
     const { data: offerRows, error: offersErr } = await supabase
       .from("match_offers")
@@ -95,30 +140,68 @@ export default function OfferReceivedPage() {
 
     if (offersErr) {
       console.error(offersErr);
-      setOffers([]);
-      setTeamMap(new Map());
-      setSlotMap(new Map());
-      setLoading(false);
-      return;
     }
 
-    const offerData = (offerRows ?? []) as Offer[];
-    setOffers(offerData);
+    let requestRows: MatchRequest[] = [];
+    if (mySlotIds.length > 0) {
+      const { data: requests, error: requestsErr } = await supabase
+        .from("match_requests")
+        .select("id,slot_id,requester_team_id,requester_user_id,status,comment,created_at")
+        .in("slot_id", mySlotIds)
+        .order("created_at", { ascending: false });
 
-    const teamIds = Array.from(
+      if (requestsErr) {
+        console.error(requestsErr);
+      } else {
+        requestRows = (requests ?? []) as MatchRequest[];
+      }
+    }
+
+    const offerItems: ReceivedItem[] = ((offerRows ?? []) as Offer[]).map((o) => ({
+      kind: "offer",
+      id: o.id,
+      created_at: o.created_at,
+      status: o.status,
+      from_team_id: o.from_team_id,
+      to_team_id: o.to_team_id,
+      slot_id: o.slot_id,
+      message: o.message,
+    }));
+
+    const requestItems: ReceivedItem[] = requestRows.map((r) => {
+      const slot = mySlotRows.find((s) => s.id === r.slot_id);
+      return {
+        kind: "request",
+        id: r.id,
+        created_at: r.created_at,
+        status: r.status,
+        from_team_id: r.requester_team_id,
+        to_team_id: slot?.host_team_id ?? "",
+        slot_id: r.slot_id,
+        message: r.comment,
+      };
+    });
+
+    const merged = [...offerItems, ...requestItems].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    setItems(merged);
+
+    const relatedTeamIds = Array.from(
       new Set(
-        [
-          ...offerData.map((o) => o.from_team_id),
-          ...offerData.map((o) => o.to_team_id),
-        ].filter(Boolean)
+        merged
+          .flatMap((x) => [x.from_team_id, x.to_team_id])
+          .filter(Boolean)
       )
     );
 
-    if (teamIds.length > 0) {
+    if (relatedTeamIds.length > 0) {
       const { data: teamRows, error: teamErr } = await supabase
         .from("teams")
         .select("id,name,category")
-        .in("id", teamIds);
+        .in("id", relatedTeamIds);
 
       if (teamErr) {
         console.error(teamErr);
@@ -133,13 +216,13 @@ export default function OfferReceivedPage() {
     }
 
     const slotIds = Array.from(
-      new Set(offerData.map((o) => o.slot_id).filter(Boolean) as string[])
+      new Set(merged.map((x) => x.slot_id).filter(Boolean) as string[])
     );
 
     if (slotIds.length > 0) {
       const { data: slotRows, error: slotErr } = await supabase
         .from("match_slots")
-        .select("id,date,start_time,end_time,area,area_text,category")
+        .select("id,date,start_time,end_time,area,area_text,category,host_team_id")
         .in("id", slotIds);
 
       if (slotErr) {
@@ -176,6 +259,13 @@ export default function OfferReceivedPage() {
       )
       .on(
         "postgres_changes",
+        { event: "*", schema: "public", table: "match_requests" },
+        () => {
+          loadPage();
+        }
+      )
+      .on(
+        "postgres_changes",
         { event: "*", schema: "public", table: "match_slots" },
         () => {
           loadPage();
@@ -197,44 +287,66 @@ export default function OfferReceivedPage() {
 
   const counts = useMemo(() => {
     return {
-      pending: offers.filter((o) => o.status === "pending").length,
-      accepted: offers.filter((o) => o.status === "accepted").length,
-      rejected: offers.filter((o) => o.status === "rejected").length,
-      cancelled: offers.filter((o) => o.status === "cancelled").length,
+      pending: items.filter((o) => o.status === "pending").length,
+      accepted: items.filter((o) => o.status === "accepted").length,
+      rejected: items.filter((o) => o.status === "rejected").length,
+      cancelled: items.filter((o) => o.status === "cancelled").length,
     };
-  }, [offers]);
+  }, [items]);
 
   const updateStatus = async (
-    offerId: string,
+    item: ReceivedItem,
     nextStatus: "accepted" | "rejected"
   ) => {
     const confirmText =
       nextStatus === "accepted"
-        ? "この招待を承認しますか？"
-        : "この招待を見送りますか？";
+        ? "このオファーを承認しますか？"
+        : "このオファーを見送りますか？";
 
     if (!window.confirm(confirmText)) return;
 
-    setUpdatingId(offerId);
+    setUpdatingId(`${item.kind}:${item.id}`);
 
-    const { error } = await supabase
-      .from("match_offers")
-      .update({ status: nextStatus })
-      .eq("id", offerId);
+    if (item.kind === "offer") {
+      const { error } = await supabase
+        .from("match_offers")
+        .update({ status: nextStatus })
+        .eq("id", item.id);
 
-    if (error) {
-      console.error(error);
-      alert(
-        nextStatus === "accepted"
-          ? `承認に失敗しました: ${error.message}`
-          : `見送りに失敗しました: ${error.message}`
-      );
-      setUpdatingId("");
-      return;
+      if (error) {
+        console.error(error);
+        alert(
+          nextStatus === "accepted"
+            ? `承認に失敗しました: ${error.message}`
+            : `見送りに失敗しました: ${error.message}`
+        );
+        setUpdatingId("");
+        return;
+      }
+    } else {
+      const { error } = await supabase
+        .from("match_requests")
+        .update({ status: nextStatus })
+        .eq("id", item.id);
+
+      if (error) {
+        console.error(error);
+        alert(
+          nextStatus === "accepted"
+            ? `承認に失敗しました: ${error.message}`
+            : `見送りに失敗しました: ${error.message}`
+        );
+        setUpdatingId("");
+        return;
+      }
     }
 
-    setOffers((prev) =>
-      prev.map((o) => (o.id === offerId ? { ...o, status: nextStatus } : o))
+    setItems((prev) =>
+      prev.map((x) =>
+        x.kind === item.kind && x.id === item.id
+          ? { ...x, status: nextStatus }
+          : x
+      )
     );
 
     setUpdatingId("");
@@ -243,12 +355,12 @@ export default function OfferReceivedPage() {
   return (
     <main style={wrap}>
       <AppTabNav />
-      <PageBackNav current="届いた招待" />
+      <PageBackNav current="届いたオファー" />
 
       <AppHero
         icon="📥"
-        title="届いた招待"
-        desc="相手チームから届いた試合招待一覧です。"
+        title="届いたオファー"
+        desc="相手から届いた招待と、自分の募集に対する申込み一覧です。"
       />
 
       <div style={summary}>
@@ -264,27 +376,30 @@ export default function OfferReceivedPage() {
         <div style={empty}>自分のチームがまだ登録されていません</div>
       ) : null}
 
-      {!loading && myTeams.length > 0 && offers.length === 0 ? (
-        <div style={empty}>届いた招待はまだありません</div>
+      {!loading && myTeams.length > 0 && items.length === 0 ? (
+        <div style={empty}>届いたオファーはまだありません</div>
       ) : null}
 
       <div style={list}>
-        {offers.map((o) => {
-          const fromTeam = teamMap.get(o.from_team_id);
-          const toTeam = teamMap.get(o.to_team_id);
-          const slot = o.slot_id ? slotMap.get(o.slot_id) : null;
-          const expanded = openId === o.id;
-          const isPending = o.status === "pending";
-          const busy = updatingId === o.id;
+        {items.map((item) => {
+          const fromTeam = teamMap.get(item.from_team_id);
+          const toTeam = teamMap.get(item.to_team_id);
+          const slot = item.slot_id ? slotMap.get(item.slot_id) : null;
+          const rowId = `${item.kind}:${item.id}`;
+          const expanded = openId === rowId;
+          const isPending = item.status === "pending";
+          const busy = updatingId === rowId;
 
           return (
-            <div key={o.id} style={card}>
+            <div key={rowId} style={card}>
               <div style={titleRow}>
                 <div>
                   <div style={teamName}>
                     {fromTeam?.name ?? "相手チーム"}
                   </div>
                   <div style={subText}>
+                    {item.kind === "offer" ? "招待" : "申込み"}
+                    {" / "}
                     宛先：{toTeam?.name ?? "自チーム"}
                     {fromTeam?.category
                       ? ` / ${categoryLabel(fromTeam.category) || fromTeam.category}`
@@ -292,10 +407,10 @@ export default function OfferReceivedPage() {
                   </div>
                 </div>
 
-                <span style={badge(o.status)}>{label(o.status)}</span>
+                <span style={badge(item.status)}>{label(item.status)}</span>
               </div>
 
-              <div style={meta}>受信日時：{fmt(o.created_at)}</div>
+              <div style={meta}>受信日時：{fmt(item.created_at)}</div>
 
               {slot ? (
                 <div style={slotBox}>
@@ -317,12 +432,12 @@ export default function OfferReceivedPage() {
                 <button
                   className="sh-btn"
                   type="button"
-                  onClick={() => setOpenId(expanded ? "" : o.id)}
+                  onClick={() => setOpenId(expanded ? "" : rowId)}
                 >
                   {expanded ? "閉じる" : "詳細"}
                 </button>
 
-                <Link href={`/teams/${o.from_team_id}`} className="sh-btn">
+                <Link href={`/teams/${item.from_team_id}`} className="sh-btn">
                   チーム詳細
                 </Link>
 
@@ -335,7 +450,7 @@ export default function OfferReceivedPage() {
                     <button
                       className="sh-btn sh-btn--primary"
                       type="button"
-                      onClick={() => updateStatus(o.id, "accepted")}
+                      onClick={() => updateStatus(item, "accepted")}
                       disabled={busy}
                     >
                       {busy ? "更新中…" : "承認"}
@@ -344,7 +459,7 @@ export default function OfferReceivedPage() {
                     <button
                       className="sh-btn"
                       type="button"
-                      onClick={() => updateStatus(o.id, "rejected")}
+                      onClick={() => updateStatus(item, "rejected")}
                       disabled={busy}
                     >
                       {busy ? "更新中…" : "見送り"}
@@ -355,6 +470,13 @@ export default function OfferReceivedPage() {
 
               {expanded ? (
                 <div style={detail}>
+                  <div style={detailBlock}>
+                    <div style={detailLabel}>種別</div>
+                    <div style={detailValue}>
+                      {item.kind === "offer" ? "招待" : "申込み"}
+                    </div>
+                  </div>
+
                   <div style={detailBlock}>
                     <div style={detailLabel}>送信チーム</div>
                     <div style={detailValue}>
@@ -376,13 +498,15 @@ export default function OfferReceivedPage() {
                   </div>
 
                   <div style={detailBlock}>
-                    <div style={detailLabel}>メッセージ</div>
-                    <div style={detailValue}>{o.message || "なし"}</div>
+                    <div style={detailLabel}>
+                      {item.kind === "offer" ? "メッセージ" : "コメント"}
+                    </div>
+                    <div style={detailValue}>{item.message || "なし"}</div>
                   </div>
 
                   <div style={detailBlock}>
-                    <div style={detailLabel}>送信日時</div>
-                    <div style={detailValue}>{fmt(o.created_at)}</div>
+                    <div style={detailLabel}>受信日時</div>
+                    <div style={detailValue}>{fmt(item.created_at)}</div>
                   </div>
 
                   {slot ? (
@@ -398,10 +522,10 @@ export default function OfferReceivedPage() {
                         {slot.category ?? "カテゴリ未設定"}
                       </div>
                     </div>
-                  ) : o.slot_id ? (
+                  ) : item.slot_id ? (
                     <div style={detailBlock}>
                       <div style={detailLabel}>関連募集ID</div>
-                      <div style={detailValue}>{o.slot_id}</div>
+                      <div style={detailValue}>{item.slot_id}</div>
                     </div>
                   ) : null}
                 </div>

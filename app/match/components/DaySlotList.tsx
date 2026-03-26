@@ -255,7 +255,7 @@ export function DaySlotList(props: {
                       type="button"
                       onClick={() => onToggleDetail(s.id)}
                     >
-                      {selectedSlotId === s.id ? "閉じる" : "詳細"}
+                      {selectedSlotId === s.id ? "閉じる" : "募集詳細"}
                     </button>
                   </div>
                 </div>

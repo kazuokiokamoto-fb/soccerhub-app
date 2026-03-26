@@ -90,7 +90,9 @@ function categoryMetaEntries(team?: TeamRow | null) {
 }
 
 export default function MyPage() {
-  const [me, setMe] = useState<{ id: string; email?: string | null } | null>(null);
+  const [me, setMe] = useState<{ id: string; email?: string | null } | null>(
+    null
+  );
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -206,7 +208,11 @@ export default function MyPage() {
   }
 
   async function existsRow(table: string, column: string, teamId: string) {
-    const res = await supabase.from(table).select("id", { count: "exact", head: true }).eq(column, teamId);
+    const res = await supabase
+      .from(table)
+      .select("id", { count: "exact", head: true })
+      .eq(column, teamId);
+
     if (res.error) {
       throw res.error;
     }
@@ -250,7 +256,9 @@ export default function MyPage() {
       } catch (e: any) {
         console.error(`delete-check failed: ${check.label}`, e);
         throw new Error(
-          `削除前チェックに失敗しました（${check.label}）: ${e?.message ?? "unknown error"}`
+          `削除前チェックに失敗しました（${check.label}）: ${
+            e?.message ?? "unknown error"
+          }`
         );
       }
     }
@@ -437,14 +445,14 @@ export default function MyPage() {
               return (
                 <div key={team.id} style={card}>
                   <div style={cardHead}>
-                    <div>
+                    <div style={cardTitleArea}>
                       <div style={{ fontWeight: 900, fontSize: 18 }}>
                         {team.name}
                       </div>
                       <div style={subText}>{categoryText(team)}</div>
                     </div>
 
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <div style={cardActions}>
                       <Link href={`/teams/${team.id}`} className="sh-btn">
                         詳細
                       </Link>
@@ -579,7 +587,22 @@ const cardHead: React.CSSProperties = {
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: 12,
+  flexWrap: "nowrap",
+};
+
+const cardTitleArea: React.CSSProperties = {
+  minWidth: 0,
+  flex: "1 1 auto",
+};
+
+const cardActions: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
   flexWrap: "wrap",
+  justifyContent: "flex-end",
+  alignItems: "flex-start",
+  marginLeft: "auto",
+  flex: "0 0 auto",
 };
 
 const subText: React.CSSProperties = {
