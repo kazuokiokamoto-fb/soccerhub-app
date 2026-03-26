@@ -7,7 +7,12 @@ import { supabase } from "@/app/lib/supabase";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 
-type TeamMini = { id: string; name: string | null; category?: string | null };
+type TeamMini = {
+  id: string;
+  name: string | null;
+  category?: string | null;
+};
+
 type LastMsgMini = {
   thread_id: string;
   body: string | null;
@@ -40,6 +45,7 @@ function clip(s?: string | null, n = 42) {
 
 function formatLineTime(dt?: string | null) {
   if (!dt) return "";
+
   try {
     const d = new Date(dt);
     const now = new Date();
@@ -100,6 +106,7 @@ export default function ChatListPage() {
 
     (async () => {
       setLoading(true);
+
       try {
         const { data: myTeamsRows } = await supabase
           .from("teams")
@@ -115,7 +122,7 @@ export default function ChatListPage() {
           .select("thread_id,last_read_at,created_at")
           .eq("user_id", meId)
           .order("created_at", { ascending: false })
-          .limit(50);
+          .limit(100);
 
         if (cmErr) {
           console.error(cmErr);
@@ -124,16 +131,17 @@ export default function ChatListPage() {
         }
 
         const threadIds = Array.from(
-          new Set(
-            (myMemberRows ?? []).map((r: any) => r.thread_id).filter(Boolean)
-          )
+          new Set((myMemberRows ?? []).map((r: any) => r.thread_id).filter(Boolean))
         );
 
         const myLastReadMap = new Map<string, string | null>();
         for (const r of myMemberRows ?? []) {
-          if (!r.thread_id) continue;
-          if (!myLastReadMap.has(r.thread_id)) {
-            myLastReadMap.set(r.thread_id, (r as any).last_read_at ?? null);
+          if (!(r as any).thread_id) continue;
+          if (!myLastReadMap.has((r as any).thread_id)) {
+            myLastReadMap.set(
+              (r as any).thread_id,
+              ((r as any).last_read_at ?? null) as string | null
+            );
           }
         }
 
@@ -202,7 +210,7 @@ export default function ChatListPage() {
         }
 
         const lastMsgByThread = new Map<string, LastMsgMini>();
-        const limit = Math.min(2000, Math.max(400, threadIds.length * 50));
+        const limit = Math.min(3000, Math.max(500, threadIds.length * 60));
 
         const { data: msgRows, error: msgErr } = await supabase
           .from("chat_messages")
@@ -217,6 +225,7 @@ export default function ChatListPage() {
           for (const m of (msgRows ?? []) as any[]) {
             const tid = m.thread_id as string;
             if (!tid) continue;
+
             if (!lastMsgByThread.has(tid)) {
               lastMsgByThread.set(tid, {
                 thread_id: tid,
@@ -320,7 +329,7 @@ export default function ChatListPage() {
         </div>
       ) : (
         <div style={listWrap}>
-          {threads.map((t) => {
+          {threads.map((t, index) => {
             const title = t.otherTeamName || "相手チーム";
             const category = t.otherTeamCategory || "";
             const body = t.lastMessageBody
@@ -331,7 +340,17 @@ export default function ChatListPage() {
             );
 
             return (
-              <Link key={t.id} href={`/chat/${t.id}`} style={threadCard}>
+              <Link
+                key={t.id}
+                href={`/chat/${t.id}`}
+                style={{
+                  ...threadCard,
+                  borderBottom:
+                    index === threads.length - 1
+                      ? "none"
+                      : "1px solid #edf1ee",
+                }}
+              >
                 <div style={avatar}>{buildInitial(title)}</div>
 
                 <div style={threadMain}>
@@ -406,7 +425,6 @@ const threadCard: React.CSSProperties = {
   padding: "14px 14px",
   textDecoration: "none",
   color: "#111",
-  borderBottom: "1px solid #edf1ee",
   background: "#fff",
 };
 

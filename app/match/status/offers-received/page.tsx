@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import AppTabNav from "@/app/components/AppTabNav";
 import AppHero from "@/app/components/AppHero";
@@ -44,6 +45,7 @@ type SlotMini = {
   area_text?: string | null;
   category: string | null;
   host_team_id?: string | null;
+  is_closed?: boolean | null;
 };
 
 type ReceivedItem =
@@ -69,6 +71,8 @@ type ReceivedItem =
     };
 
 export default function OfferReceivedPage() {
+  const router = useRouter();
+
   const [meId, setMeId] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -79,6 +83,7 @@ export default function OfferReceivedPage() {
 
   const [openId, setOpenId] = useState("");
   const [updatingId, setUpdatingId] = useState("");
+  const [chatOpeningId, setChatOpeningId] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -122,7 +127,9 @@ export default function OfferReceivedPage() {
 
     const { data: mySlots, error: mySlotsErr } = await supabase
       .from("match_slots")
-      .select("id,date,start_time,end_time,area,area_text,category,host_team_id")
+      .select(
+        "id,date,start_time,end_time,area,area_text,category,host_team_id,is_closed"
+      )
       .in("host_team_id", myTeamIds);
 
     if (mySlotsErr) {
@@ -134,7 +141,9 @@ export default function OfferReceivedPage() {
 
     const { data: offerRows, error: offersErr } = await supabase
       .from("match_offers")
-      .select("id,slot_id,from_user_id,from_team_id,to_team_id,status,message,created_at")
+      .select(
+        "id,slot_id,from_user_id,from_team_id,to_team_id,status,message,created_at"
+      )
       .in("to_team_id", myTeamIds)
       .order("created_at", { ascending: false });
 
@@ -146,7 +155,9 @@ export default function OfferReceivedPage() {
     if (mySlotIds.length > 0) {
       const { data: requests, error: requestsErr } = await supabase
         .from("match_requests")
-        .select("id,slot_id,requester_team_id,requester_user_id,status,comment,created_at")
+        .select(
+          "id,slot_id,requester_team_id,requester_user_id,status,comment,created_at"
+        )
         .in("slot_id", mySlotIds)
         .order("created_at", { ascending: false });
 
@@ -191,9 +202,7 @@ export default function OfferReceivedPage() {
 
     const relatedTeamIds = Array.from(
       new Set(
-        merged
-          .flatMap((x) => [x.from_team_id, x.to_team_id])
-          .filter(Boolean)
+        merged.flatMap((x) => [x.from_team_id, x.to_team_id]).filter(Boolean)
       )
     );
 
@@ -222,7 +231,9 @@ export default function OfferReceivedPage() {
     if (slotIds.length > 0) {
       const { data: slotRows, error: slotErr } = await supabase
         .from("match_slots")
-        .select("id,date,start_time,end_time,area,area_text,category,host_team_id")
+        .select(
+          "id,date,start_time,end_time,area,area_text,category,host_team_id,is_closed"
+        )
         .in("id", slotIds);
 
       if (slotErr) {
@@ -294,6 +305,52 @@ export default function OfferReceivedPage() {
     };
   }, [items]);
 
+  async function getOrCreateDmThread(myTeamId: string, otherTeamId: string) {
+    const { data, error } = await supabase.rpc("rpc_get_or_create_dm_thread", {
+      my_team_id: myTeamId,
+      other_team_id: otherTeamId,
+    });
+
+    if (error) throw error;
+    return data as string;
+  }
+
+  async function insertChatMessage(params: {
+    threadId: string;
+    senderId: string;
+    senderTeamId: string | null;
+    body: string;
+  }) {
+    const { threadId, senderId, senderTeamId, body } = params;
+
+    const { error } = await supabase.from("chat_messages").insert({
+      thread_id: threadId,
+      sender_id: senderId,
+      sender_team_id: senderTeamId,
+      body,
+    });
+
+    if (error) throw error;
+  }
+
+  async function openChat(item: ReceivedItem) {
+    const rowId = `${item.kind}:${item.id}`;
+    setChatOpeningId(rowId);
+
+    try {
+      const threadId = await getOrCreateDmThread(
+        item.to_team_id,
+        item.from_team_id
+      );
+      router.push(`/chat/${threadId}`);
+    } catch (e: any) {
+      console.error(e);
+      alert(`チャットを開けません: ${e?.message ?? "unknown error"}`);
+    } finally {
+      setChatOpeningId("");
+    }
+  }
+
   const updateStatus = async (
     item: ReceivedItem,
     nextStatus: "accepted" | "rejected"
@@ -305,51 +362,163 @@ export default function OfferReceivedPage() {
 
     if (!window.confirm(confirmText)) return;
 
-    setUpdatingId(`${item.kind}:${item.id}`);
+    const rowId = `${item.kind}:${item.id}`;
+    setUpdatingId(rowId);
 
-    if (item.kind === "offer") {
-      const { error } = await supabase
-        .from("match_offers")
-        .update({ status: nextStatus })
-        .eq("id", item.id);
-
-      if (error) {
-        console.error(error);
-        alert(
-          nextStatus === "accepted"
-            ? `承認に失敗しました: ${error.message}`
-            : `見送りに失敗しました: ${error.message}`
-        );
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth?.user?.id;
+      if (!uid) {
+        alert("ログインが必要です");
         setUpdatingId("");
         return;
       }
-    } else {
-      const { error } = await supabase
-        .from("match_requests")
-        .update({ status: nextStatus })
-        .eq("id", item.id);
 
-      if (error) {
-        console.error(error);
-        alert(
-          nextStatus === "accepted"
-            ? `承認に失敗しました: ${error.message}`
-            : `見送りに失敗しました: ${error.message}`
-        );
-        setUpdatingId("");
-        return;
+      const slot = item.slot_id ? slotMap.get(item.slot_id) : null;
+      const fromTeam = teamMap.get(item.from_team_id);
+      const toTeam = teamMap.get(item.to_team_id);
+
+      if (item.kind === "offer") {
+        const { error } = await supabase
+          .from("match_offers")
+          .update({ status: nextStatus })
+          .eq("id", item.id);
+
+        if (error) {
+          console.error(error);
+          alert(
+            nextStatus === "accepted"
+              ? `承認に失敗しました: ${error.message}`
+              : `見送りに失敗しました: ${error.message}`
+          );
+          setUpdatingId("");
+          return;
+        }
+
+        if (nextStatus === "accepted" && item.slot_id) {
+          await supabase
+            .from("match_slots")
+            .update({ is_closed: true })
+            .eq("id", item.slot_id);
+        }
+
+        if (nextStatus === "accepted") {
+          const threadId = await getOrCreateDmThread(
+            item.to_team_id,
+            item.from_team_id
+          );
+
+          const body = [
+            "【試合オファー 承認】",
+            slot
+              ? `${slot.date || "日付未設定"} ${
+                  slot.start_time ? String(slot.start_time).slice(0, 5) : ""
+                }${
+                  slot.end_time ? `-${String(slot.end_time).slice(0, 5)}` : ""
+                }`
+              : "",
+            slot
+              ? `カテゴリ: ${categoryLabel(slot.category) || slot.category || "未設定"}`
+              : "",
+            slot ? `エリア: ${slot.area_text ?? slot.area ?? "未設定"}` : "",
+            `募集チーム: ${toTeam?.name ?? "自チーム"}`,
+            `相手チーム: ${fromTeam?.name ?? "相手チーム"}`,
+            "オファーを承認しました。詳細はこのチャットで調整してください。",
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+          await insertChatMessage({
+            threadId,
+            senderId: uid,
+            senderTeamId: item.to_team_id,
+            body,
+          });
+
+          router.push(`/chat/${threadId}`);
+          return;
+        }
+      } else {
+        const { error } = await supabase
+          .from("match_requests")
+          .update({ status: nextStatus })
+          .eq("id", item.id);
+
+        if (error) {
+          console.error(error);
+          alert(
+            nextStatus === "accepted"
+              ? `承認に失敗しました: ${error.message}`
+              : `見送りに失敗しました: ${error.message}`
+          );
+          setUpdatingId("");
+          return;
+        }
+
+        if (nextStatus === "accepted" && item.slot_id) {
+          await supabase
+            .from("match_slots")
+            .update({ is_closed: true })
+            .eq("id", item.slot_id);
+        }
+
+        if (nextStatus === "accepted") {
+          const threadId = await getOrCreateDmThread(
+            item.to_team_id,
+            item.from_team_id
+          );
+
+          const body = [
+            "【試合申込 承認】",
+            slot
+              ? `${slot.date || "日付未設定"} ${
+                  slot.start_time ? String(slot.start_time).slice(0, 5) : ""
+                }${
+                  slot.end_time ? `-${String(slot.end_time).slice(0, 5)}` : ""
+                }`
+              : "",
+            slot
+              ? `カテゴリ: ${categoryLabel(slot.category) || slot.category || "未設定"}`
+              : "",
+            slot ? `エリア: ${slot.area_text ?? slot.area ?? "未設定"}` : "",
+            `申込チーム: ${fromTeam?.name ?? "相手チーム"}`,
+            `募集チーム: ${toTeam?.name ?? "自チーム"}`,
+            "申込みを承認しました。詳細はこのチャットで調整してください。",
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+          await insertChatMessage({
+            threadId,
+            senderId: uid,
+            senderTeamId: item.to_team_id,
+            body,
+          });
+
+          router.push(`/chat/${threadId}`);
+          return;
+        }
       }
+
+      setItems((prev) =>
+        prev.map((x) =>
+          x.kind === item.kind && x.id === item.id
+            ? { ...x, status: nextStatus }
+            : x
+        )
+      );
+
+      await loadPage();
+      setUpdatingId("");
+    } catch (e: any) {
+      console.error(e);
+      alert(
+        nextStatus === "accepted"
+          ? `承認に失敗しました: ${e?.message ?? "unknown error"}`
+          : `見送りに失敗しました: ${e?.message ?? "unknown error"}`
+      );
+      setUpdatingId("");
     }
-
-    setItems((prev) =>
-      prev.map((x) =>
-        x.kind === item.kind && x.id === item.id
-          ? { ...x, status: nextStatus }
-          : x
-      )
-    );
-
-    setUpdatingId("");
   };
 
   return (
@@ -389,14 +558,13 @@ export default function OfferReceivedPage() {
           const expanded = openId === rowId;
           const isPending = item.status === "pending";
           const busy = updatingId === rowId;
+          const chatBusy = chatOpeningId === rowId;
 
           return (
             <div key={rowId} style={card}>
               <div style={titleRow}>
                 <div>
-                  <div style={teamName}>
-                    {fromTeam?.name ?? "相手チーム"}
-                  </div>
+                  <div style={teamName}>{fromTeam?.name ?? "相手チーム"}</div>
                   <div style={subText}>
                     {item.kind === "offer" ? "招待" : "申込み"}
                     {" / "}
@@ -418,7 +586,9 @@ export default function OfferReceivedPage() {
                   <div style={slotText}>
                     {slot.date || "日付未設定"}{" "}
                     {slot.start_time ? String(slot.start_time).slice(0, 5) : ""}
-                    {slot.end_time ? ` - ${String(slot.end_time).slice(0, 5)}` : ""}
+                    {slot.end_time
+                      ? ` - ${String(slot.end_time).slice(0, 5)}`
+                      : ""}
                   </div>
                   <div style={slotSub}>
                     {slot.area_text ?? slot.area ?? "エリア未設定"}
@@ -441,9 +611,14 @@ export default function OfferReceivedPage() {
                   チーム詳細
                 </Link>
 
-                <Link href="/chat" className="sh-btn sh-btn--primary">
-                  チャット
-                </Link>
+                <button
+                  type="button"
+                  className="sh-btn sh-btn--primary"
+                  onClick={() => openChat(item)}
+                  disabled={chatBusy}
+                >
+                  {chatBusy ? "移動中…" : "チャット"}
+                </button>
 
                 {isPending ? (
                   <>
@@ -514,8 +689,12 @@ export default function OfferReceivedPage() {
                       <div style={detailLabel}>関連募集</div>
                       <div style={detailValue}>
                         {slot.date || "日付未設定"}{" "}
-                        {slot.start_time ? String(slot.start_time).slice(0, 5) : ""}
-                        {slot.end_time ? ` - ${String(slot.end_time).slice(0, 5)}` : ""}
+                        {slot.start_time
+                          ? String(slot.start_time).slice(0, 5)
+                          : ""}
+                        {slot.end_time
+                          ? ` - ${String(slot.end_time).slice(0, 5)}`
+                          : ""}
                         <br />
                         {slot.area_text ?? slot.area ?? "エリア未設定"}
                         {" / "}
@@ -562,9 +741,12 @@ function badge(s: string): React.CSSProperties {
     whiteSpace: "nowrap",
   };
 
-  if (s === "pending") return { ...base, background: "#fef3c7", color: "#92400e" };
-  if (s === "accepted") return { ...base, background: "#dcfce7", color: "#166534" };
-  if (s === "rejected") return { ...base, background: "#fee2e2", color: "#991b1b" };
+  if (s === "pending")
+    return { ...base, background: "#fef3c7", color: "#92400e" };
+  if (s === "accepted")
+    return { ...base, background: "#dcfce7", color: "#166534" };
+  if (s === "rejected")
+    return { ...base, background: "#fee2e2", color: "#991b1b" };
   return { ...base, background: "#eee", color: "#444" };
 }
 
