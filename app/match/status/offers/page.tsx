@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import AppTabNav from "@/app/components/AppTabNav";
 import AppHero from "@/app/components/AppHero";
@@ -68,6 +69,8 @@ type SentItem =
     };
 
 export default function OfferSentPage() {
+  const router = useRouter();
+
   const [meId, setMeId] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -77,6 +80,7 @@ export default function OfferSentPage() {
   const [slotMap, setSlotMap] = useState<Map<string, SlotMini>>(new Map());
 
   const [openId, setOpenId] = useState("");
+  const [chatOpeningId, setChatOpeningId] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -146,7 +150,9 @@ export default function OfferSentPage() {
     if (otherSlotIds.length > 0) {
       const { data: requests, error: requestsErr } = await supabase
         .from("match_requests")
-        .select("id,slot_id,requester_team_id,requester_user_id,status,comment,created_at")
+        .select(
+          "id,slot_id,requester_team_id,requester_user_id,status,comment,created_at"
+        )
         .in("requester_team_id", myTeamIds)
         .in("slot_id", otherSlotIds)
         .order("created_at", { ascending: false });
@@ -192,9 +198,7 @@ export default function OfferSentPage() {
 
     const teamIds = Array.from(
       new Set(
-        merged
-          .flatMap((x) => [x.from_team_id, x.to_team_id])
-          .filter(Boolean)
+        merged.flatMap((x) => [x.from_team_id, x.to_team_id]).filter(Boolean)
       )
     );
 
@@ -295,6 +299,34 @@ export default function OfferSentPage() {
     };
   }, [items]);
 
+  async function getOrCreateDmThread(myTeamId: string, otherTeamId: string) {
+    const { data, error } = await supabase.rpc("rpc_get_or_create_dm_thread", {
+      my_team_id: myTeamId,
+      other_team_id: otherTeamId,
+    });
+
+    if (error) throw error;
+    return data as string;
+  }
+
+  async function openChat(item: SentItem) {
+    const rowId = `${item.kind}:${item.id}`;
+    setChatOpeningId(rowId);
+
+    try {
+      const threadId = await getOrCreateDmThread(
+        item.from_team_id,
+        item.to_team_id
+      );
+      router.push(`/chat/${threadId}`);
+    } catch (e: any) {
+      console.error(e);
+      alert(`チャットを開けません: ${e?.message ?? "unknown error"}`);
+    } finally {
+      setChatOpeningId("");
+    }
+  }
+
   return (
     <main style={wrap}>
       <AppTabNav />
@@ -330,14 +362,13 @@ export default function OfferSentPage() {
           const slot = item.slot_id ? slotMap.get(item.slot_id) : null;
           const rowId = `${item.kind}:${item.id}`;
           const expanded = openId === rowId;
+          const chatBusy = chatOpeningId === rowId;
 
           return (
             <div key={rowId} style={card}>
               <div style={titleRow}>
                 <div>
-                  <div style={teamName}>
-                    {toTeam?.name ?? "相手チーム"}
-                  </div>
+                  <div style={teamName}>{toTeam?.name ?? "相手チーム"}</div>
                   <div style={subText}>
                     {item.kind === "offer" ? "招待" : "申込み"}
                     {" / "}
@@ -359,7 +390,9 @@ export default function OfferSentPage() {
                   <div style={slotText}>
                     {slot.date || "日付未設定"}{" "}
                     {slot.start_time ? String(slot.start_time).slice(0, 5) : ""}
-                    {slot.end_time ? ` - ${String(slot.end_time).slice(0, 5)}` : ""}
+                    {slot.end_time
+                      ? ` - ${String(slot.end_time).slice(0, 5)}`
+                      : ""}
                   </div>
                   <div style={slotSub}>
                     {slot.area_text ?? slot.area ?? "エリア未設定"}
@@ -378,13 +411,23 @@ export default function OfferSentPage() {
                   {expanded ? "閉じる" : "詳細"}
                 </button>
 
-                <Link href={`/teams/${item.to_team_id}`} className="sh-btn">
+                <Link
+                  href={`/teams/${item.to_team_id}?threadId=${encodeURIComponent(
+                    `${item.from_team_id}:${item.to_team_id}`
+                  )}`}
+                  className="sh-btn"
+                >
                   チーム詳細
                 </Link>
 
-                <Link href="/chat" className="sh-btn sh-btn--primary">
-                  チャット
-                </Link>
+                <button
+                  type="button"
+                  className="sh-btn sh-btn--primary"
+                  onClick={() => openChat(item)}
+                  disabled={chatBusy}
+                >
+                  {chatBusy ? "移動中…" : "チャット"}
+                </button>
               </div>
 
               {expanded ? (
@@ -433,8 +476,12 @@ export default function OfferSentPage() {
                       <div style={detailLabel}>関連募集</div>
                       <div style={detailValue}>
                         {slot.date || "日付未設定"}{" "}
-                        {slot.start_time ? String(slot.start_time).slice(0, 5) : ""}
-                        {slot.end_time ? ` - ${String(slot.end_time).slice(0, 5)}` : ""}
+                        {slot.start_time
+                          ? String(slot.start_time).slice(0, 5)
+                          : ""}
+                        {slot.end_time
+                          ? ` - ${String(slot.end_time).slice(0, 5)}`
+                          : ""}
                         <br />
                         {slot.area_text ?? slot.area ?? "エリア未設定"}
                         {" / "}

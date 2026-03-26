@@ -28,6 +28,7 @@ export default function TeamDetail() {
   const [comment, setComment] = useState("");
   const [loading, setLoading] = useState(true);
   const [requesting, setRequesting] = useState(false);
+  const [openingChat, setOpeningChat] = useState(false);
 
   useEffect(() => {
     load();
@@ -80,6 +81,61 @@ export default function TeamDetail() {
     return "不明";
   }, [team]);
 
+  async function openDirectChat() {
+    if (!id || !team || openingChat) return;
+
+    const { data: auth } = await supabase.auth.getUser();
+    const user = auth?.user;
+
+    if (!user) {
+      alert("ログインしてください");
+      return;
+    }
+
+    setOpeningChat(true);
+
+    try {
+      const { data: myTeam, error: myTeamErr } = await supabase
+        .from("teams")
+        .select("id,name")
+        .eq("owner_id", user.id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (myTeamErr || !myTeam) {
+        alert("先にチーム登録してください");
+        return;
+      }
+
+      if (myTeam.id === id) {
+        alert("自分のチームとのチャットは開けません");
+        return;
+      }
+
+      const { data: createdThreadId, error: threadErr } = await supabase.rpc(
+        "rpc_get_or_create_dm_thread",
+        {
+          my_team_id: myTeam.id,
+          other_team_id: id,
+        }
+      );
+
+      if (threadErr || !createdThreadId) {
+        console.error(threadErr);
+        alert(threadErr?.message ?? "チャットを開けませんでした");
+        return;
+      }
+
+      router.push(`/chat/${createdThreadId}`);
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message ?? "チャットを開けませんでした");
+    } finally {
+      setOpeningChat(false);
+    }
+  }
+
   async function requestMatch() {
     if (!id || !team) return;
     if (requesting) return;
@@ -103,13 +159,11 @@ export default function TeamDetail() {
 
       if (myTeamErr || !myTeam) {
         alert("先にチーム登録してください");
-        setRequesting(false);
         return;
       }
 
       if (myTeam.id === id) {
         alert("自分のチームには申込できません");
-        setRequesting(false);
         return;
       }
 
@@ -125,7 +179,6 @@ export default function TeamDetail() {
 
       if (slotErr || !slot) {
         alert("現在募集している試合がありません");
-        setRequesting(false);
         return;
       }
 
@@ -139,7 +192,6 @@ export default function TeamDetail() {
 
       if (existingReq) {
         alert("この募集にはすでに申込済みです");
-        setRequesting(false);
         return;
       }
 
@@ -157,7 +209,6 @@ export default function TeamDetail() {
 
       if (error || !request) {
         alert(error?.message ?? "試合申込に失敗しました");
-        setRequesting(false);
         return;
       }
 
@@ -231,6 +282,15 @@ export default function TeamDetail() {
         <Link href="/teams/search" className="sh-btn">
           ← チーム検索へ
         </Link>
+
+        <button
+          type="button"
+          onClick={openDirectChat}
+          className="sh-btn"
+          disabled={openingChat}
+        >
+          {openingChat ? "チャットを開いています…" : "チャットする"}
+        </button>
       </div>
 
       <section style={heroBox}>

@@ -607,7 +607,12 @@ export default function OfferReceivedPage() {
                   {expanded ? "閉じる" : "詳細"}
                 </button>
 
-                <Link href={`/teams/${item.from_team_id}`} className="sh-btn">
+                <Link
+                  href={`/teams/${item.from_team_id}?threadId=${
+                    encodeURIComponent(`${item.to_team_id}:${item.from_team_id}`)
+                  }`}
+                  className="sh-btn"
+                >
                   チーム詳細
                 </Link>
 
