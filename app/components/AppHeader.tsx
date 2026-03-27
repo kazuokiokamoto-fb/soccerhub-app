@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/app/lib/auth";
 import { supabase } from "@/app/lib/supabase";
@@ -110,7 +111,17 @@ export default function AppHeader() {
     <header className="smh-header">
       <div className="smh-inner">
         <Link href="/" className="smh-brand">
-          <div className="smh-brandMark">⚽</div>
+          <div className="smh-brandMark">
+            <Image
+              src="/header-logo.png"
+              alt="サカまちロゴ"
+              width={36}
+              height={36}
+              className="smh-brandMarkImage"
+              priority
+            />
+          </div>
+
           <div>
             <div className="logoText">サカまち</div>
             <div className="smh-brandSub">Soccer Match</div>
