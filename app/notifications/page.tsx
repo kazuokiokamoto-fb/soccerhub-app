@@ -146,6 +146,7 @@ export default function NotificationsPage() {
     }
 
     setItems((prev) => prev.map((x) => ({ ...x, is_read: true })));
+    router.refresh();
   }
 
   return (
