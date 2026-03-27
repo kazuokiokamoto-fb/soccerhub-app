@@ -23,6 +23,17 @@ function isStandaloneMode() {
   return iosStandalone || mediaStandalone;
 }
 
+function isSafariOnIos() {
+  if (typeof window === "undefined") return false;
+  const ua = window.navigator.userAgent;
+  const iOS = /iPad|iPhone|iPod/.test(ua);
+  const webkit = /WebKit/.test(ua);
+  const notCriOS = !/CriOS/.test(ua);
+  const notFxiOS = !/FxiOS/.test(ua);
+  const notEdgiOS = !/EdgiOS/.test(ua);
+  return iOS && webkit && notCriOS && notFxiOS && notEdgiOS;
+}
+
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -41,6 +52,7 @@ export default function PushPermissionButton() {
     useState<SubscriptionState>("unknown");
 
   const ios = useMemo(() => isIos(), []);
+  const safariOnIos = useMemo(() => isSafariOnIos(), []);
 
   useEffect(() => {
     const ok =
@@ -55,12 +67,20 @@ export default function PushPermissionButton() {
       setPermission(Notification.permission);
     }
 
-    if (ios && !isStandaloneMode()) {
-      setShowIosGuide(true);
+    // iPhone/iPad では
+    // 1) Safari以外
+    // 2) ホーム画面追加されていない
+    // のどちらでも案内を出す
+    if (ios) {
+      if (!safariOnIos || !isStandaloneMode()) {
+        setShowIosGuide(true);
+      } else {
+        setShowIosGuide(false);
+      }
     } else {
       setShowIosGuide(false);
     }
-  }, [ios]);
+  }, [ios, safariOnIos]);
 
   useEffect(() => {
     if (!supported) return;
@@ -112,10 +132,20 @@ export default function PushPermissionButton() {
   }
 
   async function subscribeCurrentDevice() {
-    if (!supported || loading) return;
+    if (loading) return;
+
+    if (ios && !safariOnIos) {
+      alert("iPhone / iPadでは、Safariで開いてホーム画面に追加したアプリから通知設定してください。");
+      return;
+    }
 
     if (ios && !isStandaloneMode()) {
       alert("Safariで開いてホーム画面に追加してください");
+      return;
+    }
+
+    if (!supported) {
+      alert("この環境では通知に対応していません。");
       return;
     }
 
@@ -136,7 +166,7 @@ export default function PushPermissionButton() {
 
       const registration = await navigator.serviceWorker.ready;
 
-      // 次で本物に差し替える。今は仮。
+      // 次で本物に差し替え
       const VAPID_PUBLIC_KEY = "BXXXXXXXXXXXXXXX仮XXXXXXXXXXXXXXX";
 
       const subscription =
@@ -184,8 +214,6 @@ export default function PushPermissionButton() {
     }
   }
 
-  if (!supported) return null;
-
   return (
     <div style={{ display: "grid", gap: 10 }}>
       {showIosGuide ? (
@@ -207,7 +235,11 @@ export default function PushPermissionButton() {
         </div>
       ) : null}
 
-      {permission !== "granted" ? (
+      {!supported ? (
+        <button type="button" className="sh-btn" disabled>
+          この環境では通知未対応
+        </button>
+      ) : permission !== "granted" ? (
         <button
           type="button"
           className="sh-btn sh-btn--primary"
