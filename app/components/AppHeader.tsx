@@ -1,9 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/app/lib/auth";
+import { supabase } from "@/app/lib/supabase";
 
 export default function AppHeader() {
   if (typeof window === "undefined") {
@@ -13,7 +14,42 @@ export default function AppHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, loading, signOut } = useAuth();
+
   const [busy, setBusy] = React.useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // 🔔 未読件数取得
+  useEffect(() => {
+    if (!user) return;
+
+    loadUnread();
+
+    const channel = supabase
+      .channel("notifications-header")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "notifications" },
+        () => {
+          loadUnread();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  async function loadUnread() {
+    const { count, error } = await supabase
+      .from("notifications")
+      .select("*", { count: "exact", head: true })
+      .eq("is_read", false);
+
+    if (!error) {
+      setUnreadCount(count ?? 0);
+    }
+  }
 
   const onLogout = async () => {
     if (busy) return;
@@ -53,6 +89,31 @@ export default function AppHeader() {
               </Link>
               <Link href="/chat" className="smh-link">
                 チャット
+              </Link>
+
+              {/* 🔔 通知 */}
+              <Link href="/notifications" className="smh-link" style={{ position: "relative" }}>
+                🔔
+
+                {unreadCount > 0 && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: -6,
+                      right: -10,
+                      background: "#ef4444",
+                      color: "#fff",
+                      borderRadius: "999px",
+                      padding: "2px 6px",
+                      fontSize: 10,
+                      fontWeight: 900,
+                      minWidth: 18,
+                      textAlign: "center",
+                    }}
+                  >
+                    {unreadCount}
+                  </span>
+                )}
               </Link>
             </>
           ) : null}

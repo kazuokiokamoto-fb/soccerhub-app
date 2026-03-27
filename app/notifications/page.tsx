@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import AppTabNav from "@/app/components/AppTabNav";
 import AppHero from "@/app/components/AppHero";
@@ -30,9 +30,12 @@ function fmt(dt: string) {
 }
 
 export default function NotificationsPage() {
+  const router = useRouter();
+
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [meId, setMeId] = useState("");
+  const [openingId, setOpeningId] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -72,6 +75,48 @@ export default function NotificationsPage() {
     return items.filter((x) => !x.is_read).length;
   }, [items]);
 
+  async function openNotification(item: NotificationRow) {
+    if (openingId) return;
+
+    setOpeningId(item.id);
+
+    try {
+      if (!item.is_read) {
+        const res = await fetch("/api/notifications/read", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ id: item.id }),
+        });
+
+        if (!res.ok) {
+          const json = await res.json().catch(() => null);
+          throw new Error(json?.error ?? "既読更新に失敗しました");
+        }
+
+        setItems((prev) =>
+          prev.map((x) =>
+            x.id === item.id
+              ? {
+                  ...x,
+                  is_read: true,
+                }
+              : x
+          )
+        );
+      }
+
+      router.push(item.target_url || "/");
+    } catch (e) {
+      console.error(e);
+      alert(
+        e instanceof Error ? e.message : "通知の処理に失敗しました"
+      );
+      setOpeningId("");
+    }
+  }
+
   return (
     <main style={{ maxWidth: 980, margin: "0 auto", padding: 16 }}>
       <AppTabNav />
@@ -97,28 +142,39 @@ export default function NotificationsPage() {
         <div style={emptyBox}>通知はまだありません。</div>
       ) : (
         <div style={listWrap}>
-          {items.map((item) => (
-            <Link
-              key={item.id}
-              href={item.target_url || "/"}
-              style={{
-                ...card,
-                ...(item.is_read ? cardRead : cardUnread),
-              }}
-            >
-              <div style={topRow}>
-                <div style={title}>{item.title}</div>
-                {!item.is_read ? <span style={unreadBadge}>未読</span> : null}
-              </div>
+          {items.map((item) => {
+            const busy = openingId === item.id;
 
-              <div style={body}>{item.body}</div>
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => openNotification(item)}
+                disabled={busy}
+                style={{
+                  ...card,
+                  ...(item.is_read ? cardRead : cardUnread),
+                  ...(busy ? cardBusy : null),
+                }}
+              >
+                <div style={topRow}>
+                  <div style={title}>{item.title}</div>
+                  {!item.is_read ? (
+                    <span style={unreadBadge}>未読</span>
+                  ) : null}
+                </div>
 
-              <div style={metaRow}>
-                <span style={typePill}>{item.type}</span>
-                <span style={timeText}>{fmt(item.created_at)}</span>
-              </div>
-            </Link>
-          ))}
+                <div style={body}>{item.body}</div>
+
+                <div style={metaRow}>
+                  <span style={typePill}>{item.type}</span>
+                  <span style={timeText}>
+                    {busy ? "移動中…" : fmt(item.created_at)}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
     </main>
@@ -157,9 +213,12 @@ const card: React.CSSProperties = {
   gap: 10,
   padding: 14,
   borderRadius: 16,
-  textDecoration: "none",
   color: "#111",
   border: "1px solid #e5ece7",
+  width: "100%",
+  textAlign: "left",
+  cursor: "pointer",
+  background: "#fff",
 };
 
 const cardUnread: React.CSSProperties = {
@@ -168,6 +227,10 @@ const cardUnread: React.CSSProperties = {
 
 const cardRead: React.CSSProperties = {
   background: "#fff",
+};
+
+const cardBusy: React.CSSProperties = {
+  opacity: 0.75,
 };
 
 const topRow: React.CSSProperties = {
