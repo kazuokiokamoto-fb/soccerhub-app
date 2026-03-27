@@ -23,7 +23,6 @@ function isStandaloneMode() {
   return iosStandalone || mediaStandalone;
 }
 
-// 🔥 Base64 → Uint8Array変換（必須）
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -31,11 +30,15 @@ function urlBase64ToUint8Array(base64String: string) {
   return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
 }
 
+type SubscriptionState = "unknown" | "registered" | "not_registered";
+
 export default function PushPermissionButton() {
   const [supported, setSupported] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const [loading, setLoading] = useState(false);
   const [showIosGuide, setShowIosGuide] = useState(false);
+  const [subscriptionState, setSubscriptionState] =
+    useState<SubscriptionState>("unknown");
 
   const ios = useMemo(() => isIos(), []);
 
@@ -43,7 +46,8 @@ export default function PushPermissionButton() {
     const ok =
       typeof window !== "undefined" &&
       "Notification" in window &&
-      "serviceWorker" in navigator;
+      "serviceWorker" in navigator &&
+      "PushManager" in window;
 
     setSupported(ok);
 
@@ -58,7 +62,56 @@ export default function PushPermissionButton() {
     }
   }, [ios]);
 
-  async function requestPermission() {
+  useEffect(() => {
+    if (!supported) return;
+    if (permission !== "granted") {
+      setSubscriptionState("not_registered");
+      return;
+    }
+
+    checkCurrentSubscription();
+  }, [supported, permission]);
+
+  async function checkCurrentSubscription() {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+
+      if (!subscription?.endpoint) {
+        setSubscriptionState("not_registered");
+        return;
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setSubscriptionState("not_registered");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("push_subscriptions")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("endpoint", subscription.endpoint)
+        .maybeSingle();
+
+      if (error) {
+        console.error("push_subscriptions check error:", error);
+        setSubscriptionState("not_registered");
+        return;
+      }
+
+      setSubscriptionState(data ? "registered" : "not_registered");
+    } catch (e) {
+      console.error("checkCurrentSubscription error:", e);
+      setSubscriptionState("not_registered");
+    }
+  }
+
+  async function subscribeCurrentDevice() {
     if (!supported || loading) return;
 
     if (ios && !isStandaloneMode()) {
@@ -69,29 +122,32 @@ export default function PushPermissionButton() {
     setLoading(true);
 
     try {
-      const result = await Notification.requestPermission();
-      setPermission(result);
+      let currentPermission = Notification.permission;
 
-      if (result !== "granted") {
+      if (currentPermission !== "granted") {
+        currentPermission = await Notification.requestPermission();
+        setPermission(currentPermission);
+      }
+
+      if (currentPermission !== "granted") {
         alert("通知が許可されていません");
         return;
       }
 
-      // ✅ Service Worker取得
       const registration = await navigator.serviceWorker.ready;
 
-      // 🔥 VAPIDキー（次で正式に作る。今は仮でOK）
+      // 次で本物に差し替える。今は仮。
       const VAPID_PUBLIC_KEY = "BXXXXXXXXXXXXXXX仮XXXXXXXXXXXXXXX";
 
-      // ✅ Push購読
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-      });
+      const subscription =
+        (await registration.pushManager.getSubscription()) ||
+        (await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        }));
 
       const sub = subscription.toJSON();
 
-      // ✅ ログインユーザー取得
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -101,25 +157,28 @@ export default function PushPermissionButton() {
         return;
       }
 
-      // ✅ Supabase保存
-      const { error } = await supabase.from("push_subscriptions").upsert({
-        user_id: user.id,
-        endpoint: sub.endpoint,
-        p256dh: sub.keys?.p256dh,
-        auth: sub.keys?.auth,
-        user_agent: navigator.userAgent,
-      });
+      const { error } = await supabase.from("push_subscriptions").upsert(
+        {
+          user_id: user.id,
+          endpoint: sub.endpoint,
+          p256dh: sub.keys?.p256dh,
+          auth: sub.keys?.auth,
+          user_agent: navigator.userAgent,
+        },
+        { onConflict: "endpoint" }
+      );
 
       if (error) {
-        console.error(error);
-        alert("保存失敗");
+        console.error("push_subscriptions upsert error:", error);
+        alert(`保存失敗: ${error.message}`);
         return;
       }
 
-      alert("通知設定が完了しました🔥");
+      setSubscriptionState("registered");
+      alert("この端末の通知設定が完了しました");
     } catch (e: any) {
       console.error(e);
-      alert(e?.message ?? "エラー発生");
+      alert(e?.message ?? "通知設定に失敗しました");
     } finally {
       setLoading(false);
     }
@@ -148,18 +207,27 @@ export default function PushPermissionButton() {
         </div>
       ) : null}
 
-      {permission === "granted" ? (
+      {permission !== "granted" ? (
+        <button
+          type="button"
+          className="sh-btn sh-btn--primary"
+          onClick={subscribeCurrentDevice}
+          disabled={loading}
+        >
+          {loading ? "確認中…" : "通知を許可する"}
+        </button>
+      ) : subscriptionState === "registered" ? (
         <button type="button" className="sh-btn" disabled>
-          通知は許可済み
+          この端末は通知設定済み
         </button>
       ) : (
         <button
           type="button"
           className="sh-btn sh-btn--primary"
-          onClick={requestPermission}
+          onClick={subscribeCurrentDevice}
           disabled={loading}
         >
-          {loading ? "確認中…" : "通知を許可する"}
+          {loading ? "登録中…" : "この端末を通知対象に登録する"}
         </button>
       )}
     </div>
