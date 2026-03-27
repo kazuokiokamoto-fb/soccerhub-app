@@ -57,6 +57,21 @@ export default function RootLayout({
           <AppHeader />
           {children}
         </AuthProvider>
+
+        {/* ✅ Service Worker登録 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                  navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('SW registered', reg))
+                    .catch(err => console.log('SW error', err));
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );
