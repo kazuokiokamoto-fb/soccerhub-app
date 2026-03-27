@@ -93,6 +93,27 @@ export default function NotificationsPage() {
     return items.filter((x) => !x.is_read).length;
   }, [items]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!("setAppBadge" in navigator)) return;
+
+    (async () => {
+      try {
+        if (unreadCount > 0) {
+          await (navigator as Navigator & {
+            setAppBadge?: (count?: number) => Promise<void>;
+          }).setAppBadge?.(unreadCount);
+        } else if ("clearAppBadge" in navigator) {
+          await (navigator as Navigator & {
+            clearAppBadge?: () => Promise<void>;
+          }).clearAppBadge?.();
+        }
+      } catch (e) {
+        console.error("app badge sync error:", e);
+      }
+    })();
+  }, [unreadCount]);
+
   async function openNotification(item: NotificationRow) {
     if (openingId) return;
 

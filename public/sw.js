@@ -60,16 +60,30 @@ self.addEventListener("push", (event) => {
   }
 
   event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: "/icon-192.png",
-      badge: "/icon-192.png",
-      tag: "sakamachi-notification",
-      renotify: true,
-      data: {
-        url: data.url,
-        badgeCount: data.badgeCount,
-      },
-    })
+    (async () => {
+      try {
+        if ("setAppBadge" in navigator) {
+          if (data.badgeCount > 0) {
+            await navigator.setAppBadge(data.badgeCount);
+          } else if ("clearAppBadge" in navigator) {
+            await navigator.clearAppBadge();
+          }
+        }
+      } catch (e) {
+        console.error("badge update error:", e);
+      }
+
+      await self.registration.showNotification(data.title, {
+        body: data.body,
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        tag: "sakamachi-notification",
+        renotify: true,
+        data: {
+          url: data.url,
+          badgeCount: data.badgeCount,
+        },
+      });
+    })()
   );
 });
