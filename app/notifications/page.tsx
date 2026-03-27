@@ -114,12 +114,7 @@ export default function NotificationsPage() {
 
         setItems((prev) =>
           prev.map((x) =>
-            x.id === item.id
-              ? {
-                  ...x,
-                  is_read: true,
-                }
-              : x
+            x.id === item.id ? { ...x, is_read: true } : x
           )
         );
       }
@@ -132,6 +127,26 @@ export default function NotificationsPage() {
     }
   }
 
+  async function markAllRead() {
+    if (!meId) return;
+
+    const res = await fetch("/api/notifications/read-all", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ userId: meId }),
+    });
+
+    if (!res.ok) {
+      const json = await res.json().catch(() => null);
+      alert(json?.error ?? "一括既読に失敗しました");
+      return;
+    }
+
+    setItems((prev) => prev.map((x) => ({ ...x, is_read: true })));
+  }
+
   return (
     <main style={{ maxWidth: 980, margin: "0 auto", padding: 16 }}>
       <AppTabNav />
@@ -142,12 +157,26 @@ export default function NotificationsPage() {
         desc="チャット、オファー、承認などの通知を確認できます。"
       />
 
+      {/* 🔥 一括既読付きヘッダー */}
       <div style={summaryBox}>
-        <div style={summaryTitle}>通知</div>
-        <div style={summaryText}>
-          {loading
-            ? "読み込み中…"
-            : `全${items.length}件 / 未読${unreadCount}件`}
+        <div style={summaryHeaderRow}>
+          <div>
+            <div style={summaryTitle}>通知</div>
+            <div style={summaryText}>
+              {loading
+                ? "読み込み中…"
+                : `全${items.length}件 / 未読${unreadCount}件`}
+            </div>
+          </div>
+
+          {!loading && unreadCount > 0 && (
+            <button
+              className="sh-btn"
+              onClick={markAllRead}
+            >
+              すべて既読
+            </button>
+          )}
         </div>
       </div>
 
@@ -174,9 +203,9 @@ export default function NotificationsPage() {
               >
                 <div style={topRow}>
                   <div style={title}>{item.title}</div>
-                  {!item.is_read ? (
+                  {!item.is_read && (
                     <span style={unreadBadge}>未読</span>
-                  ) : null}
+                  )}
                 </div>
 
                 <div style={body}>{item.body}</div>
@@ -196,6 +225,8 @@ export default function NotificationsPage() {
   );
 }
 
+/* ================= styles ================= */
+
 const summaryBox: React.CSSProperties = {
   marginTop: 12,
   marginBottom: 12,
@@ -203,6 +234,13 @@ const summaryBox: React.CSSProperties = {
   borderRadius: 14,
   border: "1px solid #e5ece7",
   background: "#fff",
+};
+
+const summaryHeaderRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
 };
 
 const summaryTitle: React.CSSProperties = {
@@ -251,67 +289,41 @@ const cardBusy: React.CSSProperties = {
 const topRow: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 10,
 };
 
 const title: React.CSSProperties = {
   fontSize: 16,
   fontWeight: 900,
-  color: "#16391f",
-  lineHeight: 1.5,
 };
 
 const body: React.CSSProperties = {
   fontSize: 14,
   color: "#4b5563",
-  lineHeight: 1.7,
-  whiteSpace: "pre-wrap",
 };
 
 const metaRow: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "center",
-  gap: 10,
-  flexWrap: "wrap",
 };
 
 const typePill: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
   padding: "4px 10px",
   borderRadius: 999,
   background: "#e8f5eb",
-  color: "#145c2a",
-  fontSize: 12,
-  fontWeight: 800,
 };
 
 const timeText: React.CSSProperties = {
   fontSize: 12,
-  color: "#6b7280",
 };
 
 const unreadBadge: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
+  background: "#dcfce7",
   padding: "4px 10px",
   borderRadius: 999,
-  background: "#dcfce7",
-  color: "#166534",
-  fontSize: 12,
-  fontWeight: 900,
-  whiteSpace: "nowrap",
 };
 
 const emptyBox: React.CSSProperties = {
   marginTop: 12,
   padding: 20,
-  borderRadius: 16,
-  border: "1px solid #e5ece7",
-  background: "#fff",
-  color: "#666",
-  lineHeight: 1.8,
   textAlign: "center",
 };
