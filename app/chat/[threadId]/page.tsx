@@ -21,6 +21,13 @@ type TeamMini = {
   category?: string | null;
 };
 
+type ChatMemberRow = {
+  thread_id: string;
+  user_id?: string | null;
+  team_id?: string | null;
+  last_read_at: string | null;
+};
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -73,6 +80,7 @@ export default function ChatThreadPage() {
   const [meId, setMeId] = useState<string>("");
   const [myTeamId, setMyTeamId] = useState<string>("");
   const [otherTeamId, setOtherTeamId] = useState<string>("");
+  const [otherUserId, setOtherUserId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [isMember, setIsMember] = useState<boolean>(false);
 
@@ -189,6 +197,7 @@ export default function ChatThreadPage() {
       setIsMember(false);
       setMyTeamId("");
       setOtherTeamId("");
+      setOtherUserId("");
       setSendError("");
 
       const { data: mem, error: memErr } = await supabase
@@ -211,7 +220,7 @@ export default function ChatThreadPage() {
 
       const { data: memberRows, error: memberErr } = await supabase
         .from("chat_members")
-        .select("team_id")
+        .select("user_id,team_id")
         .eq("thread_id", threadId);
 
       if (memberErr) {
@@ -220,6 +229,13 @@ export default function ChatThreadPage() {
         const teamIds = (memberRows ?? [])
           .map((r: any) => r.team_id as string)
           .filter(Boolean);
+
+        const otherUserIdValue =
+          (memberRows ?? []).find(
+            (r: any) => r.user_id && r.user_id !== meId
+          )?.user_id ?? "";
+
+        setOtherUserId(otherUserIdValue);
 
         if (teamIds.length > 0) {
           const { data: myTeams } = await supabase
@@ -249,7 +265,9 @@ export default function ChatThreadPage() {
             if (teamRow) {
               const team = teamRow as TeamMini;
               setOtherTeamName(team.name ?? "相手チーム");
-              setOtherTeamCategory(categoryLabel(team.category) || team.category || "");
+              setOtherTeamCategory(
+                categoryLabel(team.category) || team.category || ""
+              );
             }
           }
         }
@@ -408,6 +426,25 @@ export default function ChatThreadPage() {
     requestAnimationFrame(() => {
       scrollToBottom(true);
     });
+
+    if (otherUserId) {
+      const { error: notificationErr } = await supabase
+        .from("notifications")
+        .insert({
+          user_id: otherUserId,
+          type: "chat_message",
+          title: "新着チャット",
+          body: body.length > 40 ? `${body.slice(0, 40)}…` : body,
+          target_url: `/chat/${threadId}`,
+          is_read: false,
+          related_thread_id: threadId,
+          related_team_id: myTeamId,
+        });
+
+      if (notificationErr) {
+        console.error("notification insert error:", notificationErr);
+      }
+    }
 
     await markRead();
     setSending(false);
