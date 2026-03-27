@@ -166,7 +166,7 @@ export default function PushPermissionButton() {
       const registration = await navigator.serviceWorker.ready;
 
       // 次で本物に差し替える
-      const VAPID_PUBLIC_KEY = "BXXXXXXXXXXXXXXX仮XXXXXXXXXXXXXXX";
+      const VAPID_PUBLIC_KEY = "BAa4DSI8ELFBuRz-_MADlETMWX8vQXeQbLuBU1K-2g6YeO6azrqydV98IOpuYfIDQ8SQ8m3FwyJYbk24bEO1I";
 
       const existingSubscription = await registration.pushManager.getSubscription();
 
