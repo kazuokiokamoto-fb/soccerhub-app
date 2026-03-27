@@ -14,31 +14,39 @@ export default function AppHeader() {
   const [busy, setBusy] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // 🔔 未読件数取得
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) {
+      setUnreadCount(0);
+      return;
+    }
 
-    loadUnread();
+    loadUnread(user.id);
 
     const channel = supabase
-      .channel("notifications-header")
+      .channel(`notifications-header:${user.id}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "notifications" },
-        () => loadUnread()
+        () => loadUnread(user.id)
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user?.id]);
 
-  async function loadUnread() {
-    const { count } = await supabase
+  async function loadUnread(userId: string) {
+    const { count, error } = await supabase
       .from("notifications")
       .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
       .eq("is_read", false);
+
+    if (error) {
+      console.error("header unread count error:", error);
+      return;
+    }
 
     setUnreadCount(count ?? 0);
   }
@@ -58,7 +66,6 @@ export default function AppHeader() {
   return (
     <header className="smh-header">
       <div className="smh-inner">
-        {/* ロゴ */}
         <Link href="/" className="smh-brand">
           <div className="smh-brandMark">⚽</div>
           <div>
@@ -67,35 +74,26 @@ export default function AppHeader() {
           </div>
         </Link>
 
-        {/* ナビ */}
         <nav className="smh-nav">
           {pathname !== "/login" && (
-            <>
-              {/* 🔔 通知（←これが重要） */}
-              <Link href="/notifications" className="smh-bell">
-                🔔
-                {unreadCount > 0 && (
-                  <span className="smh-bellBadge">
-                    {unreadCount}
-                  </span>
-                )}
-              </Link>
-            </>
+            <Link href="/notifications" className="smh-bell">
+              🔔
+              {unreadCount > 0 && (
+                <span className="smh-bellBadge">{unreadCount}</span>
+              )}
+            </Link>
           )}
 
-          {/* ユーザー */}
           {loading ? (
             <span className="smh-user">...</span>
           ) : user ? (
-            <>
-              <button
-                onClick={onLogout}
-                disabled={busy}
-                className="sh-btn smh-logout"
-              >
-                {busy ? "..." : "ログアウト"}
-              </button>
-            </>
+            <button
+              onClick={onLogout}
+              disabled={busy}
+              className="sh-btn smh-logout"
+            >
+              {busy ? "..." : "ログアウト"}
+            </button>
           ) : pathname === "/login" ? (
             <Link href="/" className="sh-btn smh-logout">
               トップへ

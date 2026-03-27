@@ -74,6 +74,7 @@ export default function NotificationsPage() {
     const { data, error } = await supabase
       .from("notifications")
       .select("*")
+      .eq("user_id", meId)
       .order("created_at", { ascending: false })
       .limit(100);
 
