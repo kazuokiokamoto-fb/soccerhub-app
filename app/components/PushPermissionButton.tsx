@@ -67,10 +67,6 @@ export default function PushPermissionButton() {
       setPermission(Notification.permission);
     }
 
-    // iPhone/iPad では
-    // 1) Safari以外
-    // 2) ホーム画面追加されていない
-    // のどちらでも案内を出す
     if (ios) {
       if (!safariOnIos || !isStandaloneMode()) {
         setShowIosGuide(true);
@@ -84,12 +80,13 @@ export default function PushPermissionButton() {
 
   useEffect(() => {
     if (!supported) return;
+
     if (permission !== "granted") {
       setSubscriptionState("not_registered");
       return;
     }
 
-    checkCurrentSubscription();
+    void checkCurrentSubscription();
   }, [supported, permission]);
 
   async function checkCurrentSubscription() {
@@ -135,7 +132,9 @@ export default function PushPermissionButton() {
     if (loading) return;
 
     if (ios && !safariOnIos) {
-      alert("iPhone / iPadでは、Safariで開いてホーム画面に追加したアプリから通知設定してください。");
+      alert(
+        "iPhone / iPadでは、Safariで開いてホーム画面に追加したアプリから通知設定してください。"
+      );
       return;
     }
 
@@ -166,17 +165,24 @@ export default function PushPermissionButton() {
 
       const registration = await navigator.serviceWorker.ready;
 
-      // 次で本物に差し替え
+      // 次で本物に差し替える
       const VAPID_PUBLIC_KEY = "BXXXXXXXXXXXXXXX仮XXXXXXXXXXXXXXX";
 
+      const existingSubscription = await registration.pushManager.getSubscription();
+
       const subscription =
-        (await registration.pushManager.getSubscription()) ||
+        existingSubscription ||
         (await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
         }));
 
       const sub = subscription.toJSON();
+
+      if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) {
+        alert("購読情報の取得に失敗しました");
+        return;
+      }
 
       const {
         data: { user },
@@ -191,9 +197,10 @@ export default function PushPermissionButton() {
         {
           user_id: user.id,
           endpoint: sub.endpoint,
-          p256dh: sub.keys?.p256dh,
-          auth: sub.keys?.auth,
+          p256dh: sub.keys.p256dh,
+          auth: sub.keys.auth,
           user_agent: navigator.userAgent,
+          updated_at: new Date().toISOString(),
         },
         { onConflict: "endpoint" }
       );
@@ -204,6 +211,7 @@ export default function PushPermissionButton() {
         return;
       }
 
+      setPermission("granted");
       setSubscriptionState("registered");
       alert("この端末の通知設定が完了しました");
     } catch (e: any) {
