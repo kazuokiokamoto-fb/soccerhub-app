@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/app/lib/supabase";
 
 function isIos() {
   if (typeof window === "undefined") return false;
@@ -11,17 +12,23 @@ function isIos() {
 function isStandaloneMode() {
   if (typeof window === "undefined") return false;
 
-  // iOS Safari のホーム画面追加判定
   const iosStandalone =
     "standalone" in window.navigator &&
     (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
 
-  // Android系や一部ブラウザ用
   const mediaStandalone =
     typeof window.matchMedia === "function" &&
     window.matchMedia("(display-mode: standalone)").matches;
 
   return iosStandalone || mediaStandalone;
+}
+
+// 🔥 Base64 → Uint8Array変換（必須）
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
 }
 
 export default function PushPermissionButton() {
@@ -44,7 +51,6 @@ export default function PushPermissionButton() {
       setPermission(Notification.permission);
     }
 
-    // iPhone / iPad でホーム画面追加されていない時だけ案内表示
     if (ios && !isStandaloneMode()) {
       setShowIosGuide(true);
     } else {
@@ -55,25 +61,65 @@ export default function PushPermissionButton() {
   async function requestPermission() {
     if (!supported || loading) return;
 
-    // iOSはホーム画面追加されていないと通知許可できない
     if (ios && !isStandaloneMode()) {
-      alert("iPhone / iPadで通知を受け取るには、Safariで開いてホーム画面に追加してください。");
+      alert("Safariで開いてホーム画面に追加してください");
       return;
     }
 
     setLoading(true);
+
     try {
       const result = await Notification.requestPermission();
       setPermission(result);
 
-      if (result === "granted") {
-        alert("通知を許可しました");
-      } else if (result === "denied") {
-        alert("通知が拒否されました。必要ならブラウザ設定から変更してください。");
+      if (result !== "granted") {
+        alert("通知が許可されていません");
+        return;
       }
+
+      // ✅ Service Worker取得
+      const registration = await navigator.serviceWorker.ready;
+
+      // 🔥 VAPIDキー（次で正式に作る。今は仮でOK）
+      const VAPID_PUBLIC_KEY = "BXXXXXXXXXXXXXXX仮XXXXXXXXXXXXXXX";
+
+      // ✅ Push購読
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+
+      const sub = subscription.toJSON();
+
+      // ✅ ログインユーザー取得
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        alert("ログインが必要です");
+        return;
+      }
+
+      // ✅ Supabase保存
+      const { error } = await supabase.from("push_subscriptions").upsert({
+        user_id: user.id,
+        endpoint: sub.endpoint,
+        p256dh: sub.keys?.p256dh,
+        auth: sub.keys?.auth,
+        user_agent: navigator.userAgent,
+      });
+
+      if (error) {
+        console.error(error);
+        alert("保存失敗");
+        return;
+      }
+
+      alert("通知設定が完了しました🔥");
     } catch (e: any) {
       console.error(e);
-      alert(e?.message ?? "通知許可に失敗しました");
+      alert(e?.message ?? "エラー発生");
     } finally {
       setLoading(false);
     }
