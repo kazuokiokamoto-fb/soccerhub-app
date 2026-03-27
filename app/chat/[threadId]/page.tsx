@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import { categoryLabel } from "@/app/lib/categories";
+import { getUnifiedBadgeCount, syncAppBadge } from "@/app/lib/badge";
 
 type Msg = {
   id: string;
@@ -128,8 +129,23 @@ export default function ChatThreadPage() {
     });
   };
 
+  async function refreshUnifiedBadge() {
+    if (!meId) return;
+
+    try {
+      const total = await getUnifiedBadgeCount(meId);
+      await syncAppBadge(total);
+    } catch (e) {
+      console.error("refreshUnifiedBadge error:", e);
+    }
+
+    window.dispatchEvent(new Event("badge-updated"));
+    window.dispatchEvent(new Event("notifications-updated"));
+  }
+
   const markRead = async () => {
     if (!threadId || !meId) return;
+
     try {
       const { error } = await supabase
         .from("chat_members")
@@ -137,7 +153,12 @@ export default function ChatThreadPage() {
         .eq("thread_id", threadId)
         .eq("user_id", meId);
 
-      if (error) console.error("markRead update error:", error);
+      if (error) {
+        console.error("markRead update error:", error);
+        return;
+      }
+
+      await refreshUnifiedBadge();
     } catch (e) {
       console.error("markRead failed:", e);
     }

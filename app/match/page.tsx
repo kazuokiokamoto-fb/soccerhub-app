@@ -671,6 +671,13 @@ export default function MatchCalendarPage() {
     const hostTeam = teamMap.get(slot.host_team_id);
     const requesterTeam = myTeams.find((t) => t.id === requestTeamId);
 
+    let threadId = "";
+    try {
+      threadId = await getOrCreateDmThread(requestTeamId, slot.host_team_id);
+    } catch (e) {
+      console.error("thread create failed:", e);
+    }
+
     try {
       const { data: hostTeamRow, error: hostTeamErr } = await supabase
         .from("teams")
@@ -690,7 +697,7 @@ export default function MatchCalendarPage() {
         const notificationBody = `${
           requesterTeam?.name ?? "相手チーム"
         } から申込みが届きました`;
-        const notificationUrl = "/match/status/offers-received";
+        const notificationUrl = threadId ? `/chat/${threadId}` : "/chat";
 
         const { error: notificationErr } = await supabase
           .from("notifications")
@@ -703,6 +710,7 @@ export default function MatchCalendarPage() {
             is_read: false,
             related_team_id: requestTeamId,
             related_request_id: insertedRequest.id,
+            related_thread_id: threadId || null,
           });
 
         if (notificationErr) {
@@ -736,10 +744,9 @@ export default function MatchCalendarPage() {
     }
 
     try {
-      const threadId = await getOrCreateDmThread(
-        requestTeamId,
-        slot.host_team_id
-      );
+      if (!threadId) {
+        threadId = await getOrCreateDmThread(requestTeamId, slot.host_team_id);
+      }
 
       const bodyLines = [
         "【試合申込】",

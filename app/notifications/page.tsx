@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import AppTabNav from "@/app/components/AppTabNav";
 import AppHero from "@/app/components/AppHero";
+import { getUnifiedBadgeCount, syncAppBadge } from "@/app/lib/badge";
 
 type NotificationRow = {
   id: string;
@@ -94,25 +95,31 @@ export default function NotificationsPage() {
   }, [items]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!("setAppBadge" in navigator)) return;
+    if (!meId) return;
 
     (async () => {
       try {
-        if (unreadCount > 0) {
-          await (navigator as Navigator & {
-            setAppBadge?: (count?: number) => Promise<void>;
-          }).setAppBadge?.(unreadCount);
-        } else if ("clearAppBadge" in navigator) {
-          await (navigator as Navigator & {
-            clearAppBadge?: () => Promise<void>;
-          }).clearAppBadge?.();
-        }
+        const total = await getUnifiedBadgeCount(meId);
+        await syncAppBadge(total);
       } catch (e) {
-        console.error("app badge sync error:", e);
+        console.error("notifications page badge sync error:", e);
       }
     })();
-  }, [unreadCount]);
+  }, [meId, unreadCount]);
+
+  async function notifyBadgeUpdate() {
+    if (!meId) return;
+
+    try {
+      const total = await getUnifiedBadgeCount(meId);
+      await syncAppBadge(total);
+    } catch (e) {
+      console.error("notifyBadgeUpdate error:", e);
+    }
+
+    window.dispatchEvent(new Event("badge-updated"));
+    window.dispatchEvent(new Event("notifications-updated"));
+  }
 
   async function openNotification(item: NotificationRow) {
     if (openingId) return;
@@ -138,7 +145,7 @@ export default function NotificationsPage() {
           prev.map((x) => (x.id === item.id ? { ...x, is_read: true } : x))
         );
 
-        window.dispatchEvent(new Event("notifications-updated"));
+        await notifyBadgeUpdate();
       }
 
       router.push(item.target_url || "/");
@@ -167,7 +174,7 @@ export default function NotificationsPage() {
     }
 
     setItems((prev) => prev.map((x) => ({ ...x, is_read: true })));
-    window.dispatchEvent(new Event("notifications-updated"));
+    await notifyBadgeUpdate();
     router.refresh();
   }
 

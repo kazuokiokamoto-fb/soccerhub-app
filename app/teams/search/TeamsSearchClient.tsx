@@ -513,6 +513,13 @@ export default function TeamsSearchClient() {
 
       const myTeam = myTeams.find((t) => t.id === fromTeamId);
 
+      let threadId = "";
+      try {
+        threadId = await getOrCreateDmThread(fromTeamId, offerTargetTeam.id);
+      } catch (e) {
+        console.error("thread create failed:", e);
+      }
+
       try {
         const { data: targetTeamRow, error: targetTeamErr } = await supabase
           .from("teams")
@@ -532,7 +539,7 @@ export default function TeamsSearchClient() {
           const notificationBody = `${
             myTeam?.name ?? "相手チーム"
           } からオファーが届きました`;
-          const notificationUrl = "/match/status/offers-received";
+          const notificationUrl = threadId ? `/chat/${threadId}` : "/chat";
 
           const { error: notificationErr } = await supabase
             .from("notifications")
@@ -545,6 +552,7 @@ export default function TeamsSearchClient() {
               is_read: false,
               related_team_id: fromTeamId,
               related_offer_id: insertedOffer.id,
+              related_thread_id: threadId || null,
             });
 
           if (notificationErr) {
@@ -578,7 +586,9 @@ export default function TeamsSearchClient() {
       }
 
       try {
-        const threadId = await getOrCreateDmThread(fromTeamId, offerTargetTeam.id);
+        if (!threadId) {
+          threadId = await getOrCreateDmThread(fromTeamId, offerTargetTeam.id);
+        }
 
         await supabase.from("chat_messages").insert({
           thread_id: threadId,

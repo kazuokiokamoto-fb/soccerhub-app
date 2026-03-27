@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/app/lib/auth";
 import { supabase } from "@/app/lib/supabase";
+import { getUnreadChatCount, syncAppBadge } from "@/app/lib/badge";
 
 export default function AppHeader() {
   const router = useRouter();
@@ -12,72 +13,84 @@ export default function AppHeader() {
   const { user, loading, signOut } = useAuth();
 
   const [busy, setBusy] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
 
   useEffect(() => {
     if (!user?.id) {
-      setUnreadCount(0);
+      setChatUnreadCount(0);
+      syncAppBadge(0);
       return;
     }
 
-    loadUnread(user.id);
+    loadChatUnread(user.id);
 
-    const channel = supabase
-      .channel(`notifications-header:${user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "notifications",
-        },
-        () => {
-          loadUnread(user.id);
-        }
-      )
-      .subscribe();
+    const channels = [
+      supabase
+        .channel(`header-chat-members:${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "chat_members",
+          },
+          () => {
+            loadChatUnread(user.id);
+          }
+        )
+        .subscribe(),
+
+      supabase
+        .channel(`header-chat-messages:${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "chat_messages",
+          },
+          () => {
+            loadChatUnread(user.id);
+          }
+        )
+        .subscribe(),
+    ];
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        loadUnread(user.id);
+        loadChatUnread(user.id);
       }
     };
 
-    const onNotificationsUpdated = () => {
-      loadUnread(user.id);
+    const onBadgeUpdated = () => {
+      loadChatUnread(user.id);
     };
 
     document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("notifications-updated", onNotificationsUpdated);
+    window.addEventListener("badge-updated", onBadgeUpdated);
+    window.addEventListener("notifications-updated", onBadgeUpdated);
 
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener(
-        "notifications-updated",
-        onNotificationsUpdated
-      );
-      supabase.removeChannel(channel);
+      window.removeEventListener("badge-updated", onBadgeUpdated);
+      window.removeEventListener("notifications-updated", onBadgeUpdated);
+      channels.forEach((ch) => supabase.removeChannel(ch));
     };
   }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
-    loadUnread(user.id);
+    loadChatUnread(user.id);
   }, [pathname, user?.id]);
 
-  async function loadUnread(userId: string) {
-    const { data, error } = await supabase
-      .from("notifications")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("is_read", false);
-
-    if (error) {
-      console.error("header unread count error:", error);
-      return;
+  async function loadChatUnread(userId: string) {
+    try {
+      const total = await getUnreadChatCount(userId);
+      setChatUnreadCount(total);
+      await syncAppBadge(total);
+    } catch (e) {
+      console.error("loadChatUnread error:", e);
     }
-
-    setUnreadCount((data ?? []).length);
   }
 
   const onLogout = async () => {
@@ -85,6 +98,7 @@ export default function AppHeader() {
     setBusy(true);
     try {
       await signOut();
+      await syncAppBadge(0);
       router.replace("/login");
       router.refresh();
     } finally {
@@ -105,10 +119,10 @@ export default function AppHeader() {
 
         <nav className="smh-nav">
           {pathname !== "/login" && (
-            <Link href="/notifications" className="smh-bell" aria-label="通知">
-              🔔
-              {unreadCount > 0 ? (
-                <span className="smh-bellBadge">{unreadCount}</span>
+            <Link href="/chat" className="smh-bell" aria-label="チャット">
+              💬
+              {chatUnreadCount > 0 ? (
+                <span className="smh-bellBadge">{chatUnreadCount}</span>
               ) : null}
             </Link>
           )}

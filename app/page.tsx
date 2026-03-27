@@ -95,7 +95,6 @@ export default function HomePage() {
   const [sentOfferCount, setSentOfferCount] = useState(0);
 
   const [unreadTotal, setUnreadTotal] = useState(0);
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [nextMatch, setNextMatch] = useState<NextMatchCard | null>(null);
 
   useEffect(() => {
@@ -113,7 +112,6 @@ export default function HomePage() {
       setReceivedOfferCount(0);
       setSentOfferCount(0);
       setUnreadTotal(0);
-      setUnreadNotificationCount(0);
       setNextMatch(null);
       return;
     }
@@ -141,7 +139,6 @@ export default function HomePage() {
       setReceivedOfferCount(0);
       setSentOfferCount(0);
       setUnreadTotal(0);
-      setUnreadNotificationCount(0);
       setNextMatch(null);
       setLoading(false);
       return;
@@ -287,19 +284,6 @@ export default function HomePage() {
       setUnreadTotal(0);
     }
 
-    const { count: notificationCount, error: notificationErr } = await supabase
-      .from("notifications")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", meId)
-      .eq("is_read", false);
-
-    if (notificationErr) {
-      console.error(notificationErr);
-      setUnreadNotificationCount(0);
-    } else {
-      setUnreadNotificationCount(notificationCount ?? 0);
-    }
-
     const acceptedOutgoingRequestSlotIds = outgoingRequestRows
       .filter((r) => r.status === "accepted")
       .map((r) => r.slot_id);
@@ -437,17 +421,6 @@ export default function HomePage() {
           }
         )
         .subscribe(),
-
-      supabase
-        .channel(`home-notifications:${meId}`)
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "notifications" },
-          () => {
-            loadHome();
-          }
-        )
-        .subscribe(),
     ];
 
     return () => {
@@ -538,16 +511,6 @@ export default function HomePage() {
               label="未読メッセージ"
               value={unreadTotal}
               helper={unreadTotal === 0 ? "新しいメッセージはありません" : "未読があります"}
-            />
-            <DashboardLinkRow
-              href="/notifications"
-              label="通知"
-              value={unreadNotificationCount}
-              helper={
-                unreadNotificationCount === 0
-                  ? "新しい通知はありません"
-                  : "未読の通知があります"
-              }
             />
           </div>
         </div>
