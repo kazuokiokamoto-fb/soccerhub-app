@@ -43,10 +43,19 @@ export default function AppHeader() {
       }
     };
 
+    const onNotificationsUpdated = () => {
+      loadUnread(user.id);
+    };
+
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("notifications-updated", onNotificationsUpdated);
 
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener(
+        "notifications-updated",
+        onNotificationsUpdated
+      );
       supabase.removeChannel(channel);
     };
   }, [user?.id]);

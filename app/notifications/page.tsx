@@ -114,10 +114,10 @@ export default function NotificationsPage() {
         }
 
         setItems((prev) =>
-          prev.map((x) =>
-            x.id === item.id ? { ...x, is_read: true } : x
-          )
+          prev.map((x) => (x.id === item.id ? { ...x, is_read: true } : x))
         );
+
+        window.dispatchEvent(new Event("notifications-updated"));
       }
 
       router.push(item.target_url || "/");
@@ -146,6 +146,7 @@ export default function NotificationsPage() {
     }
 
     setItems((prev) => prev.map((x) => ({ ...x, is_read: true })));
+    window.dispatchEvent(new Event("notifications-updated"));
     router.refresh();
   }
 
@@ -159,7 +160,6 @@ export default function NotificationsPage() {
         desc="チャット、オファー、承認などの通知を確認できます。"
       />
 
-      {/* 🔥 一括既読付きヘッダー */}
       <div style={summaryBox}>
         <div style={summaryHeaderRow}>
           <div>
@@ -172,10 +172,7 @@ export default function NotificationsPage() {
           </div>
 
           {!loading && unreadCount > 0 && (
-            <button
-              className="sh-btn"
-              onClick={markAllRead}
-            >
+            <button className="sh-btn" onClick={markAllRead}>
               すべて既読
             </button>
           )}
@@ -205,9 +202,7 @@ export default function NotificationsPage() {
               >
                 <div style={topRow}>
                   <div style={title}>{item.title}</div>
-                  {!item.is_read && (
-                    <span style={unreadBadge}>未読</span>
-                  )}
+                  {!item.is_read && <span style={unreadBadge}>未読</span>}
                 </div>
 
                 <div style={body}>{item.body}</div>
@@ -291,41 +286,61 @@ const cardBusy: React.CSSProperties = {
 const topRow: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
+  gap: 12,
+  alignItems: "flex-start",
 };
 
 const title: React.CSSProperties = {
   fontSize: 16,
   fontWeight: 900,
+  color: "#16391f",
 };
 
 const body: React.CSSProperties = {
   fontSize: 14,
   color: "#4b5563",
+  lineHeight: 1.7,
+  whiteSpace: "pre-wrap",
 };
 
 const metaRow: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+  alignItems: "center",
 };
 
 const typePill: React.CSSProperties = {
   padding: "4px 10px",
   borderRadius: 999,
   background: "#e8f5eb",
+  color: "#145c2a",
+  fontSize: 12,
+  fontWeight: 800,
 };
 
 const timeText: React.CSSProperties = {
   fontSize: 12,
+  color: "#6b7280",
 };
 
 const unreadBadge: React.CSSProperties = {
   background: "#dcfce7",
+  color: "#166534",
   padding: "4px 10px",
   borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 900,
+  whiteSpace: "nowrap",
 };
 
 const emptyBox: React.CSSProperties = {
   marginTop: 12,
   padding: 20,
   textAlign: "center",
+  borderRadius: 16,
+  border: "1px solid #e5ece7",
+  background: "#fff",
+  color: "#666",
 };
