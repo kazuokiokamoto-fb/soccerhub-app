@@ -61,6 +61,9 @@ self.addEventListener("push", (event) => {
 
   event.waitUntil(
     (async () => {
+      // =========================
+      // ① iOS バッジ対応
+      // =========================
       try {
         if ("setAppBadge" in navigator) {
           if (data.badgeCount > 0) {
@@ -73,12 +76,23 @@ self.addEventListener("push", (event) => {
         console.error("badge update error:", e);
       }
 
+      // =========================
+      // ② Android対応（通知で擬似バッジ）
+      // =========================
+      const displayBody =
+        data.badgeCount > 0
+          ? `${data.body}\n（未読${data.badgeCount}件）`
+          : data.body;
+
       await self.registration.showNotification(data.title, {
-        body: data.body,
+        body: displayBody,
         icon: "/icon-192.png",
         badge: "/icon-192.png",
+
+        // 👇 Androidで「上書き通知」にする
         tag: "sakamachi-notification",
         renotify: true,
+
         data: {
           url: data.url,
           badgeCount: data.badgeCount,
