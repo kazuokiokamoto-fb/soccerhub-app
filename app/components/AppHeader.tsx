@@ -26,22 +26,40 @@ export default function AppHeader() {
       .channel(`notifications-header:${user.id}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "notifications" },
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+        },
         () => {
           loadUnread(user.id);
         }
       )
       .subscribe();
 
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        loadUnread(user.id);
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
+
     return () => {
+      document.removeEventListener("visibilitychange", onVisible);
       supabase.removeChannel(channel);
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    loadUnread(user.id);
+  }, [pathname, user?.id]);
+
   async function loadUnread(userId: string) {
-    const { count, error } = await supabase
+    const { data, error } = await supabase
       .from("notifications")
-      .select("id", { count: "exact", head: true })
+      .select("id")
       .eq("user_id", userId)
       .eq("is_read", false);
 
@@ -50,7 +68,7 @@ export default function AppHeader() {
       return;
     }
 
-    setUnreadCount(count ?? 0);
+    setUnreadCount((data ?? []).length);
   }
 
   const onLogout = async () => {
