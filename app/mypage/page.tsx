@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
 import { categoryLabel, categoryLabels } from "@/app/lib/categories";
+import PushPermissionButton from "@/app/components/PushPermissionButton";
 
 type ProfileRow = {
   user_id: string;
@@ -413,6 +414,20 @@ export default function MyPage() {
             <b>通知</b>
             <span>アプリ内通知を使用</span>
           </div>
+        </div>
+      </section>
+
+      <section style={box}>
+        <div style={sectionHead}>
+          <h2 style={sectionTitle}>通知</h2>
+        </div>
+
+        <div style={{ display: "grid", gap: 10, color: "#555", lineHeight: 1.8 }}>
+          <div>
+            チャットやオファーの通知を受け取るには、通知を許可してください。
+          </div>
+
+          <PushPermissionButton />
         </div>
       </section>
 
