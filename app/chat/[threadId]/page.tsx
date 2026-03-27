@@ -428,14 +428,19 @@ export default function ChatThreadPage() {
     });
 
     if (otherUserId) {
+      const notificationTitle = "新着チャット";
+      const notificationBody =
+        body.length > 40 ? `${body.slice(0, 40)}…` : body;
+      const notificationUrl = `/chat/${threadId}`;
+
       const { error: notificationErr } = await supabase
         .from("notifications")
         .insert({
           user_id: otherUserId,
           type: "chat_message",
-          title: "新着チャット",
-          body: body.length > 40 ? `${body.slice(0, 40)}…` : body,
-          target_url: `/chat/${threadId}`,
+          title: notificationTitle,
+          body: notificationBody,
+          target_url: notificationUrl,
           is_read: false,
           related_thread_id: threadId,
           related_team_id: myTeamId,
@@ -443,6 +448,28 @@ export default function ChatThreadPage() {
 
       if (notificationErr) {
         console.error("notification insert error:", notificationErr);
+      } else {
+        try {
+          const pushRes = await fetch("/api/push/send", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userId: otherUserId,
+              title: notificationTitle,
+              body: notificationBody,
+              url: notificationUrl,
+            }),
+          });
+
+          if (!pushRes.ok) {
+            const pushJson = await pushRes.json().catch(() => null);
+            console.error("push send error:", pushJson ?? pushRes.statusText);
+          }
+        } catch (e) {
+          console.error("push send fetch error:", e);
+        }
       }
     }
 
