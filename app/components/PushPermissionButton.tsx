@@ -167,15 +167,20 @@ export default function PushPermissionButton() {
       const registration = await navigator.serviceWorker.ready;
 
       const VAPID_PUBLIC_KEY =
-        "BAa4DSI8ELFBuRz-__MADIETMWX8vQXeQbLuBU1K-2g6YeO6azrqydV98IOpuYfIDQ8SQ8m3FwyJYbk24bEO1I";
+        "BFISQsrF1NiWyt3PN2ru0Xvykn2QxVwn1M1pjeYuVT3JSLtjd3uz7NSWdB1i8RqkKAQ2j7HTYAh_wa5sLkvLk24";
+
+      const vapidKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+        console.log("VAPID_PUBLIC_KEY", VAPID_PUBLIC_KEY);
+        console.log("VAPID length", VAPID_PUBLIC_KEY.length);
+        console.log("converted vapid key length", vapidKey.length);
 
       const existingSubscription = await registration.pushManager.getSubscription();
 
       const subscription =
         existingSubscription ||
         (await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+            userVisibleOnly: true,
+            applicationServerKey: vapidKey,
         }));
 
       const sub = subscription.toJSON();
