@@ -35,6 +35,20 @@ export async function POST(req: Request) {
       );
     }
 
+    // 未読通知数を取得
+    const { count: unreadCount, error: unreadErr } = await supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_read", false);
+
+    if (unreadErr) {
+      return Response.json({ error: unreadErr.message }, { status: 500 });
+    }
+
+    const badgeCount = unreadCount ?? 0;
+
+    // push購読取得
     const { data: subscriptions, error } = await supabase
       .from("push_subscriptions")
       .select("id, endpoint, p256dh, auth")
@@ -45,13 +59,20 @@ export async function POST(req: Request) {
     }
 
     if (!subscriptions || subscriptions.length === 0) {
-      return Response.json({ success: true, sent: 0, skipped: true });
+      return Response.json({
+        success: true,
+        sent: 0,
+        skipped: true,
+        badgeCount,
+      });
     }
 
+    // payload（ここが重要）
     const payload = JSON.stringify({
       title,
       body,
       url,
+      badgeCount,
     });
 
     let sent = 0;
@@ -72,7 +93,6 @@ export async function POST(req: Request) {
       } catch (e: any) {
         console.error("push send error:", e?.message ?? e);
 
-        // 無効な購読は削除
         const statusCode = e?.statusCode;
         if (statusCode === 404 || statusCode === 410) {
           await supabase
@@ -87,6 +107,7 @@ export async function POST(req: Request) {
       success: true,
       sent,
       total: subscriptions.length,
+      badgeCount,
     });
   } catch (e: any) {
     return Response.json(
