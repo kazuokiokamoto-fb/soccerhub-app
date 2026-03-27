@@ -7,24 +7,48 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   try {
-    const { id } = await req.json();
+    const body = await req.json();
+    const id = body?.id;
 
-    if (!id) {
-      return Response.json({ error: "id required" }, { status: 400 });
+    if (!id || typeof id !== "string") {
+      return Response.json(
+        { error: "invalid id" },
+        { status: 400 }
+      );
     }
 
-    const { error } = await supabase
+    const { error, data } = await supabase
       .from("notifications")
-      .update({ is_read: true })
-      .eq("id", id);
+      .update({
+        is_read: true,
+      })
+      .eq("id", id)
+      .select("id") // ← 更新確認
+      .single();
 
     if (error) {
-      return Response.json({ error: error.message }, { status: 500 });
+      return Response.json(
+        { error: error.message },
+        { status: 500 }
+      );
     }
 
-    return Response.json({ success: true });
+    if (!data) {
+      return Response.json(
+        { error: "not found" },
+        { status: 404 }
+      );
+    }
+
+    return Response.json({
+      success: true,
+      id: data.id,
+    });
 
   } catch (e) {
-    return Response.json({ error: "invalid request" }, { status: 400 });
+    return Response.json(
+      { error: "invalid request" },
+      { status: 400 }
+    );
   }
 }

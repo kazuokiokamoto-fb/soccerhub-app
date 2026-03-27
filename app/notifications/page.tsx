@@ -50,26 +50,43 @@ export default function NotificationsPage() {
       return;
     }
 
-    (async () => {
-      setLoading(true);
+    loadNotifications();
 
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(100);
+    const channel = supabase
+      .channel(`notifications-page:${meId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "notifications" },
+        () => {
+          loadNotifications();
+        }
+      )
+      .subscribe();
 
-      if (error) {
-        console.error(error);
-        setItems([]);
-        setLoading(false);
-        return;
-      }
-
-      setItems((data ?? []) as NotificationRow[]);
-      setLoading(false);
-    })();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [meId]);
+
+  async function loadNotifications() {
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("notifications")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error) {
+      console.error(error);
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+
+    setItems((data ?? []) as NotificationRow[]);
+    setLoading(false);
+  }
 
   const unreadCount = useMemo(() => {
     return items.filter((x) => !x.is_read).length;
@@ -110,9 +127,7 @@ export default function NotificationsPage() {
       router.push(item.target_url || "/");
     } catch (e) {
       console.error(e);
-      alert(
-        e instanceof Error ? e.message : "通知の処理に失敗しました"
-      );
+      alert(e instanceof Error ? e.message : "通知の処理に失敗しました");
       setOpeningId("");
     }
   }
