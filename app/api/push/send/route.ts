@@ -19,6 +19,67 @@ type PushSendBody = {
   url?: string;
 };
 
+// =========================
+// 🔥 チャット未読数を算出
+// =========================
+async function getUnreadChatCount(userId: string) {
+  const { data: memberRows, error: memberErr } = await supabase
+    .from("chat_members")
+    .select("thread_id,last_read_at")
+    .eq("user_id", userId);
+
+  if (memberErr) {
+    console.error("chat unread member error:", memberErr);
+    return 0;
+  }
+
+  const members = memberRows ?? [];
+  const threadIds = members.map((x: any) => x.thread_id).filter(Boolean);
+
+  if (threadIds.length === 0) return 0;
+
+  const { data: msgRows, error: msgErr } = await supabase
+    .from("chat_messages")
+    .select("id,thread_id,created_at")
+    .in("thread_id", threadIds)
+    .order("created_at", { ascending: false })
+    .limit(2000);
+
+  if (msgErr) {
+    console.error("chat unread message error:", msgErr);
+    return 0;
+  }
+
+  const latestByThread = new Map<string, any>();
+
+  for (const m of msgRows ?? []) {
+    if (!latestByThread.has(m.thread_id)) {
+      latestByThread.set(m.thread_id, m);
+    }
+  }
+
+  let unread = 0;
+
+  for (const member of members) {
+    const latest = latestByThread.get(member.thread_id);
+    if (!latest?.created_at) continue;
+
+    if (!member.last_read_at) {
+      unread += 1;
+      continue;
+    }
+
+    if (
+      new Date(latest.created_at).getTime() >
+      new Date(member.last_read_at).getTime()
+    ) {
+      unread += 1;
+    }
+  }
+
+  return unread;
+}
+
 export async function POST(req: Request) {
   try {
     const json = (await req.json()) as PushSendBody;
@@ -35,18 +96,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // 未読通知数を取得
-    const { count: unreadCount, error: unreadErr } = await supabase
-      .from("notifications")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("is_read", false);
-
-    if (unreadErr) {
-      return Response.json({ error: unreadErr.message }, { status: 500 });
-    }
-
-    const badgeCount = unreadCount ?? 0;
+    // =========================
+    // 🔥 チャット未読数を取得（統一）
+    // =========================
+    const badgeCount = await getUnreadChatCount(userId);
 
     // push購読取得
     const { data: subscriptions, error } = await supabase
@@ -67,7 +120,9 @@ export async function POST(req: Request) {
       });
     }
 
-    // payload（ここが重要）
+    // =========================
+    // 🔥 payload（統一済み）
+    // =========================
     const payload = JSON.stringify({
       title,
       body,
