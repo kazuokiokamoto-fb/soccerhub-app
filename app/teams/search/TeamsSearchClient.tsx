@@ -492,19 +492,89 @@ export default function TeamsSearchClient() {
         return;
       }
 
-      const { error } = await supabase.from("match_offers").insert({
-        from_team_id: fromTeamId,
-        to_team_id: offerTargetTeam.id,
-        from_user_id: meId,
-        status: "pending",
-        message: offerMessage.trim() || null,
-      });
+      const { data: insertedOffer, error } = await supabase
+        .from("match_offers")
+        .insert({
+          from_team_id: fromTeamId,
+          to_team_id: offerTargetTeam.id,
+          from_user_id: meId,
+          status: "pending",
+          message: offerMessage.trim() || null,
+        })
+        .select("id, from_team_id, to_team_id, status, message, created_at")
+        .single();
 
       if (error) {
         console.error(error);
         alert(`オファー送信に失敗しました: ${error.message}`);
         setSendingOffer(false);
         return;
+      }
+
+      const myTeam = myTeams.find((t) => t.id === fromTeamId);
+
+      try {
+        const { data: targetTeamRow, error: targetTeamErr } = await supabase
+          .from("teams")
+          .select("owner_id")
+          .eq("id", offerTargetTeam.id)
+          .maybeSingle();
+
+        if (targetTeamErr) {
+          console.error("target team owner fetch error:", targetTeamErr);
+        }
+
+        const targetUserId =
+          (targetTeamRow as { owner_id?: string | null } | null)?.owner_id ?? "";
+
+        if (targetUserId) {
+          const notificationTitle = "新しい試合オファー";
+          const notificationBody = `${
+            myTeam?.name ?? "相手チーム"
+          } からオファーが届きました`;
+          const notificationUrl = "/match/status/offers-received";
+
+          const { error: notificationErr } = await supabase
+            .from("notifications")
+            .insert({
+              user_id: targetUserId,
+              type: "match_offer",
+              title: notificationTitle,
+              body: notificationBody,
+              target_url: notificationUrl,
+              is_read: false,
+              related_team_id: fromTeamId,
+              related_offer_id: insertedOffer.id,
+            });
+
+          if (notificationErr) {
+            console.error("notification insert error:", notificationErr);
+          } else {
+            try {
+              const pushRes = await fetch("/api/push/send", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  userId: targetUserId,
+                  title: notificationTitle,
+                  body: notificationBody,
+                  url: notificationUrl,
+                }),
+              });
+
+              if (!pushRes.ok) {
+                const pushJson = await pushRes.json().catch(() => null);
+                console.error("push send error:", pushJson ?? pushRes.statusText);
+              }
+            } catch (e) {
+              console.error("push send fetch error:", e);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("offer notification error:", e);
       }
 
       try {
@@ -516,7 +586,7 @@ export default function TeamsSearchClient() {
           sender_team_id: fromTeamId,
           body: [
             "【試合オファー】",
-            `送信元チーム: ${myTeams.find((t) => t.id === fromTeamId)?.name ?? "未設定"}`,
+            `送信元チーム: ${myTeam?.name ?? "未設定"}`,
             `送信先チーム: ${offerTargetTeam.name ?? "未設定"}`,
             offerMessage.trim() ? `メッセージ: ${offerMessage.trim()}` : "",
           ]

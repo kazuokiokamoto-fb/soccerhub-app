@@ -654,7 +654,13 @@ export default function MatchCalendarPage() {
       comment: requestComment.trim() || null,
     };
 
-    const { error } = await supabase.from("match_requests").insert(payload);
+    const { data: insertedRequest, error } = await supabase
+      .from("match_requests")
+      .insert(payload)
+      .select(
+        "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
+      )
+      .single();
 
     if (error) {
       console.error(error);
@@ -664,6 +670,70 @@ export default function MatchCalendarPage() {
 
     const hostTeam = teamMap.get(slot.host_team_id);
     const requesterTeam = myTeams.find((t) => t.id === requestTeamId);
+
+    try {
+      const { data: hostTeamRow, error: hostTeamErr } = await supabase
+        .from("teams")
+        .select("owner_id")
+        .eq("id", slot.host_team_id)
+        .maybeSingle();
+
+      if (hostTeamErr) {
+        console.error("host team owner fetch error:", hostTeamErr);
+      }
+
+      const hostUserId =
+        (hostTeamRow as { owner_id?: string | null } | null)?.owner_id ?? "";
+
+      if (hostUserId) {
+        const notificationTitle = "新しい試合申込み";
+        const notificationBody = `${
+          requesterTeam?.name ?? "相手チーム"
+        } から申込みが届きました`;
+        const notificationUrl = "/match/status/offers-received";
+
+        const { error: notificationErr } = await supabase
+          .from("notifications")
+          .insert({
+            user_id: hostUserId,
+            type: "match_request",
+            title: notificationTitle,
+            body: notificationBody,
+            target_url: notificationUrl,
+            is_read: false,
+            related_team_id: requestTeamId,
+            related_request_id: insertedRequest.id,
+          });
+
+        if (notificationErr) {
+          console.error("notification insert error:", notificationErr);
+        } else {
+          try {
+            const pushRes = await fetch("/api/push/send", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                userId: hostUserId,
+                title: notificationTitle,
+                body: notificationBody,
+                url: notificationUrl,
+              }),
+            });
+
+            if (!pushRes.ok) {
+              const pushJson = await pushRes.json().catch(() => null);
+              console.error("push send error:", pushJson ?? pushRes.statusText);
+            }
+          } catch (e) {
+            console.error("push send fetch error:", e);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("request notification error:", e);
+    }
 
     try {
       const threadId = await getOrCreateDmThread(

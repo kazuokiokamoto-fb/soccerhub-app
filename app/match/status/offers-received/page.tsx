@@ -333,6 +333,92 @@ export default function OfferReceivedPage() {
     if (error) throw error;
   }
 
+  async function getUserIdByTeamId(teamId: string) {
+    const { data: teamRow, error } = await supabase
+      .from("teams")
+      .select("owner_id")
+      .eq("id", teamId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return (teamRow as { owner_id?: string | null } | null)?.owner_id ?? "";
+  }
+
+  async function createNotification(params: {
+    userId: string;
+    type: string;
+    title: string;
+    body: string;
+    targetUrl: string;
+    relatedThreadId?: string | null;
+    relatedTeamId?: string | null;
+    relatedOfferId?: string | null;
+    relatedRequestId?: string | null;
+  }) {
+    const {
+      userId,
+      type,
+      title,
+      body,
+      targetUrl,
+      relatedThreadId = null,
+      relatedTeamId = null,
+      relatedOfferId = null,
+      relatedRequestId = null,
+    } = params;
+
+    if (!userId) return;
+
+    const { error } = await supabase.from("notifications").insert({
+      user_id: userId,
+      type,
+      title,
+      body,
+      target_url: targetUrl,
+      is_read: false,
+      related_thread_id: relatedThreadId,
+      related_team_id: relatedTeamId,
+      related_offer_id: relatedOfferId,
+      related_request_id: relatedRequestId,
+    });
+
+    if (error) {
+      console.error("notification insert error:", error);
+    }
+  }
+
+  async function sendPush(params: {
+    userId: string;
+    title: string;
+    body: string;
+    url: string;
+  }) {
+    const { userId, title, body, url } = params;
+    if (!userId) return;
+
+    try {
+      const res = await fetch("/api/push/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          title,
+          body,
+          url,
+        }),
+      });
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        console.error("push send error:", json ?? res.statusText);
+      }
+    } catch (e) {
+      console.error("push send fetch error:", e);
+    }
+  }
+
   async function openChat(item: ReceivedItem) {
     const rowId = `${item.kind}:${item.id}`;
     setChatOpeningId(rowId);
@@ -377,6 +463,7 @@ export default function OfferReceivedPage() {
       const slot = item.slot_id ? slotMap.get(item.slot_id) : null;
       const fromTeam = teamMap.get(item.from_team_id);
       const toTeam = teamMap.get(item.to_team_id);
+      const otherUserId = await getUserIdByTeamId(item.from_team_id);
 
       if (item.kind === "offer") {
         const { error } = await supabase
@@ -435,8 +522,44 @@ export default function OfferReceivedPage() {
             body,
           });
 
+          await createNotification({
+            userId: otherUserId,
+            type: "offer_accepted",
+            title: "試合オファーが承認されました",
+            body: `${toTeam?.name ?? "相手チーム"} があなたのオファーを承認しました`,
+            targetUrl: `/chat/${threadId}`,
+            relatedThreadId: threadId,
+            relatedTeamId: item.to_team_id,
+            relatedOfferId: item.id,
+          });
+
+          await sendPush({
+            userId: otherUserId,
+            title: "試合オファーが承認されました",
+            body: `${toTeam?.name ?? "相手チーム"} があなたのオファーを承認しました`,
+            url: `/chat/${threadId}`,
+          });
+
+          window.dispatchEvent(new Event("notifications-updated"));
           router.push(`/chat/${threadId}`);
           return;
+        } else {
+          await createNotification({
+            userId: otherUserId,
+            type: "offer_rejected",
+            title: "試合オファーは見送りになりました",
+            body: `${toTeam?.name ?? "相手チーム"} があなたのオファーを見送りました`,
+            targetUrl: "/match/status/offers",
+            relatedTeamId: item.to_team_id,
+            relatedOfferId: item.id,
+          });
+
+          await sendPush({
+            userId: otherUserId,
+            title: "試合オファーは見送りになりました",
+            body: `${toTeam?.name ?? "相手チーム"} があなたのオファーを見送りました`,
+            url: "/match/status/offers",
+          });
         }
       } else {
         const { error } = await supabase
@@ -495,8 +618,44 @@ export default function OfferReceivedPage() {
             body,
           });
 
+          await createNotification({
+            userId: otherUserId,
+            type: "request_accepted",
+            title: "試合申込みが承認されました",
+            body: `${toTeam?.name ?? "相手チーム"} があなたの申込みを承認しました`,
+            targetUrl: `/chat/${threadId}`,
+            relatedThreadId: threadId,
+            relatedTeamId: item.to_team_id,
+            relatedRequestId: item.id,
+          });
+
+          await sendPush({
+            userId: otherUserId,
+            title: "試合申込みが承認されました",
+            body: `${toTeam?.name ?? "相手チーム"} があなたの申込みを承認しました`,
+            url: `/chat/${threadId}`,
+          });
+
+          window.dispatchEvent(new Event("notifications-updated"));
           router.push(`/chat/${threadId}`);
           return;
+        } else {
+          await createNotification({
+            userId: otherUserId,
+            type: "request_rejected",
+            title: "試合申込みは見送りになりました",
+            body: `${toTeam?.name ?? "相手チーム"} があなたの申込みを見送りました`,
+            targetUrl: "/match/status/offers",
+            relatedTeamId: item.to_team_id,
+            relatedRequestId: item.id,
+          });
+
+          await sendPush({
+            userId: otherUserId,
+            title: "試合申込みは見送りになりました",
+            body: `${toTeam?.name ?? "相手チーム"} があなたの申込みを見送りました`,
+            url: "/match/status/offers",
+          });
         }
       }
 
@@ -608,9 +767,9 @@ export default function OfferReceivedPage() {
                 </button>
 
                 <Link
-                  href={`/teams/${item.from_team_id}?threadId=${
-                    encodeURIComponent(`${item.to_team_id}:${item.from_team_id}`)
-                  }`}
+                  href={`/teams/${item.from_team_id}?threadId=${encodeURIComponent(
+                    `${item.to_team_id}:${item.from_team_id}`
+                  )}`}
                   className="sh-btn"
                 >
                   チーム詳細
