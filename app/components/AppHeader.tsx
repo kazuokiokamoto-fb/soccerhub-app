@@ -27,7 +27,9 @@ export default function AppHeader() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "notifications" },
-        () => loadUnread(user.id)
+        () => {
+          loadUnread(user.id);
+        }
       )
       .subscribe();
 
@@ -39,7 +41,7 @@ export default function AppHeader() {
   async function loadUnread(userId: string) {
     const { count, error } = await supabase
       .from("notifications")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
       .eq("is_read", false);
 
@@ -76,11 +78,11 @@ export default function AppHeader() {
 
         <nav className="smh-nav">
           {pathname !== "/login" && (
-            <Link href="/notifications" className="smh-bell">
+            <Link href="/notifications" className="smh-bell" aria-label="通知">
               🔔
-              {unreadCount > 0 && (
+              {unreadCount > 0 ? (
                 <span className="smh-bellBadge">{unreadCount}</span>
-              )}
+              ) : null}
             </Link>
           )}
 
