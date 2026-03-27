@@ -1,0 +1,239 @@
+"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { supabase } from "@/app/lib/supabase";
+import AppTabNav from "@/app/components/AppTabNav";
+import AppHero from "@/app/components/AppHero";
+
+type NotificationRow = {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  body: string;
+  target_url: string;
+  is_read: boolean;
+  related_team_id: string | null;
+  related_thread_id: string | null;
+  related_offer_id: string | null;
+  related_request_id: string | null;
+  created_at: string;
+};
+
+function fmt(dt: string) {
+  try {
+    return new Date(dt).toLocaleString("ja-JP");
+  } catch {
+    return dt;
+  }
+}
+
+export default function NotificationsPage() {
+  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<NotificationRow[]>([]);
+  const [meId, setMeId] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      setMeId(data?.user?.id ?? "");
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!meId) {
+      setLoading(false);
+      return;
+    }
+
+    (async () => {
+      setLoading(true);
+
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      if (error) {
+        console.error(error);
+        setItems([]);
+        setLoading(false);
+        return;
+      }
+
+      setItems((data ?? []) as NotificationRow[]);
+      setLoading(false);
+    })();
+  }, [meId]);
+
+  const unreadCount = useMemo(() => {
+    return items.filter((x) => !x.is_read).length;
+  }, [items]);
+
+  return (
+    <main style={{ maxWidth: 980, margin: "0 auto", padding: 16 }}>
+      <AppTabNav />
+
+      <AppHero
+        icon="🔔"
+        title="通知一覧"
+        desc="チャット、オファー、承認などの通知を確認できます。"
+      />
+
+      <div style={summaryBox}>
+        <div style={summaryTitle}>通知</div>
+        <div style={summaryText}>
+          {loading
+            ? "読み込み中…"
+            : `全${items.length}件 / 未読${unreadCount}件`}
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={emptyBox}>読み込み中…</div>
+      ) : items.length === 0 ? (
+        <div style={emptyBox}>通知はまだありません。</div>
+      ) : (
+        <div style={listWrap}>
+          {items.map((item) => (
+            <Link
+              key={item.id}
+              href={item.target_url || "/"}
+              style={{
+                ...card,
+                ...(item.is_read ? cardRead : cardUnread),
+              }}
+            >
+              <div style={topRow}>
+                <div style={title}>{item.title}</div>
+                {!item.is_read ? <span style={unreadBadge}>未読</span> : null}
+              </div>
+
+              <div style={body}>{item.body}</div>
+
+              <div style={metaRow}>
+                <span style={typePill}>{item.type}</span>
+                <span style={timeText}>{fmt(item.created_at)}</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </main>
+  );
+}
+
+const summaryBox: React.CSSProperties = {
+  marginTop: 12,
+  marginBottom: 12,
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: "1px solid #e5ece7",
+  background: "#fff",
+};
+
+const summaryTitle: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 900,
+  color: "#1f5d30",
+};
+
+const summaryText: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 12,
+  color: "#66756d",
+};
+
+const listWrap: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  marginTop: 8,
+};
+
+const card: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+  padding: 14,
+  borderRadius: 16,
+  textDecoration: "none",
+  color: "#111",
+  border: "1px solid #e5ece7",
+};
+
+const cardUnread: React.CSSProperties = {
+  background: "#f7fff9",
+};
+
+const cardRead: React.CSSProperties = {
+  background: "#fff",
+};
+
+const topRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 10,
+};
+
+const title: React.CSSProperties = {
+  fontSize: 16,
+  fontWeight: 900,
+  color: "#16391f",
+  lineHeight: 1.5,
+};
+
+const body: React.CSSProperties = {
+  fontSize: 14,
+  color: "#4b5563",
+  lineHeight: 1.7,
+  whiteSpace: "pre-wrap",
+};
+
+const metaRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const typePill: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "4px 10px",
+  borderRadius: 999,
+  background: "#e8f5eb",
+  color: "#145c2a",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
+const timeText: React.CSSProperties = {
+  fontSize: 12,
+  color: "#6b7280",
+};
+
+const unreadBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "4px 10px",
+  borderRadius: 999,
+  background: "#dcfce7",
+  color: "#166534",
+  fontSize: 12,
+  fontWeight: 900,
+  whiteSpace: "nowrap",
+};
+
+const emptyBox: React.CSSProperties = {
+  marginTop: 12,
+  padding: 20,
+  borderRadius: 16,
+  border: "1px solid #e5ece7",
+  background: "#fff",
+  color: "#666",
+  lineHeight: 1.8,
+  textAlign: "center",
+};
