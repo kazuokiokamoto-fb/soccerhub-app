@@ -35,8 +35,9 @@ function isSafariOnIos() {
 }
 
 function urlBase64ToUint8Array(base64String: string) {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const normalized = base64String.trim();
+  const padding = "=".repeat((4 - (normalized.length % 4)) % 4);
+  const base64 = (normalized + padding).replace(/-/g, "+").replace(/_/g, "/");
   const rawData = window.atob(base64);
   return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
 }
@@ -165,8 +166,8 @@ export default function PushPermissionButton() {
 
       const registration = await navigator.serviceWorker.ready;
 
-      // 次で本物に差し替える
-      const VAPID_PUBLIC_KEY = "BAa4DSI8ELFBuRz-_MADlETMWX8vQXeQbLuBU1K-2g6YeO6azrqydV98IOpuYfIDQ8SQ8m3FwyJYbk24bEO1I";
+      const VAPID_PUBLIC_KEY =
+        "BAa4DSI8ELFBuRz-__MADIETMWX8vQXeQbLuBU1K-2g6YeO6azrqydV98IOpuYfIDQ8SQ8m3FwyJYbk24bEO1I";
 
       const existingSubscription = await registration.pushManager.getSubscription();
 
