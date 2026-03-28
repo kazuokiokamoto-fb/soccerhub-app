@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import { categoryLabel } from "@/app/lib/categories";
 import { getUnifiedBadgeCount, syncAppBadge } from "@/app/lib/badge";
@@ -74,9 +74,38 @@ function sameDate(a?: string | null, b?: string | null) {
   );
 }
 
+function getBackLink(from?: string | null) {
+  switch (from) {
+    case "sent-offers":
+      return {
+        href: "/match/status/offers",
+        label: "← 送ったオファーへ",
+      };
+    case "received-offers":
+      return {
+        href: "/match/status/offers-received",
+        label: "← 届いたオファーへ",
+      };
+    case "chat-list":
+      return {
+        href: "/chat",
+        label: "← 一覧",
+      };
+    default:
+      return {
+        href: "/chat",
+        label: "← 一覧",
+      };
+  }
+}
+
 export default function ChatThreadPage() {
   const params = useParams<{ threadId: string }>();
+  const searchParams = useSearchParams();
   const threadId = params.threadId;
+  const from = searchParams.get("from");
+
+  const backLink = useMemo(() => getBackLink(from), [from]);
 
   const [meId, setMeId] = useState<string>("");
   const [myTeamId, setMyTeamId] = useState<string>("");
@@ -452,7 +481,7 @@ export default function ChatThreadPage() {
       const notificationTitle = "新着チャット";
       const notificationBody =
         body.length > 40 ? `${body.slice(0, 40)}…` : body;
-      const notificationUrl = `/chat/${threadId}`;
+      const notificationUrl = `/chat/${threadId}${from ? `?from=${encodeURIComponent(from)}` : ""}`;
 
       const { error: notificationErr } = await supabase
         .from("notifications")
@@ -510,8 +539,8 @@ export default function ChatThreadPage() {
       <section style={chatPanel}>
         <header style={panelHeader}>
           <div style={headerLeft}>
-            <Link href="/chat" className="sh-btn">
-              ← 一覧
+            <Link href={backLink.href} className="sh-btn">
+              {backLink.label}
             </Link>
 
             <div style={titleWrap}>
@@ -524,7 +553,12 @@ export default function ChatThreadPage() {
 
           <div style={headerRight}>
             {otherTeamId ? (
-              <Link href={`/teams/${otherTeamId}`} className="sh-btn">
+              <Link
+                href={`/teams/${otherTeamId}${
+                  from ? `?from=${encodeURIComponent(from)}` : ""
+                }`}
+                className="sh-btn"
+              >
                 チーム詳細
               </Link>
             ) : null}

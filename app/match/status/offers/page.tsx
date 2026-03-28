@@ -318,12 +318,21 @@ export default function OfferSentPage() {
         item.from_team_id,
         item.to_team_id
       );
-      router.push(`/chat/${threadId}`);
+      router.push(`/chat/${threadId}?from=sent-offers`);
     } catch (e: any) {
       console.error(e);
       alert(`チャットを開けません: ${e?.message ?? "unknown error"}`);
     } finally {
       setChatOpeningId("");
+    }
+  }
+
+  async function getThreadIdForTeamLink(item: SentItem) {
+    try {
+      return await getOrCreateDmThread(item.from_team_id, item.to_team_id);
+    } catch (e) {
+      console.error("getThreadIdForTeamLink error:", e);
+      return "";
     }
   }
 
@@ -411,14 +420,7 @@ export default function OfferSentPage() {
                   {expanded ? "閉じる" : "詳細"}
                 </button>
 
-                <Link
-                  href={`/teams/${item.to_team_id}?threadId=${encodeURIComponent(
-                    `${item.from_team_id}:${item.to_team_id}`
-                  )}`}
-                  className="sh-btn"
-                >
-                  チーム詳細
-                </Link>
+                <AsyncTeamLink item={item} />
 
                 <button
                   type="button"
@@ -502,6 +504,41 @@ export default function OfferSentPage() {
       </div>
     </main>
   );
+
+  function AsyncTeamLink({ item }: { item: SentItem }) {
+    const [href, setHref] = useState<string>(
+      `/teams/${item.to_team_id}?from=sent-offers`
+    );
+
+    useEffect(() => {
+      let active = true;
+
+      (async () => {
+        const threadId = await getThreadIdForTeamLink(item);
+        if (!active) return;
+
+        if (threadId) {
+          setHref(
+            `/teams/${item.to_team_id}?threadId=${encodeURIComponent(
+              threadId
+            )}&from=sent-offers`
+          );
+        } else {
+          setHref(`/teams/${item.to_team_id}?from=sent-offers`);
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
+    }, [item]);
+
+    return (
+      <Link href={href} className="sh-btn">
+        チーム詳細
+      </Link>
+    );
+  }
 }
 
 function label(s: string) {
@@ -528,9 +565,12 @@ function badge(s: string): React.CSSProperties {
     whiteSpace: "nowrap",
   };
 
-  if (s === "pending") return { ...base, background: "#fef3c7", color: "#92400e" };
-  if (s === "accepted") return { ...base, background: "#dcfce7", color: "#166534" };
-  if (s === "rejected") return { ...base, background: "#fee2e2", color: "#991b1b" };
+  if (s === "pending")
+    return { ...base, background: "#fef3c7", color: "#92400e" };
+  if (s === "accepted")
+    return { ...base, background: "#dcfce7", color: "#166534" };
+  if (s === "rejected")
+    return { ...base, background: "#fee2e2", color: "#991b1b" };
   return { ...base, background: "#eee", color: "#444" };
 }
 
