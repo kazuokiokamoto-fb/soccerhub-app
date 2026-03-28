@@ -157,14 +157,12 @@ export function DaySlotList(props: {
           この日はまだ募集がありません。
         </p>
       ) : (
-        <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+        <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
           {slots.map((s) => {
             const isMine = !!meId && s.owner_id === meId;
 
             const hostTeam = allTeams.find((t) => t.id === s.host_team_id) ?? null;
-
             const hostTeamName = hostTeam?.name?.trim() || "チーム未設定";
-
             const rankText =
               hostTeam?.strength_rank?.trim() ||
               levelLabel(Number(hostTeam?.level ?? 0));
@@ -172,52 +170,52 @@ export function DaySlotList(props: {
             const myReq = requestsForMonth.find(
               (r) =>
                 r.slot_id === s.id &&
-                r.requester_user_id === meId &&
+                r.requester_team_id === requestTeamId &&
                 r.status !== "cancelled"
             );
 
             const categoryText = slotCategoryText(s);
+            const isExpanded = selectedSlotId === s.id;
 
             return (
               <div
                 key={s.id}
                 style={{
-                  padding: 12,
-                  borderRadius: 12,
-                  border:
-                    selectedSlotId === s.id
-                      ? "2px solid #86efac"
-                      : "1px solid #eee",
-                  background:
-                    selectedSlotId === s.id ? "#f0fdf4" : "#fafafa",
+                  padding: 14,
+                  borderRadius: 14,
+                  border: isExpanded ? "2px solid #86efac" : "1px solid #e5e7eb",
+                  background: isExpanded ? "#f0fdf4" : "#fff",
+                  display: "grid",
+                  gap: 12,
                 }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 10,
-                    alignItems: "flex-start",
-                    flexWrap: "wrap",
-                  }}
-                >
+                <div style={slotHeaderRow}>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontWeight: 900, lineHeight: 1.5 }}>
+                    <div style={slotMainLine}>
                       {hhmm(s.start_time)}–{hhmm(s.end_time)} /{" "}
                       {s.area_text ?? s.area ?? "エリア未設定"} / {categoryText}
                       {isMine ? "（あなた）" : ""}
+                    </div>
+
+                    <div style={metaRow}>
                       {s.is_closed ? (
                         <span
                           style={{
                             ...statusBadgeStyle("cancelled"),
-                            marginLeft: 8,
+                            marginLeft: 0,
                           }}
                         >
                           締切
                         </span>
                       ) : null}
+
                       {!isMine && myReq ? (
-                        <span style={statusBadgeStyle(myReq.status)}>
+                        <span
+                          style={{
+                            ...statusBadgeStyle(myReq.status),
+                            marginLeft: 0,
+                          }}
+                        >
                           {statusLabel(myReq.status)}
                         </span>
                       ) : null}
@@ -235,35 +233,32 @@ export function DaySlotList(props: {
                       希望相手：<b>{renderWantedLevelRange(s)}</b>
                     </div>
                   </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                    }}
-                  >
-                    {hostTeam?.id ? (
-                      <Link href={`/teams/${hostTeam.id}`} className="sh-btn">
-                        チーム詳細
-                      </Link>
-                    ) : null}
-
-                    <button
-                      className="sh-btn"
-                      type="button"
-                      onClick={() => onToggleDetail(s.id)}
-                    >
-                      {selectedSlotId === s.id ? "閉じる" : "募集詳細"}
-                    </button>
-                  </div>
                 </div>
 
-                {selectedSlotId === s.id ? (
+                <div style={buttonRow}>
+                  <button
+                    className="sh-btn sh-btn--primary"
+                    type="button"
+                    onClick={() => onToggleDetail(s.id)}
+                    style={buttonWide}
+                  >
+                    {isExpanded ? "閉じる" : "募集詳細"}
+                  </button>
+
+                  {hostTeam?.id ? (
+                    <Link
+                      href={`/teams/${hostTeam.id}`}
+                      className="sh-btn"
+                      style={buttonLink}
+                    >
+                      チーム詳細
+                    </Link>
+                  ) : null}
+                </div>
+
+                {isExpanded ? (
                   <div
                     style={{
-                      marginTop: 12,
                       paddingTop: 12,
                       borderTop: "1px solid #eaeaea",
                     }}
@@ -314,8 +309,30 @@ const h2: React.CSSProperties = {
   fontWeight: 900,
 };
 
-const hostTeamText: React.CSSProperties = {
+const slotHeaderRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 10,
+  alignItems: "flex-start",
+  flexWrap: "wrap",
+};
+
+const slotMainLine: React.CSSProperties = {
+  fontWeight: 900,
+  lineHeight: 1.6,
+  fontSize: 16,
+  color: "#16391f",
+};
+
+const metaRow: React.CSSProperties = {
   marginTop: 8,
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const hostTeamText: React.CSSProperties = {
+  marginTop: 10,
   color: "#4b5563",
   fontSize: 14,
   lineHeight: 1.5,
@@ -334,4 +351,21 @@ const wantedTextStyle: React.CSSProperties = {
   fontSize: 14,
   lineHeight: 1.5,
   fontWeight: 700,
+};
+
+const buttonRow: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 8,
+};
+
+const buttonWide: React.CSSProperties = {
+  width: "100%",
+  textAlign: "center",
+};
+
+const buttonLink: React.CSSProperties = {
+  width: "100%",
+  textAlign: "center",
+  boxSizing: "border-box",
 };

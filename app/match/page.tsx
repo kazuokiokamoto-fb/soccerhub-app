@@ -632,11 +632,11 @@ export default function MatchCalendarPage() {
     const already = requestsForMonth.some(
       (r) =>
         r.slot_id === slotId &&
-        r.requester_user_id === uid &&
+        r.requester_team_id === requestTeamId &&
         r.status !== "cancelled"
     );
     if (already) {
-      alert("すでに申込み済みです");
+      alert("この募集にはこのチームですでに申込済みです");
       return;
     }
 
@@ -664,6 +664,14 @@ export default function MatchCalendarPage() {
 
     if (error) {
       console.error(error);
+
+      if (
+        error.message?.includes("match_requests_slot_id_requester_team_id_key")
+      ) {
+        alert("この募集にはこのチームですでに申込済みです");
+        return;
+      }
+
       alert(`申込みに失敗しました: ${error.message}`);
       return;
     }
