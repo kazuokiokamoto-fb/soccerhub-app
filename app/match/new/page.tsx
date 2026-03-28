@@ -27,6 +27,14 @@ type DbVenue = {
   area: string | null;
 };
 
+function getTodayYmd() {
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, "0");
+  const d = String(today.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function levelLabelFromValue(v: string) {
   if (v === "9") return "SS";
   if (v === "7") return "S";
@@ -59,6 +67,8 @@ function MatchCreatePageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const initialQueryDate = searchParams.get("date") ?? "";
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -66,7 +76,7 @@ function MatchCreatePageInner() {
   const [myTeams, setMyTeams] = useState<DbTeam[]>([]);
   const [venues, setVenues] = useState<DbVenue[]>([]);
 
-  const [slotDate, setSlotDate] = useState("");
+  const [slotDate, setSlotDate] = useState(initialQueryDate || getTodayYmd());
   const [hostTeamId, setHostTeamId] = useState("");
   const [startTime, setStartTime] = useState("13:00");
   const [endTime, setEndTime] = useState("15:00");
@@ -92,7 +102,10 @@ function MatchCreatePageInner() {
     const categoryParam = searchParams.get("category") ?? "";
     const categoriesParam = searchParams.get("categories") ?? "";
 
-    if (date) setSlotDate(date);
+    if (date) {
+      setSlotDate(date);
+    }
+
     if (hostTeamIdParam) setHostTeamId(hostTeamIdParam);
     if (areaParam) setSlotArea(areaParam);
 
@@ -167,13 +180,7 @@ function MatchCreatePageInner() {
       setMyTeams(teams);
       setVenues((venueRows ?? []) as DbVenue[]);
 
-      if (!slotDate) {
-        const today = new Date();
-        const y = today.getFullYear();
-        const m = String(today.getMonth() + 1).padStart(2, "0");
-        const d = String(today.getDate()).padStart(2, "0");
-        setSlotDate(`${y}-${m}-${d}`);
-      }
+      setSlotDate((prev) => prev || initialQueryDate || getTodayYmd());
 
       if (!hostTeamId && teams[0]?.id) {
         setHostTeamId(teams[0].id);
@@ -495,7 +502,9 @@ function MatchCreatePageInner() {
                 選択中: {slotCategories.map((v) => categoryLabel(v)).join(" / ")}
               </div>
             ) : (
-              <div style={helperText}>カテゴリを1つ以上選択してください。</div>
+              <div style={helperText}>
+                カテゴリを1つ以上選択してください。
+              </div>
             )}
           </div>
 
@@ -536,8 +545,8 @@ function MatchCreatePageInner() {
           </div>
 
           <div style={hintBox}>
-            希望相手の強さ：下限 <b>{levelLabelFromValue(wantedLevelMin)}</b> / 上限{" "}
-            <b>{levelLabelFromValue(wantedLevelMax)}</b>
+            希望相手の強さ：下限 <b>{levelLabelFromValue(wantedLevelMin)}</b> /
+            上限 <b>{levelLabelFromValue(wantedLevelMax)}</b>
           </div>
 
           <div style={sectionBox}>
@@ -608,7 +617,8 @@ function MatchCreatePageInner() {
                 </label>
 
                 <div style={helperText}>
-                  作成時に `venues` に保存されるので、次回以降も候補に表示されます。
+                  作成時に `venues`
+                  に保存されるので、次回以降も候補に表示されます。
                 </div>
               </div>
             )}
