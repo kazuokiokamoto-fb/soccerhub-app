@@ -440,7 +440,7 @@ export default function OfferReceivedPage() {
       router.push(`/chat/${threadId}`);
     } catch (e: any) {
       console.error(e);
-      alert(`チャットを開けません: ${e?.message ?? "unknown error"}`);
+      alert(`OPEN-CHAT-ERROR-V2: ${e?.message ?? "unknown error"}`);
     } finally {
       setChatOpeningId("");
     }
@@ -599,8 +599,8 @@ export default function OfferReceivedPage() {
           console.error(error);
           alert(
             nextStatus === "accepted"
-              ? `承認に失敗しました: ${error.message}`
-              : `見送りに失敗しました: ${error.message}`
+              ? `UPDATE-OFFER-ERROR-V2: ${error.message}`
+              : `REJECT-OFFER-ERROR-V2: ${error.message}`
           );
           setUpdatingId("");
           return;
@@ -615,8 +615,8 @@ export default function OfferReceivedPage() {
           console.error(error);
           alert(
             nextStatus === "accepted"
-              ? `承認に失敗しました: ${error.message}`
-              : `見送りに失敗しました: ${error.message}`
+              ? `UPDATE-REQUEST-ERROR-V2: ${error.message}`
+              : `REJECT-REQUEST-ERROR-V2: ${error.message}`
           );
           setUpdatingId("");
           return;
@@ -657,7 +657,7 @@ export default function OfferReceivedPage() {
 
         if (!ok) {
           alert(
-            "承認自体は完了しましたが、チャットの自動作成に失敗しました。後で「チャット」ボタンから開けるかお試しください。"
+            "ACCEPTED-BUT-CHAT-FAILED-V2: 承認自体は完了しました。チャット自動作成だけ失敗しました。"
           );
         }
 
@@ -705,11 +705,11 @@ export default function OfferReceivedPage() {
       await loadPage();
       setUpdatingId("");
     } catch (e: any) {
-      console.error(e);
+      console.error("OUTER-CATCH-V2", e);
       alert(
         nextStatus === "accepted"
-          ? `承認に失敗しました: ${e?.message ?? "unknown error"}`
-          : `見送りに失敗しました: ${e?.message ?? "unknown error"}`
+          ? `OUTER-CATCH-V2: ${e?.message ?? "unknown error"}`
+          : `REJECT-CATCH-V2: ${e?.message ?? "unknown error"}`
       );
       setUpdatingId("");
     }
@@ -727,7 +727,7 @@ export default function OfferReceivedPage() {
       />
 
       <div style={{ color: "red", fontWeight: 900, marginTop: 8 }}>
-        OFFERS-RECEIVED NEW
+        OFFERS-RECEIVED NEW V2
       </div>
 
       <div style={summary}>
