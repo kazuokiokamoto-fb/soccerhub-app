@@ -726,6 +726,10 @@ export default function OfferReceivedPage() {
         desc="相手から届いた招待と、自分の募集に対する申込み一覧です。"
       />
 
+      <div style={{ color: "red", fontWeight: 900, marginTop: 8 }}>
+        OFFERS-RECEIVED NEW
+      </div>
+
       <div style={summary}>
         <Stat label="未対応" value={counts.pending} />
         <Stat label="承認" value={counts.accepted} />
