@@ -276,14 +276,17 @@ export default function ChatThreadPage() {
       if (memberErr) {
         console.error(memberErr);
       } else {
-        const teamIds = (memberRows ?? [])
-          .map((r: any) => r.team_id as string)
+        const typedMemberRows = ((memberRows ?? []) as ChatMemberRow[]).filter(
+          Boolean
+        );
+
+        const teamIds = typedMemberRows
+          .map((r) => r.team_id as string)
           .filter(Boolean);
 
         const otherUserIdValue =
-          (memberRows ?? []).find(
-            (r: any) => r.user_id && r.user_id !== meId
-          )?.user_id ?? "";
+          typedMemberRows.find((r) => r.user_id && r.user_id !== meId)
+            ?.user_id ?? "";
 
         setOtherUserId(otherUserIdValue);
 
@@ -294,7 +297,9 @@ export default function ChatThreadPage() {
             .eq("owner_id", meId);
 
           const myTeamIds = new Set<string>(
-            (myTeams ?? []).map((r: any) => r.id).filter(Boolean)
+            ((myTeams ?? []) as { id: string }[])
+              .map((r) => r.id)
+              .filter(Boolean)
           );
 
           const mine = teamIds.find((id) => myTeamIds.has(id)) ?? "";
@@ -336,7 +341,7 @@ export default function ChatThreadPage() {
         return;
       }
 
-      setMessages(((data ?? []) as any[]).filter(Boolean) as Msg[]);
+      setMessages(((data ?? []) as Msg[]).filter(Boolean));
       setLoading(false);
 
       requestAnimationFrame(() => {
@@ -440,7 +445,7 @@ export default function ChatThreadPage() {
       scrollToBottom(true);
     });
 
-    const payload: any = {
+    const payload = {
       thread_id: threadId,
       sender_id: meId,
       sender_team_id: myTeamId,
@@ -464,7 +469,7 @@ export default function ChatThreadPage() {
 
     setMessages((prev) => {
       const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
-      const real = data as any as Msg;
+      const real = data as Msg;
       if (withoutOptimistic.some((m) => m.id === real.id)) {
         return withoutOptimistic;
       }
@@ -481,7 +486,9 @@ export default function ChatThreadPage() {
       const notificationTitle = "新着チャット";
       const notificationBody =
         body.length > 40 ? `${body.slice(0, 40)}…` : body;
-      const notificationUrl = `/chat/${threadId}${from ? `?from=${encodeURIComponent(from)}` : ""}`;
+      const notificationUrl = `/chat/${threadId}${
+        from ? `?from=${encodeURIComponent(from)}` : ""
+      }`;
 
       const { error: notificationErr } = await supabase
         .from("notifications")
@@ -565,9 +572,7 @@ export default function ChatThreadPage() {
 
             {notificationPermission === "granted" ? (
               <span style={notifyBadgeGranted}>通知ON</span>
-            ) : notificationPermission === "unsupported" ? (
-              <span style={notifyBadgeMuted}>通知非対応</span>
-            ) : (
+            ) : notificationPermission !== "unsupported" ? (
               <button
                 type="button"
                 className="sh-btn"
@@ -575,7 +580,7 @@ export default function ChatThreadPage() {
               >
                 通知をON
               </button>
-            )}
+            ) : null}
           </div>
         </header>
 
@@ -758,19 +763,6 @@ const notifyBadgeGranted: React.CSSProperties = {
   borderRadius: 999,
   background: "#dcfce7",
   color: "#166534",
-  fontSize: 12,
-  fontWeight: 900,
-};
-
-const notifyBadgeMuted: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 32,
-  padding: "0 10px",
-  borderRadius: 999,
-  background: "#f3f4f6",
-  color: "#4b5563",
   fontSize: 12,
   fontWeight: 900,
 };

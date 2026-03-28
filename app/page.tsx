@@ -485,19 +485,31 @@ export default function HomePage() {
               href="/match/status/open"
               label="募集中の試合"
               value={openCount}
-              helper={openCount === 0 ? "まだ募集していません" : "現在公開中の募集です"}
+              helper={
+                openCount === 0
+                  ? "まだ募集していません"
+                  : "現在公開中の募集です"
+              }
             />
             <DashboardLinkRow
               href="/match/status/offers-received"
               label="届いたオファー"
               value={receivedOfferCount}
-              helper={receivedOfferCount === 0 ? "新しいオファーはありません" : "確認待ちのオファーがあります"}
+              helper={
+                receivedOfferCount === 0
+                  ? "新しいオファーはありません"
+                  : "確認待ちのオファーがあります"
+              }
             />
             <DashboardLinkRow
               href="/match/status/offers"
               label="送ったオファー"
               value={sentOfferCount}
-              helper={sentOfferCount === 0 ? "まだオファーを送っていません" : "返答待ちのオファーがあります"}
+              helper={
+                sentOfferCount === 0
+                  ? "まだオファーを送っていません"
+                  : "返答待ちのオファーがあります"
+              }
             />
           </div>
         </div>
@@ -510,7 +522,11 @@ export default function HomePage() {
               href="/chat"
               label="未読メッセージ"
               value={unreadTotal}
-              helper={unreadTotal === 0 ? "新しいメッセージはありません" : "未読があります"}
+              helper={
+                unreadTotal === 0
+                  ? "新しいメッセージはありません"
+                  : "未読があります"
+              }
             />
           </div>
         </div>
@@ -593,7 +609,8 @@ export default function HomePage() {
         <div style={qaItem}>
           <div style={qaQ}>Q. まず何をすればいいですか？</div>
           <div style={qaA}>
-            A. まずはチーム登録です。登録情報があると、検索にも募集にもチャットにも進みやすくなります。
+            A.
+            まずはチーム登録です。登録情報があると、検索にも募集にもチャットにも進みやすくなります。
           </div>
         </div>
 
@@ -605,23 +622,50 @@ export default function HomePage() {
         </div>
 
         <div style={qaItem}>
-          <div style={qaQ}>Q. 募集するだけでなく、探すこともできますか？</div>
+          <div style={qaQ}>
+            Q. 募集するだけでなく、探すこともできますか？
+          </div>
           <div style={qaA}>
-            A. できます。カレンダー上で既存の募集枠を見ながら、条件で絞り込んで探せます。
+            A.
+            できます。カレンダー上で既存の募集枠を見ながら、条件で絞り込んで探せます。
           </div>
         </div>
 
         <div style={qaItem}>
           <div style={qaQ}>Q. チーム検索では何で絞り込めますか？</div>
           <div style={qaA}>
-            A. エリア、カテゴリ、強さ、グラウンド提供、所属人数、キーワードなどで絞り込みできます。
+            A.
+            エリア、カテゴリ、強さ、グラウンド提供、所属人数、キーワードなどで絞り込みできます。
           </div>
         </div>
 
         <div style={qaItem}>
           <div style={qaQ}>Q. まだ相手が少ない場合は？</div>
           <div style={qaA}>
-            A. 先に自分で募集枠を出しておくと、相手から見つけてもらいやすくなります。
+            A.
+            先に自分で募集枠を出しておくと、相手から見つけてもらいやすくなります。
+          </div>
+        </div>
+
+        <div style={qaItem}>
+          <div style={qaQ}>Q. チャット通知が使えないのはなぜですか？</div>
+          <div style={qaA}>
+            <div>
+              A.
+              チャット通知はブラウザの通知機能を利用しているため、
+              ご利用の端末・ブラウザによっては対応していない場合があります。
+            </div>
+
+            <div style={qaSubHeading}>■ ご利用をおすすめする環境</div>
+            <div>・PC：Google Chrome / Microsoft Edge（最新版）</div>
+            <div>・スマートフォン：Safari（iOS）</div>
+
+            <div style={qaSubHeading}>■ ご確認ください</div>
+            <div>・通知が「許可」になっているか</div>
+            <div>・シークレットモードになっていないか</div>
+            <div>
+              ・ホーム画面追加（PWA）で開いている場合は設定が制限されていないか
+            </div>
           </div>
         </div>
 
@@ -887,6 +931,13 @@ const qaA: React.CSSProperties = {
   fontSize: 14,
   color: "#444",
   lineHeight: 1.8,
+};
+
+const qaSubHeading: React.CSSProperties = {
+  marginTop: 10,
+  marginBottom: 4,
+  fontWeight: 800,
+  color: "#16391f",
 };
 
 const startBox: React.CSSProperties = {
