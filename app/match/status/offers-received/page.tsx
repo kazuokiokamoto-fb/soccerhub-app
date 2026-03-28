@@ -80,6 +80,7 @@ export default function OfferReceivedPage() {
   const [items, setItems] = useState<ReceivedItem[]>([]);
   const [teamMap, setTeamMap] = useState<Map<string, Team>>(new Map());
   const [slotMap, setSlotMap] = useState<Map<string, SlotMini>>(new Map());
+  const [threadMap, setThreadMap] = useState<Map<string, string>>(new Map());
 
   const [openId, setOpenId] = useState("");
   const [updatingId, setUpdatingId] = useState("");
@@ -108,6 +109,7 @@ export default function OfferReceivedPage() {
       setItems([]);
       setTeamMap(new Map());
       setSlotMap(new Map());
+      setThreadMap(new Map());
       setLoading(false);
       return;
     }
@@ -121,6 +123,7 @@ export default function OfferReceivedPage() {
       setItems([]);
       setTeamMap(new Map());
       setSlotMap(new Map());
+      setThreadMap(new Map());
       setLoading(false);
       return;
     }
@@ -168,16 +171,18 @@ export default function OfferReceivedPage() {
       }
     }
 
-    const offerItems: ReceivedItem[] = ((offerRows ?? []) as Offer[]).map((o) => ({
-      kind: "offer",
-      id: o.id,
-      created_at: o.created_at,
-      status: o.status,
-      from_team_id: o.from_team_id,
-      to_team_id: o.to_team_id,
-      slot_id: o.slot_id,
-      message: o.message,
-    }));
+    const offerItems: ReceivedItem[] = ((offerRows ?? []) as Offer[]).map(
+      (o) => ({
+        kind: "offer",
+        id: o.id,
+        created_at: o.created_at,
+        status: o.status,
+        from_team_id: o.from_team_id,
+        to_team_id: o.to_team_id,
+        slot_id: o.slot_id,
+        message: o.message,
+      })
+    );
 
     const requestItems: ReceivedItem[] = requestRows.map((r) => {
       const slot = mySlotRows.find((s) => s.id === r.slot_id);
@@ -248,6 +253,66 @@ export default function OfferReceivedPage() {
       setSlotMap(new Map());
     }
 
+    const myTeamIdSet = new Set(myTeamIds);
+    const relevantPairs = Array.from(
+      new Set(
+        merged
+          .map((x) => {
+            const myTeamId = myTeamIdSet.has(x.to_team_id)
+              ? x.to_team_id
+              : myTeamIds[0] ?? "";
+            const otherTeamId = x.from_team_id;
+            return myTeamId && otherTeamId ? `${myTeamId}:${otherTeamId}` : "";
+          })
+          .filter(Boolean)
+      )
+    );
+
+    if (relevantPairs.length > 0) {
+      const allPairTeamIds = Array.from(
+        new Set(relevantPairs.flatMap((pair) => pair.split(":")))
+      );
+
+      const { data: chatMembers, error: chatMembersErr } = await supabase
+        .from("chat_members")
+        .select("thread_id,team_id")
+        .in("team_id", allPairTeamIds);
+
+      if (chatMembersErr) {
+        console.error(chatMembersErr);
+        setThreadMap(new Map());
+      } else {
+        const rows = (chatMembers ?? []) as Array<{
+          thread_id: string;
+          team_id: string | null;
+        }>;
+
+        const threadTeams = new Map<string, Set<string>>();
+        rows.forEach((row) => {
+          if (!row.thread_id || !row.team_id) return;
+          if (!threadTeams.has(row.thread_id)) {
+            threadTeams.set(row.thread_id, new Set());
+          }
+          threadTeams.get(row.thread_id)!.add(row.team_id);
+        });
+
+        const nextThreadMap = new Map<string, string>();
+        relevantPairs.forEach((pair) => {
+          const [teamA, teamB] = pair.split(":");
+          for (const [threadId, teamSet] of threadTeams.entries()) {
+            if (teamSet.has(teamA) && teamSet.has(teamB)) {
+              nextThreadMap.set(pair, threadId);
+              break;
+            }
+          }
+        });
+
+        setThreadMap(nextThreadMap);
+      }
+    } else {
+      setThreadMap(new Map());
+    }
+
     setLoading(false);
   }, [meId]);
 
@@ -306,11 +371,6 @@ export default function OfferReceivedPage() {
   }, [items]);
 
   async function getOrCreateDmThread(myTeamId: string, otherTeamId: string) {
-    console.log("rpc_get_or_create_dm_thread", {
-      myTeamId,
-      otherTeamId,
-    });
-
     const { data, error } = await supabase.rpc("rpc_get_or_create_dm_thread", {
       my_team_id: myTeamId,
       other_team_id: otherTeamId,
@@ -437,10 +497,10 @@ export default function OfferReceivedPage() {
         item.to_team_id,
         item.from_team_id
       );
-      router.push(`/chat/${threadId}`);
+      router.push(`/chat/${threadId}?from=received-offers`);
     } catch (e: any) {
       console.error(e);
-      alert(`OPEN-CHAT-ERROR-V2: ${e?.message ?? "unknown error"}`);
+      alert(`チャットを開けません: ${e?.message ?? "unknown error"}`);
     } finally {
       setChatOpeningId("");
     }
@@ -465,44 +525,48 @@ export default function OfferReceivedPage() {
       const body =
         item.kind === "offer"
           ? [
-              "【試合オファー 承認】",
+              "━━━━━━━━━━━━",
+              "✅ 試合オファー承認",
+              "━━━━━━━━━━━━",
               slot
-                ? `${slot.date || "日付未設定"} ${
+                ? `📅 ${slot.date || "日付未設定"} ${
                     slot.start_time ? String(slot.start_time).slice(0, 5) : ""
                   }${
                     slot.end_time ? `-${String(slot.end_time).slice(0, 5)}` : ""
                   }`
                 : "",
               slot
-                ? `カテゴリ: ${
+                ? `🏷 ${
                     categoryLabel(slot.category) || slot.category || "未設定"
                   }`
                 : "",
-              slot ? `エリア: ${slot.area_text ?? slot.area ?? "未設定"}` : "",
-              `募集チーム: ${toTeam?.name ?? "自チーム"}`,
-              `相手チーム: ${fromTeam?.name ?? "相手チーム"}`,
-              "オファーを承認しました。詳細はこのチャットで調整してください。",
+              slot ? `📍 ${slot.area_text ?? slot.area ?? "未設定"}` : "",
+              `👥 募集チーム: ${toTeam?.name ?? "自チーム"}`,
+              `👥 相手チーム: ${fromTeam?.name ?? "相手チーム"}`,
+              "📩 詳細はこのチャットで調整してください。",
             ]
               .filter(Boolean)
               .join("\n")
           : [
-              "【試合申込 承認】",
+              "━━━━━━━━━━━━",
+              "✅ 試合申込み承認",
+              "━━━━━━━━━━━━",
               slot
-                ? `${slot.date || "日付未設定"} ${
+                ? `📅 ${slot.date || "日付未設定"} ${
                     slot.start_time ? String(slot.start_time).slice(0, 5) : ""
                   }${
                     slot.end_time ? `-${String(slot.end_time).slice(0, 5)}` : ""
                   }`
                 : "",
               slot
-                ? `カテゴリ: ${
+                ? `🏷 ${
                     categoryLabel(slot.category) || slot.category || "未設定"
                   }`
                 : "",
-              slot ? `エリア: ${slot.area_text ?? slot.area ?? "未設定"}` : "",
-              `申込チーム: ${fromTeam?.name ?? "相手チーム"}`,
-              `募集チーム: ${toTeam?.name ?? "自チーム"}`,
-              "申込みを承認しました。詳細はこのチャットで調整してください。",
+              slot ? `📍 ${slot.area_text ?? slot.area ?? "未設定"}` : "",
+              `👥 申込チーム: ${fromTeam?.name ?? "相手チーム"}`,
+              `👥 募集チーム: ${toTeam?.name ?? "自チーム"}`,
+              "📩 詳細はこのチャットで調整してください。",
             ]
               .filter(Boolean)
               .join("\n");
@@ -520,7 +584,7 @@ export default function OfferReceivedPage() {
           type: "offer_accepted",
           title: "試合オファーが承認されました",
           body: `${toTeam?.name ?? "相手チーム"} があなたのオファーを承認しました`,
-          targetUrl: `/chat/${threadId}`,
+          targetUrl: `/chat/${threadId}?from=received-offers`,
           relatedThreadId: threadId,
           relatedTeamId: item.to_team_id,
           relatedOfferId: item.id,
@@ -530,7 +594,7 @@ export default function OfferReceivedPage() {
           userId: otherUserId,
           title: "試合オファーが承認されました",
           body: `${toTeam?.name ?? "相手チーム"} があなたのオファーを承認しました`,
-          url: `/chat/${threadId}`,
+          url: `/chat/${threadId}?from=received-offers`,
         });
       } else {
         await createNotification({
@@ -538,7 +602,7 @@ export default function OfferReceivedPage() {
           type: "request_accepted",
           title: "試合申込みが承認されました",
           body: `${toTeam?.name ?? "相手チーム"} があなたの申込みを承認しました`,
-          targetUrl: `/chat/${threadId}`,
+          targetUrl: `/chat/${threadId}?from=received-offers`,
           relatedThreadId: threadId,
           relatedTeamId: item.to_team_id,
           relatedRequestId: item.id,
@@ -548,12 +612,12 @@ export default function OfferReceivedPage() {
           userId: otherUserId,
           title: "試合申込みが承認されました",
           body: `${toTeam?.name ?? "相手チーム"} があなたの申込みを承認しました`,
-          url: `/chat/${threadId}`,
+          url: `/chat/${threadId}?from=received-offers`,
         });
       }
 
       window.dispatchEvent(new Event("notifications-updated"));
-      router.push(`/chat/${threadId}`);
+      router.push(`/chat/${threadId}?from=received-offers`);
       return true;
     } catch (e: any) {
       console.error("accepted flow error:", e);
@@ -599,8 +663,8 @@ export default function OfferReceivedPage() {
           console.error(error);
           alert(
             nextStatus === "accepted"
-              ? `UPDATE-OFFER-ERROR-V2: ${error.message}`
-              : `REJECT-OFFER-ERROR-V2: ${error.message}`
+              ? `承認に失敗しました: ${error.message}`
+              : `見送りに失敗しました: ${error.message}`
           );
           setUpdatingId("");
           return;
@@ -615,8 +679,8 @@ export default function OfferReceivedPage() {
           console.error(error);
           alert(
             nextStatus === "accepted"
-              ? `UPDATE-REQUEST-ERROR-V2: ${error.message}`
-              : `REJECT-REQUEST-ERROR-V2: ${error.message}`
+              ? `承認に失敗しました: ${error.message}`
+              : `見送りに失敗しました: ${error.message}`
           );
           setUpdatingId("");
           return;
@@ -657,7 +721,7 @@ export default function OfferReceivedPage() {
 
         if (!ok) {
           alert(
-            "ACCEPTED-BUT-CHAT-FAILED-V2: 承認自体は完了しました。チャット自動作成だけ失敗しました。"
+            "承認自体は完了しましたが、チャットの自動作成に失敗しました。後で「チャット」ボタンから開けるかお試しください。"
           );
         }
 
@@ -705,15 +769,31 @@ export default function OfferReceivedPage() {
       await loadPage();
       setUpdatingId("");
     } catch (e: any) {
-      console.error("OUTER-CATCH-V2", e);
+      console.error(e);
       alert(
         nextStatus === "accepted"
-          ? `OUTER-CATCH-V2: ${e?.message ?? "unknown error"}`
-          : `REJECT-CATCH-V2: ${e?.message ?? "unknown error"}`
+          ? `承認に失敗しました: ${e?.message ?? "unknown error"}`
+          : `見送りに失敗しました: ${e?.message ?? "unknown error"}`
       );
       setUpdatingId("");
     }
   };
+
+  function TeamDetailLink({ item }: { item: ReceivedItem }) {
+    const pairKey = `${item.to_team_id}:${item.from_team_id}`;
+    const threadId = threadMap.get(pairKey);
+    const href = threadId
+      ? `/teams/${item.from_team_id}?threadId=${encodeURIComponent(
+          threadId
+        )}&from=received-offers`
+      : `/teams/${item.from_team_id}?from=received-offers`;
+
+    return (
+      <Link href={href} className="sh-btn">
+        チーム詳細
+      </Link>
+    );
+  }
 
   return (
     <main style={wrap}>
@@ -725,10 +805,6 @@ export default function OfferReceivedPage() {
         title="届いたオファー"
         desc="相手から届いた招待と、自分の募集に対する申込み一覧です。"
       />
-
-      <div style={{ color: "red", fontWeight: 900, marginTop: 8 }}>
-        OFFERS-RECEIVED NEW V2
-      </div>
 
       <div style={summary}>
         <Stat label="未対応" value={counts.pending} />
@@ -768,7 +844,9 @@ export default function OfferReceivedPage() {
                     {" / "}
                     宛先：{toTeam?.name ?? "自チーム"}
                     {fromTeam?.category
-                      ? ` / ${categoryLabel(fromTeam.category) || fromTeam.category}`
+                      ? ` / ${
+                          categoryLabel(fromTeam.category) || fromTeam.category
+                        }`
                       : ""}
                   </div>
                 </div>
@@ -805,14 +883,7 @@ export default function OfferReceivedPage() {
                   {expanded ? "閉じる" : "詳細"}
                 </button>
 
-                <Link
-                  href={`/teams/${item.from_team_id}?threadId=${encodeURIComponent(
-                    `${item.to_team_id}:${item.from_team_id}`
-                  )}`}
-                  className="sh-btn"
-                >
-                  チーム詳細
-                </Link>
+                <TeamDetailLink item={item} />
 
                 <button
                   type="button"
@@ -860,7 +931,10 @@ export default function OfferReceivedPage() {
                     <div style={detailValue}>
                       {fromTeam?.name ?? "相手チーム"}
                       {fromTeam?.category
-                        ? `（${categoryLabel(fromTeam.category) || fromTeam.category}）`
+                        ? `（${
+                            categoryLabel(fromTeam.category) ||
+                            fromTeam.category
+                          }）`
                         : ""}
                     </div>
                   </div>
@@ -870,7 +944,9 @@ export default function OfferReceivedPage() {
                     <div style={detailValue}>
                       {toTeam?.name ?? "自チーム"}
                       {toTeam?.category
-                        ? `（${categoryLabel(toTeam.category) || toTeam.category}）`
+                        ? `（${
+                            categoryLabel(toTeam.category) || toTeam.category
+                          }）`
                         : ""}
                     </div>
                   </div>
