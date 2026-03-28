@@ -6,6 +6,12 @@ import { supabase } from "@/app/lib/supabase";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { categoryLabel, categoryLabels } from "@/app/lib/categories";
 
+type TeamOption = {
+  id: string;
+  name: string | null;
+  category: string | null;
+};
+
 function levelToRankLabel(level?: number | null) {
   const n = Number(level ?? 0);
   if (!level && level !== 0) return "";
@@ -30,6 +36,10 @@ export default function TeamDetail() {
   const [requesting, setRequesting] = useState(false);
   const [openingChat, setOpeningChat] = useState(false);
 
+  const [meId, setMeId] = useState("");
+  const [myTeams, setMyTeams] = useState<TeamOption[]>([]);
+  const [selectedMyTeamId, setSelectedMyTeamId] = useState("");
+
   useEffect(() => {
     load();
   }, [id]);
@@ -39,21 +49,51 @@ export default function TeamDetail() {
 
     setLoading(true);
 
-    const { data, error } = await supabase
-      .from("teams")
-      .select("*")
-      .eq("id", id)
-      .single();
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      const userId = auth?.user?.id ?? "";
+      setMeId(userId);
 
-    if (error) {
-      console.error(error);
-      setTeam(null);
+      const { data, error } = await supabase
+        .from("teams")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (error) {
+        console.error(error);
+        setTeam(null);
+      } else {
+        setTeam(data);
+      }
+
+      if (userId) {
+        const { data: ownTeams, error: ownTeamsErr } = await supabase
+          .from("teams")
+          .select("id,name,category")
+          .eq("owner_id", userId)
+          .order("updated_at", { ascending: false });
+
+        if (ownTeamsErr) {
+          console.error(ownTeamsErr);
+          setMyTeams([]);
+          setSelectedMyTeamId("");
+        } else {
+          const rows = (ownTeams ?? []) as TeamOption[];
+          setMyTeams(rows);
+
+          const firstAvailable =
+            rows.find((t) => t.id !== id)?.id ?? rows[0]?.id ?? "";
+
+          setSelectedMyTeamId(firstAvailable);
+        }
+      } else {
+        setMyTeams([]);
+        setSelectedMyTeamId("");
+      }
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setTeam(data);
-    setLoading(false);
   }
 
   const categoryText = useMemo(() => {
@@ -81,6 +121,10 @@ export default function TeamDetail() {
     return "不明";
   }, [team]);
 
+  const selectedMyTeam = useMemo(() => {
+    return myTeams.find((t) => t.id === selectedMyTeamId) ?? null;
+  }, [myTeams, selectedMyTeamId]);
+
   async function openDirectChat() {
     if (!id || !team || openingChat) return;
 
@@ -95,20 +139,21 @@ export default function TeamDetail() {
     setOpeningChat(true);
 
     try {
-      const { data: myTeam, error: myTeamErr } = await supabase
-        .from("teams")
-        .select("id,name")
-        .eq("owner_id", user.id)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      let myTeamId = selectedMyTeamId;
 
-      if (myTeamErr || !myTeam) {
+      if (!myTeamId) {
+        const fallbackTeamId =
+          myTeams.find((t) => t.id !== id)?.id ?? myTeams[0]?.id ?? "";
+
+        myTeamId = fallbackTeamId;
+      }
+
+      if (!myTeamId) {
         alert("先にチーム登録してください");
         return;
       }
 
-      if (myTeam.id === id) {
+      if (myTeamId === id) {
         alert("自分のチームとのチャットは開けません");
         return;
       }
@@ -116,7 +161,7 @@ export default function TeamDetail() {
       const { data: createdThreadId, error: threadErr } = await supabase.rpc(
         "rpc_get_or_create_dm_thread",
         {
-          my_team_id: myTeam.id,
+          my_team_id: myTeamId,
           other_team_id: id,
         }
       );
@@ -151,14 +196,24 @@ export default function TeamDetail() {
     setRequesting(true);
 
     try {
-      const { data: myTeam, error: myTeamErr } = await supabase
-        .from("teams")
-        .select("id,name")
-        .eq("owner_id", user.id)
-        .single();
+      let myTeamId = selectedMyTeamId;
 
-      if (myTeamErr || !myTeam) {
+      if (!myTeamId) {
+        const fallbackTeamId =
+          myTeams.find((t) => t.id !== id)?.id ?? myTeams[0]?.id ?? "";
+
+        myTeamId = fallbackTeamId;
+      }
+
+      if (!myTeamId) {
         alert("先にチーム登録してください");
+        return;
+      }
+
+      const myTeam = myTeams.find((t) => t.id === myTeamId) ?? null;
+
+      if (!myTeam) {
+        alert("申込チームを選択してください");
         return;
       }
 
@@ -228,16 +283,19 @@ export default function TeamDetail() {
           `エリア: ${slot.area_text ?? slot.area ?? "未設定"}`,
           `申込チーム: ${myTeam.name ?? "未設定"}`,
           `募集チーム: ${team.name ?? "未設定"}`,
-          `申込チーム強さ: ${strengthText}`,
           comment.trim() ? `コメント: ${comment.trim()}` : "",
         ].filter(Boolean);
 
-        await supabase.from("chat_messages").insert({
+        const { error: msgErr } = await supabase.from("chat_messages").insert({
           thread_id: createdThreadId,
           sender_id: user.id,
           sender_team_id: myTeam.id,
           body: bodyLines.join("\n"),
         });
+
+        if (msgErr) {
+          console.error(msgErr);
+        }
 
         alert("試合申込しました");
         router.push(`/chat/${createdThreadId}`);
@@ -321,6 +379,32 @@ export default function TeamDetail() {
       <section style={requestCard}>
         <div style={requestTitle}>このチームに試合申込</div>
 
+        <label style={fieldLabel}>
+          <span style={fieldTitle}>申込元チーム</span>
+          <select
+            value={selectedMyTeamId}
+            onChange={(e) => setSelectedMyTeamId(e.target.value)}
+            className="sh-select"
+            style={selectStyle}
+            disabled={requesting || myTeams.length === 0}
+          >
+            {myTeams.length === 0 ? (
+              <option value="">チーム未登録</option>
+            ) : (
+              myTeams
+                .filter((t) => t.id !== id)
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name ?? "チーム未設定"}
+                    {t.category
+                      ? `（${categoryLabel(t.category) || t.category}）`
+                      : ""}
+                  </option>
+                ))
+            )}
+          </select>
+        </label>
+
         <textarea
           placeholder="コメント（任意）"
           value={comment}
@@ -338,6 +422,18 @@ export default function TeamDetail() {
         >
           {requesting ? "申込中…" : "試合申込"}
         </button>
+
+        {myTeams.length === 0 ? (
+          <div style={hintText}>
+            試合申込には、先に自分のチーム登録が必要です。
+          </div>
+        ) : null}
+
+        {myTeams.length > 0 && !selectedMyTeam ? (
+          <div style={hintText}>
+            申込元に使う自分のチームを選択してください。
+          </div>
+        ) : null}
       </section>
     </main>
   );
@@ -418,8 +514,31 @@ const requestTitle: React.CSSProperties = {
   marginBottom: 10,
 };
 
+const fieldLabel: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+  marginBottom: 12,
+};
+
+const fieldTitle: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 800,
+  color: "#374151",
+};
+
+const selectStyle: React.CSSProperties = {
+  width: "100%",
+};
+
 const commentStyle: React.CSSProperties = {
   minHeight: 110,
+};
+
+const hintText: React.CSSProperties = {
+  marginTop: 10,
+  fontSize: 13,
+  color: "#6b7280",
+  lineHeight: 1.7,
 };
 
 const emptyBox: React.CSSProperties = {
