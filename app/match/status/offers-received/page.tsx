@@ -306,12 +306,21 @@ export default function OfferReceivedPage() {
   }, [items]);
 
   async function getOrCreateDmThread(myTeamId: string, otherTeamId: string) {
+    console.log("rpc_get_or_create_dm_thread", {
+      myTeamId,
+      otherTeamId,
+    });
+
     const { data, error } = await supabase.rpc("rpc_get_or_create_dm_thread", {
       my_team_id: myTeamId,
       other_team_id: otherTeamId,
     });
 
-    if (error) throw error;
+    if (error) {
+      console.error("rpc_get_or_create_dm_thread error:", error);
+      throw error;
+    }
+
     return data as string;
   }
 
@@ -437,6 +446,121 @@ export default function OfferReceivedPage() {
     }
   }
 
+  async function handleAcceptedFlow(params: {
+    item: ReceivedItem;
+    uid: string;
+    slot: SlotMini | null;
+    fromTeam: Team | undefined;
+    toTeam: Team | undefined;
+    otherUserId: string;
+  }) {
+    const { item, uid, slot, fromTeam, toTeam, otherUserId } = params;
+
+    try {
+      const threadId = await getOrCreateDmThread(
+        item.to_team_id,
+        item.from_team_id
+      );
+
+      const body =
+        item.kind === "offer"
+          ? [
+              "【試合オファー 承認】",
+              slot
+                ? `${slot.date || "日付未設定"} ${
+                    slot.start_time ? String(slot.start_time).slice(0, 5) : ""
+                  }${
+                    slot.end_time ? `-${String(slot.end_time).slice(0, 5)}` : ""
+                  }`
+                : "",
+              slot
+                ? `カテゴリ: ${
+                    categoryLabel(slot.category) || slot.category || "未設定"
+                  }`
+                : "",
+              slot ? `エリア: ${slot.area_text ?? slot.area ?? "未設定"}` : "",
+              `募集チーム: ${toTeam?.name ?? "自チーム"}`,
+              `相手チーム: ${fromTeam?.name ?? "相手チーム"}`,
+              "オファーを承認しました。詳細はこのチャットで調整してください。",
+            ]
+              .filter(Boolean)
+              .join("\n")
+          : [
+              "【試合申込 承認】",
+              slot
+                ? `${slot.date || "日付未設定"} ${
+                    slot.start_time ? String(slot.start_time).slice(0, 5) : ""
+                  }${
+                    slot.end_time ? `-${String(slot.end_time).slice(0, 5)}` : ""
+                  }`
+                : "",
+              slot
+                ? `カテゴリ: ${
+                    categoryLabel(slot.category) || slot.category || "未設定"
+                  }`
+                : "",
+              slot ? `エリア: ${slot.area_text ?? slot.area ?? "未設定"}` : "",
+              `申込チーム: ${fromTeam?.name ?? "相手チーム"}`,
+              `募集チーム: ${toTeam?.name ?? "自チーム"}`,
+              "申込みを承認しました。詳細はこのチャットで調整してください。",
+            ]
+              .filter(Boolean)
+              .join("\n");
+
+      await insertChatMessage({
+        threadId,
+        senderId: uid,
+        senderTeamId: item.to_team_id,
+        body,
+      });
+
+      if (item.kind === "offer") {
+        await createNotification({
+          userId: otherUserId,
+          type: "offer_accepted",
+          title: "試合オファーが承認されました",
+          body: `${toTeam?.name ?? "相手チーム"} があなたのオファーを承認しました`,
+          targetUrl: `/chat/${threadId}`,
+          relatedThreadId: threadId,
+          relatedTeamId: item.to_team_id,
+          relatedOfferId: item.id,
+        });
+
+        await sendPush({
+          userId: otherUserId,
+          title: "試合オファーが承認されました",
+          body: `${toTeam?.name ?? "相手チーム"} があなたのオファーを承認しました`,
+          url: `/chat/${threadId}`,
+        });
+      } else {
+        await createNotification({
+          userId: otherUserId,
+          type: "request_accepted",
+          title: "試合申込みが承認されました",
+          body: `${toTeam?.name ?? "相手チーム"} があなたの申込みを承認しました`,
+          targetUrl: `/chat/${threadId}`,
+          relatedThreadId: threadId,
+          relatedTeamId: item.to_team_id,
+          relatedRequestId: item.id,
+        });
+
+        await sendPush({
+          userId: otherUserId,
+          title: "試合申込みが承認されました",
+          body: `${toTeam?.name ?? "相手チーム"} があなたの申込みを承認しました`,
+          url: `/chat/${threadId}`,
+        });
+      }
+
+      window.dispatchEvent(new Event("notifications-updated"));
+      router.push(`/chat/${threadId}`);
+      return true;
+    } catch (e: any) {
+      console.error("accepted flow error:", e);
+      return false;
+    }
+  }
+
   const updateStatus = async (
     item: ReceivedItem,
     nextStatus: "accepted" | "rejected"
@@ -460,7 +584,7 @@ export default function OfferReceivedPage() {
         return;
       }
 
-      const slot = item.slot_id ? slotMap.get(item.slot_id) : null;
+      const slot = item.slot_id ? slotMap.get(item.slot_id) ?? null : null;
       const fromTeam = teamMap.get(item.from_team_id);
       const toTeam = teamMap.get(item.to_team_id);
       const otherUserId = await getUserIdByTeamId(item.from_team_id);
@@ -481,86 +605,6 @@ export default function OfferReceivedPage() {
           setUpdatingId("");
           return;
         }
-
-        if (nextStatus === "accepted" && item.slot_id) {
-          await supabase
-            .from("match_slots")
-            .update({ is_closed: true })
-            .eq("id", item.slot_id);
-        }
-
-        if (nextStatus === "accepted") {
-          const threadId = await getOrCreateDmThread(
-            item.to_team_id,
-            item.from_team_id
-          );
-
-          const body = [
-            "【試合オファー 承認】",
-            slot
-              ? `${slot.date || "日付未設定"} ${
-                  slot.start_time ? String(slot.start_time).slice(0, 5) : ""
-                }${
-                  slot.end_time ? `-${String(slot.end_time).slice(0, 5)}` : ""
-                }`
-              : "",
-            slot
-              ? `カテゴリ: ${categoryLabel(slot.category) || slot.category || "未設定"}`
-              : "",
-            slot ? `エリア: ${slot.area_text ?? slot.area ?? "未設定"}` : "",
-            `募集チーム: ${toTeam?.name ?? "自チーム"}`,
-            `相手チーム: ${fromTeam?.name ?? "相手チーム"}`,
-            "オファーを承認しました。詳細はこのチャットで調整してください。",
-          ]
-            .filter(Boolean)
-            .join("\n");
-
-          await insertChatMessage({
-            threadId,
-            senderId: uid,
-            senderTeamId: item.to_team_id,
-            body,
-          });
-
-          await createNotification({
-            userId: otherUserId,
-            type: "offer_accepted",
-            title: "試合オファーが承認されました",
-            body: `${toTeam?.name ?? "相手チーム"} があなたのオファーを承認しました`,
-            targetUrl: `/chat/${threadId}`,
-            relatedThreadId: threadId,
-            relatedTeamId: item.to_team_id,
-            relatedOfferId: item.id,
-          });
-
-          await sendPush({
-            userId: otherUserId,
-            title: "試合オファーが承認されました",
-            body: `${toTeam?.name ?? "相手チーム"} があなたのオファーを承認しました`,
-            url: `/chat/${threadId}`,
-          });
-
-          window.dispatchEvent(new Event("notifications-updated"));
-          router.push(`/chat/${threadId}`);
-          return;
-        } else {
-          await createNotification({
-            userId: otherUserId,
-            type: "offer_rejected",
-            title: "試合オファーは見送りになりました",
-            body: `${toTeam?.name ?? "相手チーム"} があなたのオファーを見送りました`,
-            targetUrl: "/match/status/offers",
-            relatedTeamId: item.to_team_id,
-            relatedOfferId: item.id,
-          });
-
-          await sendPush({
-            userId: otherUserId,
-            title: "試合オファーは見送りになりました",
-            body: `${toTeam?.name ?? "相手チーム"} があなたのオファーを見送りました`,
-            url: "/match/status/offers",
-          });
-        }
       } else {
         const { error } = await supabase
           .from("match_requests")
@@ -577,68 +621,67 @@ export default function OfferReceivedPage() {
           setUpdatingId("");
           return;
         }
+      }
 
-        if (nextStatus === "accepted" && item.slot_id) {
-          await supabase
-            .from("match_slots")
-            .update({ is_closed: true })
-            .eq("id", item.slot_id);
+      if (nextStatus === "accepted" && item.slot_id) {
+        const { error: slotCloseErr } = await supabase
+          .from("match_slots")
+          .update({ is_closed: true })
+          .eq("id", item.slot_id);
+
+        if (slotCloseErr) {
+          console.error("slot close error:", slotCloseErr);
+        }
+      }
+
+      setItems((prev) =>
+        prev.map((x) =>
+          x.kind === item.kind && x.id === item.id
+            ? { ...x, status: nextStatus }
+            : x
+        )
+      );
+
+      if (nextStatus === "accepted") {
+        const ok = await handleAcceptedFlow({
+          item,
+          uid,
+          slot,
+          fromTeam,
+          toTeam,
+          otherUserId,
+        });
+
+        await loadPage();
+        setUpdatingId("");
+
+        if (!ok) {
+          alert(
+            "承認自体は完了しましたが、チャットの自動作成に失敗しました。後で「チャット」ボタンから開けるかお試しください。"
+          );
         }
 
-        if (nextStatus === "accepted") {
-          const threadId = await getOrCreateDmThread(
-            item.to_team_id,
-            item.from_team_id
-          );
+        return;
+      }
 
-          const body = [
-            "【試合申込 承認】",
-            slot
-              ? `${slot.date || "日付未設定"} ${
-                  slot.start_time ? String(slot.start_time).slice(0, 5) : ""
-                }${
-                  slot.end_time ? `-${String(slot.end_time).slice(0, 5)}` : ""
-                }`
-              : "",
-            slot
-              ? `カテゴリ: ${categoryLabel(slot.category) || slot.category || "未設定"}`
-              : "",
-            slot ? `エリア: ${slot.area_text ?? slot.area ?? "未設定"}` : "",
-            `申込チーム: ${fromTeam?.name ?? "相手チーム"}`,
-            `募集チーム: ${toTeam?.name ?? "自チーム"}`,
-            "申込みを承認しました。詳細はこのチャットで調整してください。",
-          ]
-            .filter(Boolean)
-            .join("\n");
-
-          await insertChatMessage({
-            threadId,
-            senderId: uid,
-            senderTeamId: item.to_team_id,
-            body,
-          });
-
+      if (nextStatus === "rejected") {
+        if (item.kind === "offer") {
           await createNotification({
             userId: otherUserId,
-            type: "request_accepted",
-            title: "試合申込みが承認されました",
-            body: `${toTeam?.name ?? "相手チーム"} があなたの申込みを承認しました`,
-            targetUrl: `/chat/${threadId}`,
-            relatedThreadId: threadId,
+            type: "offer_rejected",
+            title: "試合オファーは見送りになりました",
+            body: `${toTeam?.name ?? "相手チーム"} があなたのオファーを見送りました`,
+            targetUrl: "/match/status/offers",
             relatedTeamId: item.to_team_id,
-            relatedRequestId: item.id,
+            relatedOfferId: item.id,
           });
 
           await sendPush({
             userId: otherUserId,
-            title: "試合申込みが承認されました",
-            body: `${toTeam?.name ?? "相手チーム"} があなたの申込みを承認しました`,
-            url: `/chat/${threadId}`,
+            title: "試合オファーは見送りになりました",
+            body: `${toTeam?.name ?? "相手チーム"} があなたのオファーを見送りました`,
+            url: "/match/status/offers",
           });
-
-          window.dispatchEvent(new Event("notifications-updated"));
-          router.push(`/chat/${threadId}`);
-          return;
         } else {
           await createNotification({
             userId: otherUserId,
@@ -658,14 +701,6 @@ export default function OfferReceivedPage() {
           });
         }
       }
-
-      setItems((prev) =>
-        prev.map((x) =>
-          x.kind === item.kind && x.id === item.id
-            ? { ...x, status: nextStatus }
-            : x
-        )
-      );
 
       await loadPage();
       setUpdatingId("");
