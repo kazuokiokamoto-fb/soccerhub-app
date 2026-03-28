@@ -666,7 +666,8 @@ export default function MatchCalendarPage() {
       console.error(error);
 
       if (
-        error.message?.includes("match_requests_slot_id_requester_team_id_key")
+        error.message?.includes("match_requests_slot_id_requester_team_id_key") ||
+        error.message?.includes("match_requests_active_unique_idx")
       ) {
         alert("この募集にはこのチームですでに申込済みです");
         return;
@@ -757,15 +758,20 @@ export default function MatchCalendarPage() {
       }
 
       const bodyLines = [
-        "【試合申込】",
-        `${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
-        `カテゴリ: ${categoryLabel(slot.category) || slot.category || "未設定"}`,
-        `エリア: ${slot.area_text ?? slot.area ?? "未設定"}`,
-        `申込チーム: ${requesterTeam?.name ?? "未設定"}`,
-        `申込チーム強さ: ${teamStrengthLabel(requesterTeam)}`,
-        `募集チーム: ${hostTeam?.name ?? "未設定"}`,
-        `募集チーム強さ: ${teamStrengthLabel(hostTeam)}`,
-        requestComment.trim() ? `コメント: ${requestComment.trim()}` : "",
+        "━━━━━━━━━━━━",
+        "⚽️ 試合申込",
+        "━━━━━━━━━━━━",
+        `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
+        `📍 ${slot.area_text ?? slot.area ?? "未設定"}`,
+        `🏷 ${categoryLabel(slot.category) || slot.category || "未設定"}`,
+        "",
+        `👥 申込チーム：${requesterTeam?.name ?? "未設定"}`,
+        `💪 強さ：${teamStrengthLabel(requesterTeam)}`,
+        "",
+        `👥 募集チーム：${hostTeam?.name ?? "未設定"}`,
+        `💪 強さ：${teamStrengthLabel(hostTeam)}`,
+        "",
+        requestComment.trim() ? `💬 ${requestComment.trim()}` : "",
       ].filter(Boolean);
 
       await insertChatMessage({
@@ -832,14 +838,19 @@ export default function MatchCalendarPage() {
             senderId: uid,
             senderTeamId: slot.host_team_id,
             body: [
-              "【試合申込 承認】",
-              `${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
-              `カテゴリ: ${categoryLabel(slot.category) || slot.category || "未設定"}`,
-              `募集チーム: ${hostTeamName}`,
-              `募集チーム強さ: ${teamStrengthLabel(hostTeam)}`,
-              `申込チーム: ${requesterTeamName}`,
-              `申込チーム強さ: ${teamStrengthLabel(requesterTeam)}`,
-              "申込が承認されました。詳細はこのチャットで調整してください。",
+              "━━━━━━━━━━━━",
+              "✅ 試合成立（承認）",
+              "━━━━━━━━━━━━",
+              `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
+              `🏷 ${categoryLabel(slot.category) || slot.category || "未設定"}`,
+              "",
+              `👥 募集チーム：${hostTeamName}`,
+              `💪 強さ：${teamStrengthLabel(hostTeam)}`,
+              "",
+              `👥 対戦チーム：${requesterTeamName}`,
+              `💪 強さ：${teamStrengthLabel(requesterTeam)}`,
+              "",
+              "📩 このチャットで詳細を調整してください",
             ].join("\n"),
           });
         }
@@ -896,7 +907,12 @@ export default function MatchCalendarPage() {
           threadId,
           senderId: uid,
           senderTeamId: req.requester_team_id,
-          body: `【試合申込 取消】\n${requesterTeamName} が申込みをキャンセルしました。`,
+          body: [
+            "━━━━━━━━━━━━",
+            "⚠️ 試合申込 取消",
+            "━━━━━━━━━━━━",
+            `${requesterTeamName} が申込みをキャンセルしました`,
+          ].join("\n"),
         });
       }
     } catch (e) {

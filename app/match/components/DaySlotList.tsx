@@ -96,21 +96,16 @@ export function DaySlotList(props: {
   allTeams: DbTeam[];
   myTeams: DbTeam[];
   meId: string;
-
   requestsForMonth: DbRequest[];
-
   selectedSlotId: string;
   onToggleDetail: (slotId: string) => void;
-
   requestTeamId: string;
   onChangeRequestTeamId: (teamId: string) => void;
   requestComment: string;
   onChangeRequestComment: (v: string) => void;
   onRequestSlot: (slotId: string) => void;
-
   onCancelMyRequest: (requestId: string) => void;
   onOpenChatWithTeam: (otherTeamId: string) => void | Promise<void>;
-
   selectedSlot: DbSlot | null;
   selectedHostTeam: DbTeam | null;
   selectedSlotRequests: DbRequest[];
@@ -118,7 +113,6 @@ export function DaySlotList(props: {
   onAccept: (requestId: string) => void;
   onReject: (requestId: string) => void;
   onToggleClosed: (slotId: string, nextClosed: boolean) => void;
-
   loading?: boolean;
 }) {
   const {
