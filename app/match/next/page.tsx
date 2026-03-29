@@ -35,11 +35,30 @@ type RequestRow = {
   created_at: string;
 };
 
-type NextMatchDetail = {
+type OfferRow = {
+  id: string;
+  slot_id: string | null;
+  from_team_id: string;
+  to_team_id: string;
+  status: "pending" | "accepted" | "rejected" | "cancelled";
+  message: string | null;
+  created_at: string;
+};
+
+type ConfirmedMatchDetail = {
+  key: string;
+  kind: "request" | "offer";
+  relation:
+    | "my_request_accepted"
+    | "my_slot_request_accepted"
+    | "my_offer_accepted"
+    | "received_offer_accepted";
   slot: SlotRow;
-  request: RequestRow;
   myTeam: TeamRow | null;
-  hostTeam: TeamRow | null;
+  opponentTeam: TeamRow | null;
+  request: RequestRow | null;
+  offer: OfferRow | null;
+  noteText: string;
 };
 
 function fmtDate(ymd?: string | null) {
@@ -52,17 +71,45 @@ function fmtTime(v?: string | null) {
   return String(v).slice(0, 5);
 }
 
-function formatDateTime(date?: string | null, start?: string | null, end?: string | null) {
+function formatDateTime(
+  date?: string | null,
+  start?: string | null,
+  end?: string | null
+) {
   if (!date) return "未設定";
   const s = fmtTime(start);
   const e = fmtTime(end);
   return `${date}${s ? ` ${s}` : ""}${e ? `–${e}` : ""}`;
 }
 
+function toDateTimeMs(date?: string | null, time?: string | null) {
+  if (!date || !time) return 0;
+  return new Date(`${date}T${time}`).getTime();
+}
+
+function relationLabel(relation: ConfirmedMatchDetail["relation"]) {
+  switch (relation) {
+    case "my_request_accepted":
+      return "自分の申込が承認";
+    case "my_slot_request_accepted":
+      return "自分の募集で成立";
+    case "my_offer_accepted":
+      return "自分のオファーが承認";
+    case "received_offer_accepted":
+      return "届いたオファーを承認";
+    default:
+      return "成立済み";
+  }
+}
+
+function categoryText(v?: string | null) {
+  return v || "未設定";
+}
+
 export default function NextMatchPage() {
   const [meId, setMeId] = useState("");
   const [loading, setLoading] = useState(true);
-  const [detail, setDetail] = useState<NextMatchDetail | null>(null);
+  const [matches, setMatches] = useState<ConfirmedMatchDetail[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -74,6 +121,7 @@ export default function NextMatchPage() {
   useEffect(() => {
     if (!meId) {
       setLoading(false);
+      setMatches([]);
       return;
     }
 
@@ -87,7 +135,7 @@ export default function NextMatchPage() {
 
       if (myTeamsErr) {
         console.error(myTeamsErr);
-        setDetail(null);
+        setMatches([]);
         setLoading(false);
         return;
       }
@@ -96,109 +144,243 @@ export default function NextMatchPage() {
       const myTeamIds = myTeams.map((t) => t.id).filter(Boolean);
 
       if (myTeamIds.length === 0) {
-        setDetail(null);
+        setMatches([]);
         setLoading(false);
         return;
       }
 
-      const { data: acceptedRequestsRows, error: reqErr } = await supabase
-        .from("match_requests")
-        .select("id, slot_id, requester_team_id, requester_user_id, status, comment, created_at")
-        .in("requester_team_id", myTeamIds)
-        .eq("status", "accepted")
-        .order("created_at", { ascending: false });
+      const { data: myHostedSlotsRows, error: myHostedSlotsErr } = await supabase
+        .from("match_slots")
+        .select(
+          "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
+        )
+        .in("host_team_id", myTeamIds);
 
-      if (reqErr) {
-        console.error(reqErr);
-        setDetail(null);
+      if (myHostedSlotsErr) {
+        console.error(myHostedSlotsErr);
+        setMatches([]);
         setLoading(false);
         return;
       }
 
-      const acceptedRequests = (acceptedRequestsRows ?? []) as RequestRow[];
-      const slotIds = Array.from(new Set(acceptedRequests.map((r) => r.slot_id).filter(Boolean)));
+      const myHostedSlots = (myHostedSlotsRows ?? []) as SlotRow[];
+      const myHostedSlotIds = myHostedSlots.map((s) => s.id).filter(Boolean);
+
+      const [
+        acceptedOutgoingRequestsRes,
+        acceptedIncomingRequestsRes,
+        acceptedSentOffersRes,
+        acceptedReceivedOffersRes,
+      ] = await Promise.all([
+        supabase
+          .from("match_requests")
+          .select(
+            "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
+          )
+          .in("requester_team_id", myTeamIds)
+          .eq("status", "accepted"),
+        myHostedSlotIds.length > 0
+          ? supabase
+              .from("match_requests")
+              .select(
+                "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
+              )
+              .in("slot_id", myHostedSlotIds)
+              .eq("status", "accepted")
+          : Promise.resolve({ data: [], error: null } as any),
+        supabase
+          .from("match_offers")
+          .select(
+            "id, slot_id, from_team_id, to_team_id, status, message, created_at"
+          )
+          .in("from_team_id", myTeamIds)
+          .eq("status", "accepted"),
+        supabase
+          .from("match_offers")
+          .select(
+            "id, slot_id, from_team_id, to_team_id, status, message, created_at"
+          )
+          .in("to_team_id", myTeamIds)
+          .eq("status", "accepted"),
+      ]);
+
+      if (acceptedOutgoingRequestsRes.error) {
+        console.error(acceptedOutgoingRequestsRes.error);
+      }
+      if (acceptedIncomingRequestsRes.error) {
+        console.error(acceptedIncomingRequestsRes.error);
+      }
+      if (acceptedSentOffersRes.error) {
+        console.error(acceptedSentOffersRes.error);
+      }
+      if (acceptedReceivedOffersRes.error) {
+        console.error(acceptedReceivedOffersRes.error);
+      }
+
+      const acceptedOutgoingRequests = (acceptedOutgoingRequestsRes.data ??
+        []) as RequestRow[];
+      const acceptedIncomingRequests = (acceptedIncomingRequestsRes.data ??
+        []) as RequestRow[];
+      const acceptedSentOffers = (acceptedSentOffersRes.data ?? []) as OfferRow[];
+      const acceptedReceivedOffers = (acceptedReceivedOffersRes.data ??
+        []) as OfferRow[];
+
+      const slotIds = Array.from(
+        new Set(
+          [
+            ...acceptedOutgoingRequests.map((r) => r.slot_id),
+            ...acceptedIncomingRequests.map((r) => r.slot_id),
+            ...acceptedSentOffers.map((o) => o.slot_id).filter(Boolean),
+            ...acceptedReceivedOffers.map((o) => o.slot_id).filter(Boolean),
+          ].filter(Boolean)
+        )
+      ) as string[];
 
       if (slotIds.length === 0) {
-        setDetail(null);
+        setMatches([]);
         setLoading(false);
         return;
       }
 
       const { data: slotRows, error: slotErr } = await supabase
         .from("match_slots")
-        .select("id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at")
+        .select(
+          "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
+        )
         .in("id", slotIds)
         .order("date", { ascending: true })
         .order("start_time", { ascending: true });
 
       if (slotErr) {
         console.error(slotErr);
-        setDetail(null);
+        setMatches([]);
         setLoading(false);
         return;
       }
 
       const slots = (slotRows ?? []) as SlotRow[];
-      const now = new Date();
+      const slotMap = new Map<string, SlotRow>();
+      slots.forEach((s) => slotMap.set(s.id, s));
 
-      const futurePairs = acceptedRequests
-        .map((req) => {
-          const slot = slots.find((s) => s.id === req.slot_id);
-          if (!slot) return null;
-          return { req, slot };
-        })
-        .filter(Boolean)
-        .filter((x: any) => {
-          const dt = new Date(`${x.slot.date}T${x.slot.start_time}`);
-          return dt.getTime() >= now.getTime();
-        }) as Array<{ req: RequestRow; slot: SlotRow }>;
-
-      futurePairs.sort((a, b) => {
-        const ad = new Date(`${a.slot.date}T${a.slot.start_time}`).getTime();
-        const bd = new Date(`${b.slot.date}T${b.slot.start_time}`).getTime();
-        return ad - bd;
-      });
-
-      if (futurePairs.length === 0) {
-        setDetail(null);
-        setLoading(false);
-        return;
-      }
-
-      const target = futurePairs[0];
-      const teamIds = Array.from(
-        new Set([target.req.requester_team_id, target.slot.host_team_id].filter(Boolean))
+      const allRelatedTeamIds = Array.from(
+        new Set(
+          [
+            ...myTeamIds,
+            ...slots.map((s) => s.host_team_id),
+            ...acceptedOutgoingRequests.map((r) => r.requester_team_id),
+            ...acceptedIncomingRequests.map((r) => r.requester_team_id),
+            ...acceptedSentOffers.map((o) => o.from_team_id),
+            ...acceptedSentOffers.map((o) => o.to_team_id),
+            ...acceptedReceivedOffers.map((o) => o.from_team_id),
+            ...acceptedReceivedOffers.map((o) => o.to_team_id),
+          ].filter(Boolean)
+        )
       );
 
       const { data: teamRows, error: teamErr } = await supabase
         .from("teams")
         .select("id, owner_id, name, category")
-        .in("id", teamIds);
+        .in("id", allRelatedTeamIds);
 
       if (teamErr) {
         console.error(teamErr);
       }
 
       const teamMap = new Map<string, TeamRow>();
-      for (const t of ((teamRows ?? []) as TeamRow[])) {
-        teamMap.set(t.id, t);
+      ((teamRows ?? []) as TeamRow[]).forEach((t) => teamMap.set(t.id, t));
+
+      const nowMs = Date.now();
+      const collected: ConfirmedMatchDetail[] = [];
+
+      for (const req of acceptedOutgoingRequests) {
+        const slot = slotMap.get(req.slot_id);
+        if (!slot) continue;
+        if (toDateTimeMs(slot.date, slot.start_time) < nowMs) continue;
+
+        collected.push({
+          key: `request:outgoing:${req.id}`,
+          kind: "request",
+          relation: "my_request_accepted",
+          slot,
+          request: req,
+          offer: null,
+          myTeam: teamMap.get(req.requester_team_id) ?? null,
+          opponentTeam: teamMap.get(slot.host_team_id) ?? null,
+          noteText: req.comment?.trim() || "",
+        });
       }
 
-      setDetail({
-        slot: target.slot,
-        request: target.req,
-        myTeam: teamMap.get(target.req.requester_team_id) ?? null,
-        hostTeam: teamMap.get(target.slot.host_team_id) ?? null,
+      for (const req of acceptedIncomingRequests) {
+        const slot = slotMap.get(req.slot_id);
+        if (!slot) continue;
+        if (toDateTimeMs(slot.date, slot.start_time) < nowMs) continue;
+
+        collected.push({
+          key: `request:incoming:${req.id}`,
+          kind: "request",
+          relation: "my_slot_request_accepted",
+          slot,
+          request: req,
+          offer: null,
+          myTeam: teamMap.get(slot.host_team_id) ?? null,
+          opponentTeam: teamMap.get(req.requester_team_id) ?? null,
+          noteText: req.comment?.trim() || "",
+        });
+      }
+
+      for (const offer of acceptedSentOffers) {
+        if (!offer.slot_id) continue;
+        const slot = slotMap.get(offer.slot_id);
+        if (!slot) continue;
+        if (toDateTimeMs(slot.date, slot.start_time) < nowMs) continue;
+
+        collected.push({
+          key: `offer:sent:${offer.id}`,
+          kind: "offer",
+          relation: "my_offer_accepted",
+          slot,
+          request: null,
+          offer,
+          myTeam: teamMap.get(offer.from_team_id) ?? null,
+          opponentTeam: teamMap.get(offer.to_team_id) ?? null,
+          noteText: offer.message?.trim() || "",
+        });
+      }
+
+      for (const offer of acceptedReceivedOffers) {
+        if (!offer.slot_id) continue;
+        const slot = slotMap.get(offer.slot_id);
+        if (!slot) continue;
+        if (toDateTimeMs(slot.date, slot.start_time) < nowMs) continue;
+
+        collected.push({
+          key: `offer:received:${offer.id}`,
+          kind: "offer",
+          relation: "received_offer_accepted",
+          slot,
+          request: null,
+          offer,
+          myTeam: teamMap.get(offer.to_team_id) ?? null,
+          opponentTeam: teamMap.get(offer.from_team_id) ?? null,
+          noteText: offer.message?.trim() || "",
+        });
+      }
+
+      collected.sort((a, b) => {
+        const aMs = toDateTimeMs(a.slot.date, a.slot.start_time);
+        const bMs = toDateTimeMs(b.slot.date, b.slot.start_time);
+        if (aMs !== bMs) return aMs - bMs;
+        return a.key.localeCompare(b.key);
       });
 
+      setMatches(collected);
       setLoading(false);
     })();
   }, [meId]);
 
-  const titleText = useMemo(() => {
-    if (!detail) return "次の試合";
-    return `${fmtDate(detail.slot.date)} ${fmtTime(detail.slot.start_time)}`;
-  }, [detail]);
+  const nextMatch = useMemo(() => {
+    return matches.length > 0 ? matches[0] : null;
+  }, [matches]);
 
   return (
     <main style={wrap}>
@@ -211,67 +393,75 @@ export default function NextMatchPage() {
       </div>
 
       <section style={hero}>
-        <div style={heroTitle}>次の試合</div>
+        <div style={heroTitle}>成立した試合一覧</div>
         <div style={heroDesc}>
-          直近で成立している試合予定を確認できます。
+          これから予定されている成立済みの試合を確認できます。
         </div>
       </section>
 
       {loading ? <div style={loadingText}>読み込み中…</div> : null}
 
-      {!loading && !detail ? (
-        <div style={emptyBox}>
-          予定されている次の試合はまだありません。
-        </div>
+      {!loading && matches.length === 0 ? (
+        <div style={emptyBox}>予定されている成立試合はまだありません。</div>
       ) : null}
 
-      {!loading && detail ? (
-        <section style={card}>
-          <div style={mainTitle}>{titleText}</div>
+      {!loading && nextMatch ? (
+        <section style={highlightCard}>
+          <div style={highlightBadge}>最も近い次の試合</div>
+          <div style={highlightTitle}>
+            {fmtDate(nextMatch.slot.date)} {fmtTime(nextMatch.slot.start_time)}
+          </div>
 
           <div style={infoGrid}>
             <InfoItem
               label="日時"
               value={formatDateTime(
-                detail.slot.date,
-                detail.slot.start_time,
-                detail.slot.end_time
+                nextMatch.slot.date,
+                nextMatch.slot.start_time,
+                nextMatch.slot.end_time
               )}
             />
             <InfoItem
               label="カテゴリ"
-              value={detail.slot.category ?? "未設定"}
+              value={categoryText(nextMatch.slot.category)}
             />
             <InfoItem
               label="場所"
-              value={detail.slot.area_text ?? detail.slot.area ?? "未設定"}
+              value={nextMatch.slot.area_text ?? nextMatch.slot.area ?? "未設定"}
             />
             <InfoItem
               label="自分のチーム"
               value={
-                detail.myTeam
-                  ? `${detail.myTeam.name ?? "未設定"}${detail.myTeam.category ? `（${detail.myTeam.category}）` : ""}`
+                nextMatch.myTeam
+                  ? `${nextMatch.myTeam.name ?? "未設定"}${
+                      nextMatch.myTeam.category
+                        ? `（${nextMatch.myTeam.category}）`
+                        : ""
+                    }`
                   : "未設定"
               }
             />
             <InfoItem
               label="相手チーム"
               value={
-                detail.hostTeam
-                  ? `${detail.hostTeam.name ?? "未設定"}${detail.hostTeam.category ? `（${detail.hostTeam.category}）` : ""}`
+                nextMatch.opponentTeam
+                  ? `${nextMatch.opponentTeam.name ?? "未設定"}${
+                      nextMatch.opponentTeam.category
+                        ? `（${nextMatch.opponentTeam.category}）`
+                        : ""
+                    }`
                   : "未設定"
               }
             />
-            <InfoItem
-              label="状態"
-              value="成立済み"
-            />
+            <InfoItem label="成立経路" value={relationLabel(nextMatch.relation)} />
           </div>
 
           <div style={commentBox}>
-            <div style={commentLabel}>申込コメント</div>
+            <div style={commentLabel}>
+              {nextMatch.kind === "request" ? "申込コメント" : "オファーメッセージ"}
+            </div>
             <div style={commentText}>
-              {detail.request.comment?.trim() || "コメントはありません"}
+              {nextMatch.noteText || "コメントはありません"}
             </div>
           </div>
 
@@ -279,10 +469,81 @@ export default function NextMatchPage() {
             <Link href="/chat" className="sh-btn sh-btn--primary">
               チャットへ
             </Link>
-
-            <Link href="/match/status/applying" className="sh-btn">
-              申込一覧を見る
+            <Link href="/match/status/offers" className="sh-btn">
+              オファー一覧へ
             </Link>
+          </div>
+        </section>
+      ) : null}
+
+      {!loading && matches.length > 0 ? (
+        <section style={listCard}>
+          <div style={listTitle}>成立している試合一覧</div>
+
+          <div style={matchList}>
+            {matches.map((item, index) => (
+              <div key={item.key} style={matchRow}>
+                <div style={matchRowTop}>
+                  <div>
+                    <div style={matchDateTime}>
+                      {formatDateTime(
+                        item.slot.date,
+                        item.slot.start_time,
+                        item.slot.end_time
+                      )}
+                    </div>
+                    <div style={matchMeta}>
+                      {item.slot.area_text ?? item.slot.area ?? "未設定"} /{" "}
+                      {categoryText(item.slot.category)}
+                    </div>
+                  </div>
+
+                  {index === 0 ? (
+                    <span style={smallSuccessBadge}>次の試合</span>
+                  ) : (
+                    <span style={smallBadge}>{relationLabel(item.relation)}</span>
+                  )}
+                </div>
+
+                <div style={teamsGrid}>
+                  <InfoItem
+                    label="自分のチーム"
+                    value={
+                      item.myTeam
+                        ? `${item.myTeam.name ?? "未設定"}${
+                            item.myTeam.category
+                              ? `（${item.myTeam.category}）`
+                              : ""
+                          }`
+                        : "未設定"
+                    }
+                  />
+                  <InfoItem
+                    label="相手チーム"
+                    value={
+                      item.opponentTeam
+                        ? `${item.opponentTeam.name ?? "未設定"}${
+                            item.opponentTeam.category
+                              ? `（${item.opponentTeam.category}）`
+                              : ""
+                          }`
+                        : "未設定"
+                    }
+                  />
+                </div>
+
+                <div style={miniNoteBox}>
+                  <div style={miniNoteLabel}>
+                    {item.kind === "request"
+                      ? "申込コメント"
+                      : "オファーメッセージ"}
+                  </div>
+                  <div style={miniNoteText}>
+                    {item.noteText || "コメントはありません"}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </section>
       ) : null}
@@ -341,10 +602,35 @@ const emptyBox: React.CSSProperties = {
   border: "1px solid #eee",
   background: "#fff",
   color: "#777",
-  textAlign: "center" as const,
+  textAlign: "center",
 };
 
-const card: React.CSSProperties = {
+const highlightCard: React.CSSProperties = {
+  marginTop: 14,
+  padding: 16,
+  borderRadius: 16,
+  border: "1px solid #d7ebdc",
+  background: "#fff",
+};
+
+const highlightBadge: React.CSSProperties = {
+  display: "inline-block",
+  background: "#dcfce7",
+  color: "#166534",
+  fontWeight: 900,
+  padding: "4px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+};
+
+const highlightTitle: React.CSSProperties = {
+  marginTop: 10,
+  fontSize: 24,
+  fontWeight: 900,
+  color: "#16391f",
+};
+
+const listCard: React.CSSProperties = {
   marginTop: 14,
   padding: 16,
   borderRadius: 16,
@@ -352,10 +638,76 @@ const card: React.CSSProperties = {
   background: "#fff",
 };
 
-const mainTitle: React.CSSProperties = {
-  fontSize: 24,
+const listTitle: React.CSSProperties = {
+  fontSize: 20,
   fontWeight: 900,
   color: "#16391f",
+};
+
+const matchList: React.CSSProperties = {
+  marginTop: 14,
+  display: "grid",
+  gap: 12,
+};
+
+const matchRow: React.CSSProperties = {
+  border: "1px solid #edf1ee",
+  borderRadius: 14,
+  background: "#fafcfb",
+  padding: 14,
+};
+
+const matchRowTop: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 10,
+  alignItems: "flex-start",
+  flexWrap: "wrap",
+};
+
+const matchDateTime: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#16391f",
+};
+
+const matchMeta: React.CSSProperties = {
+  marginTop: 6,
+  fontSize: 13,
+  color: "#666",
+  lineHeight: 1.6,
+};
+
+const teamsGrid: React.CSSProperties = {
+  marginTop: 12,
+  display: "grid",
+  gap: 10,
+};
+
+const smallBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 28,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#eef2ff",
+  color: "#4338ca",
+  fontSize: 12,
+  fontWeight: 900,
+};
+
+const smallSuccessBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 28,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#dcfce7",
+  color: "#166534",
+  fontSize: 12,
+  fontWeight: 900,
 };
 
 const infoGrid: React.CSSProperties = {
@@ -382,7 +734,7 @@ const infoValue: React.CSSProperties = {
   fontSize: 14,
   color: "#2d3b31",
   lineHeight: 1.7,
-  whiteSpace: "pre-wrap" as const,
+  whiteSpace: "pre-wrap",
 };
 
 const commentBox: React.CSSProperties = {
@@ -404,12 +756,34 @@ const commentText: React.CSSProperties = {
   fontSize: 14,
   color: "#2d3b31",
   lineHeight: 1.8,
-  whiteSpace: "pre-wrap" as const,
+  whiteSpace: "pre-wrap",
+};
+
+const miniNoteBox: React.CSSProperties = {
+  marginTop: 12,
+  border: "1px solid #edf1ee",
+  borderRadius: 12,
+  background: "#fff",
+  padding: "10px 12px",
+};
+
+const miniNoteLabel: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#5b6d61",
+  marginBottom: 4,
+};
+
+const miniNoteText: React.CSSProperties = {
+  fontSize: 14,
+  color: "#2d3b31",
+  lineHeight: 1.7,
+  whiteSpace: "pre-wrap",
 };
 
 const buttonRow: React.CSSProperties = {
   marginTop: 14,
   display: "flex",
   gap: 8,
-  flexWrap: "wrap" as const,
+  flexWrap: "wrap",
 };
