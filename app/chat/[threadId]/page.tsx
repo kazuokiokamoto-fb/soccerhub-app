@@ -63,6 +63,19 @@ function formatDateDivider(dt?: string | null) {
   }
 }
 
+function formatReadTime(dt?: string | null) {
+  if (!dt) return "";
+  try {
+    const d = new Date(dt);
+    return d.toLocaleTimeString("ja-JP", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
 function sameDate(a?: string | null, b?: string | null) {
   if (!a || !b) return false;
   const da = new Date(a);
@@ -106,9 +119,7 @@ function resolveMyTeamId(params: {
 }) {
   const { meId, memberRows, ownedTeams } = params;
 
-  const ownedTeamIds = new Set(
-    ownedTeams.map((t) => t.id).filter(Boolean)
-  );
+  const ownedTeamIds = new Set(ownedTeams.map((t) => t.id).filter(Boolean));
 
   const myOwnMemberRow = memberRows.find(
     (r) => r.user_id === meId && r.team_id && ownedTeamIds.has(r.team_id)
@@ -131,6 +142,27 @@ function resolveMyTeamId(params: {
   return ownedTeams[0]?.id ?? "";
 }
 
+function isOptimisticMessageId(id?: string | null) {
+  return String(id ?? "").startsWith("optimistic-");
+}
+
+function isReadByOther(params: {
+  messageCreatedAt?: string | null;
+  otherLastReadAt?: string | null;
+}) {
+  const { messageCreatedAt, otherLastReadAt } = params;
+  if (!messageCreatedAt || !otherLastReadAt) return false;
+
+  try {
+    return (
+      new Date(otherLastReadAt).getTime() >=
+      new Date(messageCreatedAt).getTime()
+    );
+  } catch {
+    return false;
+  }
+}
+
 export default function ChatThreadPage() {
   const params = useParams<{ threadId: string }>();
   const searchParams = useSearchParams();
@@ -144,6 +176,7 @@ export default function ChatThreadPage() {
   const [myOwnedTeams, setMyOwnedTeams] = useState<TeamMini[]>([]);
   const [otherTeamId, setOtherTeamId] = useState<string>("");
   const [otherUserId, setOtherUserId] = useState<string>("");
+  const [otherLastReadAt, setOtherLastReadAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isMember, setIsMember] = useState<boolean>(false);
 
@@ -170,6 +203,18 @@ export default function ChatThreadPage() {
       !sending
     );
   }, [meId, threadId, isMember, text, sending]);
+
+  const lastMyMessageId = useMemo(() => {
+    const lastMyMessage = [...messages]
+      .filter((m) => m.sender_id === meId)
+      .sort((a, b) => {
+        const at = new Date(a.created_at ?? 0).getTime();
+        const bt = new Date(b.created_at ?? 0).getTime();
+        return bt - at;
+      })[0];
+
+    return lastMyMessage?.id ?? "";
+  }, [messages, meId]);
 
   const scrollToBottom = (smooth = true) => {
     requestAnimationFrame(() => {
@@ -208,9 +253,11 @@ export default function ChatThreadPage() {
     if (!threadId || !meId) return;
 
     try {
+      const readAt = nowIso();
+
       const { error } = await supabase
         .from("chat_members")
-        .update({ last_read_at: nowIso() })
+        .update({ last_read_at: readAt })
         .eq("thread_id", threadId)
         .eq("user_id", meId);
 
@@ -255,6 +302,88 @@ export default function ChatThreadPage() {
     }
   };
 
+  async function loadThreadMeta() {
+    if (!meId || !threadId) return;
+
+    const [
+      { data: memberRows, error: memberErr },
+      { data: ownedTeamsRows, error: ownedTeamsErr },
+    ] = await Promise.all([
+      supabase
+        .from("chat_members")
+        .select("thread_id,user_id,team_id,last_read_at")
+        .eq("thread_id", threadId),
+      supabase.from("teams").select("id,name,category").eq("owner_id", meId),
+    ]);
+
+    if (memberErr) {
+      console.error(memberErr);
+    }
+    if (ownedTeamsErr) {
+      console.error(ownedTeamsErr);
+    }
+
+    const typedMemberRows = ((memberRows ?? []) as ChatMemberRow[]).filter(
+      Boolean
+    );
+    const ownedTeams = ((ownedTeamsRows ?? []) as TeamMini[]).filter(Boolean);
+
+    setMyOwnedTeams(ownedTeams);
+
+    const resolvedMyTeamId = resolveMyTeamId({
+      meId,
+      memberRows: typedMemberRows,
+      ownedTeams,
+    });
+    setMyTeamId(resolvedMyTeamId);
+
+    const ownedTeamIds = new Set(ownedTeams.map((t) => t.id).filter(Boolean));
+
+    const teamIds = typedMemberRows
+      .map((r) => r.team_id as string)
+      .filter(Boolean);
+
+    const otherMemberRow =
+      typedMemberRows.find((r) => r.user_id && r.user_id !== meId) ?? null;
+
+    const otherUserIdValue = otherMemberRow?.user_id ?? "";
+    setOtherUserId(otherUserIdValue);
+    setOtherLastReadAt(otherMemberRow?.last_read_at ?? null);
+
+    const resolvedOtherTeamId =
+      teamIds.find((id) => !ownedTeamIds.has(id)) ??
+      teamIds.find((id) => id !== resolvedMyTeamId) ??
+      "";
+
+    setOtherTeamId(resolvedOtherTeamId);
+
+    if (resolvedOtherTeamId) {
+      const { data: teamRow, error: teamErr } = await supabase
+        .from("teams")
+        .select("id,name,category")
+        .eq("id", resolvedOtherTeamId)
+        .maybeSingle();
+
+      if (teamErr) {
+        console.error(teamErr);
+      }
+
+      if (teamRow) {
+        const team = teamRow as TeamMini;
+        setOtherTeamName(team.name ?? "相手チーム");
+        setOtherTeamCategory(
+          categoryLabel(team.category) || team.category || ""
+        );
+      } else {
+        setOtherTeamName("相手チーム");
+        setOtherTeamCategory("");
+      }
+    } else {
+      setOtherTeamName("相手チーム");
+      setOtherTeamCategory("");
+    }
+  }
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!("Notification" in window)) {
@@ -281,6 +410,7 @@ export default function ChatThreadPage() {
       setMyOwnedTeams([]);
       setOtherTeamId("");
       setOtherUserId("");
+      setOtherLastReadAt(null);
       setSendError("");
       setOtherTeamName("相手チーム");
       setOtherTeamCategory("");
@@ -303,75 +433,7 @@ export default function ChatThreadPage() {
 
       setIsMember(true);
 
-      const [{ data: memberRows, error: memberErr }, { data: ownedTeamsRows, error: ownedTeamsErr }] =
-        await Promise.all([
-          supabase
-            .from("chat_members")
-            .select("thread_id,user_id,team_id,last_read_at")
-            .eq("thread_id", threadId),
-          supabase
-            .from("teams")
-            .select("id,name,category")
-            .eq("owner_id", meId),
-        ]);
-
-      if (memberErr) {
-        console.error(memberErr);
-      }
-      if (ownedTeamsErr) {
-        console.error(ownedTeamsErr);
-      }
-
-      const typedMemberRows = ((memberRows ?? []) as ChatMemberRow[]).filter(Boolean);
-      const ownedTeams = ((ownedTeamsRows ?? []) as TeamMini[]).filter(Boolean);
-
-      setMyOwnedTeams(ownedTeams);
-
-      const resolvedMyTeamId = resolveMyTeamId({
-        meId,
-        memberRows: typedMemberRows,
-        ownedTeams,
-      });
-      setMyTeamId(resolvedMyTeamId);
-
-      const ownedTeamIds = new Set(
-        ownedTeams.map((t) => t.id).filter(Boolean)
-      );
-
-      const teamIds = typedMemberRows
-        .map((r) => r.team_id as string)
-        .filter(Boolean);
-
-      const otherUserIdValue =
-        typedMemberRows.find((r) => r.user_id && r.user_id !== meId)?.user_id ?? "";
-      setOtherUserId(otherUserIdValue);
-
-      const resolvedOtherTeamId =
-        teamIds.find((id) => !ownedTeamIds.has(id)) ??
-        teamIds.find((id) => id !== resolvedMyTeamId) ??
-        "";
-
-      setOtherTeamId(resolvedOtherTeamId);
-
-      if (resolvedOtherTeamId) {
-        const { data: teamRow, error: teamErr } = await supabase
-          .from("teams")
-          .select("id,name,category")
-          .eq("id", resolvedOtherTeamId)
-          .maybeSingle();
-
-        if (teamErr) {
-          console.error(teamErr);
-        }
-
-        if (teamRow) {
-          const team = teamRow as TeamMini;
-          setOtherTeamName(team.name ?? "相手チーム");
-          setOtherTeamCategory(
-            categoryLabel(team.category) || team.category || ""
-          );
-        }
-      }
+      await loadThreadMeta();
 
       const { data, error } = await supabase
         .from("chat_messages")
@@ -408,8 +470,8 @@ export default function ChatThreadPage() {
   useEffect(() => {
     if (!meId || !threadId || !isMember) return;
 
-    const channel = supabase
-      .channel(`chat:${threadId}`)
+    const messageChannel = supabase
+      .channel(`chat-messages:${threadId}`)
       .on(
         "postgres_changes",
         {
@@ -423,7 +485,9 @@ export default function ChatThreadPage() {
 
           setMessages((prev) => {
             if (prev.some((m) => m.id === row.id)) {
-              return prev.filter((m) => !String(m.id).startsWith("optimistic-"));
+              return prev.filter(
+                (m) => !String(m.id).startsWith("optimistic-")
+              );
             }
 
             const withoutOptimistic = prev.filter(
@@ -452,8 +516,29 @@ export default function ChatThreadPage() {
       )
       .subscribe();
 
+    const memberChannel = supabase
+      .channel(`chat-members:${threadId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "chat_members",
+          filter: `thread_id=eq.${threadId}`,
+        },
+        async (payload) => {
+          const row = payload.new as ChatMemberRow;
+
+          if (row.user_id && row.user_id !== meId) {
+            setOtherLastReadAt(row.last_read_at ?? null);
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(messageChannel);
+      supabase.removeChannel(memberChannel);
     };
   }, [meId, threadId, isMember, otherTeamName]);
 
@@ -476,7 +561,9 @@ export default function ChatThreadPage() {
       });
 
     if (!resolvedSendTeamId) {
-      setSendError("送信元チームが取得できません。チーム登録または chat_members の team_id を確認してください。");
+      setSendError(
+        "送信元チームが取得できません。チーム登録または chat_members の team_id を確認してください。"
+      );
       return;
     }
 
@@ -659,9 +746,15 @@ export default function ChatThreadPage() {
           <div style={messageList}>
             {messages.map((m, i) => {
               const mine = m.sender_id === meId;
-              const optimistic = String(m.id).startsWith("optimistic-");
+              const optimistic = isOptimisticMessageId(m.id);
               const prev = i > 0 ? messages[i - 1] : null;
               const showDate = !prev || !sameDate(prev.created_at, m.created_at);
+
+              const isLatestMyMessage = mine && m.id === lastMyMessageId;
+              const isRead = isReadByOther({
+                messageCreatedAt: m.created_at,
+                otherLastReadAt,
+              });
 
               return (
                 <React.Fragment key={m.id}>
@@ -701,8 +794,25 @@ export default function ChatThreadPage() {
                         <div style={bubbleText}>{m.body}</div>
                       </div>
 
-                      <div style={bubbleMeta}>
-                        {optimistic ? "送信中…" : formatBubbleTime(m.created_at)}
+                      <div
+                        style={{
+                          ...bubbleMeta,
+                          justifyContent: mine ? "flex-end" : "flex-start",
+                        }}
+                      >
+                        <span>
+                          {optimistic ? "送信中…" : formatBubbleTime(m.created_at)}
+                        </span>
+
+                        {isLatestMyMessage ? (
+                          <span style={readStateText}>
+                            {optimistic
+                              ? ""
+                              : isRead
+                              ? `既読 ${formatReadTime(otherLastReadAt)}`
+                              : "未読"}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -923,6 +1033,15 @@ const bubbleMeta: React.CSSProperties = {
   fontSize: 11,
   color: "#6b7280",
   padding: "0 4px",
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+};
+
+const readStateText: React.CSSProperties = {
+  fontSize: 11,
+  color: "#4b5563",
+  fontWeight: 700,
 };
 
 const inputArea: React.CSSProperties = {
