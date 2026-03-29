@@ -99,16 +99,49 @@ function getBackLink(from?: string | null) {
   }
 }
 
+function resolveMyTeamId(params: {
+  meId: string;
+  memberRows: ChatMemberRow[];
+  ownedTeams: TeamMini[];
+}) {
+  const { meId, memberRows, ownedTeams } = params;
+
+  const ownedTeamIds = new Set(
+    ownedTeams.map((t) => t.id).filter(Boolean)
+  );
+
+  const myOwnMemberRow = memberRows.find(
+    (r) => r.user_id === meId && r.team_id && ownedTeamIds.has(r.team_id)
+  );
+  if (myOwnMemberRow?.team_id) {
+    return myOwnMemberRow.team_id;
+  }
+
+  const matchedMemberTeamId = memberRows.find(
+    (r) => r.team_id && ownedTeamIds.has(r.team_id)
+  )?.team_id;
+  if (matchedMemberTeamId) {
+    return matchedMemberTeamId;
+  }
+
+  if (ownedTeams.length === 1) {
+    return ownedTeams[0].id;
+  }
+
+  return ownedTeams[0]?.id ?? "";
+}
+
 export default function ChatThreadPage() {
   const params = useParams<{ threadId: string }>();
   const searchParams = useSearchParams();
-  const threadId = params.threadId;
+  const threadId = params?.threadId ?? "";
   const from = searchParams.get("from");
 
   const backLink = useMemo(() => getBackLink(from), [from]);
 
   const [meId, setMeId] = useState<string>("");
   const [myTeamId, setMyTeamId] = useState<string>("");
+  const [myOwnedTeams, setMyOwnedTeams] = useState<TeamMini[]>([]);
   const [otherTeamId, setOtherTeamId] = useState<string>("");
   const [otherUserId, setOtherUserId] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -132,12 +165,11 @@ export default function ChatThreadPage() {
     return (
       !!meId &&
       !!threadId &&
-      !!myTeamId &&
       isMember &&
       text.trim().length > 0 &&
       !sending
     );
-  }, [meId, threadId, myTeamId, isMember, text, sending]);
+  }, [meId, threadId, isMember, text, sending]);
 
   const scrollToBottom = (smooth = true) => {
     requestAnimationFrame(() => {
@@ -246,9 +278,12 @@ export default function ChatThreadPage() {
       setLoading(true);
       setIsMember(false);
       setMyTeamId("");
+      setMyOwnedTeams([]);
       setOtherTeamId("");
       setOtherUserId("");
       setSendError("");
+      setOtherTeamName("相手チーム");
+      setOtherTeamCategory("");
 
       const { data: mem, error: memErr } = await supabase
         .from("chat_members")
@@ -268,63 +303,73 @@ export default function ChatThreadPage() {
 
       setIsMember(true);
 
-      const { data: memberRows, error: memberErr } = await supabase
-        .from("chat_members")
-        .select("user_id,team_id")
-        .eq("thread_id", threadId);
+      const [{ data: memberRows, error: memberErr }, { data: ownedTeamsRows, error: ownedTeamsErr }] =
+        await Promise.all([
+          supabase
+            .from("chat_members")
+            .select("thread_id,user_id,team_id,last_read_at")
+            .eq("thread_id", threadId),
+          supabase
+            .from("teams")
+            .select("id,name,category")
+            .eq("owner_id", meId),
+        ]);
 
       if (memberErr) {
         console.error(memberErr);
-      } else {
-        const typedMemberRows = ((memberRows ?? []) as ChatMemberRow[]).filter(
-          Boolean
-        );
+      }
+      if (ownedTeamsErr) {
+        console.error(ownedTeamsErr);
+      }
 
-        const teamIds = typedMemberRows
-          .map((r) => r.team_id as string)
-          .filter(Boolean);
+      const typedMemberRows = ((memberRows ?? []) as ChatMemberRow[]).filter(Boolean);
+      const ownedTeams = ((ownedTeamsRows ?? []) as TeamMini[]).filter(Boolean);
 
-        const otherUserIdValue =
-          typedMemberRows.find((r) => r.user_id && r.user_id !== meId)
-            ?.user_id ?? "";
+      setMyOwnedTeams(ownedTeams);
 
-        setOtherUserId(otherUserIdValue);
+      const resolvedMyTeamId = resolveMyTeamId({
+        meId,
+        memberRows: typedMemberRows,
+        ownedTeams,
+      });
+      setMyTeamId(resolvedMyTeamId);
 
-        if (teamIds.length > 0) {
-          const { data: myTeams } = await supabase
-            .from("teams")
-            .select("id")
-            .eq("owner_id", meId);
+      const ownedTeamIds = new Set(
+        ownedTeams.map((t) => t.id).filter(Boolean)
+      );
 
-          const myTeamIds = new Set<string>(
-            ((myTeams ?? []) as { id: string }[])
-              .map((r) => r.id)
-              .filter(Boolean)
+      const teamIds = typedMemberRows
+        .map((r) => r.team_id as string)
+        .filter(Boolean);
+
+      const otherUserIdValue =
+        typedMemberRows.find((r) => r.user_id && r.user_id !== meId)?.user_id ?? "";
+      setOtherUserId(otherUserIdValue);
+
+      const resolvedOtherTeamId =
+        teamIds.find((id) => !ownedTeamIds.has(id)) ??
+        teamIds.find((id) => id !== resolvedMyTeamId) ??
+        "";
+
+      setOtherTeamId(resolvedOtherTeamId);
+
+      if (resolvedOtherTeamId) {
+        const { data: teamRow, error: teamErr } = await supabase
+          .from("teams")
+          .select("id,name,category")
+          .eq("id", resolvedOtherTeamId)
+          .maybeSingle();
+
+        if (teamErr) {
+          console.error(teamErr);
+        }
+
+        if (teamRow) {
+          const team = teamRow as TeamMini;
+          setOtherTeamName(team.name ?? "相手チーム");
+          setOtherTeamCategory(
+            categoryLabel(team.category) || team.category || ""
           );
-
-          const mine = teamIds.find((id) => myTeamIds.has(id)) ?? "";
-          setMyTeamId(mine);
-
-          const otherTeamIdValue =
-            teamIds.find((id) => !myTeamIds.has(id)) ?? teamIds[0] ?? "";
-
-          if (otherTeamIdValue) {
-            setOtherTeamId(otherTeamIdValue);
-
-            const { data: teamRow } = await supabase
-              .from("teams")
-              .select("id,name,category")
-              .eq("id", otherTeamIdValue)
-              .maybeSingle();
-
-            if (teamRow) {
-              const team = teamRow as TeamMini;
-              setOtherTeamName(team.name ?? "相手チーム");
-              setOtherTeamCategory(
-                categoryLabel(team.category) || team.category || ""
-              );
-            }
-          }
         }
       }
 
@@ -420,8 +465,20 @@ export default function ChatThreadPage() {
     if (!meId) return alert("ログインが必要です");
     if (!threadId) return alert("threadId がありません");
     if (!isMember) return alert("このスレッドに参加していません");
-    if (!myTeamId) return alert("送信元チームが取得できません");
     if (sending) return;
+
+    const resolvedSendTeamId =
+      myTeamId ||
+      resolveMyTeamId({
+        meId,
+        memberRows: [],
+        ownedTeams: myOwnedTeams,
+      });
+
+    if (!resolvedSendTeamId) {
+      setSendError("送信元チームが取得できません。チーム登録または chat_members の team_id を確認してください。");
+      return;
+    }
 
     setSending(true);
     setText("");
@@ -434,7 +491,7 @@ export default function ChatThreadPage() {
       id: optimisticId,
       thread_id: threadId,
       sender_id: meId,
-      sender_team_id: myTeamId,
+      sender_team_id: resolvedSendTeamId,
       body,
       created_at: nowIso(),
     };
@@ -448,7 +505,7 @@ export default function ChatThreadPage() {
     const payload = {
       thread_id: threadId,
       sender_id: meId,
-      sender_team_id: myTeamId,
+      sender_team_id: resolvedSendTeamId,
       body,
     };
 
@@ -466,6 +523,8 @@ export default function ChatThreadPage() {
       setSending(false);
       return;
     }
+
+    setMyTeamId(resolvedSendTeamId);
 
     setMessages((prev) => {
       const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
@@ -500,7 +559,7 @@ export default function ChatThreadPage() {
           target_url: notificationUrl,
           is_read: false,
           related_thread_id: threadId,
-          related_team_id: myTeamId,
+          related_team_id: resolvedSendTeamId,
         });
 
       if (notificationErr) {
