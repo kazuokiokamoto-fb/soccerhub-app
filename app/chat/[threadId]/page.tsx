@@ -171,7 +171,9 @@ export default function ChatThreadPage() {
 
   const backLink = useMemo(() => getBackLink(from), [from]);
 
+  const [authLoading, setAuthLoading] = useState(true);
   const [meId, setMeId] = useState<string>("");
+
   const [myTeamId, setMyTeamId] = useState<string>("");
   const [myOwnedTeams, setMyOwnedTeams] = useState<TeamMini[]>([]);
   const [otherTeamId, setOtherTeamId] = useState<string>("");
@@ -302,8 +304,8 @@ export default function ChatThreadPage() {
     }
   };
 
-  async function loadThreadMeta() {
-    if (!meId || !threadId) return;
+  async function loadThreadMeta(currentMeId: string) {
+    if (!currentMeId || !threadId) return;
 
     const [
       { data: memberRows, error: memberErr },
@@ -313,7 +315,10 @@ export default function ChatThreadPage() {
         .from("chat_members")
         .select("thread_id,user_id,team_id,last_read_at")
         .eq("thread_id", threadId),
-      supabase.from("teams").select("id,name,category").eq("owner_id", meId),
+      supabase
+        .from("teams")
+        .select("id,name,category")
+        .eq("owner_id", currentMeId),
     ]);
 
     if (memberErr) {
@@ -331,7 +336,7 @@ export default function ChatThreadPage() {
     setMyOwnedTeams(ownedTeams);
 
     const resolvedMyTeamId = resolveMyTeamId({
-      meId,
+      meId: currentMeId,
       memberRows: typedMemberRows,
       ownedTeams,
     });
@@ -344,7 +349,7 @@ export default function ChatThreadPage() {
       .filter(Boolean);
 
     const otherMemberRow =
-      typedMemberRows.find((r) => r.user_id && r.user_id !== meId) ?? null;
+      typedMemberRows.find((r) => r.user_id && r.user_id !== currentMeId) ?? null;
 
     const otherUserIdValue = otherMemberRow?.user_id ?? "";
     setOtherUserId(otherUserIdValue);
@@ -385,6 +390,44 @@ export default function ChatThreadPage() {
   }
 
   useEffect(() => {
+    let mounted = true;
+
+    const initAuth = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!mounted) return;
+        setMeId(session?.user?.id ?? "");
+      } catch (e) {
+        console.error("getSession error:", e);
+        if (!mounted) return;
+        setMeId("");
+      } finally {
+        if (mounted) {
+          setAuthLoading(false);
+        }
+      }
+    };
+
+    initAuth();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setMeId(session?.user?.id ?? "");
+      setAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     if (!("Notification" in window)) {
       setNotificationPermission("unsupported");
@@ -394,14 +437,14 @@ export default function ChatThreadPage() {
   }, []);
 
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      setMeId(data?.user?.id ?? "");
-    })();
-  }, []);
+    if (authLoading) return;
 
-  useEffect(() => {
-    if (!meId || !threadId) return;
+    if (!meId || !threadId) {
+      setLoading(false);
+      setIsMember(false);
+      setMessages([]);
+      return;
+    }
 
     (async () => {
       setLoading(true);
@@ -433,7 +476,7 @@ export default function ChatThreadPage() {
 
       setIsMember(true);
 
-      await loadThreadMeta();
+      await loadThreadMeta(meId);
 
       const { data, error } = await supabase
         .from("chat_messages")
@@ -457,7 +500,7 @@ export default function ChatThreadPage() {
 
       await markRead();
     })();
-  }, [meId, threadId]);
+  }, [authLoading, meId, threadId]);
 
   useEffect(() => {
     if (!loading) {
@@ -468,7 +511,7 @@ export default function ChatThreadPage() {
   }, [loading]);
 
   useEffect(() => {
-    if (!meId || !threadId || !isMember) return;
+    if (authLoading || !meId || !threadId || !isMember) return;
 
     const messageChannel = supabase
       .channel(`chat-messages:${threadId}`)
@@ -540,7 +583,7 @@ export default function ChatThreadPage() {
       supabase.removeChannel(messageChannel);
       supabase.removeChannel(memberChannel);
     };
-  }, [meId, threadId, isMember, otherTeamName]);
+  }, [authLoading, meId, threadId, isMember, otherTeamName]);
 
   const send = async () => {
     setSendError("");
@@ -686,6 +729,16 @@ export default function ChatThreadPage() {
       if (canSend) send();
     }
   };
+
+  if (authLoading) {
+    return (
+      <main style={pageWrap}>
+        <section style={chatPanel}>
+          <div style={authLoadingBox}>ログイン状態を確認中…</div>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main style={pageWrap}>
@@ -876,6 +929,15 @@ const chatPanel: React.CSSProperties = {
   gridTemplateRows: "auto 1fr auto",
   height: "calc(100dvh - 24px)",
   minHeight: 0,
+};
+
+const authLoadingBox: React.CSSProperties = {
+  display: "grid",
+  placeItems: "center",
+  minHeight: 240,
+  padding: 24,
+  color: "#666",
+  background: "#fff",
 };
 
 const panelHeader: React.CSSProperties = {

@@ -86,6 +86,7 @@ function toDateTimeMs(date?: string | null, time?: string | null) {
 
 export default function HomePage() {
   const [meId, setMeId] = useState("");
+  const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(true);
 
   const [myTeams, setMyTeams] = useState<TeamRow[]>([]);
@@ -97,274 +98,337 @@ export default function HomePage() {
   const [unreadTotal, setUnreadTotal] = useState(0);
   const [nextMatch, setNextMatch] = useState<NextMatchCard | null>(null);
 
+  const loadTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const loadingRef = React.useRef(false);
+
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      setMeId(data?.user?.id ?? "");
-    })();
+    let mounted = true;
+
+    const initAuth = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!mounted) return;
+        setMeId(session?.user?.id ?? "");
+      } catch (e) {
+        console.error("getSession error:", e);
+        if (!mounted) return;
+        setMeId("");
+      } finally {
+        if (mounted) {
+          setAuthLoading(false);
+        }
+      }
+    };
+
+    initAuth();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setMeId(session?.user?.id ?? "");
+      setAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const resetHomeState = useCallback(() => {
+    setMyTeams([]);
+    setOpenCount(0);
+    setReceivedOfferCount(0);
+    setSentOfferCount(0);
+    setUnreadTotal(0);
+    setNextMatch(null);
   }, []);
 
   const loadHome = useCallback(async () => {
+    if (loadingRef.current) return;
+
     if (!meId) {
+      resetHomeState();
       setLoading(false);
-      setMyTeams([]);
-      setOpenCount(0);
-      setReceivedOfferCount(0);
-      setSentOfferCount(0);
-      setUnreadTotal(0);
-      setNextMatch(null);
       return;
     }
 
+    loadingRef.current = true;
     setLoading(true);
 
-    const { data: teamRows, error: teamErr } = await supabase
-      .from("teams")
-      .select("id, owner_id, name, category")
-      .eq("owner_id", meId);
+    try {
+      const { data: teamRows, error: teamErr } = await supabase
+        .from("teams")
+        .select("id, owner_id, name, category")
+        .eq("owner_id", meId);
 
-    if (teamErr) {
-      console.error(teamErr);
-      setLoading(false);
-      return;
-    }
-
-    const myTeamData = (teamRows ?? []) as TeamRow[];
-    setMyTeams(myTeamData);
-
-    const myTeamIds = myTeamData.map((t) => t.id).filter(Boolean);
-
-    if (myTeamIds.length === 0) {
-      setOpenCount(0);
-      setReceivedOfferCount(0);
-      setSentOfferCount(0);
-      setUnreadTotal(0);
-      setNextMatch(null);
-      setLoading(false);
-      return;
-    }
-
-    const { data: mySlots, error: slotErr } = await supabase
-      .from("match_slots")
-      .select(
-        "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
-      )
-      .in("host_team_id", myTeamIds);
-
-    if (slotErr) {
-      console.error(slotErr);
-    }
-
-    const mySlotRows = (mySlots ?? []) as MatchSlotRow[];
-    const mySlotIds = mySlotRows.map((s) => s.id).filter(Boolean);
-
-    setOpenCount(mySlotRows.filter((s) => !s.is_closed).length);
-
-    const { data: outgoingRequests, error: outgoingReqErr } = await supabase
-      .from("match_requests")
-      .select(
-        "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
-      )
-      .in("requester_team_id", myTeamIds);
-
-    if (outgoingReqErr) {
-      console.error(outgoingReqErr);
-    }
-
-    const outgoingRequestRows = (outgoingRequests ?? []) as MatchRequestRow[];
-
-    let incomingRequestRows: MatchRequestRow[] = [];
-    if (mySlotIds.length > 0) {
-      const { data: incomingRequests, error: incomingReqErr } = await supabase
-        .from("match_requests")
-        .select(
-          "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
-        )
-        .in("slot_id", mySlotIds);
-
-      if (incomingReqErr) {
-        console.error(incomingReqErr);
-      } else {
-        incomingRequestRows = (incomingRequests ?? []) as MatchRequestRow[];
-      }
-    }
-
-    const { data: sentOffers, error: sentOffersErr } = await supabase
-      .from("match_offers")
-      .select(
-        "id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at"
-      )
-      .in("from_team_id", myTeamIds);
-
-    if (sentOffersErr) {
-      console.error("sentOffers error:", sentOffersErr);
-    }
-
-    const sentOfferRows = (sentOffers ?? []) as MatchOfferRow[];
-
-    const { data: receivedOffers, error: receivedOffersErr } = await supabase
-      .from("match_offers")
-      .select(
-        "id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at"
-      )
-      .in("to_team_id", myTeamIds);
-
-    if (receivedOffersErr) {
-      console.error("receivedOffers error:", receivedOffersErr);
-    }
-
-    const receivedOfferRows = (receivedOffers ?? []) as MatchOfferRow[];
-
-    const pendingReceivedOffers =
-      receivedOfferRows.filter((o) => o.status === "pending").length +
-      incomingRequestRows.filter(
-        (r) => r.status === "pending" && !myTeamIds.includes(r.requester_team_id)
-      ).length;
-
-    const pendingSentOffers =
-      sentOfferRows.filter((o) => o.status === "pending").length +
-      outgoingRequestRows.filter((r) => r.status === "pending").length;
-
-    setReceivedOfferCount(pendingReceivedOffers);
-    setSentOfferCount(pendingSentOffers);
-
-    const { data: memberRows, error: memberErr } = await supabase
-      .from("chat_members")
-      .select("thread_id,last_read_at")
-      .eq("user_id", meId);
-
-    if (memberErr) {
-      console.error(memberErr);
-    }
-
-    const myMemberRows = (memberRows ?? []) as ChatMemberRow[];
-    const threadIds = myMemberRows.map((r) => r.thread_id).filter(Boolean);
-
-    if (threadIds.length > 0) {
-      const { data: msgRows, error: msgErr } = await supabase
-        .from("chat_messages")
-        .select("id,thread_id,body,created_at")
-        .in("thread_id", threadIds)
-        .order("created_at", { ascending: false })
-        .limit(2000);
-
-      if (msgErr) {
-        console.error(msgErr);
+      if (teamErr) {
+        console.error(teamErr);
+        resetHomeState();
+        setLoading(false);
+        return;
       }
 
-      const messages = (msgRows ?? []) as ChatMessageRow[];
-      const latestByThread = new Map<string, ChatMessageRow>();
+      const myTeamData = (teamRows ?? []) as TeamRow[];
+      setMyTeams(myTeamData);
 
-      for (const m of messages) {
-        if (!latestByThread.has(m.thread_id)) {
-          latestByThread.set(m.thread_id, m);
-        }
+      const myTeamIds = myTeamData.map((t) => t.id).filter(Boolean);
+
+      if (myTeamIds.length === 0) {
+        setOpenCount(0);
+        setReceivedOfferCount(0);
+        setSentOfferCount(0);
+        setUnreadTotal(0);
+        setNextMatch(null);
+        setLoading(false);
+        return;
       }
 
-      let unread = 0;
-      for (const member of myMemberRows) {
-        const last = latestByThread.get(member.thread_id);
-        if (!last?.created_at) continue;
-
-        if (!member.last_read_at) {
-          unread += 1;
-          continue;
-        }
-
-        if (
-          new Date(last.created_at).getTime() >
-          new Date(member.last_read_at).getTime()
-        ) {
-          unread += 1;
-        }
-      }
-
-      setUnreadTotal(unread);
-    } else {
-      setUnreadTotal(0);
-    }
-
-    const acceptedOutgoingRequestSlotIds = outgoingRequestRows
-      .filter((r) => r.status === "accepted")
-      .map((r) => r.slot_id);
-
-    const acceptedIncomingRequestSlotIds = incomingRequestRows
-      .filter((r) => r.status === "accepted")
-      .map((r) => r.slot_id);
-
-    const acceptedReceivedOfferSlotIds = receivedOfferRows
-      .filter((o) => o.status === "accepted" && o.slot_id)
-      .map((o) => o.slot_id as string);
-
-    const acceptedSentOfferSlotIds = sentOfferRows
-      .filter((o) => o.status === "accepted" && o.slot_id)
-      .map((o) => o.slot_id as string);
-
-    const mergedAcceptedSlotIds = Array.from(
-      new Set(
-        [
-          ...acceptedOutgoingRequestSlotIds,
-          ...acceptedIncomingRequestSlotIds,
-          ...acceptedReceivedOfferSlotIds,
-          ...acceptedSentOfferSlotIds,
-        ].filter(Boolean)
-      )
-    );
-
-    if (mergedAcceptedSlotIds.length > 0) {
-      const { data: acceptedSlots, error: acceptedSlotsErr } = await supabase
+      const { data: mySlots, error: slotErr } = await supabase
         .from("match_slots")
         .select(
           "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
         )
-        .in("id", mergedAcceptedSlotIds)
-        .order("date", { ascending: true })
-        .order("start_time", { ascending: true });
+        .in("host_team_id", myTeamIds);
 
-      if (acceptedSlotsErr) {
-        console.error(acceptedSlotsErr);
+      if (slotErr) {
+        console.error(slotErr);
       }
 
-      const now = Date.now();
-      const futureSlots = ((acceptedSlots ?? []) as MatchSlotRow[])
-        .filter((s) => toDateTimeMs(s.date, s.start_time) >= now)
-        .sort((a, b) => {
-          const aMs = toDateTimeMs(a.date, a.start_time);
-          const bMs = toDateTimeMs(b.date, b.start_time);
-          return aMs - bMs;
-        });
+      const mySlotRows = (mySlots ?? []) as MatchSlotRow[];
+      const mySlotIds = mySlotRows.map((s) => s.id).filter(Boolean);
 
-      if (futureSlots.length > 0) {
-        const s = futureSlots[0];
-        setNextMatch({
-          date: s.date,
-          start_time: s.start_time,
-          end_time: s.end_time,
-          area: s.area,
-          area_text: s.area_text,
-          category: s.category,
-          slot_id: s.id,
-        });
+      setOpenCount(mySlotRows.filter((s) => !s.is_closed).length);
+
+      const { data: outgoingRequests, error: outgoingReqErr } = await supabase
+        .from("match_requests")
+        .select(
+          "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
+        )
+        .in("requester_team_id", myTeamIds);
+
+      if (outgoingReqErr) {
+        console.error(outgoingReqErr);
+      }
+
+      const outgoingRequestRows = (outgoingRequests ?? []) as MatchRequestRow[];
+
+      let incomingRequestRows: MatchRequestRow[] = [];
+      if (mySlotIds.length > 0) {
+        const { data: incomingRequests, error: incomingReqErr } = await supabase
+          .from("match_requests")
+          .select(
+            "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
+          )
+          .in("slot_id", mySlotIds);
+
+        if (incomingReqErr) {
+          console.error(incomingReqErr);
+        } else {
+          incomingRequestRows = (incomingRequests ?? []) as MatchRequestRow[];
+        }
+      }
+
+      const { data: sentOffers, error: sentOffersErr } = await supabase
+        .from("match_offers")
+        .select(
+          "id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at"
+        )
+        .in("from_team_id", myTeamIds);
+
+      if (sentOffersErr) {
+        console.error("sentOffers error:", sentOffersErr);
+      }
+
+      const sentOfferRows = (sentOffers ?? []) as MatchOfferRow[];
+
+      const { data: receivedOffers, error: receivedOffersErr } = await supabase
+        .from("match_offers")
+        .select(
+          "id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at"
+        )
+        .in("to_team_id", myTeamIds);
+
+      if (receivedOffersErr) {
+        console.error("receivedOffers error:", receivedOffersErr);
+      }
+
+      const receivedOfferRows = (receivedOffers ?? []) as MatchOfferRow[];
+
+      const pendingReceivedOffers =
+        receivedOfferRows.filter((o) => o.status === "pending").length +
+        incomingRequestRows.filter(
+          (r) =>
+            r.status === "pending" && !myTeamIds.includes(r.requester_team_id)
+        ).length;
+
+      const pendingSentOffers =
+        sentOfferRows.filter((o) => o.status === "pending").length +
+        outgoingRequestRows.filter((r) => r.status === "pending").length;
+
+      setReceivedOfferCount(pendingReceivedOffers);
+      setSentOfferCount(pendingSentOffers);
+
+      const { data: memberRows, error: memberErr } = await supabase
+        .from("chat_members")
+        .select("thread_id,last_read_at")
+        .eq("user_id", meId);
+
+      if (memberErr) {
+        console.error(memberErr);
+      }
+
+      const myMemberRows = (memberRows ?? []) as ChatMemberRow[];
+      const threadIds = myMemberRows.map((r) => r.thread_id).filter(Boolean);
+
+      if (threadIds.length > 0) {
+        const { data: msgRows, error: msgErr } = await supabase
+          .from("chat_messages")
+          .select("id,thread_id,body,created_at")
+          .in("thread_id", threadIds)
+          .order("created_at", { ascending: false })
+          .limit(2000);
+
+        if (msgErr) {
+          console.error(msgErr);
+        }
+
+        const messages = (msgRows ?? []) as ChatMessageRow[];
+        const latestByThread = new Map<string, ChatMessageRow>();
+
+        for (const m of messages) {
+          if (!latestByThread.has(m.thread_id)) {
+            latestByThread.set(m.thread_id, m);
+          }
+        }
+
+        let unread = 0;
+        for (const member of myMemberRows) {
+          const last = latestByThread.get(member.thread_id);
+          if (!last?.created_at) continue;
+
+          if (!member.last_read_at) {
+            unread += 1;
+            continue;
+          }
+
+          if (
+            new Date(last.created_at).getTime() >
+            new Date(member.last_read_at).getTime()
+          ) {
+            unread += 1;
+          }
+        }
+
+        setUnreadTotal(unread);
+      } else {
+        setUnreadTotal(0);
+      }
+
+      const acceptedOutgoingRequestSlotIds = outgoingRequestRows
+        .filter((r) => r.status === "accepted")
+        .map((r) => r.slot_id);
+
+      const acceptedIncomingRequestSlotIds = incomingRequestRows
+        .filter((r) => r.status === "accepted")
+        .map((r) => r.slot_id);
+
+      const acceptedReceivedOfferSlotIds = receivedOfferRows
+        .filter((o) => o.status === "accepted" && o.slot_id)
+        .map((o) => o.slot_id as string);
+
+      const acceptedSentOfferSlotIds = sentOfferRows
+        .filter((o) => o.status === "accepted" && o.slot_id)
+        .map((o) => o.slot_id as string);
+
+      const mergedAcceptedSlotIds = Array.from(
+        new Set(
+          [
+            ...acceptedOutgoingRequestSlotIds,
+            ...acceptedIncomingRequestSlotIds,
+            ...acceptedReceivedOfferSlotIds,
+            ...acceptedSentOfferSlotIds,
+          ].filter(Boolean)
+        )
+      );
+
+      if (mergedAcceptedSlotIds.length > 0) {
+        const { data: acceptedSlots, error: acceptedSlotsErr } = await supabase
+          .from("match_slots")
+          .select(
+            "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
+          )
+          .in("id", mergedAcceptedSlotIds)
+          .order("date", { ascending: true })
+          .order("start_time", { ascending: true });
+
+        if (acceptedSlotsErr) {
+          console.error(acceptedSlotsErr);
+        }
+
+        const now = Date.now();
+        const futureSlots = ((acceptedSlots ?? []) as MatchSlotRow[])
+          .filter((s) => toDateTimeMs(s.date, s.start_time) >= now)
+          .sort((a, b) => {
+            const aMs = toDateTimeMs(a.date, a.start_time);
+            const bMs = toDateTimeMs(b.date, b.start_time);
+            return aMs - bMs;
+          });
+
+        if (futureSlots.length > 0) {
+          const s = futureSlots[0];
+          setNextMatch({
+            date: s.date,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            area: s.area,
+            area_text: s.area_text,
+            category: s.category,
+            slot_id: s.id,
+          });
+        } else {
+          setNextMatch(null);
+        }
       } else {
         setNextMatch(null);
       }
-    } else {
-      setNextMatch(null);
+    } catch (e) {
+      console.error("loadHome error:", e);
+      resetHomeState();
+    } finally {
+      setLoading(false);
+      loadingRef.current = false;
+    }
+  }, [meId, resetHomeState]);
+
+  const triggerLoadHome = useCallback(() => {
+    if (loadTimerRef.current) {
+      clearTimeout(loadTimerRef.current);
     }
 
-    setLoading(false);
-  }, [meId]);
+    loadTimerRef.current = setTimeout(() => {
+      loadHome();
+    }, 300);
+  }, [loadHome]);
 
   useEffect(() => {
+    if (authLoading) return;
+
     if (!meId) {
+      resetHomeState();
       setLoading(false);
       return;
     }
+
     loadHome();
-  }, [meId, loadHome]);
+  }, [authLoading, meId, loadHome, resetHomeState]);
 
   useEffect(() => {
-    if (!meId) return;
+    if (authLoading || !meId) return;
 
     const channels = [
       supabase
@@ -373,7 +437,7 @@ export default function HomePage() {
           "postgres_changes",
           { event: "*", schema: "public", table: "match_requests" },
           () => {
-            loadHome();
+            triggerLoadHome();
           }
         )
         .subscribe(),
@@ -384,7 +448,7 @@ export default function HomePage() {
           "postgres_changes",
           { event: "*", schema: "public", table: "match_offers" },
           () => {
-            loadHome();
+            triggerLoadHome();
           }
         )
         .subscribe(),
@@ -395,7 +459,7 @@ export default function HomePage() {
           "postgres_changes",
           { event: "*", schema: "public", table: "match_slots" },
           () => {
-            loadHome();
+            triggerLoadHome();
           }
         )
         .subscribe(),
@@ -406,7 +470,7 @@ export default function HomePage() {
           "postgres_changes",
           { event: "*", schema: "public", table: "chat_messages" },
           () => {
-            loadHome();
+            triggerLoadHome();
           }
         )
         .subscribe(),
@@ -417,18 +481,34 @@ export default function HomePage() {
           "postgres_changes",
           { event: "*", schema: "public", table: "chat_members" },
           () => {
-            loadHome();
+            triggerLoadHome();
           }
         )
         .subscribe(),
     ];
 
     return () => {
-      channels.forEach((ch) => supabase.removeChannel(ch));
+      if (loadTimerRef.current) {
+        clearTimeout(loadTimerRef.current);
+        loadTimerRef.current = null;
+      }
+
+      channels.forEach((ch) => {
+        supabase.removeChannel(ch);
+      });
     };
-  }, [meId, loadHome]);
+  }, [authLoading, meId, triggerLoadHome]);
 
   const hasTeam = useMemo(() => myTeams.length > 0, [myTeams.length]);
+
+  if (authLoading) {
+    return (
+      <main style={wrap}>
+        <AppTabNav />
+        <div style={loadingPanel}>ログイン状態を確認中…</div>
+      </main>
+    );
+  }
 
   return (
     <main style={wrap}>
@@ -710,6 +790,16 @@ const wrap: React.CSSProperties = {
   padding: 16,
   maxWidth: 980,
   margin: "0 auto",
+};
+
+const loadingPanel: React.CSSProperties = {
+  marginTop: 16,
+  padding: 20,
+  borderRadius: 16,
+  border: "1px solid #e5ece7",
+  background: "#fff",
+  color: "#666",
+  textAlign: "center",
 };
 
 const hero: React.CSSProperties = {

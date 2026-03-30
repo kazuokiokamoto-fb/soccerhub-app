@@ -87,34 +87,76 @@ function buildInitial(name?: string | null) {
 }
 
 export default function ChatListPage() {
+  const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [threads, setThreads] = useState<ThreadRow[]>([]);
   const [meId, setMeId] = useState<string>("");
 
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      setMeId(data?.user?.id ?? "");
-    })();
+    let mounted = true;
+
+    const init = async () => {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (error) {
+        console.error("getSession error:", error);
+      }
+
+      if (!mounted) return;
+
+      setMeId(session?.user?.id ?? "");
+      setAuthLoading(false);
+    };
+
+    init();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setMeId(session?.user?.id ?? "");
+      setAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
+    if (authLoading) return;
+
     if (!meId) {
+      setThreads([]);
       setLoading(false);
       return;
     }
+
+    let cancelled = false;
 
     (async () => {
       setLoading(true);
 
       try {
-        const { data: myTeamsRows } = await supabase
+        const { data: myTeamsRows, error: myTeamsErr } = await supabase
           .from("teams")
           .select("id")
           .eq("owner_id", meId);
 
+        if (myTeamsErr) {
+          console.error(myTeamsErr);
+          if (!cancelled) setThreads([]);
+          return;
+        }
+
         const myTeamIds = new Set<string>(
-          (myTeamsRows ?? []).map((r: any) => r.id).filter(Boolean)
+          ((myTeamsRows ?? []) as Array<{ id: string }>)
+            .map((r) => r.id)
+            .filter(Boolean)
         );
 
         const { data: myMemberRows, error: cmErr } = await supabase
@@ -126,27 +168,28 @@ export default function ChatListPage() {
 
         if (cmErr) {
           console.error(cmErr);
-          setThreads([]);
+          if (!cancelled) setThreads([]);
           return;
         }
 
         const threadIds = Array.from(
-          new Set((myMemberRows ?? []).map((r: any) => r.thread_id).filter(Boolean))
+          new Set(
+            ((myMemberRows ?? []) as any[])
+              .map((r) => r.thread_id)
+              .filter(Boolean)
+          )
         );
 
         const myLastReadMap = new Map<string, string | null>();
-        for (const r of myMemberRows ?? []) {
-          if (!(r as any).thread_id) continue;
-          if (!myLastReadMap.has((r as any).thread_id)) {
-            myLastReadMap.set(
-              (r as any).thread_id,
-              ((r as any).last_read_at ?? null) as string | null
-            );
+        for (const r of (myMemberRows ?? []) as any[]) {
+          if (!r?.thread_id) continue;
+          if (!myLastReadMap.has(r.thread_id)) {
+            myLastReadMap.set(r.thread_id, (r.last_read_at ?? null) as string | null);
           }
         }
 
         if (threadIds.length === 0) {
-          setThreads([]);
+          if (!cancelled) setThreads([]);
           return;
         }
 
@@ -157,7 +200,7 @@ export default function ChatListPage() {
 
         if (thErr) {
           console.error(thErr);
-          setThreads([]);
+          if (!cancelled) setThreads([]);
           return;
         }
 
@@ -168,16 +211,16 @@ export default function ChatListPage() {
 
         if (membersErr) {
           console.error(membersErr);
-          setThreads([]);
+          if (!cancelled) setThreads([]);
           return;
         }
 
         const memberTeamsByThread = new Map<string, string[]>();
         const allTeamIds: string[] = [];
 
-        for (const r of membersRows ?? []) {
-          const tid = (r as any).thread_id as string;
-          const teamId = (r as any).team_id as string;
+        for (const r of (membersRows ?? []) as any[]) {
+          const tid = r.thread_id as string;
+          const teamId = r.team_id as string;
           if (!tid || !teamId) continue;
 
           if (!memberTeamsByThread.has(tid)) {
@@ -289,12 +332,20 @@ export default function ChatListPage() {
           return at > bt ? -1 : 1;
         });
 
-        setThreads(merged);
+        if (!cancelled) {
+          setThreads(merged);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     })();
-  }, [meId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, meId]);
 
   const unreadTotal = useMemo(() => {
     return threads.reduce((sum, t) => sum + (t.isUnread ? 1 : 0), 0);
@@ -313,13 +364,13 @@ export default function ChatListPage() {
       <div style={summaryBox}>
         <div style={summaryTitle}>チャット一覧</div>
         <div style={summaryText}>
-          {loading
+          {authLoading || loading
             ? "読み込み中…"
             : `スレッド ${threads.length}件 / 未読 ${unreadTotal}件`}
         </div>
       </div>
 
-      {loading ? (
+      {authLoading || loading ? (
         <div style={emptyBox}>読み込み中…</div>
       ) : threads.length === 0 ? (
         <div style={emptyBox}>

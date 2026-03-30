@@ -107,23 +107,56 @@ function categoryText(v?: string | null) {
 }
 
 export default function NextMatchPage() {
+  const [authLoading, setAuthLoading] = useState(true);
   const [meId, setMeId] = useState("");
   const [loading, setLoading] = useState(true);
   const [matches, setMatches] = useState<ConfirmedMatchDetail[]>([]);
 
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      setMeId(data?.user?.id ?? "");
-    })();
+    let mounted = true;
+
+    const init = async () => {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (error) {
+        console.error("getSession error:", error);
+      }
+
+      if (!mounted) return;
+
+      setMeId(session?.user?.id ?? "");
+      setAuthLoading(false);
+    };
+
+    init();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setMeId(session?.user?.id ?? "");
+      setAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
+    if (authLoading) return;
+
     if (!meId) {
-      setLoading(false);
       setMatches([]);
+      setLoading(false);
       return;
     }
+
+    let cancelled = false;
 
     (async () => {
       setLoading(true);
@@ -135,8 +168,10 @@ export default function NextMatchPage() {
 
       if (myTeamsErr) {
         console.error(myTeamsErr);
-        setMatches([]);
-        setLoading(false);
+        if (!cancelled) {
+          setMatches([]);
+          setLoading(false);
+        }
         return;
       }
 
@@ -144,8 +179,10 @@ export default function NextMatchPage() {
       const myTeamIds = myTeams.map((t) => t.id).filter(Boolean);
 
       if (myTeamIds.length === 0) {
-        setMatches([]);
-        setLoading(false);
+        if (!cancelled) {
+          setMatches([]);
+          setLoading(false);
+        }
         return;
       }
 
@@ -158,8 +195,10 @@ export default function NextMatchPage() {
 
       if (myHostedSlotsErr) {
         console.error(myHostedSlotsErr);
-        setMatches([]);
-        setLoading(false);
+        if (!cancelled) {
+          setMatches([]);
+          setLoading(false);
+        }
         return;
       }
 
@@ -179,6 +218,7 @@ export default function NextMatchPage() {
           )
           .in("requester_team_id", myTeamIds)
           .eq("status", "accepted"),
+
         myHostedSlotIds.length > 0
           ? supabase
               .from("match_requests")
@@ -188,6 +228,7 @@ export default function NextMatchPage() {
               .in("slot_id", myHostedSlotIds)
               .eq("status", "accepted")
           : Promise.resolve({ data: [], error: null } as any),
+
         supabase
           .from("match_offers")
           .select(
@@ -195,6 +236,7 @@ export default function NextMatchPage() {
           )
           .in("from_team_id", myTeamIds)
           .eq("status", "accepted"),
+
         supabase
           .from("match_offers")
           .select(
@@ -221,7 +263,8 @@ export default function NextMatchPage() {
         []) as RequestRow[];
       const acceptedIncomingRequests = (acceptedIncomingRequestsRes.data ??
         []) as RequestRow[];
-      const acceptedSentOffers = (acceptedSentOffersRes.data ?? []) as OfferRow[];
+      const acceptedSentOffers = (acceptedSentOffersRes.data ??
+        []) as OfferRow[];
       const acceptedReceivedOffers = (acceptedReceivedOffersRes.data ??
         []) as OfferRow[];
 
@@ -237,8 +280,10 @@ export default function NextMatchPage() {
       ) as string[];
 
       if (slotIds.length === 0) {
-        setMatches([]);
-        setLoading(false);
+        if (!cancelled) {
+          setMatches([]);
+          setLoading(false);
+        }
         return;
       }
 
@@ -253,8 +298,10 @@ export default function NextMatchPage() {
 
       if (slotErr) {
         console.error(slotErr);
-        setMatches([]);
-        setLoading(false);
+        if (!cancelled) {
+          setMatches([]);
+          setLoading(false);
+        }
         return;
       }
 
@@ -373,10 +420,16 @@ export default function NextMatchPage() {
         return a.key.localeCompare(b.key);
       });
 
-      setMatches(collected);
-      setLoading(false);
+      if (!cancelled) {
+        setMatches(collected);
+        setLoading(false);
+      }
     })();
-  }, [meId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, meId]);
 
   const nextMatch = useMemo(() => {
     return matches.length > 0 ? matches[0] : null;
@@ -399,13 +452,14 @@ export default function NextMatchPage() {
         </div>
       </section>
 
-      {loading ? <div style={loadingText}>読み込み中…</div> : null}
+      {authLoading ? <div style={loadingText}>ログイン確認中…</div> : null}
+      {!authLoading && loading ? <div style={loadingText}>読み込み中…</div> : null}
 
-      {!loading && matches.length === 0 ? (
+      {!authLoading && !loading && matches.length === 0 ? (
         <div style={emptyBox}>予定されている成立試合はまだありません。</div>
       ) : null}
 
-      {!loading && nextMatch ? (
+      {!authLoading && !loading && nextMatch ? (
         <section style={highlightCard}>
           <div style={highlightBadge}>最も近い次の試合</div>
           <div style={highlightTitle}>
@@ -453,12 +507,17 @@ export default function NextMatchPage() {
                   : "未設定"
               }
             />
-            <InfoItem label="成立経路" value={relationLabel(nextMatch.relation)} />
+            <InfoItem
+              label="成立経路"
+              value={relationLabel(nextMatch.relation)}
+            />
           </div>
 
           <div style={commentBox}>
             <div style={commentLabel}>
-              {nextMatch.kind === "request" ? "申込コメント" : "オファーメッセージ"}
+              {nextMatch.kind === "request"
+                ? "申込コメント"
+                : "オファーメッセージ"}
             </div>
             <div style={commentText}>
               {nextMatch.noteText || "コメントはありません"}
@@ -476,7 +535,7 @@ export default function NextMatchPage() {
         </section>
       ) : null}
 
-      {!loading && matches.length > 0 ? (
+      {!authLoading && !loading && matches.length > 0 ? (
         <section style={listCard}>
           <div style={listTitle}>成立している試合一覧</div>
 
