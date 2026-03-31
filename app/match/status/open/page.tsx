@@ -39,6 +39,8 @@ type MatchRequestRow = {
   created_at: string;
 };
 
+type SummaryView = "open" | "closed" | "requests" | null;
+
 function fmtDate(ymd?: string | null) {
   if (!ymd) return "";
   return ymd;
@@ -58,8 +60,15 @@ function toJst(dt?: string | null) {
   }
 }
 
-function countByStatus(rows: MatchRequestRow[], status: MatchRequestRow["status"]) {
+function countByStatus(
+  rows: MatchRequestRow[],
+  status: MatchRequestRow["status"]
+) {
   return rows.filter((r) => r.status === status).length;
+}
+
+function getTotalRequestCount(rows: MatchRequestRow[]) {
+  return rows.length;
 }
 
 export default function OpenMatchesPage() {
@@ -75,6 +84,7 @@ export default function OpenMatchesPage() {
   const [closedCount, setClosedCount] = useState(0);
 
   const [openDetailId, setOpenDetailId] = useState<string>("");
+  const [selectedView, setSelectedView] = useState<SummaryView>(null);
 
   useEffect(() => {
     (async () => {
@@ -95,7 +105,7 @@ export default function OpenMatchesPage() {
       const { data: teamRows, error: teamErr } = await supabase
         .from("teams")
         .select("id, owner_id, name, category")
-        .eq("owner_id", meId)
+        .eq("owner_id", meId);
 
       console.log("OPEN teamErr:", teamErr);
       console.log("OPEN teamRows:", teamRows);
@@ -150,7 +160,6 @@ export default function OpenMatchesPage() {
       const slotData = (slotRows ?? []) as MatchSlotRow[];
       setSlots(slotData);
 
-      // ホームと同じ考え方で件数を確定
       setOpenCount(slotData.filter((s) => !s.is_closed).length);
       setClosedCount(slotData.filter((s) => !!s.is_closed).length);
 
@@ -167,7 +176,9 @@ export default function OpenMatchesPage() {
 
       const { data: reqRows, error: reqErr } = await supabase
         .from("match_requests")
-        .select("id, slot_id, requester_team_id, requester_user_id, status, comment, created_at")
+        .select(
+          "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
+        )
         .in("slot_id", slotIds)
         .order("created_at", { ascending: false });
 
@@ -186,7 +197,9 @@ export default function OpenMatchesPage() {
         )
       );
 
-      const allNeedTeamIds = Array.from(new Set([...myTeamIds, ...requesterTeamIds]));
+      const allNeedTeamIds = Array.from(
+        new Set([...myTeamIds, ...requesterTeamIds])
+      );
 
       if (allNeedTeamIds.length > 0) {
         const { data: allTeamsRows, error: allTeamsErr } = await supabase
@@ -223,13 +236,33 @@ export default function OpenMatchesPage() {
     return m;
   }, [requests]);
 
-  const openSlots = useMemo(() => {
-    return slots.filter((s) => !s.is_closed);
-  }, [slots]);
+  const totalRequestCount = useMemo(() => requests.length, [requests]);
 
-  const closedSlots = useMemo(() => {
-    return slots.filter((s) => !!s.is_closed);
-  }, [slots]);
+  const visibleSlots = useMemo(() => {
+    const arr = [...slots];
+
+    if (selectedView === "open") {
+      return arr.filter((slot) => !slot.is_closed);
+    }
+
+    if (selectedView === "closed") {
+      return arr.filter((slot) => !!slot.is_closed);
+    }
+
+    if (selectedView === "requests") {
+      return arr.sort((a, b) => {
+        const aCount = getTotalRequestCount(requestsBySlot.get(a.id) ?? []);
+        const bCount = getTotalRequestCount(requestsBySlot.get(b.id) ?? []);
+        if (bCount !== aCount) return bCount - aCount;
+
+        const aDate = new Date(`${a.date}T${a.start_time || "00:00:00"}`).getTime();
+        const bDate = new Date(`${b.date}T${b.start_time || "00:00:00"}`).getTime();
+        return aDate - bDate;
+      });
+    }
+
+    return arr;
+  }, [slots, selectedView, requestsBySlot]);
 
   const toggleClosed = async (slotId: string, nextClosed: boolean) => {
     const { error } = await supabase
@@ -265,19 +298,42 @@ export default function OpenMatchesPage() {
       />
 
       <div style={summaryBox}>
-        <div style={summaryItem}>
-          <div style={summaryLabel}>公開中</div>
-          <div style={summaryValue}>{openCount}</div>
-        </div>
-        <div style={summaryItem}>
-          <div style={summaryLabel}>停止中</div>
-          <div style={summaryValue}>{closedCount}</div>
-        </div>
-        <div style={summaryItem}>
-          <div style={summaryLabel}>総申込数</div>
-          <div style={summaryValue}>{requests.length}</div>
-        </div>
+        <SummaryButton
+          label="公開中"
+          value={openCount}
+          active={selectedView === "open"}
+          onClick={() =>
+            setSelectedView((prev) => (prev === "open" ? null : "open"))
+          }
+        />
+        <SummaryButton
+          label="停止中"
+          value={closedCount}
+          active={selectedView === "closed"}
+          onClick={() =>
+            setSelectedView((prev) => (prev === "closed" ? null : "closed"))
+          }
+        />
+        <SummaryButton
+          label="総申込数"
+          value={totalRequestCount}
+          active={selectedView === "requests"}
+          onClick={() =>
+            setSelectedView((prev) => (prev === "requests" ? null : "requests"))
+          }
+        />
       </div>
+
+      {selectedView ? (
+        <div style={filterInfo}>
+          表示中：
+          {selectedView === "open"
+            ? "公開中のみ"
+            : selectedView === "closed"
+            ? "停止中のみ"
+            : "総申込数の多い順"}
+        </div>
+      ) : null}
 
       <div style={topActionRow}>
         <Link href="/match" className="sh-btn">
@@ -298,9 +354,13 @@ export default function OpenMatchesPage() {
         <div style={emptyBox}>現在、募集している試合はありません。</div>
       ) : null}
 
-      {!loading && slots.length > 0 ? (
+      {!loading && slots.length > 0 && visibleSlots.length === 0 ? (
+        <div style={emptyBox}>該当する募集はありません。</div>
+      ) : null}
+
+      {!loading && visibleSlots.length > 0 ? (
         <div style={listWrap}>
-          {slots.map((slot) => {
+          {visibleSlots.map((slot) => {
             const hostTeam = teamMap.get(slot.host_team_id);
             const slotRequests = requestsBySlot.get(slot.id) ?? [];
             const pendingCount = countByStatus(slotRequests, "pending");
@@ -315,7 +375,9 @@ export default function OpenMatchesPage() {
                 <div style={cardHead}>
                   <div style={{ minWidth: 0 }}>
                     <div style={cardTitleRow}>
-                      <div style={teamName}>{hostTeam?.name ?? "チーム未設定"}</div>
+                      <div style={teamName}>
+                        {hostTeam?.name ?? "チーム未設定"}
+                      </div>
 
                       <span
                         style={{
@@ -328,7 +390,8 @@ export default function OpenMatchesPage() {
                     </div>
 
                     <div style={metaText}>
-                      📅 {fmtDate(slot.date)} {fmtTime(slot.start_time)}–{fmtTime(slot.end_time)}
+                      📅 {fmtDate(slot.date)} {fmtTime(slot.start_time)}–
+                      {fmtTime(slot.end_time)}
                     </div>
                     <div style={metaText}>
                       📍 {slot.area_text ?? slot.area ?? "未設定"}
@@ -402,7 +465,9 @@ export default function OpenMatchesPage() {
                       ) : (
                         <div style={requestList}>
                           {slotRequests.map((req) => {
-                            const requesterTeam = teamMap.get(req.requester_team_id);
+                            const requesterTeam = teamMap.get(
+                              req.requester_team_id
+                            );
 
                             return (
                               <div key={req.id} style={requestCard}>
@@ -419,7 +484,10 @@ export default function OpenMatchesPage() {
                                     </div>
                                   </div>
 
-                                  <Link href="/chat" className="sh-btn sh-btn--primary">
+                                  <Link
+                                    href="/chat"
+                                    className="sh-btn sh-btn--primary"
+                                  >
                                     チャット
                                   </Link>
                                 </div>
@@ -443,6 +511,35 @@ export default function OpenMatchesPage() {
         </div>
       ) : null}
     </main>
+  );
+}
+
+function SummaryButton({
+  label,
+  value,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        ...summaryItem,
+        cursor: "pointer",
+        textAlign: "left",
+        transition: "all 0.2s ease",
+        ...(active ? summaryItemActive : {}),
+      }}
+    >
+      <div style={summaryLabel}>{label}</div>
+      <div style={summaryValue}>{value}</div>
+    </button>
   );
 }
 
@@ -481,6 +578,12 @@ const summaryItem: React.CSSProperties = {
   padding: "14px 12px",
 };
 
+const summaryItemActive: React.CSSProperties = {
+  border: "2px solid #2f6f3e",
+  background: "#f3fbf5",
+  transform: "translateY(-1px)",
+};
+
 const summaryLabel: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 800,
@@ -493,6 +596,13 @@ const summaryValue: React.CSSProperties = {
   fontWeight: 900,
   color: "#145c2a",
   lineHeight: 1.1,
+};
+
+const filterInfo: React.CSSProperties = {
+  marginTop: 10,
+  fontSize: 12,
+  color: "#5b6d61",
+  fontWeight: 700,
 };
 
 const topActionRow: React.CSSProperties = {
