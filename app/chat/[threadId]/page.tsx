@@ -176,6 +176,7 @@ export default function ChatThreadPage() {
 
   const [myTeamId, setMyTeamId] = useState<string>("");
   const [myOwnedTeams, setMyOwnedTeams] = useState<TeamMini[]>([]);
+  const [memberRowsState, setMemberRowsState] = useState<ChatMemberRow[]>([]);
   const [otherTeamId, setOtherTeamId] = useState<string>("");
   const [otherUserId, setOtherUserId] = useState<string>("");
   const [otherLastReadAt, setOtherLastReadAt] = useState<string | null>(null);
@@ -333,6 +334,7 @@ export default function ChatThreadPage() {
     );
     const ownedTeams = ((ownedTeamsRows ?? []) as TeamMini[]).filter(Boolean);
 
+    setMemberRowsState(typedMemberRows);
     setMyOwnedTeams(ownedTeams);
 
     const resolvedMyTeamId = resolveMyTeamId({
@@ -349,7 +351,8 @@ export default function ChatThreadPage() {
       .filter(Boolean);
 
     const otherMemberRow =
-      typedMemberRows.find((r) => r.user_id && r.user_id !== currentMeId) ?? null;
+      typedMemberRows.find((r) => r.user_id && r.user_id !== currentMeId) ??
+      null;
 
     const otherUserIdValue = otherMemberRow?.user_id ?? "";
     setOtherUserId(otherUserIdValue);
@@ -443,6 +446,7 @@ export default function ChatThreadPage() {
       setLoading(false);
       setIsMember(false);
       setMessages([]);
+      setMemberRowsState([]);
       return;
     }
 
@@ -451,6 +455,7 @@ export default function ChatThreadPage() {
       setIsMember(false);
       setMyTeamId("");
       setMyOwnedTeams([]);
+      setMemberRowsState([]);
       setOtherTeamId("");
       setOtherUserId("");
       setOtherLastReadAt(null);
@@ -599,7 +604,7 @@ export default function ChatThreadPage() {
       myTeamId ||
       resolveMyTeamId({
         meId,
-        memberRows: [],
+        memberRows: memberRowsState,
         ownedTeams: myOwnedTeams,
       });
 
