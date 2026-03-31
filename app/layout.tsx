@@ -22,13 +22,13 @@ const logoFont = Zen_Kaku_Gothic_New({
 });
 
 export const metadata: Metadata = {
-  title: "サカまち",
+  title: "サカまっち",
   description: "サッカー練習試合マッチング",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "サカまち",
+    title: "サカまっち",
   },
   icons: {
     apple: "/apple-icon.png",

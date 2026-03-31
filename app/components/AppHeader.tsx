@@ -123,7 +123,7 @@ export default function AppHeader() {
           </div>
 
           <div>
-            <div className="logoText">サカまち</div>
+            <div className="logoText">サカまっち</div>
             <div className="smh-brandSub">Soccer Match</div>
           </div>
         </Link>
