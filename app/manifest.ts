@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "サカまち",
-    short_name: "サカまち",
+    name: "サカまっち",
+    short_name: "サカまっち",
     description: "サッカー練習試合をもっと簡単に。チーム同士をつなぐマッチングサービス。",
     start_url: "/",
     scope: "/",

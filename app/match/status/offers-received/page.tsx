@@ -70,6 +70,8 @@ type ReceivedItem =
       message: string | null;
     };
 
+type StatusFilter = "pending" | "accepted" | "rejected" | "cancelled" | null;
+
 export default function OfferReceivedPage() {
   const router = useRouter();
 
@@ -85,6 +87,8 @@ export default function OfferReceivedPage() {
   const [openId, setOpenId] = useState("");
   const [updatingId, setUpdatingId] = useState("");
   const [chatOpeningId, setChatOpeningId] = useState("");
+
+  const [selectedStatus, setSelectedStatus] = useState<StatusFilter>(null);
 
   useEffect(() => {
     (async () => {
@@ -369,6 +373,11 @@ export default function OfferReceivedPage() {
       cancelled: items.filter((o) => o.status === "cancelled").length,
     };
   }, [items]);
+
+  const filteredItems = useMemo(() => {
+    if (!selectedStatus) return items;
+    return items.filter((item) => item.status === selectedStatus);
+  }, [items, selectedStatus]);
 
   async function getOrCreateDmThread(myTeamId: string, otherTeamId: string) {
     const { data, error } = await supabase.rpc("rpc_get_or_create_dm_thread", {
@@ -807,11 +816,53 @@ export default function OfferReceivedPage() {
       />
 
       <div style={summary}>
-        <Stat label="未対応" value={counts.pending} />
-        <Stat label="承認" value={counts.accepted} />
-        <Stat label="見送り" value={counts.rejected} />
-        <Stat label="取消" value={counts.cancelled} />
+        <Stat
+          label="未対応"
+          value={counts.pending}
+          active={selectedStatus === "pending"}
+          onClick={() =>
+            setSelectedStatus((prev) =>
+              prev === "pending" ? null : "pending"
+            )
+          }
+        />
+        <Stat
+          label="承認"
+          value={counts.accepted}
+          active={selectedStatus === "accepted"}
+          onClick={() =>
+            setSelectedStatus((prev) =>
+              prev === "accepted" ? null : "accepted"
+            )
+          }
+        />
+        <Stat
+          label="見送り"
+          value={counts.rejected}
+          active={selectedStatus === "rejected"}
+          onClick={() =>
+            setSelectedStatus((prev) =>
+              prev === "rejected" ? null : "rejected"
+            )
+          }
+        />
+        <Stat
+          label="取消"
+          value={counts.cancelled}
+          active={selectedStatus === "cancelled"}
+          onClick={() =>
+            setSelectedStatus((prev) =>
+              prev === "cancelled" ? null : "cancelled"
+            )
+          }
+        />
       </div>
+
+      {selectedStatus ? (
+        <div style={filterInfo}>
+          絞り込み中：{label(selectedStatus)}
+        </div>
+      ) : null}
 
       {loading ? <div style={infoText}>読み込み中…</div> : null}
 
@@ -819,12 +870,12 @@ export default function OfferReceivedPage() {
         <div style={empty}>自分のチームがまだ登録されていません</div>
       ) : null}
 
-      {!loading && myTeams.length > 0 && items.length === 0 ? (
-        <div style={empty}>届いたオファーはまだありません</div>
+      {!loading && myTeams.length > 0 && filteredItems.length === 0 ? (
+        <div style={empty}>該当するオファーはありません</div>
       ) : null}
 
       <div style={list}>
-        {items.map((item) => {
+        {filteredItems.map((item) => {
           const fromTeam = teamMap.get(item.from_team_id);
           const toTeam = teamMap.get(item.to_team_id);
           const slot = item.slot_id ? slotMap.get(item.slot_id) : null;
@@ -1037,12 +1088,31 @@ function fmt(dt: string) {
   }
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({
+  label,
+  value,
+  onClick,
+  active,
+}: {
+  label: string;
+  value: number;
+  onClick?: () => void;
+  active?: boolean;
+}) {
   return (
-    <div style={statBox}>
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        ...statBox,
+        cursor: "pointer",
+        transition: "all 0.2s ease",
+        ...(active ? statBoxActive : {}),
+      }}
+    >
       <div style={statLabel}>{label}</div>
       <div style={statValue}>{value}</div>
-    </div>
+    </button>
   );
 }
 
@@ -1064,6 +1134,13 @@ const statBox: React.CSSProperties = {
   padding: 10,
   borderRadius: 12,
   border: "1px solid #e5ece7",
+  textAlign: "left",
+};
+
+const statBoxActive: React.CSSProperties = {
+  border: "2px solid #2f6f3e",
+  background: "#f3fbf5",
+  transform: "translateY(-1px)",
 };
 
 const statLabel: React.CSSProperties = {
@@ -1077,6 +1154,13 @@ const statValue: React.CSSProperties = {
   fontWeight: 900,
   color: "#145c2a",
   marginTop: 4,
+};
+
+const filterInfo: React.CSSProperties = {
+  marginTop: 10,
+  fontSize: 12,
+  color: "#5b6d61",
+  fontWeight: 700,
 };
 
 const infoText: React.CSSProperties = {

@@ -37,7 +37,7 @@ self.addEventListener("notificationclick", (event) => {
 
 self.addEventListener("push", (event) => {
   let data = {
-    title: "サカまち",
+    title: "サカまっち",
     body: "新しい通知があります",
     url: "/",
     badgeCount: 0,
@@ -48,7 +48,7 @@ self.addEventListener("push", (event) => {
       const parsed = event.data.json();
 
       data = {
-        title: parsed.title || "サカまち",
+        title: parsed.title || "サカまっち",
         body: parsed.body || "新しい通知があります",
         url: parsed.url || "/",
         badgeCount:

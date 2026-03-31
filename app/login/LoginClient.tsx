@@ -6,17 +6,34 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 
 function timeout<T>(ms: number, label = "timeout") {
-  return new Promise<T>((_, reject) => setTimeout(() => reject(new Error(label)), ms));
+  return new Promise<T>((_, reject) =>
+    setTimeout(() => reject(new Error(label)), ms)
+  );
 }
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function normalizeRedirect(input: string | null | undefined) {
+  if (!input) return "/";
+  if (!input.startsWith("/")) return "/";
+  if (input.startsWith("//")) return "/";
+  return input;
+}
+
+function getAppOrigin() {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
+  }
+  return process.env.NEXT_PUBLIC_APP_URL || "https://sakamatch.com";
+}
+
 export default function LoginClient() {
   const router = useRouter();
   const sp = useSearchParams();
-  const redirect = sp.get("redirect") ?? "/";
+
+  const redirect = normalizeRedirect(sp.get("redirect"));
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +43,10 @@ export default function LoginClient() {
   const [msg, setMsg] = useState("");
 
   const normalizeEmail = (v: string) => v.trim().toLowerCase();
-  const canSubmit = useMemo(() => !!email.trim() && !!password, [email, password]);
+  const canSubmit = useMemo(
+    () => !!email.trim() && !!password,
+    [email, password]
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -69,7 +89,7 @@ export default function LoginClient() {
   }, [redirect, router]);
 
   const goAfterAuth = async (path?: string) => {
-    const to = path ?? redirect ?? "/";
+    const to = normalizeRedirect(path ?? redirect ?? "/");
 
     for (let i = 0; i < 10; i++) {
       const { data } = await supabase.auth.getSession();
@@ -95,9 +115,18 @@ export default function LoginClient() {
 
     try {
       const em = normalizeEmail(email);
+      const origin = getAppOrigin();
 
       const { data, error } = await Promise.race([
-        supabase.auth.signUp({ email: em, password }),
+        supabase.auth.signUp({
+          email: em,
+          password,
+          options: {
+            emailRedirectTo: `${origin}/auth/callback?redirect=${encodeURIComponent(
+              redirect
+            )}`,
+          },
+        }),
         timeout<any>(10000, "signUp timeout (10s)"),
       ]);
 
@@ -111,7 +140,12 @@ export default function LoginClient() {
         return;
       }
 
-      setMsg("✅ 登録受付しました。確認メールが届いているかご確認ください。");
+      setMsg(
+        [
+          "✅ 登録受付しました。確認メールが届いているかご確認ください。",
+          `確認後の戻り先: ${origin}/auth/callback`,
+        ].join("\n")
+      );
     } catch (e: any) {
       setMsg(
         `❌ 新規登録が返ってきません: ${e?.message ?? String(e)}\n` +
@@ -142,7 +176,9 @@ export default function LoginClient() {
       }
 
       if (!data?.session) {
-        setMsg("⚠️ 成功っぽいですが session が取得できませんでした。設定をご確認ください。");
+        setMsg(
+          "⚠️ 成功っぽいですが session が取得できませんでした。設定をご確認ください。"
+        );
         return;
       }
 
@@ -162,15 +198,14 @@ export default function LoginClient() {
     setMsg("🟡 Googleログインへ移動します…");
 
     try {
-      const origin =
-        typeof window !== "undefined"
-          ? window.location.origin
-          : "https://soccerhub-app.vercel.app";
+      const origin = getAppOrigin();
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${origin}/auth/callback?redirect=${encodeURIComponent(redirect)}`,
+          redirectTo: `${origin}/auth/callback?redirect=${encodeURIComponent(
+            redirect
+          )}`,
           queryParams: {
             prompt: "select_account",
           },
@@ -208,7 +243,9 @@ export default function LoginClient() {
         </div>
 
         <h1 style={title}>ログイン / 登録</h1>
-        <p style={lead}>チーム登録や練習試合マッチングを始めるにはログインしてください。</p>
+        <p style={lead}>
+          チーム登録や練習試合マッチングを始めるにはログインしてください。
+        </p>
 
         <div style={topActions}>
           <Link href="/" className="sh-btn sh-btn--ghost" style={topLinkBtn}>
@@ -224,7 +261,8 @@ export default function LoginClient() {
             style={{
               ...oauthBtn,
               opacity: loadingGoogle || loadingEmail ? 0.7 : 1,
-              cursor: loadingGoogle || loadingEmail ? "not-allowed" : "pointer",
+              cursor:
+                loadingGoogle || loadingEmail ? "not-allowed" : "pointer",
             }}
           >
             <span style={googleIcon}>G</span>
