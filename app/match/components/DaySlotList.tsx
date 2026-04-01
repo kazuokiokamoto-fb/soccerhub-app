@@ -143,7 +143,10 @@ export function DaySlotList(props: {
   onChangeRequestComment: (v: string) => void;
   onRequestSlot: (slotId: string) => void;
   onCancelMyRequest: (requestId: string) => void;
-  onOpenChatWithTeam: (otherTeamId: string) => void | Promise<void>;
+  onOpenChatWithTeam: (
+    otherTeamId: string,
+    slot?: DbSlot | null
+  ) => void | Promise<void>;
   selectedSlot: DbSlot | null;
   selectedHostTeam: DbTeam | null;
   selectedSlotRequests: DbRequest[];
@@ -194,7 +197,8 @@ export function DaySlotList(props: {
           {slots.map((s) => {
             const isMine = !!meId && s.owner_id === meId;
 
-            const hostTeam = allTeams.find((t) => t.id === s.host_team_id) ?? null;
+            const hostTeam =
+              allTeams.find((t) => t.id === s.host_team_id) ?? null;
             const hostTeamName = hostTeam?.name?.trim() || "チーム未設定";
             const rankText =
               hostTeam?.strength_rank?.trim() ||
@@ -207,9 +211,21 @@ export function DaySlotList(props: {
                 r.status !== "cancelled"
             );
 
+            const acceptedReq =
+              requestsForMonth
+                .filter((r) => r.slot_id === s.id && r.status === "accepted")
+                .sort((a, b) => (a.created_at > b.created_at ? -1 : 1))[0] ??
+              null;
+
             const categoryText = slotCategoryText(s);
             const isExpanded = selectedSlotId === s.id;
             const slotStatus = slotStatusResolver(s);
+
+            const displayTeamForLink =
+              slotStatus === "decided" && isMine && acceptedReq
+                ? allTeams.find((t) => t.id === acceptedReq.requester_team_id) ??
+                  hostTeam
+                : hostTeam;
 
             return (
               <div
@@ -288,9 +304,9 @@ export function DaySlotList(props: {
                     {isExpanded ? "閉じる" : "募集詳細"}
                   </button>
 
-                  {hostTeam?.id ? (
+                  {displayTeamForLink?.id ? (
                     <Link
-                      href={`/teams/${hostTeam.id}`}
+                      href={`/teams/${displayTeamForLink.id}`}
                       className="sh-btn"
                       style={buttonLink}
                     >

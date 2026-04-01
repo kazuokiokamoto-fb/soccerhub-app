@@ -182,7 +182,10 @@ export function SlotDetail(props: {
   onAccept: (requestId: string) => void;
   onReject: (requestId: string) => void;
   onToggleClosed: (slotId: string, nextClosed: boolean) => void;
-  onOpenChat: (otherTeamId: string) => void | Promise<void>;
+  onOpenChat: (
+    otherTeamId: string,
+    slot?: DbSlot | null
+  ) => void | Promise<void>;
 
   slotStatus: "decided" | "open" | "other";
 
@@ -234,33 +237,51 @@ export function SlotDetail(props: {
   const canShowChatButton = useMemo(() => {
     if (!acceptedReq) return false;
     const isParticipant =
-      !!meId && (meId === slot.owner_id || meId === acceptedReq.requester_user_id);
+      !!meId &&
+      (meId === slot.owner_id || meId === acceptedReq.requester_user_id);
     return isParticipant && !!otherTeamIdForChat;
   }, [acceptedReq, meId, slot.owner_id, otherTeamIdForChat]);
-
-  const memberCount =
-    hostTeam?.member_count != null
-      ? Number(hostTeam.member_count)
-      : sumRoster(hostTeam?.roster_by_grade);
-
-  const hostArea =
-    (hostTeam?.area ?? "").trim() ||
-    `${hostTeam?.prefecture ?? ""} ${hostTeam?.city ?? ""}${
-      hostTeam?.town ? "・" + hostTeam.town : ""
-    }`.trim() ||
-    "未設定";
 
   const requesterTeamName = (teamId: string) => {
     return allTeams.find((t) => t.id === teamId)?.name ?? "チーム未設定";
   };
 
-  const hostStrength =
-    hostTeam?.strength_rank?.trim() ||
-    levelToRankLabel(hostTeam?.level) ||
+  const slotCategoryDisplay = slotCategoryText(slot);
+
+  const displayTeam = useMemo(() => {
+    if (!acceptedReq) {
+      return hostTeam;
+    }
+
+    if (isMine) {
+      return (
+        allTeams.find((t) => t.id === acceptedReq.requester_team_id) || null
+      );
+    }
+
+    return hostTeam;
+  }, [acceptedReq, isMine, hostTeam, allTeams]);
+
+  const displayTeamName = displayTeam?.name?.trim() || "チーム未設定";
+
+  const displayTeamStrength =
+    displayTeam?.strength_rank?.trim() ||
+    levelToRankLabel(displayTeam?.level) ||
     "未設定";
 
-  const slotCategoryDisplay = slotCategoryText(slot);
-  const hostCategoryText = categoryTextFromTeam(hostTeam);
+  const displayTeamMemberCount =
+    displayTeam?.member_count != null
+      ? Number(displayTeam.member_count)
+      : sumRoster(displayTeam?.roster_by_grade);
+
+  const displayTeamArea =
+    (displayTeam?.area ?? "").trim() ||
+    `${displayTeam?.prefecture ?? ""} ${displayTeam?.city ?? ""}${
+      displayTeam?.town ? "・" + displayTeam.town : ""
+    }`.trim() ||
+    "未設定";
+
+  const displayTeamCategoryText = categoryTextFromTeam(displayTeam);
 
   return (
     <div style={root}>
@@ -348,38 +369,47 @@ export function SlotDetail(props: {
             <div style={sectionTitle}>相手チーム情報</div>
           </div>
 
-          {hostTeam?.id ? (
-            <Link href={`/teams/${hostTeam.id}`} className="sh-btn">
+          {displayTeam?.id ? (
+            <Link href={`/teams/${displayTeam.id}`} className="sh-btn">
               チーム詳細
             </Link>
           ) : null}
         </div>
 
         <div style={infoGrid}>
-          <InfoRow label="チーム名" value={hostTeam?.name || "未設定"} />
-          <InfoRow label="エリア" value={hostArea} />
-          <InfoRow label="カテゴリ" value={hostCategoryText} />
-          <InfoRow label="強さ" value={hostStrength} />
-          <InfoRow label="グラウンド提供" value={hostTeam?.has_ground ? "あり" : "なし"} />
-          <InfoRow label="駐輪場" value={hostTeam?.bike_parking ?? "不明"} />
+          <InfoRow label="チーム名" value={displayTeamName} />
+          <InfoRow label="エリア" value={displayTeamArea} />
+          <InfoRow label="カテゴリ" value={displayTeamCategoryText} />
+          <InfoRow label="強さ" value={displayTeamStrength} />
+          <InfoRow
+            label="グラウンド提供"
+            value={displayTeam?.has_ground ? "あり" : "なし"}
+          />
+          <InfoRow
+            label="駐輪場"
+            value={displayTeam?.bike_parking ?? "不明"}
+          />
           <InfoRow
             label="駐輪場台数"
-            value={hostTeam?.bike_parking_capacity ?? "未設定"}
+            value={displayTeam?.bike_parking_capacity ?? "未設定"}
           />
-          <InfoRow label="所属人数" value={`${memberCount || 0}人`} />
+          <InfoRow
+            label="所属人数"
+            value={`${displayTeamMemberCount || 0}人`}
+          />
           <InfoRow
             label="ユニフォーム"
-            value={`${hostTeam?.uniform_main ?? "不明"}（メイン） / ${
-              hostTeam?.uniform_sub ?? "不明"
-            }（サブ） / ${hostTeam?.uniform_gk ?? "不明"}（GK）`}
+            value={`${displayTeam?.uniform_main ?? "不明"}（メイン） / ${
+              displayTeam?.uniform_sub ?? "不明"
+            }（サブ） / ${displayTeam?.uniform_gk ?? "不明"}（GK）`}
           />
           <InfoRow
             label="希望枠"
-            value={formatDesiredDates(hostTeam?.desired_dates)}
+            value={formatDesiredDates(displayTeam?.desired_dates)}
           />
           <InfoRow
             label="メモ"
-            value={hostTeam?.note?.trim() || "なし"}
+            value={displayTeam?.note?.trim() || "なし"}
             multiline
           />
         </div>
@@ -482,7 +512,9 @@ export function SlotDetail(props: {
                   className="sh-btn sh-btn--primary"
                   type="button"
                   onClick={() => onRequestSlot(slot.id)}
-                  disabled={!!loading || myTeams.length === 0 || slotStatus !== "open"}
+                  disabled={
+                    !!loading || myTeams.length === 0 || slotStatus !== "open"
+                  }
                 >
                   試合申込
                 </button>
@@ -524,7 +556,7 @@ export function SlotDetail(props: {
           <button
             className="sh-btn"
             type="button"
-            onClick={() => onOpenChat(otherTeamIdForChat)}
+            onClick={() => onOpenChat(otherTeamIdForChat, slot)}
           >
             💬 チャットを開く
           </button>
@@ -573,7 +605,11 @@ export function SlotDetail(props: {
                       className="sh-btn sh-btn--primary"
                       type="button"
                       onClick={() => onAccept(r.id)}
-                      disabled={r.status !== "pending" || !!slot.is_closed || slotStatus !== "open"}
+                      disabled={
+                        r.status !== "pending" ||
+                        !!slot.is_closed ||
+                        slotStatus !== "open"
+                      }
                     >
                       承認
                     </button>
