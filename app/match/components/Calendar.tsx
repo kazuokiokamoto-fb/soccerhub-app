@@ -212,7 +212,7 @@ const calendarGrid: React.CSSProperties = {
 const calCell: React.CSSProperties = {
   minWidth: 0,
   width: "100%",
-  height: 72,
+  height: 57,
   padding: "5px 5px 4px",
   borderRadius: 12,
   border: "1px solid #e5e7eb",
