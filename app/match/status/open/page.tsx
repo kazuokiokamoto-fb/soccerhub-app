@@ -39,7 +39,8 @@ type MatchRequestRow = {
   created_at: string;
 };
 
-type SummaryView = "open" | "closed" | "requests" | null;
+type SummaryView = "open" | "closed" | "requested" | null;
+type RequestStatusFilter = MatchRequestRow["status"] | null;
 
 function fmtDate(ymd?: string | null) {
   if (!ymd) return "";
@@ -67,8 +68,19 @@ function countByStatus(
   return rows.filter((r) => r.status === status).length;
 }
 
-function getTotalRequestCount(rows: MatchRequestRow[]) {
-  return rows.length;
+function labelStatus(status: MatchRequestRow["status"]) {
+  switch (status) {
+    case "pending":
+      return "申込待ち";
+    case "accepted":
+      return "成立";
+    case "rejected":
+      return "見送り";
+    case "cancelled":
+      return "取消";
+    default:
+      return status;
+  }
 }
 
 export default function OpenMatchesPage() {
@@ -85,6 +97,8 @@ export default function OpenMatchesPage() {
 
   const [openDetailId, setOpenDetailId] = useState<string>("");
   const [selectedView, setSelectedView] = useState<SummaryView>(null);
+  const [selectedRequestStatus, setSelectedRequestStatus] =
+    useState<RequestStatusFilter>(null);
 
   useEffect(() => {
     (async () => {
@@ -236,33 +250,31 @@ export default function OpenMatchesPage() {
     return m;
   }, [requests]);
 
-  const totalRequestCount = useMemo(() => requests.length, [requests]);
+  const requestedCount = useMemo(() => {
+    return slots.filter((slot) => (requestsBySlot.get(slot.id) ?? []).length > 0)
+      .length;
+  }, [slots, requestsBySlot]);
 
   const visibleSlots = useMemo(() => {
-    const arr = [...slots];
+    let arr = [...slots];
 
     if (selectedView === "open") {
-      return arr.filter((slot) => !slot.is_closed);
+      arr = arr.filter((slot) => !slot.is_closed);
+    } else if (selectedView === "closed") {
+      arr = arr.filter((slot) => !!slot.is_closed);
+    } else if (selectedView === "requested") {
+      arr = arr.filter((slot) => (requestsBySlot.get(slot.id) ?? []).length > 0);
     }
 
-    if (selectedView === "closed") {
-      return arr.filter((slot) => !!slot.is_closed);
-    }
-
-    if (selectedView === "requests") {
-      return arr.sort((a, b) => {
-        const aCount = getTotalRequestCount(requestsBySlot.get(a.id) ?? []);
-        const bCount = getTotalRequestCount(requestsBySlot.get(b.id) ?? []);
-        if (bCount !== aCount) return bCount - aCount;
-
-        const aDate = new Date(`${a.date}T${a.start_time || "00:00:00"}`).getTime();
-        const bDate = new Date(`${b.date}T${b.start_time || "00:00:00"}`).getTime();
-        return aDate - bDate;
+    if (selectedRequestStatus) {
+      arr = arr.filter((slot) => {
+        const slotRequests = requestsBySlot.get(slot.id) ?? [];
+        return slotRequests.some((req) => req.status === selectedRequestStatus);
       });
     }
 
     return arr;
-  }, [slots, selectedView, requestsBySlot]);
+  }, [slots, selectedView, selectedRequestStatus, requestsBySlot]);
 
   const toggleClosed = async (slotId: string, nextClosed: boolean) => {
     const { error } = await supabase
@@ -315,23 +327,25 @@ export default function OpenMatchesPage() {
           }
         />
         <SummaryButton
-          label="総申込数"
-          value={totalRequestCount}
-          active={selectedView === "requests"}
+          label="申込済"
+          value={requestedCount}
+          active={selectedView === "requested"}
           onClick={() =>
-            setSelectedView((prev) => (prev === "requests" ? null : "requests"))
+            setSelectedView((prev) =>
+              prev === "requested" ? null : "requested"
+            )
           }
         />
       </div>
 
-      {selectedView ? (
+      {selectedView || selectedRequestStatus ? (
         <div style={filterInfo}>
           表示中：
-          {selectedView === "open"
-            ? "公開中のみ"
-            : selectedView === "closed"
-            ? "停止中のみ"
-            : "総申込数の多い順"}
+          {selectedView === "open" && "公開中のみ"}
+          {selectedView === "closed" && "停止中のみ"}
+          {selectedView === "requested" && "申込済のみ"}
+          {selectedView && selectedRequestStatus ? " / " : ""}
+          {selectedRequestStatus ? `${labelStatus(selectedRequestStatus)}あり` : ""}
         </div>
       ) : null}
 
@@ -403,22 +417,46 @@ export default function OpenMatchesPage() {
                 </div>
 
                 <div style={statsRow}>
-                  <div style={miniStat}>
-                    <div style={miniStatLabel}>申込待ち</div>
-                    <div style={miniStatValue}>{pendingCount}</div>
-                  </div>
-                  <div style={miniStat}>
-                    <div style={miniStatLabel}>成立</div>
-                    <div style={miniStatValue}>{acceptedCount}</div>
-                  </div>
-                  <div style={miniStat}>
-                    <div style={miniStatLabel}>見送り</div>
-                    <div style={miniStatValue}>{rejectedCount}</div>
-                  </div>
-                  <div style={miniStat}>
-                    <div style={miniStatLabel}>取消</div>
-                    <div style={miniStatValue}>{cancelledCount}</div>
-                  </div>
+                  <FilterMiniStat
+                    label="申込待ち"
+                    value={pendingCount}
+                    active={selectedRequestStatus === "pending"}
+                    onClick={() =>
+                      setSelectedRequestStatus((prev) =>
+                        prev === "pending" ? null : "pending"
+                      )
+                    }
+                  />
+                  <FilterMiniStat
+                    label="成立"
+                    value={acceptedCount}
+                    active={selectedRequestStatus === "accepted"}
+                    onClick={() =>
+                      setSelectedRequestStatus((prev) =>
+                        prev === "accepted" ? null : "accepted"
+                      )
+                    }
+                  />
+                  <FilterMiniStat
+                    label="見送り"
+                    value={rejectedCount}
+                    active={selectedRequestStatus === "rejected"}
+                    onClick={() =>
+                      setSelectedRequestStatus((prev) =>
+                        prev === "rejected" ? null : "rejected"
+                      )
+                    }
+                  />
+                  <FilterMiniStat
+                    label="取消"
+                    value={cancelledCount}
+                    active={selectedRequestStatus === "cancelled"}
+                    onClick={() =>
+                      setSelectedRequestStatus((prev) =>
+                        prev === "cancelled" ? null : "cancelled"
+                      )
+                    }
+                  />
                 </div>
 
                 <div style={buttonRow}>
@@ -543,19 +581,32 @@ function SummaryButton({
   );
 }
 
-function labelStatus(status: MatchRequestRow["status"]) {
-  switch (status) {
-    case "pending":
-      return "申込待ち";
-    case "accepted":
-      return "成立";
-    case "rejected":
-      return "見送り";
-    case "cancelled":
-      return "取消";
-    default:
-      return status;
-  }
+function FilterMiniStat({
+  label,
+  value,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        ...miniStat,
+        cursor: "pointer",
+        transition: "all 0.2s ease",
+        ...(active ? miniStatActive : {}),
+      }}
+    >
+      <div style={miniStatLabel}>{label}</div>
+      <div style={miniStatValue}>{value}</div>
+    </button>
+  );
 }
 
 const wrap: React.CSSProperties = {
@@ -702,6 +753,12 @@ const miniStat: React.CSSProperties = {
   background: "#fafcfb",
   padding: "10px 8px",
   textAlign: "center",
+};
+
+const miniStatActive: React.CSSProperties = {
+  border: "2px solid #2f6f3e",
+  background: "#f3fbf5",
+  transform: "translateY(-1px)",
 };
 
 const miniStatLabel: React.CSSProperties = {
