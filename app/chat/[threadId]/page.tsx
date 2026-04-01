@@ -87,29 +87,63 @@ function sameDate(a?: string | null, b?: string | null) {
   );
 }
 
-function getBackLink(from?: string | null) {
+function getBackLink(params: {
+  from?: string | null;
+  slotId?: string | null;
+  date?: string | null;
+}) {
+  const { from, slotId, date } = params;
+
   switch (from) {
+    case "match-calendar": {
+      const qs = new URLSearchParams();
+      if (date) qs.set("date", date);
+      if (slotId) qs.set("slotId", slotId);
+
+      return {
+        href: qs.toString() ? `/match?${qs.toString()}` : "/match",
+        label: "← 試合を探すに戻る",
+      };
+    }
+
     case "sent-offers":
       return {
         href: "/match/status/offers",
         label: "← 送ったオファーへ",
       };
+
     case "received-offers":
       return {
         href: "/match/status/offers-received",
         label: "← 届いたオファーへ",
       };
+
     case "chat-list":
       return {
         href: "/chat",
         label: "← 一覧",
       };
+
     default:
       return {
         href: "/chat",
         label: "← 一覧",
       };
   }
+}
+
+function buildQueryString(params: {
+  from?: string | null;
+  slotId?: string | null;
+  date?: string | null;
+}) {
+  const qs = new URLSearchParams();
+
+  if (params.from) qs.set("from", params.from);
+  if (params.slotId) qs.set("slotId", params.slotId);
+  if (params.date) qs.set("date", params.date);
+
+  return qs.toString();
 }
 
 function resolveMyTeamId(params: {
@@ -167,9 +201,20 @@ export default function ChatThreadPage() {
   const params = useParams<{ threadId: string }>();
   const searchParams = useSearchParams();
   const threadId = params?.threadId ?? "";
-  const from = searchParams.get("from");
 
-  const backLink = useMemo(() => getBackLink(from), [from]);
+  const from = searchParams.get("from");
+  const slotId = searchParams.get("slotId");
+  const date = searchParams.get("date");
+
+  const backLink = useMemo(
+    () => getBackLink({ from, slotId, date }),
+    [from, slotId, date]
+  );
+
+  const carriedQueryString = useMemo(
+    () => buildQueryString({ from, slotId, date }),
+    [from, slotId, date]
+  );
 
   const [authLoading, setAuthLoading] = useState(true);
   const [meId, setMeId] = useState<string>("");
@@ -680,8 +725,9 @@ export default function ChatThreadPage() {
       const notificationTitle = "新着チャット";
       const notificationBody =
         body.length > 40 ? `${body.slice(0, 40)}…` : body;
+
       const notificationUrl = `/chat/${threadId}${
-        from ? `?from=${encodeURIComponent(from)}` : ""
+        carriedQueryString ? `?${carriedQueryString}` : ""
       }`;
 
       const { error: notificationErr } = await supabase
@@ -766,7 +812,7 @@ export default function ChatThreadPage() {
             {otherTeamId ? (
               <Link
                 href={`/teams/${otherTeamId}${
-                  from ? `?from=${encodeURIComponent(from)}` : ""
+                  carriedQueryString ? `?${carriedQueryString}` : ""
                 }`}
                 className="sh-btn"
               >
