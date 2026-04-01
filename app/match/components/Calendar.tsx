@@ -15,6 +15,16 @@ function summaryLabel(summary: DayCalendarSummary) {
   return "他決定";
 }
 
+function isPastDate(ymd: string) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const target = new Date(y, (m || 1) - 1, d || 1);
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  return target < today;
+}
+
 export function Calendar(props: {
   monthKey: string;
   loading?: boolean;
@@ -75,6 +85,7 @@ export function Calendar(props: {
         {cells.map((c, index) => {
           const summary = dayStatusSummaryByDate.get(c.ymd);
           const isSelected = c.ymd === selectedYmd;
+          const isPast = isPastDate(c.ymd);
           const weekday = index % 7;
 
           const dayColor =
@@ -92,13 +103,14 @@ export function Calendar(props: {
               style={{
                 ...calCell,
                 ...(isSelected ? calCellSelected : null),
+                ...(isPast ? calCellPast : null),
                 opacity: c.inMonth ? 1 : 0.42,
               }}
             >
               <div
                 style={{
                   ...dayNumText,
-                  color: c.inMonth ? dayColor : "#9ca3af",
+                  color: c.inMonth ? (isPast ? "#9ca3af" : dayColor) : "#c5cbd3",
                 }}
               >
                 {c.dayNum}
@@ -114,6 +126,15 @@ export function Calendar(props: {
                       ? statusTextOpen
                       : statusTextOther
                     : statusTextEmpty),
+                  color: isPast
+                    ? "#94a3b8"
+                    : summary
+                    ? summary.tone === "decided"
+                      ? "#166534"
+                      : summary.tone === "open"
+                      ? "#1d4ed8"
+                      : "#4b5563"
+                    : "#9ca3af",
                 }}
               >
                 {summary ? summaryLabel(summary) : "-"}
@@ -122,7 +143,7 @@ export function Calendar(props: {
               <div
                 style={{
                   ...summaryCountText,
-                  color: summary ? "#065f46" : "#9ca3af",
+                  color: isPast ? "#94a3b8" : summary ? "#065f46" : "#9ca3af",
                 }}
               >
                 {summary ? `${summary.count}件` : "-"}
@@ -192,7 +213,7 @@ const calCell: React.CSSProperties = {
   minWidth: 0,
   width: "100%",
   height: 72,
-  padding: "6px 5px",
+  padding: "5px 5px 4px",
   borderRadius: 12,
   border: "1px solid #e5e7eb",
   background: "#ffffff",
@@ -201,8 +222,13 @@ const calCell: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
   alignItems: "flex-start",
-  justifyContent: "space-between",
+  justifyContent: "flex-start",
+  gap: 1,
   overflow: "hidden",
+};
+
+const calCellPast: React.CSSProperties = {
+  background: "#f8fafc",
 };
 
 const calCellSelected: React.CSSProperties = {
@@ -214,14 +240,15 @@ const calCellSelected: React.CSSProperties = {
 const dayNumText: React.CSSProperties = {
   fontWeight: 900,
   fontSize: 13,
-  lineHeight: 1.1,
+  lineHeight: 1,
 };
 
 const statusText: React.CSSProperties = {
   width: "100%",
+  marginTop: 1,
   fontSize: 10,
   fontWeight: 900,
-  lineHeight: 1.15,
+  lineHeight: 1.05,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -245,9 +272,10 @@ const statusTextEmpty: React.CSSProperties = {
 
 const summaryCountText: React.CSSProperties = {
   width: "100%",
+  marginTop: 0,
   fontSize: 11,
   fontWeight: 900,
-  lineHeight: 1.1,
+  lineHeight: 1.05,
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
