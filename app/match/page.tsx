@@ -50,6 +50,15 @@ type StrengthGuide = {
   note: string;
 };
 
+type CalendarShortStatus = "decided" | "open" | "other";
+type DetailFilterStatus = "all" | "decided" | "open" | "other";
+
+type DayCalendarSummary = {
+  label: "決" | "募" | "他";
+  count: number;
+  tone: CalendarShortStatus;
+};
+
 const STRENGTH_OPTIONS = [
   { value: "SS", label: "SS 都・県リーグ1・2部" },
   { value: "S", label: "S 都・県リーグ3・4部" },
@@ -393,10 +402,13 @@ export default function MatchCalendarPage() {
   );
   const [selectedYmd, setSelectedYmd] = useState<string>(ymdToday());
   const [selectedSlotId, setSelectedSlotId] = useState<string>("");
+  const [selectedDetailFilter, setSelectedDetailFilter] =
+    useState<DetailFilterStatus>("all");
 
   const [requestTeamId, setRequestTeamId] = useState<string>("");
   const [requestComment, setRequestComment] = useState<string>("");
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
+  const [showCalendarHelp, setShowCalendarHelp] = useState(false);
 
   const {
     draftKeyword,
@@ -449,6 +461,8 @@ export default function MatchCalendarPage() {
     }
   }, [myTeams, requestTeamId]);
 
+  const myTeamIds = useMemo(() => myTeams.map((t: any) => t.id), [myTeams]);
+
   const teamMap = useMemo(() => {
     return new Map(allTeams.map((t) => [t.id, t]));
   }, [allTeams]);
@@ -478,6 +492,82 @@ export default function MatchCalendarPage() {
     return m;
   }, [filteredSlotsInMonth]);
 
+  const requestsBySlotId = useMemo(() => {
+    const m = new Map<string, any[]>();
+    for (const r of requestsForMonth) {
+      if (!m.has(r.slot_id)) m.set(r.slot_id, []);
+      m.get(r.slot_id)!.push(r);
+    }
+    return m;
+  }, [requestsForMonth]);
+
+  const getSlotStatus = React.useCallback(
+    (slot: any): CalendarShortStatus => {
+      const reqs = requestsBySlotId.get(slot.id) ?? [];
+      const acceptedReq = reqs.find((r) => r.status === "accepted");
+
+      if (acceptedReq) {
+        if (
+          myTeamIds.includes(slot.host_team_id) ||
+          myTeamIds.includes(acceptedReq.requester_team_id)
+        ) {
+          return "decided";
+        }
+        return "other";
+      }
+
+      return "open";
+    },
+    [requestsBySlotId, myTeamIds]
+  );
+
+  const dayStatusSummaryByDate = useMemo(() => {
+    const grouped = new Map<string, any[]>();
+
+    for (const slot of filteredSlotsInMonth) {
+      const ymd = slot.date;
+      if (!grouped.has(ymd)) grouped.set(ymd, []);
+      grouped.get(ymd)!.push(slot);
+    }
+
+    const result = new Map<string, DayCalendarSummary>();
+
+    for (const [ymd, daySlots] of grouped.entries()) {
+      let decidedCount = 0;
+      let openCount = 0;
+      let otherCount = 0;
+
+      for (const slot of daySlots) {
+        const status = getSlotStatus(slot);
+        if (status === "decided") decidedCount += 1;
+        else if (status === "open") openCount += 1;
+        else if (status === "other") otherCount += 1;
+      }
+
+      if (decidedCount > 0) {
+        result.set(ymd, {
+          label: "決",
+          count: decidedCount,
+          tone: "decided",
+        });
+      } else if (openCount > 0) {
+        result.set(ymd, {
+          label: "募",
+          count: openCount,
+          tone: "open",
+        });
+      } else if (otherCount > 0) {
+        result.set(ymd, {
+          label: "他",
+          count: otherCount,
+          tone: "other",
+        });
+      }
+    }
+
+    return result;
+  }, [filteredSlotsInMonth, getSlotStatus]);
+
   const slotsOnSelectedDate = useMemo(() => {
     return filteredSlotsInMonth.filter((s: any) => s.date === selectedYmd);
   }, [filteredSlotsInMonth, selectedYmd]);
@@ -485,6 +575,30 @@ export default function MatchCalendarPage() {
   const draftSlotsOnSelectedDate = useMemo(() => {
     return draftFilteredSlotsInMonth.filter((s: any) => s.date === selectedYmd);
   }, [draftFilteredSlotsInMonth, selectedYmd]);
+
+  const detailCountSummary = useMemo(() => {
+    let decided = 0;
+    let open = 0;
+    let other = 0;
+
+    for (const slot of slotsOnSelectedDate) {
+      const status = getSlotStatus(slot);
+      if (status === "decided") decided += 1;
+      else if (status === "open") open += 1;
+      else if (status === "other") other += 1;
+    }
+
+    return { decided, open, other };
+  }, [slotsOnSelectedDate, getSlotStatus]);
+
+  const visibleSlotsOnSelectedDate = useMemo(() => {
+    if (selectedDetailFilter === "all") return slotsOnSelectedDate;
+
+    return slotsOnSelectedDate.filter((slot) => {
+      const status = getSlotStatus(slot);
+      return status === selectedDetailFilter;
+    });
+  }, [slotsOnSelectedDate, selectedDetailFilter, getSlotStatus]);
 
   const selectedSlot = useMemo(() => {
     return slotsInMonth.find((s) => s.id === selectedSlotId) || null;
@@ -532,12 +646,14 @@ export default function MatchCalendarPage() {
   const handleApplyAndJump = () => {
     applyDraftToApplied();
     setSelectedSlotId("");
+    setSelectedDetailFilter("all");
     scrollToDayList();
   };
 
   const handleResetFilters = () => {
     clearAllFilters();
     setSelectedSlotId("");
+    setSelectedDetailFilter("all");
     scrollToDayList();
   };
 
@@ -761,7 +877,10 @@ export default function MatchCalendarPage() {
         "━━━━━━━━━━━━",
         "⚽️ 試合申込",
         "━━━━━━━━━━━━",
-        `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
+        `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(
+          0,
+          5
+        )}`,
         `📍 ${slot.area_text ?? slot.area ?? "未設定"}`,
         `🏷 ${categoryLabel(slot.category) || slot.category || "未設定"}`,
         "",
@@ -841,7 +960,10 @@ export default function MatchCalendarPage() {
               "━━━━━━━━━━━━",
               "✅ 試合成立（承認）",
               "━━━━━━━━━━━━",
-              `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
+              `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(
+                0,
+                5
+              )}`,
               `🏷 ${categoryLabel(slot.category) || slot.category || "未設定"}`,
               "",
               `👥 募集チーム：${hostTeamName}`,
@@ -954,10 +1076,12 @@ export default function MatchCalendarPage() {
           cells={calendarCells}
           selectedYmd={selectedYmd}
           countByDate={countByDate}
+          dayStatusSummaryByDate={dayStatusSummaryByDate}
           onSelectDate={(ymd) => {
             setSelectedYmd(ymd);
             setSelectedSlotId("");
             setRequestComment("");
+            setSelectedDetailFilter("all");
             scrollToDayList();
           }}
           onPrevMonth={() => setMonthDate(addMonths(monthDate, -1))}
@@ -978,15 +1102,27 @@ export default function MatchCalendarPage() {
               </div>
             </div>
 
-            <button
-              type="button"
-              className="sh-btn"
-              style={createButtonInline}
-              onClick={() => goToCreatePage(selectedYmd)}
-              disabled={loading || myTeams.length === 0}
-            >
-              ＋募集枠を作る
-            </button>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                style={calendarHelpButton}
+                onClick={() => setShowCalendarHelp(true)}
+                aria-label="カレンダー表示の説明"
+                title="カレンダー表示の説明"
+              >
+                ?
+              </button>
+
+              <button
+                type="button"
+                className="sh-btn"
+                style={createButtonInline}
+                onClick={() => goToCreatePage(selectedYmd)}
+                disabled={loading || myTeams.length === 0}
+              >
+                ＋募集枠を作る
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1001,15 +1137,55 @@ export default function MatchCalendarPage() {
             </button>
           </div>
 
+          <div style={detailFilterWrap}>
+            <DetailFilterChip
+              label="すべて"
+              count={slotsOnSelectedDate.length}
+              active={selectedDetailFilter === "all"}
+              onClick={() => setSelectedDetailFilter("all")}
+            />
+            <DetailFilterChip
+              label="決定済"
+              count={detailCountSummary.decided}
+              active={selectedDetailFilter === "decided"}
+              onClick={() =>
+                setSelectedDetailFilter((prev) =>
+                  prev === "decided" ? "all" : "decided"
+                )
+              }
+            />
+            <DetailFilterChip
+              label="募集中"
+              count={detailCountSummary.open}
+              active={selectedDetailFilter === "open"}
+              onClick={() =>
+                setSelectedDetailFilter((prev) =>
+                  prev === "open" ? "all" : "open"
+                )
+              }
+            />
+            <DetailFilterChip
+              label="他決定"
+              count={detailCountSummary.other}
+              active={selectedDetailFilter === "other"}
+              onClick={() =>
+                setSelectedDetailFilter((prev) =>
+                  prev === "other" ? "all" : "other"
+                )
+              }
+            />
+          </div>
+
           <DaySlotList
             selectedYmd={selectedYmd}
-            slots={slotsOnSelectedDate as any}
+            slots={visibleSlotsOnSelectedDate as any}
             venues={venues}
             allTeams={allTeams as any}
             myTeams={myTeams as any}
             meId={meId}
             requestsForMonth={requestsForMonth}
             selectedSlotId={selectedSlotId}
+            slotStatusResolver={getSlotStatus}
             onToggleDetail={(slotId) => {
               const next = selectedSlotId === slotId ? "" : slotId;
               setSelectedSlotId(next);
@@ -1311,6 +1487,154 @@ export default function MatchCalendarPage() {
           </div>
         </div>
       ) : null}
+
+      {showCalendarHelp ? (
+        <div
+          style={modalOverlay}
+          onClick={() => setShowCalendarHelp(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="カレンダー表示の説明"
+        >
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeader}>
+              <h3 style={modalTitle}>決・募・他 の見方</h3>
+              <button
+                type="button"
+                style={modalCloseButton}
+                onClick={() => setShowCalendarHelp(false)}
+              >
+                閉じる
+              </button>
+            </div>
+
+            <div style={guideList}>
+              <div style={guideCard}>
+                <div style={guideTop}>
+                  <div style={calendarLegendBadgeDecided}>決</div>
+                  <div style={guideShort}>決定済</div>
+                </div>
+                <div style={guideTitleText}>
+                  あなたのチームで試合が決まった募集です。
+                </div>
+              </div>
+
+              <div style={guideCard}>
+                <div style={guideTop}>
+                  <div style={calendarLegendBadgeOpen}>募</div>
+                  <div style={guideShort}>募集中</div>
+                </div>
+                <div style={guideTitleText}>
+                  まだ申し込みできる募集です。
+                </div>
+              </div>
+
+              <div style={guideCard}>
+                <div style={guideTop}>
+                  <div style={calendarLegendBadgeOther}>他</div>
+                  <div style={guideShort}>他決定</div>
+                </div>
+                <div style={guideTitleText}>
+                  他チームで決まった募集です。
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
+
+function DetailFilterChip({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        ...detailFilterChip,
+        ...(active ? detailFilterChipActive : {}),
+      }}
+    >
+      {label} {count}
+    </button>
+  );
+}
+
+const detailFilterWrap: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginBottom: 12,
+};
+
+const detailFilterChip: React.CSSProperties = {
+  border: "1px solid #d8e5dc",
+  borderRadius: 999,
+  background: "#fff",
+  color: "#294234",
+  padding: "8px 12px",
+  fontSize: 13,
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const detailFilterChipActive: React.CSSProperties = {
+  border: "2px solid #145c2a",
+  background: "#f3fbf5",
+  color: "#145c2a",
+};
+
+const calendarHelpButton: React.CSSProperties = {
+  width: 34,
+  height: 34,
+  borderRadius: 999,
+  border: "1px solid #d6eadb",
+  background: "#fff",
+  color: "#23412c",
+  cursor: "pointer",
+  fontWeight: 800,
+  fontSize: 18,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const calendarLegendBadgeBase: React.CSSProperties = {
+  minWidth: 34,
+  height: 28,
+  borderRadius: 999,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontWeight: 900,
+  fontSize: 14,
+};
+
+const calendarLegendBadgeDecided: React.CSSProperties = {
+  ...calendarLegendBadgeBase,
+  background: "#dcfce7",
+  color: "#166534",
+};
+
+const calendarLegendBadgeOpen: React.CSSProperties = {
+  ...calendarLegendBadgeBase,
+  background: "#dbeafe",
+  color: "#1d4ed8",
+};
+
+const calendarLegendBadgeOther: React.CSSProperties = {
+  ...calendarLegendBadgeBase,
+  background: "#f3f4f6",
+  color: "#4b5563",
+};

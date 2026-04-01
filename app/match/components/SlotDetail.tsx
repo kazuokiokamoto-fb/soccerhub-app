@@ -122,6 +122,45 @@ function categoryTextFromTeam(team: DbTeam | null) {
   return categoryTextFromValues(team.categories, team.category);
 }
 
+function slotStatusLabel(status: "decided" | "open" | "other") {
+  switch (status) {
+    case "decided":
+      return "決定済";
+    case "open":
+      return "募集中";
+    case "other":
+      return "他決定";
+    default:
+      return "";
+  }
+}
+
+function slotStatusHeroStyle(
+  status: "decided" | "open" | "other"
+): React.CSSProperties {
+  if (status === "decided") {
+    return {
+      background: "rgba(255,255,255,0.18)",
+      border: "1px solid rgba(255,255,255,0.24)",
+      color: "#fff",
+    };
+  }
+
+  if (status === "open") {
+    return {
+      background: "rgba(219,234,254,0.22)",
+      border: "1px solid rgba(255,255,255,0.24)",
+      color: "#fff",
+    };
+  }
+
+  return {
+    background: "rgba(243,244,246,0.20)",
+    border: "1px solid rgba(255,255,255,0.24)",
+    color: "#fff",
+  };
+}
+
 export function SlotDetail(props: {
   slot: DbSlot | null;
   hostTeam: DbTeam | null;
@@ -145,6 +184,8 @@ export function SlotDetail(props: {
   onToggleClosed: (slotId: string, nextClosed: boolean) => void;
   onOpenChat: (otherTeamId: string) => void | Promise<void>;
 
+  slotStatus: "decided" | "open" | "other";
+
   loading?: boolean;
 }) {
   const {
@@ -167,6 +208,7 @@ export function SlotDetail(props: {
     onReject,
     onToggleClosed,
     onOpenChat,
+    slotStatus,
     loading,
   } = props;
 
@@ -225,7 +267,14 @@ export function SlotDetail(props: {
       <section style={heroCard}>
         <div style={heroHeader}>
           <div style={heroTitle}>募集詳細</div>
-          <div style={heroBadge}>{slot.is_closed ? "締切" : "募集中"}</div>
+          <div
+            style={{
+              ...heroBadge,
+              ...slotStatusHeroStyle(slotStatus),
+            }}
+          >
+            {slotStatusLabel(slotStatus)}
+          </div>
         </div>
 
         <div style={heroBody}>
@@ -345,7 +394,11 @@ export function SlotDetail(props: {
             </div>
           </div>
 
-          {slot.is_closed ? (
+          {slotStatus === "other" ? (
+            <div style={alertClosed}>この募集は他チームで決定済みです。</div>
+          ) : slotStatus === "decided" && !myRequest ? (
+            <div style={alertClosed}>この募集は決定済みです。</div>
+          ) : slot.is_closed && !myRequest ? (
             <div style={alertClosed}>この募集は締切済みです。</div>
           ) : myRequest ? (
             <div style={requestStatusWrap}>
@@ -375,7 +428,7 @@ export function SlotDetail(props: {
                 </div>
               ) : null}
 
-              {myRequest.status === "pending" ? (
+              {myRequest.status === "pending" && slotStatus === "open" ? (
                 <div>
                   <button
                     className="sh-btn"
@@ -429,7 +482,7 @@ export function SlotDetail(props: {
                   className="sh-btn sh-btn--primary"
                   type="button"
                   onClick={() => onRequestSlot(slot.id)}
-                  disabled={!!loading || myTeams.length === 0}
+                  disabled={!!loading || myTeams.length === 0 || slotStatus !== "open"}
                 >
                   試合申込
                 </button>
@@ -449,7 +502,7 @@ export function SlotDetail(props: {
           <div style={requestLeadCard}>
             <div style={requestLeadTitle}>募集状態を変更</div>
             <div style={requestLeadText}>
-              現在の状態：{slot.is_closed ? "締切" : "募集中"}
+              現在の状態：{slotStatusLabel(slotStatus)}
             </div>
           </div>
 
@@ -458,7 +511,7 @@ export function SlotDetail(props: {
               className="sh-btn"
               type="button"
               onClick={() => onToggleClosed(slot.id, !slot.is_closed)}
-              disabled={!!loading}
+              disabled={!!loading || slotStatus === "decided"}
             >
               {slot.is_closed ? "募集を再開する" : "募集を締切にする"}
             </button>
@@ -520,7 +573,7 @@ export function SlotDetail(props: {
                       className="sh-btn sh-btn--primary"
                       type="button"
                       onClick={() => onAccept(r.id)}
-                      disabled={r.status !== "pending" || !!slot.is_closed}
+                      disabled={r.status !== "pending" || !!slot.is_closed || slotStatus !== "open"}
                     >
                       承認
                     </button>
@@ -602,11 +655,8 @@ const heroBadge: React.CSSProperties = {
   minHeight: 28,
   padding: "0 10px",
   borderRadius: 999,
-  background: "rgba(255,255,255,0.16)",
-  color: "#fff",
   fontSize: 12,
   fontWeight: 900,
-  border: "1px solid rgba(255,255,255,0.22)",
 };
 
 const heroBody: React.CSSProperties = {

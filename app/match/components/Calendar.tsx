@@ -3,12 +3,19 @@
 
 import React from "react";
 
+type DayCalendarSummary = {
+  label: "決" | "募" | "他";
+  count: number;
+  tone: "decided" | "open" | "other";
+};
+
 export function Calendar(props: {
   monthKey: string;
   loading?: boolean;
   cells: Array<{ ymd: string; dayNum: number; inMonth: boolean }>;
   selectedYmd: string;
   countByDate: Map<string, number>;
+  dayStatusSummaryByDate: Map<string, DayCalendarSummary>;
   onSelectDate: (ymd: string) => void;
   onPrevMonth: () => void;
   onNextMonth: () => void;
@@ -21,6 +28,7 @@ export function Calendar(props: {
     cells,
     selectedYmd,
     countByDate,
+    dayStatusSummaryByDate,
     onSelectDate,
     onPrevMonth,
     onNextMonth,
@@ -60,7 +68,8 @@ export function Calendar(props: {
 
       <div style={calendarGrid}>
         {cells.map((c, index) => {
-          const n = countByDate.get(c.ymd) ?? 0;
+          const totalCount = countByDate.get(c.ymd) ?? 0;
+          const summary = dayStatusSummaryByDate.get(c.ymd);
           const isSelected = c.ymd === selectedYmd;
           const weekday = index % 7;
 
@@ -91,9 +100,24 @@ export function Calendar(props: {
                 {c.dayNum}
               </div>
 
-              <div style={countText}>{n > 0 ? `${n}件` : "-"}</div>
+              <div style={countText}>{totalCount > 0 ? `${totalCount}件` : "-"}</div>
 
-              <div style={statusText}>{n > 0 ? "募集中" : "-"}</div>
+              {summary ? (
+                <div
+                  style={{
+                    ...statusBadge,
+                    ...(summary.tone === "decided"
+                      ? statusBadgeDecided
+                      : summary.tone === "open"
+                      ? statusBadgeOpen
+                      : statusBadgeOther),
+                  }}
+                >
+                  {summary.label} {summary.count}
+                </div>
+              ) : (
+                <div style={statusEmpty}>-</div>
+              )}
             </button>
           );
         })}
@@ -158,7 +182,7 @@ const calendarGrid: React.CSSProperties = {
 const calCell: React.CSSProperties = {
   minWidth: 0,
   width: "100%",
-  minHeight: 70,
+  minHeight: 86,
   padding: "8px 6px",
   borderRadius: 12,
   border: "1px solid #e5e7eb",
@@ -169,7 +193,7 @@ const calCell: React.CSSProperties = {
   flexDirection: "column",
   alignItems: "flex-start",
   justifyContent: "flex-start",
-  gap: 2,
+  gap: 3,
   overflow: "hidden",
 };
 
@@ -187,16 +211,45 @@ const dayNumText: React.CSSProperties = {
 
 const countText: React.CSSProperties = {
   marginTop: 4,
-  fontSize: 12,
+  fontSize: 11,
   fontWeight: 800,
   color: "#065f46",
   lineHeight: 1.2,
 };
 
-const statusText: React.CSSProperties = {
+const statusBadge: React.CSSProperties = {
   marginTop: 2,
-  fontSize: 9,
-  color: "#6b7280",
+  minWidth: 0,
+  maxWidth: "100%",
+  padding: "2px 6px",
+  borderRadius: 999,
+  fontSize: 10,
+  fontWeight: 900,
+  lineHeight: 1.2,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const statusBadgeDecided: React.CSSProperties = {
+  background: "#dcfce7",
+  color: "#166534",
+};
+
+const statusBadgeOpen: React.CSSProperties = {
+  background: "#dbeafe",
+  color: "#1d4ed8",
+};
+
+const statusBadgeOther: React.CSSProperties = {
+  background: "#f3f4f6",
+  color: "#4b5563",
+};
+
+const statusEmpty: React.CSSProperties = {
+  marginTop: 2,
+  fontSize: 10,
+  color: "#9ca3af",
   lineHeight: 1.2,
 };
 

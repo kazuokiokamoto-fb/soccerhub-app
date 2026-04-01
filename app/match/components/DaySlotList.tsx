@@ -89,6 +89,43 @@ function slotCategoryText(slot: any) {
   return categoryLabel(slot?.category) || slot?.category || "カテゴリ未設定";
 }
 
+function slotStatusLabel(status: "decided" | "open" | "other") {
+  switch (status) {
+    case "decided":
+      return "決定済";
+    case "open":
+      return "募集中";
+    case "other":
+      return "他決定";
+    default:
+      return "";
+  }
+}
+
+function slotStatusBadgeStyle(status: "decided" | "open" | "other") {
+  if (status === "decided") {
+    return {
+      background: "#dcfce7",
+      color: "#166534",
+      border: "1px solid #bbf7d0",
+    } as React.CSSProperties;
+  }
+
+  if (status === "open") {
+    return {
+      background: "#dbeafe",
+      color: "#1d4ed8",
+      border: "1px solid #bfdbfe",
+    } as React.CSSProperties;
+  }
+
+  return {
+    background: "#f3f4f6",
+    color: "#4b5563",
+    border: "1px solid #e5e7eb",
+  } as React.CSSProperties;
+}
+
 export function DaySlotList(props: {
   selectedYmd: string;
   slots: DbSlot[];
@@ -98,6 +135,7 @@ export function DaySlotList(props: {
   meId: string;
   requestsForMonth: DbRequest[];
   selectedSlotId: string;
+  slotStatusResolver: (slot: DbSlot) => "decided" | "open" | "other";
   onToggleDetail: (slotId: string) => void;
   requestTeamId: string;
   onChangeRequestTeamId: (teamId: string) => void;
@@ -124,6 +162,7 @@ export function DaySlotList(props: {
     meId,
     requestsForMonth,
     selectedSlotId,
+    slotStatusResolver,
     onToggleDetail,
     requestTeamId,
     onChangeRequestTeamId,
@@ -144,11 +183,11 @@ export function DaySlotList(props: {
 
   return (
     <section style={{ ...card, marginTop: 14 }}>
-      <h2 style={h2}>{selectedYmd} の募集中</h2>
+      <h2 style={h2}>{selectedYmd} の募集一覧</h2>
 
       {slots.length === 0 ? (
         <p style={{ margin: "10px 0 0", color: "#777" }}>
-          この日はまだ募集がありません。
+          この条件に合う募集はありません。
         </p>
       ) : (
         <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
@@ -170,6 +209,7 @@ export function DaySlotList(props: {
 
             const categoryText = slotCategoryText(s);
             const isExpanded = selectedSlotId === s.id;
+            const slotStatus = slotStatusResolver(s);
 
             return (
               <div
@@ -192,7 +232,16 @@ export function DaySlotList(props: {
                     </div>
 
                     <div style={metaRow}>
-                      {s.is_closed ? (
+                      <span
+                        style={{
+                          ...slotStatusBadge,
+                          ...slotStatusBadgeStyle(slotStatus),
+                        }}
+                      >
+                        {slotStatusLabel(slotStatus)}
+                      </span>
+
+                      {s.is_closed && slotStatus === "open" ? (
                         <span
                           style={{
                             ...statusBadgeStyle("cancelled"),
@@ -259,6 +308,7 @@ export function DaySlotList(props: {
                   >
                     <SlotDetail
                       slot={selectedSlot}
+                      slotStatus={slotStatus}
                       hostTeam={selectedHostTeam}
                       allTeams={allTeams}
                       isMine={isMineSlot}
@@ -323,6 +373,13 @@ const metaRow: React.CSSProperties = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
+};
+
+const slotStatusBadge: React.CSSProperties = {
+  padding: "2px 8px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 900,
 };
 
 const hostTeamText: React.CSSProperties = {
