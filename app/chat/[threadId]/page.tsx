@@ -87,6 +87,20 @@ function sameDate(a?: string | null, b?: string | null) {
   );
 }
 
+function buildQueryString(params: {
+  from?: string | null;
+  slotId?: string | null;
+  date?: string | null;
+}) {
+  const qs = new URLSearchParams();
+
+  if (params.from) qs.set("from", params.from);
+  if (params.slotId) qs.set("slotId", params.slotId);
+  if (params.date) qs.set("date", params.date);
+
+  return qs.toString();
+}
+
 function getBackLink(params: {
   from?: string | null;
   slotId?: string | null;
@@ -130,20 +144,6 @@ function getBackLink(params: {
         label: "← 一覧",
       };
   }
-}
-
-function buildQueryString(params: {
-  from?: string | null;
-  slotId?: string | null;
-  date?: string | null;
-}) {
-  const qs = new URLSearchParams();
-
-  if (params.from) qs.set("from", params.from);
-  if (params.slotId) qs.set("slotId", params.slotId);
-  if (params.date) qs.set("date", params.date);
-
-  return qs.toString();
 }
 
 function resolveMyTeamId(params: {
@@ -578,9 +578,7 @@ export default function ChatThreadPage() {
 
           setMessages((prev) => {
             if (prev.some((m) => m.id === row.id)) {
-              return prev.filter(
-                (m) => !String(m.id).startsWith("optimistic-")
-              );
+              return prev.filter((m) => !String(m.id).startsWith("optimistic-"));
             }
 
             const withoutOptimistic = prev.filter(
@@ -1010,6 +1008,7 @@ const headerLeft: React.CSSProperties = {
   alignItems: "center",
   gap: 10,
   minWidth: 0,
+  flexWrap: "wrap",
 };
 
 const titleWrap: React.CSSProperties = {

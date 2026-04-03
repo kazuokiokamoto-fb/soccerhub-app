@@ -4,7 +4,7 @@ import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { Calendar } from "./components/Calendar";
 import { DaySlotList } from "./components/DaySlotList";
@@ -394,14 +394,35 @@ function teamStrengthLabel(team: any) {
   return "C";
 }
 
+function isValidYmd(v?: string | null) {
+  return !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+}
+
+function buildMatchCarryQuery(params: {
+  slotId?: string | null;
+  date?: string | null;
+}) {
+  const qs = new URLSearchParams();
+  qs.set("from", "match-calendar");
+  if (params.slotId) qs.set("slotId", params.slotId);
+  if (params.date) qs.set("date", params.date);
+  return qs.toString();
+}
+
 export default function MatchCalendarPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const queryDate = searchParams.get("date");
+  const querySlotId = searchParams.get("slotId");
+
+  const initialYmd = isValidYmd(queryDate) ? queryDate! : ymdToday();
 
   const [monthDate, setMonthDate] = useState<Date>(() =>
-    startOfMonth(new Date())
+    startOfMonth(new Date(initialYmd))
   );
-  const [selectedYmd, setSelectedYmd] = useState<string>(ymdToday());
-  const [selectedSlotId, setSelectedSlotId] = useState<string>("");
+  const [selectedYmd, setSelectedYmd] = useState<string>(initialYmd);
+  const [selectedSlotId, setSelectedSlotId] = useState<string>(querySlotId ?? "");
   const [selectedDetailFilter, setSelectedDetailFilter] =
     useState<DetailFilterStatus>("all");
 
@@ -454,6 +475,7 @@ export default function MatchCalendarPage() {
 
   const dayListRef = useRef<HTMLDivElement | null>(null);
   const filterRef = useRef<HTMLDivElement | null>(null);
+  const initialQueryAppliedRef = useRef(false);
 
   useEffect(() => {
     if (!requestTeamId && myTeams[0]?.id) {
@@ -625,6 +647,48 @@ export default function MatchCalendarPage() {
 
   const monthKey = useMemo(() => toMonthKey(monthDate), [monthDate]);
 
+  useEffect(() => {
+    if (initialQueryAppliedRef.current) return;
+    if (!querySlotId && !isValidYmd(queryDate)) {
+      initialQueryAppliedRef.current = true;
+      return;
+    }
+    if (loadingMonth) return;
+
+    if (isValidYmd(queryDate)) {
+      setSelectedYmd(queryDate!);
+      setMonthDate(startOfMonth(new Date(queryDate!)));
+    }
+
+    if (querySlotId) {
+      const targetSlot = slotsInMonth.find((s) => s.id === querySlotId);
+      if (targetSlot) {
+        setSelectedSlotId(targetSlot.id);
+        setSelectedYmd(targetSlot.date);
+
+        const status = getSlotStatus(targetSlot);
+        setSelectedDetailFilter(status);
+
+        setTimeout(() => {
+          dayListRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+        }, 180);
+      } else {
+        setSelectedSlotId(querySlotId);
+      }
+    }
+
+    initialQueryAppliedRef.current = true;
+  }, [
+    queryDate,
+    querySlotId,
+    slotsInMonth,
+    loadingMonth,
+    getSlotStatus,
+  ]);
+
   const scrollToDayList = () => {
     setTimeout(() => {
       dayListRef.current?.scrollIntoView({
@@ -699,7 +763,7 @@ export default function MatchCalendarPage() {
     if (error) throw error;
   };
 
-  const openDmAndGo = async (otherTeamId: string) => {
+  const openDmAndGo = async (otherTeamId: string, slot?: any | null) => {
     try {
       const myTeamId = requestTeamId || myTeams[0]?.id;
       if (!myTeamId) {
@@ -709,7 +773,13 @@ export default function MatchCalendarPage() {
       if (!otherTeamId || myTeamId === otherTeamId) return;
 
       const threadId = await getOrCreateDmThread(myTeamId, otherTeamId);
-      window.location.href = `/chat/${threadId}`;
+
+      const carryQuery = buildMatchCarryQuery({
+        slotId: slot?.id ?? selectedSlotId ?? "",
+        date: slot?.date ?? selectedYmd,
+      });
+
+      window.location.href = `/chat/${threadId}?${carryQuery}`;
     } catch (e: any) {
       console.error(e);
       alert(`チャットを開けません: ${e?.message ?? "unknown error"}`);
@@ -822,7 +892,14 @@ export default function MatchCalendarPage() {
         const notificationBody = `${
           requesterTeam?.name ?? "相手チーム"
         } から申込みが届きました`;
-        const notificationUrl = threadId ? `/chat/${threadId}` : "/chat";
+
+        const carryQuery = buildMatchCarryQuery({
+          slotId: slot.id,
+          date: slot.date,
+        });
+        const notificationUrl = threadId
+          ? `/chat/${threadId}?${carryQuery}`
+          : "/chat";
 
         const { error: notificationErr } = await supabase
           .from("notifications")
@@ -899,6 +976,14 @@ export default function MatchCalendarPage() {
         senderTeamId: requestTeamId,
         body: bodyLines.join("\n"),
       });
+
+      const carryQuery = buildMatchCarryQuery({
+        slotId: slot.id,
+        date: slot.date,
+      });
+
+      window.location.href = `/chat/${threadId}?${carryQuery}`;
+      return;
     } catch (e) {
       console.error("chat relay failed:", e);
     }

@@ -22,6 +22,80 @@ function levelToRankLabel(level?: number | null) {
   return "C";
 }
 
+function buildCarryQuery(params: {
+  from?: string | null;
+  threadId?: string | null;
+  slotId?: string | null;
+  date?: string | null;
+}) {
+  const qs = new URLSearchParams();
+
+  if (params.from) qs.set("from", params.from);
+  if (params.threadId) qs.set("threadId", params.threadId);
+  if (params.slotId) qs.set("slotId", params.slotId);
+  if (params.date) qs.set("date", params.date);
+
+  return qs.toString();
+}
+
+function getBackLink(params: {
+  from?: string | null;
+  threadId?: string | null;
+  slotId?: string | null;
+  date?: string | null;
+}) {
+  const { from, threadId, slotId, date } = params;
+
+  switch (from) {
+    case "match-calendar": {
+      const qs = new URLSearchParams();
+      if (date) qs.set("date", date);
+      if (slotId) qs.set("slotId", slotId);
+
+      return {
+        href: qs.toString() ? `/match?${qs.toString()}` : "/match",
+        label: "← 試合を探すに戻る",
+      };
+    }
+
+    case "sent-offers":
+      return {
+        href: "/match/status/offers",
+        label: "← 送ったオファーへ",
+      };
+
+    case "received-offers":
+      return {
+        href: "/match/status/offers-received",
+        label: "← 届いたオファーへ",
+      };
+
+    case "chat-list":
+      return {
+        href: "/chat",
+        label: "← 一覧へ",
+      };
+
+    default:
+      if (threadId) {
+        const qs = new URLSearchParams();
+        if (from) qs.set("from", from);
+        if (slotId) qs.set("slotId", slotId);
+        if (date) qs.set("date", date);
+
+        return {
+          href: qs.toString() ? `/chat/${threadId}?${qs.toString()}` : `/chat/${threadId}`,
+          label: "← チャットへ戻る",
+        };
+      }
+
+      return {
+        href: "/teams/search",
+        label: "← チーム検索へ",
+      };
+  }
+}
+
 export default function TeamDetail() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
@@ -29,6 +103,31 @@ export default function TeamDetail() {
   const searchParams = useSearchParams();
 
   const threadId = searchParams.get("threadId") ?? "";
+  const from = searchParams.get("from");
+  const slotId = searchParams.get("slotId");
+  const date = searchParams.get("date");
+
+  const carriedQueryString = useMemo(
+    () =>
+      buildCarryQuery({
+        from,
+        threadId,
+        slotId,
+        date,
+      }),
+    [from, threadId, slotId, date]
+  );
+
+  const backLink = useMemo(
+    () =>
+      getBackLink({
+        from,
+        threadId,
+        slotId,
+        date,
+      }),
+    [from, threadId, slotId, date]
+  );
 
   const [team, setTeam] = useState<any>(null);
   const [comment, setComment] = useState("");
@@ -172,7 +271,16 @@ export default function TeamDetail() {
         return;
       }
 
-      router.push(`/chat/${createdThreadId}`);
+      const nextQs = buildCarryQuery({
+        from: from ?? "chat-list",
+        threadId: null,
+        slotId,
+        date,
+      });
+
+      router.push(
+        nextQs ? `/chat/${createdThreadId}?${nextQs}` : `/chat/${createdThreadId}`
+      );
     } catch (e: any) {
       console.error(e);
       alert(e?.message ?? "チャットを開けませんでした");
@@ -298,7 +406,17 @@ export default function TeamDetail() {
         }
 
         alert("試合申込しました");
-        router.push(`/chat/${createdThreadId}`);
+
+        const nextQs = buildCarryQuery({
+          from: from ?? "match-calendar",
+          threadId: null,
+          slotId: slot.id,
+          date: slot.date,
+        });
+
+        router.push(
+          nextQs ? `/chat/${createdThreadId}?${nextQs}` : `/chat/${createdThreadId}`
+        );
         return;
       }
 
@@ -328,11 +446,20 @@ export default function TeamDetail() {
     );
   }
 
+  const chatBackHref =
+    threadId
+      ? `/chat/${threadId}${carriedQueryString ? `?${carriedQueryString}` : ""}`
+      : "";
+
   return (
     <main style={pageWrap}>
       <div style={topRow}>
+        <Link href={backLink.href} className="sh-btn sh-btn--primary">
+          {backLink.label}
+        </Link>
+
         {threadId ? (
-          <Link href={`/chat/${threadId}`} className="sh-btn sh-btn--primary">
+          <Link href={chatBackHref} className="sh-btn">
             ← チャットへ戻る
           </Link>
         ) : null}

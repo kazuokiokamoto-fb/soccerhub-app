@@ -126,6 +126,17 @@ function slotStatusBadgeStyle(status: "decided" | "open" | "other") {
   } as React.CSSProperties;
 }
 
+function buildTeamDetailQuery(params: {
+  slotId?: string | null;
+  date?: string | null;
+}) {
+  const qs = new URLSearchParams();
+  qs.set("from", "match-calendar");
+  if (params.slotId) qs.set("slotId", params.slotId);
+  if (params.date) qs.set("date", params.date);
+  return qs.toString();
+}
+
 export function DaySlotList(props: {
   selectedYmd: string;
   slots: DbSlot[];
@@ -174,10 +185,6 @@ export function DaySlotList(props: {
     onRequestSlot,
     onCancelMyRequest,
     onOpenChatWithTeam,
-    selectedSlot,
-    selectedHostTeam,
-    selectedSlotRequests,
-    isMineSlot,
     onAccept,
     onReject,
     onToggleClosed,
@@ -204,16 +211,17 @@ export function DaySlotList(props: {
               hostTeam?.strength_rank?.trim() ||
               levelLabel(Number(hostTeam?.level ?? 0));
 
-            const myReq = requestsForMonth.find(
+            const slotRequests = requestsForMonth.filter((r) => r.slot_id === s.id);
+
+            const myReq = slotRequests.find(
               (r) =>
-                r.slot_id === s.id &&
                 r.requester_team_id === requestTeamId &&
                 r.status !== "cancelled"
             );
 
             const acceptedReq =
-              requestsForMonth
-                .filter((r) => r.slot_id === s.id && r.status === "accepted")
+              slotRequests
+                .filter((r) => r.status === "accepted")
                 .sort((a, b) => (a.created_at > b.created_at ? -1 : 1))[0] ??
               null;
 
@@ -226,6 +234,17 @@ export function DaySlotList(props: {
                 ? allTeams.find((t) => t.id === acceptedReq.requester_team_id) ??
                   hostTeam
                 : hostTeam;
+
+            const detailTeam =
+              slotStatus === "decided" && isMine && acceptedReq
+                ? allTeams.find((t) => t.id === acceptedReq.requester_team_id) ??
+                  hostTeam
+                : hostTeam;
+
+            const teamDetailQuery = buildTeamDetailQuery({
+              slotId: s.id,
+              date: s.date,
+            });
 
             return (
               <div
@@ -306,7 +325,7 @@ export function DaySlotList(props: {
 
                   {displayTeamForLink?.id ? (
                     <Link
-                      href={`/teams/${displayTeamForLink.id}`}
+                      href={`/teams/${displayTeamForLink.id}?${teamDetailQuery}`}
                       className="sh-btn"
                       style={buttonLink}
                     >
@@ -323,14 +342,14 @@ export function DaySlotList(props: {
                     }}
                   >
                     <SlotDetail
-                      slot={selectedSlot}
+                      slot={s}
                       slotStatus={slotStatus}
-                      hostTeam={selectedHostTeam}
+                      hostTeam={detailTeam}
                       allTeams={allTeams}
-                      isMine={isMineSlot}
+                      isMine={isMine}
                       meId={meId}
                       venues={venues}
-                      requests={selectedSlotRequests}
+                      requests={slotRequests}
                       myTeams={myTeams}
                       requestTeamId={requestTeamId}
                       onChangeRequestTeamId={onChangeRequestTeamId}

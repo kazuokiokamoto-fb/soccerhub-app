@@ -161,6 +161,17 @@ function slotStatusHeroStyle(
   };
 }
 
+function buildTeamDetailQuery(params: {
+  slotId?: string | null;
+  date?: string | null;
+}) {
+  const qs = new URLSearchParams();
+  qs.set("from", "match-calendar");
+  if (params.slotId) qs.set("slotId", params.slotId);
+  if (params.date) qs.set("date", params.date);
+  return qs.toString();
+}
+
 export function SlotDetail(props: {
   slot: DbSlot | null;
   hostTeam: DbTeam | null;
@@ -283,6 +294,11 @@ export function SlotDetail(props: {
 
   const displayTeamCategoryText = categoryTextFromTeam(displayTeam);
 
+  const teamDetailQuery = buildTeamDetailQuery({
+    slotId: slot.id,
+    date: slot.date,
+  });
+
   return (
     <div style={root}>
       <section style={heroCard}>
@@ -370,7 +386,10 @@ export function SlotDetail(props: {
           </div>
 
           {displayTeam?.id ? (
-            <Link href={`/teams/${displayTeam.id}`} className="sh-btn">
+            <Link
+              href={`/teams/${displayTeam.id}?${teamDetailQuery}`}
+              className="sh-btn"
+            >
               チーム詳細
             </Link>
           ) : null}
