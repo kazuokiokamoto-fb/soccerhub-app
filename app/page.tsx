@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "./lib/supabase";
 import AppTabNav from "@/app/components/AppTabNav";
+import HomeCalendar from "@/app/components/home/HomeCalendar";
 
 type TeamRow = {
   id: string;
@@ -97,6 +98,9 @@ export default function HomePage() {
 
   const [unreadTotal, setUnreadTotal] = useState(0);
   const [nextMatch, setNextMatch] = useState<NextMatchCard | null>(null);
+
+  const [showGuide, setShowGuide] = useState(false);
+  const [showQa, setShowQa] = useState(false);
 
   const loadTimerRef = React.useRef<NodeJS.Timeout | null>(null);
   const loadingRef = React.useRef(false);
@@ -514,15 +518,59 @@ export default function HomePage() {
     <main style={wrap}>
       <AppTabNav />
 
-      <header style={hero}>
-        <div style={heroInner}>
-          <p style={heroDesc}>
-            サッカー練習試合をもっと簡単に。
-            <br />
-            チーム同士をつなぐマッチングサービス。
+      <HomeCalendar />
+
+      <section style={searchHero}>
+        <div style={searchHeroTextWrap}>
+          <div style={searchEyebrow}>SOCCER MATCHING</div>
+          <h1 style={searchHeroTitle}>相手を探す。募集する。すぐ話す。</h1>
+          <p style={searchHeroDesc}>
+            サカまちは、LINEのように連絡しやすく、
+            SUUMOのように探しやすいサッカー練習試合マッチングです。
           </p>
         </div>
-      </header>
+
+        <div style={searchHeroActions}>
+          <Link href="/match" className="sh-btn sh-btn--primary">
+            試合を探す
+          </Link>
+          <Link href="/teams/search" className="sh-btn">
+            チーム検索
+          </Link>
+          <Link href="/match/new" className="sh-btn">
+            募集する
+          </Link>
+        </div>
+      </section>
+
+      <section style={quickGrid}>
+        <Link href="/teams/search" style={quickCardLink}>
+          <div style={quickCard}>
+            <div style={quickTitle}>🔎 SUUMOみたいに探す</div>
+            <div style={quickText}>
+              エリア、カテゴリ、強さ、人数感などから相手チームを探す
+            </div>
+          </div>
+        </Link>
+
+        <Link href="/match" style={quickCardLink}>
+          <div style={quickCard}>
+            <div style={quickTitle}>📅 カレンダーから探す</div>
+            <div style={quickText}>
+              日付ごとの募集件数を見ながら、そのまま試合を探す
+            </div>
+          </div>
+        </Link>
+
+        <Link href="/chat" style={quickCardLink}>
+          <div style={quickCard}>
+            <div style={quickTitle}>💬 LINEみたいに連絡</div>
+            <div style={quickText}>
+              申込後はそのままチャットで日程や詳細を調整
+            </div>
+          </div>
+        </Link>
+      </section>
 
       {!hasTeam ? (
         <div style={ctaBox}>
@@ -535,233 +583,200 @@ export default function HomePage() {
               チームを登録する
             </Link>
             <Link href="/mypage" className="sh-btn">
-              設定を見る
+              マイページへ
             </Link>
           </div>
         </div>
-      ) : (
-        <div style={ctaBox}>
-          <div style={ctaTitle}>次のアクション</div>
-          <div style={ctaText}>
-            試合を探すか、自分で募集を出して相手チームとつながりましょう。
+      ) : null}
+
+      <section style={dashboardSection}>
+        <div style={sectionTitle}>マイページで確認する内容</div>
+
+        <div style={dashboardGrid}>
+          <div style={dashboardCard}>
+            <div style={dashboardTitle}>⚽ あなたの試合状況</div>
+
+            <div style={statusList}>
+              <DashboardLinkRow
+                href="/match/status/open"
+                label="募集中の試合"
+                value={openCount}
+                helper={
+                  openCount === 0
+                    ? "まだ募集していません"
+                    : "現在公開中の募集です"
+                }
+              />
+              <DashboardLinkRow
+                href="/match/status/offers-received"
+                label="届いたオファー"
+                value={receivedOfferCount}
+                helper={
+                  receivedOfferCount === 0
+                    ? "新しいオファーはありません"
+                    : "確認待ちのオファーがあります"
+                }
+              />
+              <DashboardLinkRow
+                href="/match/status/offers"
+                label="送ったオファー"
+                value={sentOfferCount}
+                helper={
+                  sentOfferCount === 0
+                    ? "まだオファーを送っていません"
+                    : "返答待ちのオファーがあります"
+                }
+              />
+            </div>
           </div>
-          <div style={ctaActions}>
-            <Link href="/match" className="sh-btn">
-              試合を探す
-            </Link>
-            <Link href="/match/new" className="sh-btn sh-btn--primary">
-              募集枠を作る
-            </Link>
+
+          <div style={dashboardCard}>
+            <div style={dashboardTitle}>💬 チャット</div>
+
+            <div style={statusList}>
+              <DashboardLinkRow
+                href="/chat"
+                label="未読メッセージ"
+                value={unreadTotal}
+                helper={
+                  unreadTotal === 0
+                    ? "新しいメッセージはありません"
+                    : "未読があります"
+                }
+              />
+            </div>
           </div>
-        </div>
-      )}
 
-      <section style={dashboardGrid}>
-        <div style={dashboardCard}>
-          <div style={dashboardTitle}>⚽ あなたの試合状況</div>
+          <div style={dashboardCard}>
+            <div style={dashboardTitle}>📅 次の試合</div>
 
-          <div style={statusList}>
-            <DashboardLinkRow
-              href="/match/status/open"
-              label="募集中の試合"
-              value={openCount}
-              helper={
-                openCount === 0
-                  ? "まだ募集していません"
-                  : "現在公開中の募集です"
-              }
-            />
-            <DashboardLinkRow
-              href="/match/status/offers-received"
-              label="届いたオファー"
-              value={receivedOfferCount}
-              helper={
-                receivedOfferCount === 0
-                  ? "新しいオファーはありません"
-                  : "確認待ちのオファーがあります"
-              }
-            />
-            <DashboardLinkRow
-              href="/match/status/offers"
-              label="送ったオファー"
-              value={sentOfferCount}
-              helper={
-                sentOfferCount === 0
-                  ? "まだオファーを送っていません"
-                  : "返答待ちのオファーがあります"
-              }
-            />
-          </div>
-        </div>
-
-        <div style={dashboardCard}>
-          <div style={dashboardTitle}>💬 チャット</div>
-
-          <div style={statusList}>
-            <DashboardLinkRow
-              href="/chat"
-              label="未読メッセージ"
-              value={unreadTotal}
-              helper={
-                unreadTotal === 0
-                  ? "新しいメッセージはありません"
-                  : "未読があります"
-              }
-            />
-          </div>
-        </div>
-
-        <div style={dashboardCard}>
-          <div style={dashboardTitle}>📅 次の試合</div>
-
-          {loading ? (
-            <div style={mutedText}>読み込み中…</div>
-          ) : nextMatch ? (
-            <>
-              <div style={successBadge}>✅ 試合成立</div>
-              <Link href="/match/next" style={nextMatchLink}>
-                <div style={nextMatchDate}>
-                  {fmtDate(nextMatch.date)} {fmtTime(nextMatch.start_time)}
-                </div>
-                <div style={nextMatchMeta}>
-                  {nextMatch.area_text ?? nextMatch.area ?? "エリア未設定"}
-                </div>
-                <div style={nextMatchMeta}>
-                  {nextMatch.category ?? "カテゴリ未設定"}
-                </div>
-              </Link>
-            </>
-          ) : (
-            <div style={emptyActionBox}>
-              <div style={mutedText}>まだ試合は成立していません</div>
-              <div style={emptyActionRow}>
-                <Link href="/match" className="sh-btn">
-                  試合を探す
+            {loading ? (
+              <div style={mutedText}>読み込み中…</div>
+            ) : nextMatch ? (
+              <>
+                <div style={successBadge}>✅ 試合成立</div>
+                <Link href="/match/next" style={nextMatchLink}>
+                  <div style={nextMatchDate}>
+                    {fmtDate(nextMatch.date)} {fmtTime(nextMatch.start_time)}
+                  </div>
+                  <div style={nextMatchMeta}>
+                    {nextMatch.area_text ?? nextMatch.area ?? "エリア未設定"}
+                  </div>
+                  <div style={nextMatchMeta}>
+                    {nextMatch.category ?? "カテゴリ未設定"}
+                  </div>
                 </Link>
-                <Link href="/match/new" className="sh-btn sh-btn--primary">
-                  募集枠を作る
-                </Link>
+              </>
+            ) : (
+              <div style={emptyActionBox}>
+                <div style={mutedText}>まだ試合は成立していません</div>
+                <div style={emptyActionRow}>
+                  <Link href="/match" className="sh-btn">
+                    試合を探す
+                  </Link>
+                  <Link href="/match/new" className="sh-btn sh-btn--primary">
+                    募集する
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={mypageActionRow}>
+          <Link href="/mypage" className="sh-btn sh-btn--primary">
+            マイページを見る
+          </Link>
+        </div>
+      </section>
+
+      <section style={foldSection}>
+        <button
+          type="button"
+          style={foldButton}
+          onClick={() => setShowGuide((v) => !v)}
+        >
+          <span>使い方</span>
+          <span>{showGuide ? "−" : "+"}</span>
+        </button>
+
+        {showGuide ? (
+          <div style={foldBody}>
+            <div style={guideBlock}>
+              <div style={guideStep}>1. チームを登録する</div>
+              <div style={guideText}>
+                まずはチーム名、エリア、カテゴリ、強さ、グラウンド提供可否、人数などを登録します。
               </div>
             </div>
-          )}
-        </div>
-      </section>
 
-      <section style={guide}>
-        <div style={guideTitle}>使い方</div>
-
-        <div style={guideBlock}>
-          <div style={guideStep}>1. チームを登録する</div>
-          <div style={guideText}>
-            まずはチーム名、エリア、カテゴリ、強さ、グラウンド提供可否、人数などを登録します。
-            相手に見てもらう前提で、なるべく分かりやすく入力しておくとマッチしやすくなります。
-          </div>
-        </div>
-
-        <div style={guideBlock}>
-          <div style={guideStep}>2. 試合を探す / 募集する</div>
-          <div style={guideText}>
-            カレンダーから日付ごとの募集枠を確認できます。
-            条件を絞って相手を探すことも、自分のチームで新しく募集枠を作ることもできます。
-          </div>
-        </div>
-
-        <div style={guideBlock}>
-          <div style={guideStep}>3. チャットで連絡する</div>
-          <div style={guideText}>
-            気になる相手が見つかったら、そのままチャットで連絡できます。
-            日程の細かい調整や持ち物確認、会場詳細のやり取りに使えます。
-          </div>
-        </div>
-
-        <div style={guideBlock}>
-          <div style={guideStep}>4. 条件を細かく活用する</div>
-          <div style={guideText}>
-            エリア、カテゴリ、強さ、グラウンド提供、所属人数などを使うと、
-            より希望に近い相手を探しやすくなります。
-          </div>
-        </div>
-      </section>
-
-      <section style={qa}>
-        <div style={qaTitle}>Q&amp;A</div>
-
-        <div style={qaItem}>
-          <div style={qaQ}>Q. まず何をすればいいですか？</div>
-          <div style={qaA}>
-            A.
-            まずはチーム登録です。登録情報があると、検索にも募集にもチャットにも進みやすくなります。
-          </div>
-        </div>
-
-        <div style={qaItem}>
-          <div style={qaQ}>Q. 相手チームにいきなり連絡できますか？</div>
-          <div style={qaA}>
-            A. はい。チーム検索や募集詳細からチャットで連絡できます。
-          </div>
-        </div>
-
-        <div style={qaItem}>
-          <div style={qaQ}>
-            Q. 募集するだけでなく、探すこともできますか？
-          </div>
-          <div style={qaA}>
-            A.
-            できます。カレンダー上で既存の募集枠を見ながら、条件で絞り込んで探せます。
-          </div>
-        </div>
-
-        <div style={qaItem}>
-          <div style={qaQ}>Q. チーム検索では何で絞り込めますか？</div>
-          <div style={qaA}>
-            A.
-            エリア、カテゴリ、強さ、グラウンド提供、所属人数、キーワードなどで絞り込みできます。
-          </div>
-        </div>
-
-        <div style={qaItem}>
-          <div style={qaQ}>Q. まだ相手が少ない場合は？</div>
-          <div style={qaA}>
-            A.
-            先に自分で募集枠を出しておくと、相手から見つけてもらいやすくなります。
-          </div>
-        </div>
-
-        <div style={qaItem}>
-          <div style={qaQ}>Q. チャット通知が使えないのはなぜですか？</div>
-          <div style={qaA}>
-            <div>
-              A.
-              チャット通知はブラウザの通知機能を利用しているため、
-              ご利用の端末・ブラウザによっては対応していない場合があります。
+            <div style={guideBlock}>
+              <div style={guideStep}>2. 試合を探す / 募集する</div>
+              <div style={guideText}>
+                カレンダーや検索から相手を探したり、自分で募集を出したりできます。
+              </div>
             </div>
 
-            <div style={qaSubHeading}>■ ご利用をおすすめする環境</div>
-            <div>・PC：Google Chrome / Microsoft Edge（最新版）</div>
-            <div>・スマートフォン：Safari（iOS）</div>
-
-            <div style={qaSubHeading}>■ ご確認ください</div>
-            <div>・通知が「許可」になっているか</div>
-            <div>・シークレットモードになっていないか</div>
-            <div>
-              ・ホーム画面追加（PWA）で開いている場合は設定が制限されていないか
-            </div>
-          </div>
-        </div>
-
-        {!hasTeam ? (
-          <div style={startBox}>
-            <div style={startTitle}>まだチーム登録がありません</div>
-            <div style={startText}>
-              まずは設定ページからチーム情報を登録すると、試合検索・募集・チャットが使いやすくなります。
-            </div>
-            <div style={{ marginTop: 10 }}>
-              <Link href="/mypage" className="sh-btn sh-btn--primary">
-                設定ページへ
-              </Link>
+            <div style={guideBlock}>
+              <div style={guideStep}>3. チャットで連絡する</div>
+              <div style={guideText}>
+                申込後はそのままチャットに進み、日程や詳細を調整できます。
+              </div>
             </div>
           </div>
         ) : null}
+      </section>
+
+      <section style={foldSection}>
+        <button
+          type="button"
+          style={foldButton}
+          onClick={() => setShowQa((v) => !v)}
+        >
+          <span>Q&amp;A</span>
+          <span>{showQa ? "−" : "+"}</span>
+        </button>
+
+        {showQa ? (
+          <div style={foldBody}>
+            <div style={qaItem}>
+              <div style={qaQ}>Q. まず何をすればいいですか？</div>
+              <div style={qaA}>
+                A. まずはチーム登録です。登録情報があると検索にも募集にも進みやすくなります。
+              </div>
+            </div>
+
+            <div style={qaItem}>
+              <div style={qaQ}>Q. 相手チームにすぐ連絡できますか？</div>
+              <div style={qaA}>
+                A. はい。チーム検索や募集詳細からそのままチャットできます。
+              </div>
+            </div>
+
+            <div style={qaItem}>
+              <div style={qaQ}>Q. 募集するだけでなく探すこともできますか？</div>
+              <div style={qaA}>
+                A. できます。カレンダーと検索から両方できます。
+              </div>
+            </div>
+
+            <div style={qaItem}>
+              <div style={qaQ}>Q. お問い合わせはどこですか？</div>
+              <div style={qaA}>
+                A. 下のメールからご連絡ください。
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <section style={contactBox}>
+        <div style={contactTitle}>お問い合わせ</div>
+        <div style={contactText}>
+          ご不明点・改善要望・掲載相談はこちらへご連絡ください。
+        </div>
+        <a href="mailto:info@sakamatch.com" style={mailLink}>
+          info@sakamatch.com
+        </a>
       </section>
     </main>
   );
@@ -802,22 +817,95 @@ const loadingPanel: React.CSSProperties = {
   textAlign: "center",
 };
 
+const searchHero: React.CSSProperties = {
+  marginTop: 16,
+  borderRadius: 18,
+  background: "linear-gradient(135deg,#1e7f3c,#145c2a)",
+  color: "#fff",
+  padding: 18,
+  display: "grid",
+  gap: 14,
+};
+
+const searchHeroTextWrap: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+};
+
+const searchEyebrow: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  color: "rgba(255,255,255,0.8)",
+};
+
+const searchHeroTitle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 28,
+  lineHeight: 1.3,
+  fontWeight: 900,
+};
+
+const searchHeroDesc: React.CSSProperties = {
+  margin: 0,
+  fontSize: 14,
+  lineHeight: 1.8,
+  color: "rgba(255,255,255,0.92)",
+};
+
+const searchHeroActions: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const quickGrid: React.CSSProperties = {
+  marginTop: 16,
+  display: "grid",
+  gap: 12,
+};
+
+const quickCardLink: React.CSSProperties = {
+  textDecoration: "none",
+};
+
+const quickCard: React.CSSProperties = {
+  padding: 16,
+  borderRadius: 16,
+  border: "1px solid #e5ece7",
+  background: "#fff",
+};
+
+const quickTitle: React.CSSProperties = {
+  fontSize: 17,
+  fontWeight: 900,
+  color: "#16391f",
+};
+
+const quickText: React.CSSProperties = {
+  marginTop: 6,
+  fontSize: 14,
+  color: "#4b5563",
+  lineHeight: 1.7,
+};
+
 const hero: React.CSSProperties = {
-  marginTop: 4,
+  marginTop: 16,
 };
 
 const heroInner: React.CSSProperties = {
   padding: "14px 16px",
-  background: "linear-gradient(135deg,#1e7f3c,#145c2a)",
+  background: "#fff",
   borderRadius: 16,
-  color: "white",
+  border: "1px solid #e5ece7",
+  color: "#16391f",
   display: "grid",
   gap: 4,
 };
 
 const heroDesc: React.CSSProperties = {
-  margin: "8px 0 0",
-  color: "rgba(255,255,255,0.92)",
+  margin: 0,
+  color: "#44534a",
   lineHeight: 1.7,
 };
 
@@ -849,8 +937,18 @@ const ctaActions: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
-const dashboardGrid: React.CSSProperties = {
+const dashboardSection: React.CSSProperties = {
   marginTop: 20,
+};
+
+const sectionTitle: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 20,
+  color: "#16391f",
+  marginBottom: 12,
+};
+
+const dashboardGrid: React.CSSProperties = {
   display: "grid",
   gap: 12,
 };
@@ -961,18 +1059,38 @@ const mutedText: React.CSSProperties = {
   lineHeight: 1.7,
 };
 
-const guide: React.CSSProperties = {
-  marginTop: 20,
-  border: "1px solid #eee",
-  borderRadius: 16,
-  padding: 16,
-  background: "#fff",
+const mypageActionRow: React.CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  justifyContent: "flex-start",
 };
 
-const guideTitle: React.CSSProperties = {
-  fontWeight: 900,
+const foldSection: React.CSSProperties = {
+  marginTop: 20,
+  border: "1px solid #e5ece7",
+  borderRadius: 16,
+  background: "#fff",
+  overflow: "hidden",
+};
+
+const foldButton: React.CSSProperties = {
+  width: "100%",
+  padding: "16px 18px",
+  border: "none",
+  background: "#fff",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
   fontSize: 18,
-  marginBottom: 12,
+  fontWeight: 900,
+  color: "#16391f",
+  cursor: "pointer",
+};
+
+const foldBody: React.CSSProperties = {
+  padding: "0 18px 18px",
+  display: "grid",
+  gap: 10,
 };
 
 const guideBlock: React.CSSProperties = {
@@ -992,20 +1110,6 @@ const guideText: React.CSSProperties = {
   lineHeight: 1.8,
 };
 
-const qa: React.CSSProperties = {
-  marginTop: 20,
-  border: "1px solid #eee",
-  borderRadius: 16,
-  padding: 16,
-  background: "#fff",
-};
-
-const qaTitle: React.CSSProperties = {
-  fontWeight: 900,
-  fontSize: 18,
-  marginBottom: 12,
-};
-
 const qaItem: React.CSSProperties = {
   padding: "10px 0",
   borderBottom: "1px solid #f0f0f0",
@@ -1023,29 +1127,31 @@ const qaA: React.CSSProperties = {
   lineHeight: 1.8,
 };
 
-const qaSubHeading: React.CSSProperties = {
-  marginTop: 10,
-  marginBottom: 4,
-  fontWeight: 800,
-  color: "#16391f",
-};
-
-const startBox: React.CSSProperties = {
-  marginTop: 14,
-  padding: 14,
-  borderRadius: 14,
+const contactBox: React.CSSProperties = {
+  marginTop: 20,
+  padding: 16,
+  borderRadius: 16,
   border: "1px solid #e5ece7",
-  background: "#fafcfb",
+  background: "#fff",
 };
 
-const startTitle: React.CSSProperties = {
+const contactTitle: React.CSSProperties = {
   fontWeight: 900,
+  fontSize: 18,
   color: "#16391f",
 };
 
-const startText: React.CSSProperties = {
+const contactText: React.CSSProperties = {
   marginTop: 6,
   fontSize: 14,
-  color: "#444",
+  color: "#4b5563",
   lineHeight: 1.7,
+};
+
+const mailLink: React.CSSProperties = {
+  display: "inline-block",
+  marginTop: 10,
+  color: "#145c2a",
+  fontWeight: 900,
+  textDecoration: "none",
 };

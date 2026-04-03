@@ -40,6 +40,62 @@ type TeamRow = {
   note?: string | null;
 };
 
+type MatchSlotRow = {
+  id: string;
+  host_team_id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  area: string | null;
+  area_text?: string | null;
+  category: string | null;
+  is_closed: boolean | null;
+  created_at: string;
+};
+
+type MatchRequestRow = {
+  id: string;
+  slot_id: string;
+  requester_team_id: string;
+  requester_user_id: string | null;
+  status: "pending" | "accepted" | "rejected" | "cancelled";
+  comment: string | null;
+  created_at: string;
+};
+
+type MatchOfferRow = {
+  id: string;
+  slot_id: string | null;
+  from_user_id?: string | null;
+  from_team_id: string;
+  to_team_id: string;
+  status: "pending" | "accepted" | "rejected" | "cancelled";
+  message: string | null;
+  created_at: string;
+};
+
+type ChatMemberRow = {
+  thread_id: string;
+  last_read_at: string | null;
+};
+
+type ChatMessageRow = {
+  id: string;
+  thread_id: string;
+  body: string | null;
+  created_at: string;
+};
+
+type NextMatchCard = {
+  date: string;
+  start_time: string;
+  end_time: string;
+  area: string | null;
+  area_text?: string | null;
+  category: string | null;
+  slot_id: string;
+};
+
 type Toast = { type: "success" | "error" | "info"; text: string };
 
 function isMissingColumnError(err: any) {
@@ -90,6 +146,22 @@ function categoryMetaEntries(team?: TeamRow | null) {
   return Object.entries(team.category_meta).filter(([key]) => !!key);
 }
 
+function fmtDate(ymd?: string | null) {
+  if (!ymd) return "";
+  return ymd;
+}
+
+function fmtTime(v?: string | null) {
+  if (!v) return "";
+  return String(v).slice(0, 5);
+}
+
+function toDateTimeMs(date?: string | null, time?: string | null) {
+  if (!date || !time) return 0;
+  const dt = new Date(`${date}T${time}`);
+  return dt.getTime();
+}
+
 export default function MyPage() {
   const [me, setMe] = useState<{ id: string; email?: string | null } | null>(
     null
@@ -99,6 +171,12 @@ export default function MyPage() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
   const [deletingTeamId, setDeletingTeamId] = useState("");
+
+  const [openCount, setOpenCount] = useState(0);
+  const [receivedOfferCount, setReceivedOfferCount] = useState(0);
+  const [sentOfferCount, setSentOfferCount] = useState(0);
+  const [unreadTotal, setUnreadTotal] = useState(0);
+  const [nextMatch, setNextMatch] = useState<NextMatchCard | null>(null);
 
   const mainTeam = useMemo(() => teams[0] ?? null, [teams]);
 
@@ -135,6 +213,11 @@ export default function MyPage() {
       setMe(null);
       setProfile(null);
       setTeams([]);
+      setOpenCount(0);
+      setReceivedOfferCount(0);
+      setSentOfferCount(0);
+      setUnreadTotal(0);
+      setNextMatch(null);
       setLoading(false);
       return;
     }
@@ -168,6 +251,8 @@ export default function MyPage() {
       .eq("owner_id", user.id)
       .order("updated_at", { ascending: false });
 
+    let loadedTeams: TeamRow[] = [];
+
     if (primaryRes.error && isMissingColumnError(primaryRes.error)) {
       const fallbackRes = await supabase
         .from("teams")
@@ -188,12 +273,8 @@ export default function MyPage() {
         return;
       }
 
-      setTeams(((fallbackRes.data ?? []) as TeamRow[]) || []);
-      setLoading(false);
-      return;
-    }
-
-    if (primaryRes.error) {
+      loadedTeams = ((fallbackRes.data ?? []) as TeamRow[]) || [];
+    } else if (primaryRes.error) {
       console.error(primaryRes.error);
       setToast({
         type: "error",
@@ -202,9 +283,233 @@ export default function MyPage() {
       setTeams([]);
       setLoading(false);
       return;
+    } else {
+      loadedTeams = ((primaryRes.data ?? []) as TeamRow[]) || [];
     }
 
-    setTeams(((primaryRes.data ?? []) as TeamRow[]) || []);
+    setTeams(loadedTeams);
+
+    const myTeamIds = loadedTeams.map((t) => t.id).filter(Boolean);
+
+    if (myTeamIds.length === 0) {
+      setOpenCount(0);
+      setReceivedOfferCount(0);
+      setSentOfferCount(0);
+      setUnreadTotal(0);
+      setNextMatch(null);
+      setLoading(false);
+      return;
+    }
+
+    const { data: mySlots, error: slotErr } = await supabase
+      .from("match_slots")
+      .select(
+        "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
+      )
+      .in("host_team_id", myTeamIds);
+
+    if (slotErr) {
+      console.error(slotErr);
+    }
+
+    const mySlotRows = (mySlots ?? []) as MatchSlotRow[];
+    const mySlotIds = mySlotRows.map((s) => s.id).filter(Boolean);
+
+    setOpenCount(mySlotRows.filter((s) => !s.is_closed).length);
+
+    const { data: outgoingRequests, error: outgoingReqErr } = await supabase
+      .from("match_requests")
+      .select(
+        "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
+      )
+      .in("requester_team_id", myTeamIds);
+
+    if (outgoingReqErr) {
+      console.error(outgoingReqErr);
+    }
+
+    const outgoingRequestRows = (outgoingRequests ?? []) as MatchRequestRow[];
+
+    let incomingRequestRows: MatchRequestRow[] = [];
+    if (mySlotIds.length > 0) {
+      const { data: incomingRequests, error: incomingReqErr } = await supabase
+        .from("match_requests")
+        .select(
+          "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
+        )
+        .in("slot_id", mySlotIds);
+
+      if (incomingReqErr) {
+        console.error(incomingReqErr);
+      } else {
+        incomingRequestRows = (incomingRequests ?? []) as MatchRequestRow[];
+      }
+    }
+
+    const { data: sentOffers, error: sentOffersErr } = await supabase
+      .from("match_offers")
+      .select(
+        "id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at"
+      )
+      .in("from_team_id", myTeamIds);
+
+    if (sentOffersErr) {
+      console.error("sentOffers error:", sentOffersErr);
+    }
+
+    const sentOfferRows = (sentOffers ?? []) as MatchOfferRow[];
+
+    const { data: receivedOffers, error: receivedOffersErr } = await supabase
+      .from("match_offers")
+      .select(
+        "id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at"
+      )
+      .in("to_team_id", myTeamIds);
+
+    if (receivedOffersErr) {
+      console.error("receivedOffers error:", receivedOffersErr);
+    }
+
+    const receivedOfferRows = (receivedOffers ?? []) as MatchOfferRow[];
+
+    const pendingReceivedOffers =
+      receivedOfferRows.filter((o) => o.status === "pending").length +
+      incomingRequestRows.filter(
+        (r) =>
+          r.status === "pending" && !myTeamIds.includes(r.requester_team_id)
+      ).length;
+
+    const pendingSentOffers =
+      sentOfferRows.filter((o) => o.status === "pending").length +
+      outgoingRequestRows.filter((r) => r.status === "pending").length;
+
+    setReceivedOfferCount(pendingReceivedOffers);
+    setSentOfferCount(pendingSentOffers);
+
+    const { data: memberRows, error: memberErr } = await supabase
+      .from("chat_members")
+      .select("thread_id,last_read_at")
+      .eq("user_id", user.id);
+
+    if (memberErr) {
+      console.error(memberErr);
+    }
+
+    const myMemberRows = (memberRows ?? []) as ChatMemberRow[];
+    const threadIds = myMemberRows.map((r) => r.thread_id).filter(Boolean);
+
+    if (threadIds.length > 0) {
+      const { data: msgRows, error: msgErr } = await supabase
+        .from("chat_messages")
+        .select("id,thread_id,body,created_at")
+        .in("thread_id", threadIds)
+        .order("created_at", { ascending: false })
+        .limit(2000);
+
+      if (msgErr) {
+        console.error(msgErr);
+      }
+
+      const messages = (msgRows ?? []) as ChatMessageRow[];
+      const latestByThread = new Map<string, ChatMessageRow>();
+
+      for (const m of messages) {
+        if (!latestByThread.has(m.thread_id)) {
+          latestByThread.set(m.thread_id, m);
+        }
+      }
+
+      let unread = 0;
+      for (const member of myMemberRows) {
+        const last = latestByThread.get(member.thread_id);
+        if (!last?.created_at) continue;
+
+        if (!member.last_read_at) {
+          unread += 1;
+          continue;
+        }
+
+        if (
+          new Date(last.created_at).getTime() >
+          new Date(member.last_read_at).getTime()
+        ) {
+          unread += 1;
+        }
+      }
+
+      setUnreadTotal(unread);
+    } else {
+      setUnreadTotal(0);
+    }
+
+    const acceptedOutgoingRequestSlotIds = outgoingRequestRows
+      .filter((r) => r.status === "accepted")
+      .map((r) => r.slot_id);
+
+    const acceptedIncomingRequestSlotIds = incomingRequestRows
+      .filter((r) => r.status === "accepted")
+      .map((r) => r.slot_id);
+
+    const acceptedReceivedOfferSlotIds = receivedOfferRows
+      .filter((o) => o.status === "accepted" && o.slot_id)
+      .map((o) => o.slot_id as string);
+
+    const acceptedSentOfferSlotIds = sentOfferRows
+      .filter((o) => o.status === "accepted" && o.slot_id)
+      .map((o) => o.slot_id as string);
+
+    const mergedAcceptedSlotIds = Array.from(
+      new Set(
+        [
+          ...acceptedOutgoingRequestSlotIds,
+          ...acceptedIncomingRequestSlotIds,
+          ...acceptedReceivedOfferSlotIds,
+          ...acceptedSentOfferSlotIds,
+        ].filter(Boolean)
+      )
+    );
+
+    if (mergedAcceptedSlotIds.length > 0) {
+      const { data: acceptedSlots, error: acceptedSlotsErr } = await supabase
+        .from("match_slots")
+        .select(
+          "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
+        )
+        .in("id", mergedAcceptedSlotIds)
+        .order("date", { ascending: true })
+        .order("start_time", { ascending: true });
+
+      if (acceptedSlotsErr) {
+        console.error(acceptedSlotsErr);
+      }
+
+      const now = Date.now();
+      const futureSlots = ((acceptedSlots ?? []) as MatchSlotRow[])
+        .filter((s) => toDateTimeMs(s.date, s.start_time) >= now)
+        .sort((a, b) => {
+          const aMs = toDateTimeMs(a.date, a.start_time);
+          const bMs = toDateTimeMs(b.date, b.start_time);
+          return aMs - bMs;
+        });
+
+      if (futureSlots.length > 0) {
+        const s = futureSlots[0];
+        setNextMatch({
+          date: s.date,
+          start_time: s.start_time,
+          end_time: s.end_time,
+          area: s.area,
+          area_text: s.area_text,
+          category: s.category,
+          slot_id: s.id,
+        });
+      } else {
+        setNextMatch(null);
+      }
+    } else {
+      setNextMatch(null);
+    }
+
     setLoading(false);
   }
 
@@ -372,7 +677,7 @@ export default function MyPage() {
       <AppHero
         icon="⚙️"
         title="マイページ"
-        desc="アカウント情報、チーム情報、グラウンド情報を確認・編集できます。"
+        desc="アカウント情報、試合状況、チーム情報、グラウンド情報を確認・編集できます。"
       />
 
       {!me ? (
@@ -380,6 +685,104 @@ export default function MyPage() {
           ログインが必要です。
         </div>
       ) : null}
+
+      <section style={box}>
+        <div style={sectionHead}>
+          <h2 style={sectionTitle}>現在の状況</h2>
+          <Link href="/chat" className="sh-btn">
+            チャットを見る
+          </Link>
+        </div>
+
+        <div style={dashboardGrid}>
+          <div style={dashboardCard}>
+            <div style={dashboardTitle}>⚽ あなたの試合状況</div>
+
+            <div style={statusList}>
+              <DashboardLinkRow
+                href="/match/status/open"
+                label="募集中の試合"
+                value={openCount}
+                helper={
+                  openCount === 0
+                    ? "まだ募集していません"
+                    : "現在公開中の募集です"
+                }
+              />
+              <DashboardLinkRow
+                href="/match/status/offers-received"
+                label="届いたオファー"
+                value={receivedOfferCount}
+                helper={
+                  receivedOfferCount === 0
+                    ? "新しいオファーはありません"
+                    : "確認待ちのオファーがあります"
+                }
+              />
+              <DashboardLinkRow
+                href="/match/status/offers"
+                label="送ったオファー"
+                value={sentOfferCount}
+                helper={
+                  sentOfferCount === 0
+                    ? "まだオファーを送っていません"
+                    : "返答待ちのオファーがあります"
+                }
+              />
+            </div>
+          </div>
+
+          <div style={dashboardCard}>
+            <div style={dashboardTitle}>💬 チャット</div>
+
+            <div style={statusList}>
+              <DashboardLinkRow
+                href="/chat"
+                label="未読メッセージ"
+                value={unreadTotal}
+                helper={
+                  unreadTotal === 0
+                    ? "新しいメッセージはありません"
+                    : "未読があります"
+                }
+              />
+            </div>
+          </div>
+
+          <div style={dashboardCard}>
+            <div style={dashboardTitle}>📅 次の試合</div>
+
+            {nextMatch ? (
+              <>
+                <div style={successBadge}>✅ 試合成立</div>
+                <Link href="/match/next" style={nextMatchLink}>
+                  <div style={nextMatchDate}>
+                    {fmtDate(nextMatch.date)} {fmtTime(nextMatch.start_time)}
+                  </div>
+                  <div style={nextMatchMeta}>
+                    {nextMatch.area_text ?? nextMatch.area ?? "エリア未設定"}
+                  </div>
+                  <div style={nextMatchMeta}>
+                    {nextMatch.category ?? "カテゴリ未設定"}
+                  </div>
+                </Link>
+              </>
+            ) : (
+              <div style={emptyActionBox}>
+                <div style={mutedText}>まだ試合は成立していません</div>
+                <div style={emptyActionRow}>
+                  <Link href="/match" className="sh-btn">
+                    試合を探す
+                  </Link>
+                  <Link href="/match/new" className="sh-btn sh-btn--primary">
+                    募集する
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
       <section style={box}>
         <div style={sectionHead}>
@@ -566,6 +969,25 @@ export default function MyPage() {
   );
 }
 
+function DashboardLinkRow(props: {
+  href: string;
+  label: string;
+  value: number;
+  helper?: string;
+}) {
+  const { href, label, value, helper } = props;
+
+  return (
+    <Link href={href} style={dashboardLinkRow}>
+      <div style={{ minWidth: 0 }}>
+        <div style={dashboardLinkLabel}>{label}</div>
+        {helper ? <div style={dashboardLinkHelper}>{helper}</div> : null}
+      </div>
+      <span style={dashboardLinkValue}>{value}</span>
+    </Link>
+  );
+}
+
 const box: React.CSSProperties = {
   padding: 16,
   border: "1px solid #eee",
@@ -587,6 +1009,117 @@ const sectionTitle: React.CSSProperties = {
   margin: 0,
   fontSize: 20,
   fontWeight: 900,
+};
+
+const dashboardGrid: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+};
+
+const dashboardCard: React.CSSProperties = {
+  border: "1px solid #e5e7eb",
+  borderRadius: 16,
+  background: "#fff",
+  padding: 16,
+  display: "grid",
+  gap: 10,
+};
+
+const dashboardTitle: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 18,
+  color: "#16391f",
+};
+
+const statusList: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+};
+
+const dashboardLinkRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  textDecoration: "none",
+  color: "#111",
+  border: "1px solid #edf1ee",
+  borderRadius: 12,
+  background: "#fafcfb",
+  padding: "12px 14px",
+};
+
+const dashboardLinkLabel: React.CSSProperties = {
+  fontWeight: 800,
+  color: "#2d3b31",
+};
+
+const dashboardLinkHelper: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 12,
+  color: "#6b7280",
+  lineHeight: 1.6,
+};
+
+const dashboardLinkValue: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 20,
+  color: "#145c2a",
+  whiteSpace: "nowrap",
+};
+
+const successBadge: React.CSSProperties = {
+  display: "inline-block",
+  background: "#dcfce7",
+  color: "#166534",
+  fontWeight: 900,
+  padding: "4px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  marginBottom: 6,
+};
+
+const nextMatchLink: React.CSSProperties = {
+  display: "block",
+  textDecoration: "none",
+  color: "#111",
+  border: "1px solid #edf1ee",
+  borderRadius: 12,
+  background: "#fafcfb",
+  padding: "12px 14px",
+};
+
+const nextMatchDate: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 20,
+  color: "#145c2a",
+};
+
+const nextMatchMeta: React.CSSProperties = {
+  marginTop: 6,
+  fontSize: 13,
+  color: "#666",
+  lineHeight: 1.6,
+};
+
+const emptyActionBox: React.CSSProperties = {
+  border: "1px solid #edf1ee",
+  borderRadius: 12,
+  background: "#fafcfb",
+  padding: "12px 14px",
+};
+
+const emptyActionRow: React.CSSProperties = {
+  marginTop: 10,
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const mutedText: React.CSSProperties = {
+  fontSize: 13,
+  color: "#666",
+  lineHeight: 1.7,
 };
 
 const card: React.CSSProperties = {
