@@ -3,7 +3,13 @@
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import { AppToast } from "@/app/components/AppToast";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -168,6 +174,33 @@ function buildMatchCarryQuery(params: {
 }
 
 export default function MatchCalendarPage() {
+  return (
+    <Suspense
+      fallback={
+        <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
+          <AppTabNav />
+          <div
+            style={{
+              marginTop: 16,
+              padding: 20,
+              borderRadius: 16,
+              border: "1px solid #e5ece7",
+              background: "#fff",
+              color: "#666",
+              textAlign: "center",
+            }}
+          >
+            読み込み中…
+          </div>
+        </main>
+      }
+    >
+      <MatchCalendarPageInner />
+    </Suspense>
+  );
+}
+
+function MatchCalendarPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -684,31 +717,31 @@ export default function MatchCalendarPage() {
             related_thread_id: threadId || null,
           });
 
-          if (notificationErr) {
-            console.error("notification insert error:", notificationErr);
-          } else {
-            try {
-              const pushRes = await fetch("/api/push/send", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  userId: hostUserId,
-                  title: notificationTitle,
-                  body: notificationBody,
-                  url: notificationUrl,
-                }),
-              });
+        if (notificationErr) {
+          console.error("notification insert error:", notificationErr);
+        } else {
+          try {
+            const pushRes = await fetch("/api/push/send", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                userId: hostUserId,
+                title: notificationTitle,
+                body: notificationBody,
+                url: notificationUrl,
+              }),
+            });
 
-              if (!pushRes.ok) {
-                const pushJson = await pushRes.json().catch(() => null);
-                console.error("push send error:", pushJson ?? pushRes.statusText);
-              }
-            } catch (e) {
-              console.error("push send fetch error:", e);
+            if (!pushRes.ok) {
+              const pushJson = await pushRes.json().catch(() => null);
+              console.error("push send error:", pushJson ?? pushRes.statusText);
             }
+          } catch (e) {
+            console.error("push send fetch error:", e);
           }
+        }
       }
     } catch (e) {
       console.error("request notification error:", e);

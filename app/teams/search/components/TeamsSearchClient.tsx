@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
-import type { StrengthRank } from "@/app/components/StrengthRankPicker";
+import { categoryLabel } from "@/app/lib/categories";
 import { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
 
 import {
@@ -14,6 +14,7 @@ import {
   STRENGTH_GUIDES,
   STRENGTH_OPTIONS,
   buildAreaText,
+  matchesTeamFilters,
 } from "./teamSearchUtils";
 
 import {
@@ -55,7 +56,6 @@ import {
 
 import { TeamSearchResultList } from "./TeamSearchResultList";
 import { TeamSearchFilterPanel } from "./TeamSearchFilterPanel";
-import { categoryLabel } from "@/app/lib/categories";
 
 export default function TeamsSearchClient() {
   const [toast, setToast] = useState<Toast | null>(null);
@@ -134,6 +134,7 @@ export default function TeamsSearchClient() {
     if (meId) {
       const own = rows.filter((t) => t.owner_id === meId);
       setMyTeams(own);
+
       if (!requestTeamId && own[0]?.id) {
         setRequestTeamId(own[0].id);
       }
@@ -145,21 +146,15 @@ export default function TeamsSearchClient() {
   };
 
   useEffect(() => {
-    load();
+    void load();
   }, []);
 
   const filteredTeams = useMemo(() => {
-    return teams.filter((t) => {
-      const { matchesTeamFilters } = require("./teamSearchUtils");
-      return matchesTeamFilters(t, appliedFilters);
-    });
+    return teams.filter((t) => matchesTeamFilters(t, appliedFilters));
   }, [teams, appliedFilters]);
 
   const draftFilteredTeams = useMemo(() => {
-    return teams.filter((t) => {
-      const { matchesTeamFilters } = require("./teamSearchUtils");
-      return matchesTeamFilters(t, draftFilters);
-    });
+    return teams.filter((t) => matchesTeamFilters(t, draftFilters));
   }, [teams, draftFilters]);
 
   const scrollToResults = () => {
@@ -205,10 +200,12 @@ export default function TeamsSearchClient() {
   const openDmAndGo = async (otherTeamId: string) => {
     try {
       const myTeamId = requestTeamId || myTeams[0]?.id;
+
       if (!myTeamId) {
         alert("自分のチームがありません");
         return;
       }
+
       if (!otherTeamId || myTeamId === otherTeamId) return;
 
       const threadId = await getOrCreateDmThread(myTeamId, otherTeamId);
@@ -224,6 +221,7 @@ export default function TeamsSearchClient() {
       alert("自分のチームがありません");
       return;
     }
+
     setOfferTargetTeam(team);
     setOfferMessage("");
   };
@@ -233,10 +231,12 @@ export default function TeamsSearchClient() {
       if (!offerTargetTeam) return;
 
       const fromTeamId = requestTeamId || myTeams[0]?.id;
+
       if (!fromTeamId) {
         alert("自分のチームを選択してください");
         return;
       }
+
       if (fromTeamId === offerTargetTeam.id) {
         alert("自分自身のチームには送れません");
         return;
@@ -246,6 +246,7 @@ export default function TeamsSearchClient() {
 
       const { data: authData } = await supabase.auth.getUser();
       const meId = authData?.user?.id ?? "";
+
       if (!meId) {
         alert("ログインが必要です");
         setSendingOffer(false);
@@ -315,9 +316,7 @@ export default function TeamsSearchClient() {
 
         if (targetUserId) {
           const notificationTitle = "新しい試合オファー";
-          const notificationBody = `${
-            myTeam?.name ?? "相手チーム"
-          } からオファーが届きました`;
+          const notificationBody = `${myTeam?.name ?? "相手チーム"} からオファーが届きました`;
           const notificationUrl = threadId ? `/chat/${threadId}` : "/chat";
 
           const { error: notificationErr } = await supabase
@@ -406,8 +405,8 @@ export default function TeamsSearchClient() {
             ...(toast.type === "success"
               ? toastSuccess
               : toast.type === "error"
-                ? toastError
-                : toastInfo),
+              ? toastError
+              : toastInfo),
           }}
           role="status"
           aria-live="polite"
