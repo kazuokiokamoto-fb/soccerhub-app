@@ -8,10 +8,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { Calendar } from "./components/Calendar";
 import { DaySlotList } from "./components/DaySlotList";
+import { MatchFilterPanel } from "./components/MatchFilterPanel";
+import { MatchHelpModals } from "./components/MatchHelpModals";
 
-import { CATEGORY_OPTIONS, categoryLabel } from "@/app/lib/categories";
-import { CheckboxGroup } from "@/app/components/CheckboxGroup";
-import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
+import { categoryLabel } from "@/app/lib/categories";
 import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 
 import {
@@ -33,13 +33,6 @@ import {
   stickySummaryCount,
   dayListHeaderRow,
   dayListTitle,
-  filterWrap,
-  filterHeaderRow,
-  filterTitle,
-  label,
-  labelTitle,
-  twoCols,
-  actionRow,
 } from "./styles/matchPageStyles";
 
 type StrengthGuide = {
@@ -58,14 +51,6 @@ type DayCalendarSummary = {
   count: number;
   tone: CalendarShortStatus;
 };
-
-const STRENGTH_OPTIONS = [
-  { value: "SS", label: "SS 都・県リーグ1・2部" },
-  { value: "S", label: "S 都・県リーグ3・4部" },
-  { value: "A", label: "A 地域リーグ1・2部" },
-  { value: "B", label: "B 地域リーグ3・4部" },
-  { value: "C", label: "C フレンドリー" },
-];
 
 const STRENGTH_GUIDES: StrengthGuide[] = [
   {
@@ -151,234 +136,6 @@ const contentScrollBox: React.CSSProperties = {
   maxHeight: "calc(100vh - 260px)",
   overflowY: "auto",
   WebkitOverflowScrolling: "touch",
-};
-
-const strengthCard: React.CSSProperties = {
-  border: "1px solid #e5ece7",
-  borderRadius: 16,
-  padding: 14,
-  background: "#fff",
-};
-
-const strengthHead: React.CSSProperties = {
-  display: "flex",
-  alignItems: "flex-start",
-  justifyContent: "space-between",
-  gap: 12,
-  flexWrap: "wrap",
-  marginBottom: 12,
-};
-
-const strengthTitleWrap: React.CSSProperties = {
-  display: "grid",
-  gap: 4,
-};
-
-const strengthTitleRow: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-};
-
-const strengthTitle: React.CSSProperties = {
-  fontWeight: 900,
-  fontSize: 16,
-  color: "#1f5d30",
-};
-
-const strengthSubText: React.CSSProperties = {
-  fontSize: 12,
-  color: "#66756d",
-};
-
-const strengthHeadRight: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  flexWrap: "wrap",
-};
-
-const helpButton: React.CSSProperties = {
-  width: 34,
-  height: 34,
-  borderRadius: 999,
-  border: "1px solid #d6eadb",
-  background: "#fff",
-  color: "#23412c",
-  cursor: "pointer",
-  fontWeight: 800,
-  fontSize: 18,
-  transition: "all 0.15s ease",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  boxShadow: "none",
-  WebkitAppearance: "none",
-  appearance: "none",
-};
-
-const strengthSimpleList: React.CSSProperties = {
-  display: "grid",
-  gap: 8,
-};
-
-const strengthSimpleButton: React.CSSProperties = {
-  width: "100%",
-  textAlign: "left",
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #d6eadb",
-  background: "#fff",
-  cursor: "pointer",
-  transition: "all 0.15s ease",
-  fontSize: 14,
-  fontWeight: 800,
-  color: "#23412c",
-  lineHeight: 1.5,
-  boxShadow: "none",
-  WebkitAppearance: "none",
-  appearance: "none",
-};
-
-const strengthSimpleButtonDisabled: React.CSSProperties = {
-  opacity: 0.6,
-  cursor: "not-allowed",
-};
-
-const strengthSimpleCode: React.CSSProperties = {
-  display: "inline-block",
-  minWidth: 28,
-  fontWeight: 900,
-};
-
-const modalOverlay: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.42)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: 16,
-  zIndex: 2000,
-};
-
-const modalCard: React.CSSProperties = {
-  width: "100%",
-  maxWidth: 720,
-  maxHeight: "80vh",
-  overflowY: "auto",
-  background: "#fff",
-  borderRadius: 20,
-  border: "1px solid #e5ece7",
-  boxShadow: "0 18px 40px rgba(0,0,0,0.18)",
-  padding: 18,
-};
-
-const modalHeader: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 12,
-  marginBottom: 12,
-  position: "sticky",
-  top: 0,
-  background: "#fff",
-  paddingBottom: 8,
-};
-
-const modalTitle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 20,
-  fontWeight: 900,
-  color: "#16391f",
-};
-
-const modalCloseButton: React.CSSProperties = {
-  border: "1px solid #d6ded9",
-  background: "#fff",
-  borderRadius: 12,
-  padding: "8px 12px",
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
-const guideList: React.CSSProperties = {
-  display: "grid",
-  gap: 12,
-};
-
-const guideCard: React.CSSProperties = {
-  border: "1px solid #e7ece9",
-  borderRadius: 16,
-  background: "#fafcfb",
-  padding: 14,
-};
-
-const guideTop: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  flexWrap: "wrap",
-};
-
-const guideRank: React.CSSProperties = {
-  minWidth: 42,
-  height: 30,
-  padding: "0 12px",
-  borderRadius: 999,
-  background: "#145c2a",
-  color: "#fff",
-  fontWeight: 900,
-  fontSize: 14,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-};
-
-const guideShort: React.CSSProperties = {
-  fontWeight: 900,
-  color: "#16391f",
-  fontSize: 15,
-};
-
-const guideTitleText: React.CSSProperties = {
-  marginTop: 10,
-  fontWeight: 800,
-  color: "#314137",
-  lineHeight: 1.7,
-};
-
-const guideBulletList: React.CSSProperties = {
-  marginTop: 10,
-  display: "grid",
-  gap: 6,
-};
-
-const guideBulletRow: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "12px 1fr",
-  gap: 8,
-  alignItems: "start",
-  color: "#314137",
-  fontSize: 14,
-  lineHeight: 1.7,
-};
-
-const guideBulletMark: React.CSSProperties = {
-  fontWeight: 900,
-  color: "#1f5d30",
-};
-
-const guideNote: React.CSSProperties = {
-  marginTop: 10,
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #e7d08a",
-  background: "#fff8dd",
-  color: "#4d3a00",
-  fontWeight: 800,
-  lineHeight: 1.7,
-  fontSize: 13,
 };
 
 function teamStrengthLabel(team: any) {
@@ -474,7 +231,7 @@ export default function MatchCalendarPage() {
   const loading = loadingBase || loadingMonth;
 
   const dayListRef = useRef<HTMLDivElement | null>(null);
-  const filterRef = useRef<HTMLDivElement | null>(null);
+  const filterRef = useRef<HTMLElement | null>(null);
   const initialQueryAppliedRef = useRef(false);
 
   useEffect(() => {
@@ -681,13 +438,7 @@ export default function MatchCalendarPage() {
     }
 
     initialQueryAppliedRef.current = true;
-  }, [
-    queryDate,
-    querySlotId,
-    slotsInMonth,
-    loadingMonth,
-    getSlotStatus,
-  ]);
+  }, [queryDate, querySlotId, slotsInMonth, loadingMonth, getSlotStatus]);
 
   const scrollToDayList = () => {
     setTimeout(() => {
@@ -826,9 +577,12 @@ export default function MatchCalendarPage() {
       return;
     }
 
-    const confirmText = requestComment.trim()
-      ? `この内容で試合申込しますか？\n\nコメント:\n${requestComment.trim()}`
-      : "この内容で試合申込しますか？";
+    const defaultComment =
+      "はじめまして。練習試合を希望しています。条件が合えばぜひお願いします。";
+
+    const finalComment = (requestComment.trim() || defaultComment).trim();
+
+    const confirmText = `この内容で試合申込しますか？\n\nコメント:\n${finalComment}`;
 
     if (!window.confirm(confirmText)) return;
 
@@ -837,7 +591,7 @@ export default function MatchCalendarPage() {
       requester_team_id: requestTeamId,
       requester_user_id: uid,
       status: "pending" as const,
-      comment: requestComment.trim() || null,
+      comment: finalComment || null,
     };
 
     const { data: insertedRequest, error } = await supabase
@@ -967,7 +721,7 @@ export default function MatchCalendarPage() {
         `👥 募集チーム：${hostTeam?.name ?? "未設定"}`,
         `💪 強さ：${teamStrengthLabel(hostTeam)}`,
         "",
-        requestComment.trim() ? `💬 ${requestComment.trim()}` : "",
+        `💬 ${finalComment}`,
       ].filter(Boolean);
 
       await insertChatMessage({
@@ -1082,7 +836,7 @@ export default function MatchCalendarPage() {
   };
 
   const cancelMyRequest = async (requestId: string) => {
-    if (!window.confirm("申込みをキャンセルしますか？")) return;
+    if (!window.confirm("申込みを撤回しますか？")) return;
 
     const req = requestsForMonth.find((r) => r.id === requestId);
     if (!req) return;
@@ -1094,7 +848,7 @@ export default function MatchCalendarPage() {
 
     if (error) {
       console.error(error);
-      alert(`キャンセル失敗: ${error.message}`);
+      alert(`申込み撤回に失敗しました: ${error.message}`);
       return;
     }
 
@@ -1205,7 +959,7 @@ export default function MatchCalendarPage() {
                 onClick={() => goToCreatePage(selectedYmd)}
                 disabled={loading || myTeams.length === 0}
               >
-                ＋募集枠を作る
+                募集する
               </button>
             </div>
           </div>
@@ -1294,339 +1048,45 @@ export default function MatchCalendarPage() {
           />
         </div>
 
-        <section ref={filterRef} style={filterWrap}>
-          <div style={{ display: "grid", gap: 12 }}>
-            <div style={filterHeaderRow}>
-              <h2 style={filterTitle}>絞り込み条件</h2>
-
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={scrollToDayList}
-              >
-                募集一覧へ
-              </button>
-            </div>
-
-            <label style={label}>
-              <span style={labelTitle}>キーワード</span>
-
-              <input
-                value={draftKeyword}
-                onChange={(e) => setDraftKeyword(e.target.value)}
-                className="sh-input"
-                disabled={loading}
-                placeholder="例：三宿 / 青 / 強度高め / 小学5年 / キッズ / SS"
-              />
-            </label>
-
-            <AreaPickerKanto
-              title="エリア"
-              allowAll={true}
-              allLabel="関東（すべて）"
-              disabled={loading}
-              prefecture={draftPrefectureFilter}
-              setPrefecture={setDraftPrefectureFilter}
-              city={draftCityFilter}
-              setCity={setDraftCityFilter}
-              town={draftTownFilter}
-              setTown={setDraftTownFilter}
-              townOptional={true}
-              useChipUI={true}
-            />
-
-            <CheckboxGroup
-              title="カテゴリ"
-              options={CATEGORY_OPTIONS}
-              values={draftCategoryFilter}
-              onChange={setDraftCategoryFilter}
-              columns={3}
-              disabled={loading}
-              useChipUI={true}
-            />
-
-            <div style={strengthCard}>
-              <div style={strengthHead}>
-                <div style={strengthTitleWrap}>
-                  <div style={strengthTitleRow}>
-                    <div style={strengthTitle}>強さ</div>
-                    <button
-                      type="button"
-                      aria-label="強さの説明"
-                      title="強さの説明"
-                      style={helpButton}
-                      onClick={() => setShowStrengthHelp(true)}
-                      disabled={loading}
-                    >
-                      ?
-                    </button>
-                  </div>
-                  <div style={strengthSubText}>複数選択できます</div>
-                </div>
-
-                <div style={strengthHeadRight}>
-                  <button
-                    type="button"
-                    className="sh-btn sh-btn--ghost"
-                    onClick={() =>
-                      setDraftStrengthFilter(
-                        STRENGTH_OPTIONS.map((o) => o.value as StrengthRank)
-                      )
-                    }
-                    disabled={loading}
-                  >
-                    全選択
-                  </button>
-
-                  <button
-                    type="button"
-                    className="sh-btn"
-                    onClick={() => setDraftStrengthFilter([])}
-                    disabled={loading}
-                  >
-                    クリア
-                  </button>
-                </div>
-              </div>
-
-              <div style={strengthSimpleList}>
-                {STRENGTH_GUIDES.map((item) => {
-                  const active = draftStrengthFilter.includes(item.rank);
-
-                  return (
-                    <button
-                      key={item.rank}
-                      type="button"
-                      disabled={loading}
-                      onClick={() => {
-                        setDraftStrengthFilter((prev) => {
-                          if (prev.includes(item.rank)) {
-                            return prev.filter((v) => v !== item.rank);
-                          }
-                          return [...prev, item.rank];
-                        });
-                      }}
-                      aria-pressed={active}
-                      style={{
-                        ...strengthSimpleButton,
-                        border: active
-                          ? "1px solid #145c2a"
-                          : "1px solid #d6eadb",
-                        background: active ? "#145c2a" : "#fff",
-                        color: active ? "#fff" : "#23412c",
-                        boxShadow: active
-                          ? "0 6px 14px rgba(20,92,42,0.14)"
-                          : "none",
-                        ...(loading ? strengthSimpleButtonDisabled : {}),
-                      }}
-                    >
-                      <span style={strengthSimpleCode}>{item.rank}</span>
-                      <span>{item.short}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div style={twoCols}>
-              <label style={label}>
-                <span style={labelTitle}>チーム所属人数（以上）</span>
-
-                <select
-                  value={draftMemberCountMin}
-                  onChange={(e) => setDraftMemberCountMin(e.target.value)}
-                  className="sh-select"
-                  disabled={loading}
-                >
-                  <option value="">指定なし</option>
-                  <option value="5">5人以上</option>
-                  <option value="10">10人以上</option>
-                  <option value="15">15人以上</option>
-                  <option value="20">20人以上</option>
-                  <option value="25">25人以上</option>
-                  <option value="30">30人以上</option>
-                </select>
-              </label>
-
-              <label style={label}>
-                <span style={labelTitle}>グラウンド</span>
-
-                <select
-                  value={draftGroundFilter}
-                  onChange={(e) => setDraftGroundFilter(e.target.value as any)}
-                  className="sh-select"
-                  disabled={loading}
-                >
-                  <option value="all">指定なし</option>
-                  <option value="あり">あり</option>
-                  <option value="なし">なし</option>
-                </select>
-              </label>
-            </div>
-
-            <div style={twoCols}>
-              <label style={label}>
-                <span style={labelTitle}>駐輪場</span>
-
-                <select
-                  value={draftBikeFilter}
-                  onChange={(e) => setDraftBikeFilter(e.target.value as any)}
-                  className="sh-select"
-                  disabled={loading}
-                >
-                  <option value="all">指定なし</option>
-                  <option value="あり">あり</option>
-                  <option value="なし">なし</option>
-                  <option value="不明">不明</option>
-                </select>
-              </label>
-
-              <label style={label}>
-                <span style={labelTitle}>駐輪場台数（以上）</span>
-
-                <select
-                  value={draftBikeCapacityMin}
-                  onChange={(e) => setDraftBikeCapacityMin(e.target.value)}
-                  className="sh-select"
-                  disabled={loading}
-                >
-                  <option value="">指定なし</option>
-                  <option value="5">5台以上</option>
-                  <option value="10">10台以上</option>
-                  <option value="15">15台以上</option>
-                  <option value="20">20台以上</option>
-                  <option value="25">25台以上</option>
-                  <option value="30">30台以上</option>
-                  <option value="40">40台以上</option>
-                  <option value="50">50台以上</option>
-                </select>
-              </label>
-            </div>
-
-            <div style={actionRow}>
-              <button
-                type="button"
-                className="sh-btn sh-btn--primary"
-                onClick={handleApplyAndJump}
-                disabled={!hasDraftChanges || loading}
-              >
-                この条件で一覧表示
-              </button>
-
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={handleResetFilters}
-                disabled={loading}
-              >
-                条件リセット
-              </button>
-            </div>
-          </div>
-        </section>
+        <MatchFilterPanel
+          filterRef={filterRef}
+          loading={loading}
+          draftKeyword={draftKeyword}
+          setDraftKeyword={setDraftKeyword}
+          draftCategoryFilter={draftCategoryFilter}
+          setDraftCategoryFilter={setDraftCategoryFilter}
+          draftPrefectureFilter={draftPrefectureFilter}
+          setDraftPrefectureFilter={setDraftPrefectureFilter}
+          draftCityFilter={draftCityFilter}
+          setDraftCityFilter={setDraftCityFilter}
+          draftTownFilter={draftTownFilter}
+          setDraftTownFilter={setDraftTownFilter}
+          draftGroundFilter={draftGroundFilter}
+          setDraftGroundFilter={setDraftGroundFilter}
+          draftStrengthFilter={draftStrengthFilter}
+          setDraftStrengthFilter={setDraftStrengthFilter}
+          draftBikeFilter={draftBikeFilter}
+          setDraftBikeFilter={setDraftBikeFilter}
+          draftBikeCapacityMin={draftBikeCapacityMin}
+          setDraftBikeCapacityMin={setDraftBikeCapacityMin}
+          draftMemberCountMin={draftMemberCountMin}
+          setDraftMemberCountMin={setDraftMemberCountMin}
+          hasDraftChanges={hasDraftChanges}
+          onApply={handleApplyAndJump}
+          onReset={handleResetFilters}
+          onBackToList={scrollToDayList}
+          onOpenStrengthHelp={() => setShowStrengthHelp(true)}
+          strengthGuides={STRENGTH_GUIDES}
+        />
       </div>
 
-      {showStrengthHelp ? (
-        <div
-          style={modalOverlay}
-          onClick={() => setShowStrengthHelp(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="強さの説明"
-        >
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={modalHeader}>
-              <h3 style={modalTitle}>強さの説明</h3>
-              <button
-                type="button"
-                style={modalCloseButton}
-                onClick={() => setShowStrengthHelp(false)}
-              >
-                閉じる
-              </button>
-            </div>
-
-            <div style={guideList}>
-              {STRENGTH_GUIDES.map((item) => (
-                <div key={item.rank} style={guideCard}>
-                  <div style={guideTop}>
-                    <div style={guideRank}>{item.rank}</div>
-                    <div style={guideShort}>{item.short}</div>
-                  </div>
-
-                  <div style={guideTitleText}>{item.title}</div>
-
-                  <div style={guideBulletList}>
-                    {item.bullets.map((bullet) => (
-                      <div key={bullet} style={guideBulletRow}>
-                        <span style={guideBulletMark}>•</span>
-                        <span>{bullet}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={guideNote}>{item.note}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {showCalendarHelp ? (
-        <div
-          style={modalOverlay}
-          onClick={() => setShowCalendarHelp(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="カレンダー表示の説明"
-        >
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={modalHeader}>
-              <h3 style={modalTitle}>決・募・他 の見方</h3>
-              <button
-                type="button"
-                style={modalCloseButton}
-                onClick={() => setShowCalendarHelp(false)}
-              >
-                閉じる
-              </button>
-            </div>
-
-            <div style={guideList}>
-              <div style={guideCard}>
-                <div style={guideTop}>
-                  <div style={calendarLegendBadgeDecided}>決</div>
-                  <div style={guideShort}>決定済</div>
-                </div>
-                <div style={guideTitleText}>
-                  あなたのチームで試合が決まった募集です。
-                </div>
-              </div>
-
-              <div style={guideCard}>
-                <div style={guideTop}>
-                  <div style={calendarLegendBadgeOpen}>募</div>
-                  <div style={guideShort}>募集中</div>
-                </div>
-                <div style={guideTitleText}>
-                  まだ申し込みできる募集です。
-                </div>
-              </div>
-
-              <div style={guideCard}>
-                <div style={guideTop}>
-                  <div style={calendarLegendBadgeOther}>他</div>
-                  <div style={guideShort}>他決定</div>
-                </div>
-                <div style={guideTitleText}>
-                  他チームで決まった募集です。
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <MatchHelpModals
+        showStrengthHelp={showStrengthHelp}
+        showCalendarHelp={showCalendarHelp}
+        onCloseStrengthHelp={() => setShowStrengthHelp(false)}
+        onCloseCalendarHelp={() => setShowCalendarHelp(false)}
+        strengthGuides={STRENGTH_GUIDES}
+      />
     </main>
   );
 }
@@ -1693,33 +1153,4 @@ const calendarHelpButton: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-};
-
-const calendarLegendBadgeBase: React.CSSProperties = {
-  minWidth: 34,
-  height: 28,
-  borderRadius: 999,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontWeight: 900,
-  fontSize: 14,
-};
-
-const calendarLegendBadgeDecided: React.CSSProperties = {
-  ...calendarLegendBadgeBase,
-  background: "#dcfce7",
-  color: "#166534",
-};
-
-const calendarLegendBadgeOpen: React.CSSProperties = {
-  ...calendarLegendBadgeBase,
-  background: "#dbeafe",
-  color: "#1d4ed8",
-};
-
-const calendarLegendBadgeOther: React.CSSProperties = {
-  ...calendarLegendBadgeBase,
-  background: "#f3f4f6",
-  color: "#4b5563",
 };

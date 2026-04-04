@@ -1,4 +1,3 @@
-// app/match/components/Calendar.tsx
 "use client";
 
 import React from "react";
@@ -37,6 +36,13 @@ export function Calendar(props: {
   onNextMonth: () => void;
   onCreateForDate: (ymd: string) => void;
   disableCreate?: boolean;
+
+  filterSummaryText?: string;
+  onOpenFilters?: () => void;
+  onResetFilters?: () => void;
+
+  openOnly?: boolean;
+  onToggleOpenOnly?: () => void;
 }) {
   const {
     monthKey,
@@ -49,12 +55,69 @@ export function Calendar(props: {
     onNextMonth,
     onCreateForDate,
     disableCreate,
+    filterSummaryText,
+    onOpenFilters,
+    onResetFilters,
+    openOnly = false,
+    onToggleOpenOnly,
   } = props;
 
   const weekLabels = ["月", "火", "水", "木", "金", "土", "日"];
 
   return (
     <section style={{ ...card, marginTop: 14 }}>
+      <div style={topHead}>
+        <div style={topHeadLeft}>
+          <div style={topEyebrow}>MATCH CALENDAR</div>
+          <div style={topTitle}>カレンダーから試合を探す</div>
+        </div>
+
+        <div style={topHeadActions}>
+          {onOpenFilters ? (
+            <button
+              type="button"
+              className="sh-btn"
+              onClick={onOpenFilters}
+              disabled={loading}
+            >
+              条件変更
+            </button>
+          ) : null}
+
+          {onResetFilters ? (
+            <button
+              type="button"
+              className="sh-btn"
+              onClick={onResetFilters}
+              disabled={loading}
+            >
+              リセット
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div style={filterSummaryBox}>
+        <div style={filterSummaryLabel}>表示条件</div>
+        <div style={filterSummaryTextStyle}>
+          {filterSummaryText?.trim() || "すべての条件で表示中"}
+        </div>
+
+        {onToggleOpenOnly ? (
+          <button
+            type="button"
+            onClick={onToggleOpenOnly}
+            style={{
+              ...openOnlyChip,
+              ...(openOnly ? openOnlyChipActive : null),
+            }}
+            aria-pressed={openOnly}
+          >
+            {openOnly ? "募集中のみ表示中" : "募集中のみ表示"}
+          </button>
+        ) : null}
+      </div>
+
       <div style={headerRow}>
         <button className="sh-btn" type="button" onClick={onPrevMonth}>
           ← 前月
@@ -160,7 +223,7 @@ export function Calendar(props: {
           onClick={() => onCreateForDate(selectedYmd)}
           disabled={loading || disableCreate}
         >
-          ＋募集枠を作る
+          募集する
         </button>
       </div>
     </section>
@@ -174,7 +237,88 @@ const card: React.CSSProperties = {
   background: "#fff",
 };
 
+const topHead: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const topHeadLeft: React.CSSProperties = {
+  display: "grid",
+  gap: 4,
+};
+
+const topEyebrow: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  color: "#5b6d61",
+};
+
+const topTitle: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#16391f",
+  lineHeight: 1.3,
+};
+
+const topHeadActions: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const filterSummaryBox: React.CSSProperties = {
+  marginTop: 12,
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: "1px solid #dfeee3",
+  background: "linear-gradient(135deg,#f5fbf6 0%,#eef8f0 100%)",
+  display: "grid",
+  gap: 6,
+};
+
+const filterSummaryLabel: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 900,
+  color: "#5b6d61",
+  letterSpacing: "0.05em",
+};
+
+const filterSummaryTextStyle: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#23412c",
+  lineHeight: 1.6,
+};
+
+const openOnlyChip: React.CSSProperties = {
+  marginTop: 2,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "fit-content",
+  minHeight: 30,
+  padding: "0 12px",
+  borderRadius: 999,
+  border: "1px solid #d8e5dc",
+  background: "#fff",
+  color: "#294234",
+  fontSize: 12,
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const openOnlyChipActive: React.CSSProperties = {
+  border: "1px solid #145c2a",
+  background: "#145c2a",
+  color: "#fff",
+};
+
 const headerRow: React.CSSProperties = {
+  marginTop: 12,
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",

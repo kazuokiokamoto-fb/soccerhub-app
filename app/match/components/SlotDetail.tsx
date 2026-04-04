@@ -5,6 +5,9 @@ import Link from "next/link";
 import type { DbRequest, DbSlot, DbTeam, DbVenue } from "../types";
 import { categoryLabel, categoryLabels } from "@/app/lib/categories";
 
+const DEFAULT_REQUEST_COMMENT =
+  "はじめまして。練習試合を希望しています。条件が合えばぜひお願いします。";
+
 function hhmm(v: string) {
   if (!v) return "";
   return v.slice(0, 5);
@@ -67,18 +70,18 @@ function badgeStyle(status: DbRequest["status"]): React.CSSProperties {
       status === "accepted"
         ? "#ecfdf3"
         : status === "rejected"
-        ? "#fef2f2"
-        : status === "cancelled"
-        ? "#f3f4f6"
-        : "#eff6ff",
+          ? "#fef2f2"
+          : status === "cancelled"
+            ? "#f3f4f6"
+            : "#eff6ff",
     color:
       status === "accepted"
         ? "#166534"
         : status === "rejected"
-        ? "#991b1b"
-        : status === "cancelled"
-        ? "#374151"
-        : "#1e3a8a",
+          ? "#991b1b"
+          : status === "cancelled"
+            ? "#374151"
+            : "#1e3a8a",
     fontSize: 12,
     fontWeight: 900,
   };
@@ -299,6 +302,9 @@ export function SlotDetail(props: {
     date: slot.date,
   });
 
+  const displayRequestComment =
+    requestComment.trim() || DEFAULT_REQUEST_COMMENT;
+
   return (
     <div style={root}>
       <section style={heroCard}>
@@ -485,7 +491,7 @@ export function SlotDetail(props: {
                     onClick={() => onCancelMyRequest(myRequest.id)}
                     disabled={!!loading}
                   >
-                    申込みキャンセル
+                    申込み撤回
                   </button>
                 </div>
               ) : null}
@@ -516,11 +522,11 @@ export function SlotDetail(props: {
               </label>
 
               <label style={fieldWrap}>
-                <span style={smallLabel}>コメント（任意）</span>
+                <span style={smallLabel}>コメント</span>
                 <textarea
-                  value={requestComment}
+                  value={displayRequestComment}
                   onChange={(e) => onChangeRequestComment(e.target.value)}
-                  placeholder="例：交流重視でぜひお願いします。"
+                  placeholder={DEFAULT_REQUEST_COMMENT}
                   style={textarea}
                   disabled={!!loading}
                 />

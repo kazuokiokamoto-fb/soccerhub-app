@@ -6,6 +6,9 @@ import type { DbSlot, DbTeam, DbVenue, DbRequest } from "../types";
 import { SlotDetail } from "./SlotDetail";
 import { categoryLabel, categoryLabels } from "@/app/lib/categories";
 
+const DEFAULT_REQUEST_COMMENT =
+  "はじめまして。練習試合を希望しています。条件が合えばぜひお願いします。";
+
 function hhmm(v: string) {
   if (!v) return "";
   return v.slice(0, 5);
@@ -67,16 +70,16 @@ function statusBadgeStyle(status: DbRequest["status"]) {
         : status === "rejected"
         ? "#fef2f2"
         : status === "cancelled"
-        ? "#f3f4f6"
-        : "#eff6ff",
+          ? "#f3f4f6"
+          : "#eff6ff",
     color:
       status === "accepted"
         ? "#166534"
         : status === "rejected"
-        ? "#991b1b"
-        : status === "cancelled"
-        ? "#374151"
-        : "#1e3a8a",
+          ? "#991b1b"
+          : status === "cancelled"
+            ? "#374151"
+            : "#1e3a8a",
   } as React.CSSProperties;
 }
 
@@ -190,6 +193,25 @@ export function DaySlotList(props: {
     onToggleClosed,
     loading,
   } = props;
+
+  React.useEffect(() => {
+    if (!selectedSlotId) return;
+    if (requestComment.trim()) return;
+
+    const targetSlot = slots.find((slot) => slot.id === selectedSlotId);
+    if (!targetSlot) return;
+
+    const isMine = !!meId && targetSlot.owner_id === meId;
+    if (isMine) return;
+
+    onChangeRequestComment(DEFAULT_REQUEST_COMMENT);
+  }, [
+    selectedSlotId,
+    slots,
+    meId,
+    requestComment,
+    onChangeRequestComment,
+  ]);
 
   return (
     <section style={{ ...card, marginTop: 14 }}>
