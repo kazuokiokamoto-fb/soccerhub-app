@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "./lib/supabase";
 import AppTabNav from "@/app/components/AppTabNav";
@@ -13,97 +13,14 @@ type TeamRow = {
   category: string | null;
 };
 
-type MatchSlotRow = {
-  id: string;
-  host_team_id: string;
-  date: string;
-  start_time: string;
-  end_time: string;
-  area: string | null;
-  area_text?: string | null;
-  category: string | null;
-  is_closed: boolean | null;
-  created_at: string;
-};
-
-type MatchRequestRow = {
-  id: string;
-  slot_id: string;
-  requester_team_id: string;
-  requester_user_id: string | null;
-  status: "pending" | "accepted" | "rejected" | "cancelled";
-  comment: string | null;
-  created_at: string;
-};
-
-type MatchOfferRow = {
-  id: string;
-  slot_id: string | null;
-  from_user_id?: string | null;
-  from_team_id: string;
-  to_team_id: string;
-  status: "pending" | "accepted" | "rejected" | "cancelled";
-  message: string | null;
-  created_at: string;
-};
-
-type ChatMemberRow = {
-  thread_id: string;
-  last_read_at: string | null;
-};
-
-type ChatMessageRow = {
-  id: string;
-  thread_id: string;
-  body: string | null;
-  created_at: string;
-};
-
-type NextMatchCard = {
-  date: string;
-  start_time: string;
-  end_time: string;
-  area: string | null;
-  area_text?: string | null;
-  category: string | null;
-  slot_id: string;
-};
-
-function fmtDate(ymd?: string | null) {
-  if (!ymd) return "";
-  return ymd;
-}
-
-function fmtTime(v?: string | null) {
-  if (!v) return "";
-  return String(v).slice(0, 5);
-}
-
-function toDateTimeMs(date?: string | null, time?: string | null) {
-  if (!date || !time) return 0;
-  const dt = new Date(`${date}T${time}`);
-  return dt.getTime();
-}
-
 export default function HomePage() {
   const [meId, setMeId] = useState("");
   const [authLoading, setAuthLoading] = useState(true);
-  const [loading, setLoading] = useState(true);
-
   const [myTeams, setMyTeams] = useState<TeamRow[]>([]);
-
-  const [openCount, setOpenCount] = useState(0);
-  const [receivedOfferCount, setReceivedOfferCount] = useState(0);
-  const [sentOfferCount, setSentOfferCount] = useState(0);
-
-  const [unreadTotal, setUnreadTotal] = useState(0);
-  const [nextMatch, setNextMatch] = useState<NextMatchCard | null>(null);
+  const [teamLoading, setTeamLoading] = useState(true);
 
   const [showGuide, setShowGuide] = useState(false);
   const [showQa, setShowQa] = useState(false);
-
-  const loadTimerRef = React.useRef<NodeJS.Timeout | null>(null);
-  const loadingRef = React.useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -143,365 +60,54 @@ export default function HomePage() {
     };
   }, []);
 
-  const resetHomeState = useCallback(() => {
-    setMyTeams([]);
-    setOpenCount(0);
-    setReceivedOfferCount(0);
-    setSentOfferCount(0);
-    setUnreadTotal(0);
-    setNextMatch(null);
-  }, []);
+  useEffect(() => {
+    let mounted = true;
 
-  const loadHome = useCallback(async () => {
-    if (loadingRef.current) return;
+    const loadTeams = async () => {
+      if (authLoading) return;
 
-    if (!meId) {
-      resetHomeState();
-      setLoading(false);
-      return;
-    }
-
-    loadingRef.current = true;
-    setLoading(true);
-
-    try {
-      const { data: teamRows, error: teamErr } = await supabase
-        .from("teams")
-        .select("id, owner_id, name, category")
-        .eq("owner_id", meId);
-
-      if (teamErr) {
-        console.error(teamErr);
-        resetHomeState();
-        setLoading(false);
+      if (!meId) {
+        if (!mounted) return;
+        setMyTeams([]);
+        setTeamLoading(false);
         return;
       }
 
-      const myTeamData = (teamRows ?? []) as TeamRow[];
-      setMyTeams(myTeamData);
+      setTeamLoading(true);
 
-      const myTeamIds = myTeamData.map((t) => t.id).filter(Boolean);
+      try {
+        const { data, error } = await supabase
+          .from("teams")
+          .select("id, owner_id, name, category")
+          .eq("owner_id", meId);
 
-      if (myTeamIds.length === 0) {
-        setOpenCount(0);
-        setReceivedOfferCount(0);
-        setSentOfferCount(0);
-        setUnreadTotal(0);
-        setNextMatch(null);
-        setLoading(false);
-        return;
-      }
-
-      const { data: mySlots, error: slotErr } = await supabase
-        .from("match_slots")
-        .select(
-          "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
-        )
-        .in("host_team_id", myTeamIds);
-
-      if (slotErr) {
-        console.error(slotErr);
-      }
-
-      const mySlotRows = (mySlots ?? []) as MatchSlotRow[];
-      const mySlotIds = mySlotRows.map((s) => s.id).filter(Boolean);
-
-      setOpenCount(mySlotRows.filter((s) => !s.is_closed).length);
-
-      const { data: outgoingRequests, error: outgoingReqErr } = await supabase
-        .from("match_requests")
-        .select(
-          "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
-        )
-        .in("requester_team_id", myTeamIds);
-
-      if (outgoingReqErr) {
-        console.error(outgoingReqErr);
-      }
-
-      const outgoingRequestRows = (outgoingRequests ?? []) as MatchRequestRow[];
-
-      let incomingRequestRows: MatchRequestRow[] = [];
-      if (mySlotIds.length > 0) {
-        const { data: incomingRequests, error: incomingReqErr } = await supabase
-          .from("match_requests")
-          .select(
-            "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
-          )
-          .in("slot_id", mySlotIds);
-
-        if (incomingReqErr) {
-          console.error(incomingReqErr);
-        } else {
-          incomingRequestRows = (incomingRequests ?? []) as MatchRequestRow[];
-        }
-      }
-
-      const { data: sentOffers, error: sentOffersErr } = await supabase
-        .from("match_offers")
-        .select(
-          "id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at"
-        )
-        .in("from_team_id", myTeamIds);
-
-      if (sentOffersErr) {
-        console.error("sentOffers error:", sentOffersErr);
-      }
-
-      const sentOfferRows = (sentOffers ?? []) as MatchOfferRow[];
-
-      const { data: receivedOffers, error: receivedOffersErr } = await supabase
-        .from("match_offers")
-        .select(
-          "id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at"
-        )
-        .in("to_team_id", myTeamIds);
-
-      if (receivedOffersErr) {
-        console.error("receivedOffers error:", receivedOffersErr);
-      }
-
-      const receivedOfferRows = (receivedOffers ?? []) as MatchOfferRow[];
-
-      const pendingReceivedOffers =
-        receivedOfferRows.filter((o) => o.status === "pending").length +
-        incomingRequestRows.filter(
-          (r) =>
-            r.status === "pending" && !myTeamIds.includes(r.requester_team_id)
-        ).length;
-
-      const pendingSentOffers =
-        sentOfferRows.filter((o) => o.status === "pending").length +
-        outgoingRequestRows.filter((r) => r.status === "pending").length;
-
-      setReceivedOfferCount(pendingReceivedOffers);
-      setSentOfferCount(pendingSentOffers);
-
-      const { data: memberRows, error: memberErr } = await supabase
-        .from("chat_members")
-        .select("thread_id,last_read_at")
-        .eq("user_id", meId);
-
-      if (memberErr) {
-        console.error(memberErr);
-      }
-
-      const myMemberRows = (memberRows ?? []) as ChatMemberRow[];
-      const threadIds = myMemberRows.map((r) => r.thread_id).filter(Boolean);
-
-      if (threadIds.length > 0) {
-        const { data: msgRows, error: msgErr } = await supabase
-          .from("chat_messages")
-          .select("id,thread_id,body,created_at")
-          .in("thread_id", threadIds)
-          .order("created_at", { ascending: false })
-          .limit(2000);
-
-        if (msgErr) {
-          console.error(msgErr);
+        if (error) {
+          console.error("load teams error:", error);
+          if (!mounted) return;
+          setMyTeams([]);
+          setTeamLoading(false);
+          return;
         }
 
-        const messages = (msgRows ?? []) as ChatMessageRow[];
-        const latestByThread = new Map<string, ChatMessageRow>();
-
-        for (const m of messages) {
-          if (!latestByThread.has(m.thread_id)) {
-            latestByThread.set(m.thread_id, m);
-          }
+        if (!mounted) return;
+        setMyTeams((data ?? []) as TeamRow[]);
+      } catch (e) {
+        console.error("load teams catch:", e);
+        if (!mounted) return;
+        setMyTeams([]);
+      } finally {
+        if (mounted) {
+          setTeamLoading(false);
         }
-
-        let unread = 0;
-        for (const member of myMemberRows) {
-          const last = latestByThread.get(member.thread_id);
-          if (!last?.created_at) continue;
-
-          if (!member.last_read_at) {
-            unread += 1;
-            continue;
-          }
-
-          if (
-            new Date(last.created_at).getTime() >
-            new Date(member.last_read_at).getTime()
-          ) {
-            unread += 1;
-          }
-        }
-
-        setUnreadTotal(unread);
-      } else {
-        setUnreadTotal(0);
       }
+    };
 
-      const acceptedOutgoingRequestSlotIds = outgoingRequestRows
-        .filter((r) => r.status === "accepted")
-        .map((r) => r.slot_id);
-
-      const acceptedIncomingRequestSlotIds = incomingRequestRows
-        .filter((r) => r.status === "accepted")
-        .map((r) => r.slot_id);
-
-      const acceptedReceivedOfferSlotIds = receivedOfferRows
-        .filter((o) => o.status === "accepted" && o.slot_id)
-        .map((o) => o.slot_id as string);
-
-      const acceptedSentOfferSlotIds = sentOfferRows
-        .filter((o) => o.status === "accepted" && o.slot_id)
-        .map((o) => o.slot_id as string);
-
-      const mergedAcceptedSlotIds = Array.from(
-        new Set(
-          [
-            ...acceptedOutgoingRequestSlotIds,
-            ...acceptedIncomingRequestSlotIds,
-            ...acceptedReceivedOfferSlotIds,
-            ...acceptedSentOfferSlotIds,
-          ].filter(Boolean)
-        )
-      );
-
-      if (mergedAcceptedSlotIds.length > 0) {
-        const { data: acceptedSlots, error: acceptedSlotsErr } = await supabase
-          .from("match_slots")
-          .select(
-            "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
-          )
-          .in("id", mergedAcceptedSlotIds)
-          .order("date", { ascending: true })
-          .order("start_time", { ascending: true });
-
-        if (acceptedSlotsErr) {
-          console.error(acceptedSlotsErr);
-        }
-
-        const now = Date.now();
-        const futureSlots = ((acceptedSlots ?? []) as MatchSlotRow[])
-          .filter((s) => toDateTimeMs(s.date, s.start_time) >= now)
-          .sort((a, b) => {
-            const aMs = toDateTimeMs(a.date, a.start_time);
-            const bMs = toDateTimeMs(b.date, b.start_time);
-            return aMs - bMs;
-          });
-
-        if (futureSlots.length > 0) {
-          const s = futureSlots[0];
-          setNextMatch({
-            date: s.date,
-            start_time: s.start_time,
-            end_time: s.end_time,
-            area: s.area,
-            area_text: s.area_text,
-            category: s.category,
-            slot_id: s.id,
-          });
-        } else {
-          setNextMatch(null);
-        }
-      } else {
-        setNextMatch(null);
-      }
-    } catch (e) {
-      console.error("loadHome error:", e);
-      resetHomeState();
-    } finally {
-      setLoading(false);
-      loadingRef.current = false;
-    }
-  }, [meId, resetHomeState]);
-
-  const triggerLoadHome = useCallback(() => {
-    if (loadTimerRef.current) {
-      clearTimeout(loadTimerRef.current);
-    }
-
-    loadTimerRef.current = setTimeout(() => {
-      loadHome();
-    }, 300);
-  }, [loadHome]);
-
-  useEffect(() => {
-    if (authLoading) return;
-
-    if (!meId) {
-      resetHomeState();
-      setLoading(false);
-      return;
-    }
-
-    loadHome();
-  }, [authLoading, meId, loadHome, resetHomeState]);
-
-  useEffect(() => {
-    if (authLoading || !meId) return;
-
-    const channels = [
-      supabase
-        .channel(`home-match-requests:${meId}`)
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "match_requests" },
-          () => {
-            triggerLoadHome();
-          }
-        )
-        .subscribe(),
-
-      supabase
-        .channel(`home-match-offers:${meId}`)
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "match_offers" },
-          () => {
-            triggerLoadHome();
-          }
-        )
-        .subscribe(),
-
-      supabase
-        .channel(`home-match-slots:${meId}`)
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "match_slots" },
-          () => {
-            triggerLoadHome();
-          }
-        )
-        .subscribe(),
-
-      supabase
-        .channel(`home-chat-messages:${meId}`)
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "chat_messages" },
-          () => {
-            triggerLoadHome();
-          }
-        )
-        .subscribe(),
-
-      supabase
-        .channel(`home-chat-members:${meId}`)
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "chat_members" },
-          () => {
-            triggerLoadHome();
-          }
-        )
-        .subscribe(),
-    ];
+    loadTeams();
 
     return () => {
-      if (loadTimerRef.current) {
-        clearTimeout(loadTimerRef.current);
-        loadTimerRef.current = null;
-      }
-
-      channels.forEach((ch) => {
-        supabase.removeChannel(ch);
-      });
+      mounted = false;
     };
-  }, [authLoading, meId, triggerLoadHome]);
+  }, [authLoading, meId]);
 
   const hasTeam = useMemo(() => myTeams.length > 0, [myTeams.length]);
 
@@ -548,7 +154,7 @@ export default function HomePage() {
           <div style={quickCard}>
             <div style={quickTitle}>🔎 SUUMOみたいに探す</div>
             <div style={quickText}>
-              エリア、カテゴリ、強さ、人数感などから相手チームを探す
+              エリア、カテゴリ、強さ、人数感などから相手チームを探せます。
             </div>
           </div>
         </Link>
@@ -557,7 +163,7 @@ export default function HomePage() {
           <div style={quickCard}>
             <div style={quickTitle}>📅 カレンダーから探す</div>
             <div style={quickText}>
-              日付ごとの募集件数を見ながら、そのまま試合を探す
+              日付ごとの募集件数を見ながら、そのまま試合相手を探せます。
             </div>
           </div>
         </Link>
@@ -566,14 +172,14 @@ export default function HomePage() {
           <div style={quickCard}>
             <div style={quickTitle}>💬 LINEみたいに連絡</div>
             <div style={quickText}>
-              申込後はそのままチャットで日程や詳細を調整
+              申込後はそのままチャットで日程や詳細をすぐ調整できます。
             </div>
           </div>
         </Link>
       </section>
 
-      {!hasTeam ? (
-        <div style={ctaBox}>
+      {!teamLoading && !hasTeam ? (
+        <section style={ctaBox}>
           <div style={ctaTitle}>まずはチーム登録から始めましょう</div>
           <div style={ctaText}>
             チームを登録すると、試合の募集・申込・招待・チャットが使えるようになります。
@@ -586,7 +192,7 @@ export default function HomePage() {
               マイページへ
             </Link>
           </div>
-        </div>
+        </section>
       ) : null}
 
       <section style={foldSection}>
@@ -647,21 +253,21 @@ export default function HomePage() {
             <div style={qaItem}>
               <div style={qaQ}>Q. 相手チームにすぐ連絡できますか？</div>
               <div style={qaA}>
-                A. はい。チーム検索や募集詳細からそのままチャットできます。
+                A. はい。募集詳細からそのままチャットに進めます。
               </div>
             </div>
 
             <div style={qaItem}>
               <div style={qaQ}>Q. 募集するだけでなく探すこともできますか？</div>
               <div style={qaA}>
-                A. できます。カレンダーと検索から両方できます。
+                A. できます。カレンダーと検索の両方から探せます。
               </div>
             </div>
 
             <div style={qaItem}>
               <div style={qaQ}>Q. お問い合わせはどこですか？</div>
               <div style={qaA}>
-                A. 下のメールからご連絡ください。
+                A. 下のメールアドレスからご連絡ください。
               </div>
             </div>
           </div>
@@ -678,25 +284,6 @@ export default function HomePage() {
         </a>
       </section>
     </main>
-  );
-}
-
-function DashboardLinkRow(props: {
-  href: string;
-  label: string;
-  value: number;
-  helper?: string;
-}) {
-  const { href, label, value, helper } = props;
-
-  return (
-    <Link href={href} style={dashboardLinkRow}>
-      <div style={{ minWidth: 0 }}>
-        <div style={dashboardLinkLabel}>{label}</div>
-        {helper ? <div style={dashboardLinkHelper}>{helper}</div> : null}
-      </div>
-      <span style={dashboardLinkValue}>{value}</span>
-    </Link>
   );
 }
 
@@ -788,26 +375,6 @@ const quickText: React.CSSProperties = {
   lineHeight: 1.7,
 };
 
-const hero: React.CSSProperties = {
-  marginTop: 16,
-};
-
-const heroInner: React.CSSProperties = {
-  padding: "14px 16px",
-  background: "#fff",
-  borderRadius: 16,
-  border: "1px solid #e5ece7",
-  color: "#16391f",
-  display: "grid",
-  gap: 4,
-};
-
-const heroDesc: React.CSSProperties = {
-  margin: 0,
-  color: "#44534a",
-  lineHeight: 1.7,
-};
-
 const ctaBox: React.CSSProperties = {
   marginTop: 16,
   padding: 16,
@@ -834,134 +401,6 @@ const ctaActions: React.CSSProperties = {
   display: "flex",
   gap: 10,
   flexWrap: "wrap",
-};
-
-const dashboardSection: React.CSSProperties = {
-  marginTop: 20,
-};
-
-const sectionTitle: React.CSSProperties = {
-  fontWeight: 900,
-  fontSize: 20,
-  color: "#16391f",
-  marginBottom: 12,
-};
-
-const dashboardGrid: React.CSSProperties = {
-  display: "grid",
-  gap: 12,
-};
-
-const dashboardCard: React.CSSProperties = {
-  border: "1px solid #e5e7eb",
-  borderRadius: 16,
-  background: "#fff",
-  padding: 16,
-  display: "grid",
-  gap: 10,
-};
-
-const dashboardTitle: React.CSSProperties = {
-  fontWeight: 900,
-  fontSize: 18,
-  color: "#16391f",
-};
-
-const statusList: React.CSSProperties = {
-  display: "grid",
-  gap: 8,
-};
-
-const dashboardLinkRow: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 12,
-  textDecoration: "none",
-  color: "#111",
-  border: "1px solid #edf1ee",
-  borderRadius: 12,
-  background: "#fafcfb",
-  padding: "12px 14px",
-};
-
-const dashboardLinkLabel: React.CSSProperties = {
-  fontWeight: 800,
-  color: "#2d3b31",
-};
-
-const dashboardLinkHelper: React.CSSProperties = {
-  marginTop: 4,
-  fontSize: 12,
-  color: "#6b7280",
-  lineHeight: 1.6,
-};
-
-const dashboardLinkValue: React.CSSProperties = {
-  fontWeight: 900,
-  fontSize: 20,
-  color: "#145c2a",
-  whiteSpace: "nowrap",
-};
-
-const successBadge: React.CSSProperties = {
-  display: "inline-block",
-  background: "#dcfce7",
-  color: "#166534",
-  fontWeight: 900,
-  padding: "4px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  marginBottom: 6,
-};
-
-const nextMatchLink: React.CSSProperties = {
-  display: "block",
-  textDecoration: "none",
-  color: "#111",
-  border: "1px solid #edf1ee",
-  borderRadius: 12,
-  background: "#fafcfb",
-  padding: "12px 14px",
-};
-
-const nextMatchDate: React.CSSProperties = {
-  fontWeight: 900,
-  fontSize: 20,
-  color: "#145c2a",
-};
-
-const nextMatchMeta: React.CSSProperties = {
-  marginTop: 6,
-  fontSize: 13,
-  color: "#666",
-  lineHeight: 1.6,
-};
-
-const emptyActionBox: React.CSSProperties = {
-  border: "1px solid #edf1ee",
-  borderRadius: 12,
-  background: "#fafcfb",
-  padding: "12px 14px",
-};
-
-const emptyActionRow: React.CSSProperties = {
-  marginTop: 10,
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-};
-
-const mutedText: React.CSSProperties = {
-  fontSize: 13,
-  color: "#666",
-  lineHeight: 1.7,
-};
-
-const mypageActionRow: React.CSSProperties = {
-  marginTop: 12,
-  display: "flex",
-  justifyContent: "flex-start",
 };
 
 const foldSection: React.CSSProperties = {

@@ -2,6 +2,7 @@
 
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
+import { AppToast } from "@/app/components/AppToast";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -188,6 +189,9 @@ export default function MatchCalendarPage() {
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
   const [showCalendarHelp, setShowCalendarHelp] = useState(false);
 
+  const [toastOpen, setToastOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+
   const {
     draftKeyword,
     setDraftKeyword,
@@ -233,6 +237,14 @@ export default function MatchCalendarPage() {
   const dayListRef = useRef<HTMLDivElement | null>(null);
   const filterRef = useRef<HTMLElement | null>(null);
   const initialQueryAppliedRef = useRef(false);
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setToastOpen(true);
+    window.setTimeout(() => {
+      setToastOpen(false);
+    }, 1200);
+  };
 
   useEffect(() => {
     if (!requestTeamId && myTeams[0]?.id) {
@@ -530,7 +542,10 @@ export default function MatchCalendarPage() {
         date: slot?.date ?? selectedYmd,
       });
 
-      window.location.href = `/chat/${threadId}?${carryQuery}`;
+      showToast("チャットへ移動します…");
+      window.setTimeout(() => {
+        window.location.href = `/chat/${threadId}?${carryQuery}`;
+      }, 450);
     } catch (e: any) {
       console.error(e);
       alert(`チャットを開けません: ${e?.message ?? "unknown error"}`);
@@ -669,31 +684,31 @@ export default function MatchCalendarPage() {
             related_thread_id: threadId || null,
           });
 
-        if (notificationErr) {
-          console.error("notification insert error:", notificationErr);
-        } else {
-          try {
-            const pushRes = await fetch("/api/push/send", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                userId: hostUserId,
-                title: notificationTitle,
-                body: notificationBody,
-                url: notificationUrl,
-              }),
-            });
+          if (notificationErr) {
+            console.error("notification insert error:", notificationErr);
+          } else {
+            try {
+              const pushRes = await fetch("/api/push/send", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  userId: hostUserId,
+                  title: notificationTitle,
+                  body: notificationBody,
+                  url: notificationUrl,
+                }),
+              });
 
-            if (!pushRes.ok) {
-              const pushJson = await pushRes.json().catch(() => null);
-              console.error("push send error:", pushJson ?? pushRes.statusText);
+              if (!pushRes.ok) {
+                const pushJson = await pushRes.json().catch(() => null);
+                console.error("push send error:", pushJson ?? pushRes.statusText);
+              }
+            } catch (e) {
+              console.error("push send fetch error:", e);
             }
-          } catch (e) {
-            console.error("push send fetch error:", e);
           }
-        }
       }
     } catch (e) {
       console.error("request notification error:", e);
@@ -736,7 +751,10 @@ export default function MatchCalendarPage() {
         date: slot.date,
       });
 
-      window.location.href = `/chat/${threadId}?${carryQuery}`;
+      showToast("申込みを送信しました。チャットへ移動します…");
+      window.setTimeout(() => {
+        window.location.href = `/chat/${threadId}?${carryQuery}`;
+      }, 500);
       return;
     } catch (e) {
       console.error("chat relay failed:", e);
@@ -899,195 +917,199 @@ export default function MatchCalendarPage() {
   };
 
   return (
-    <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
-      <AppTabNav />
+    <>
+      <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
+        <AppTabNav />
 
-      <AppHero
-        icon="⚽️"
-        title="試合を探す / 募集する"
-        desc="カレンダーで募集枠を確認しながら、条件を指定して相手を探せます。"
-      />
-
-      <section style={{ marginTop: 12 }}>
-        <Calendar
-          monthKey={monthKey}
-          loading={loading}
-          cells={calendarCells}
-          selectedYmd={selectedYmd}
-          countByDate={countByDate}
-          dayStatusSummaryByDate={dayStatusSummaryByDate}
-          onSelectDate={(ymd) => {
-            setSelectedYmd(ymd);
-            setSelectedSlotId("");
-            setRequestComment("");
-            setSelectedDetailFilter("all");
-            scrollToDayList();
-          }}
-          onPrevMonth={() => setMonthDate(addMonths(monthDate, -1))}
-          onNextMonth={() => setMonthDate(addMonths(monthDate, 1))}
-          onCreateForDate={(ymd) => goToCreatePage(ymd)}
-          disableCreate={myTeams.length === 0}
+        <AppHero
+          icon="⚽️"
+          title="試合を探す / 募集する"
+          desc="カレンダーで募集枠を確認しながら、条件を指定して相手を探せます。"
         />
-      </section>
 
-      <div style={summaryWrap}>
-        <div style={stickySummaryBar}>
-          <div style={summaryHeaderRow}>
-            <div>
-              <div style={stickySummaryDate}>📅 {selectedYmd}</div>
-              <div style={stickySummaryCount}>
-                入力中の募集（{draftSlotsOnSelectedDate.length}件／
-                {slotsOnSelectedDate.length}件）
+        <section style={{ marginTop: 12 }}>
+          <Calendar
+            monthKey={monthKey}
+            loading={loading}
+            cells={calendarCells}
+            selectedYmd={selectedYmd}
+            countByDate={countByDate}
+            dayStatusSummaryByDate={dayStatusSummaryByDate}
+            onSelectDate={(ymd) => {
+              setSelectedYmd(ymd);
+              setSelectedSlotId("");
+              setRequestComment("");
+              setSelectedDetailFilter("all");
+              scrollToDayList();
+            }}
+            onPrevMonth={() => setMonthDate(addMonths(monthDate, -1))}
+            onNextMonth={() => setMonthDate(addMonths(monthDate, 1))}
+            onCreateForDate={(ymd) => goToCreatePage(ymd)}
+            disableCreate={myTeams.length === 0}
+          />
+        </section>
+
+        <div style={summaryWrap}>
+          <div style={stickySummaryBar}>
+            <div style={summaryHeaderRow}>
+              <div>
+                <div style={stickySummaryDate}>📅 {selectedYmd}</div>
+                <div style={stickySummaryCount}>
+                  入力中の募集（{draftSlotsOnSelectedDate.length}件／
+                  {slotsOnSelectedDate.length}件）
+                </div>
               </div>
-            </div>
 
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button
-                type="button"
-                style={calendarHelpButton}
-                onClick={() => setShowCalendarHelp(true)}
-                aria-label="カレンダー表示の説明"
-                title="カレンダー表示の説明"
-              >
-                ?
-              </button>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button
+                  type="button"
+                  style={calendarHelpButton}
+                  onClick={() => setShowCalendarHelp(true)}
+                  aria-label="カレンダー表示の説明"
+                  title="カレンダー表示の説明"
+                >
+                  ?
+                </button>
 
-              <button
-                type="button"
-                className="sh-btn"
-                style={createButtonInline}
-                onClick={() => goToCreatePage(selectedYmd)}
-                disabled={loading || myTeams.length === 0}
-              >
-                募集する
-              </button>
+                <button
+                  type="button"
+                  className="sh-btn"
+                  style={createButtonInline}
+                  onClick={() => goToCreatePage(selectedYmd)}
+                  disabled={loading || myTeams.length === 0}
+                >
+                  募集する
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div style={contentScrollBox}>
-        <div ref={dayListRef} style={dayListWrap}>
-          <div style={dayListHeaderRow}>
-            <h2 style={dayListTitle}>募集一覧</h2>
+        <div style={contentScrollBox}>
+          <div ref={dayListRef} style={dayListWrap}>
+            <div style={dayListHeaderRow}>
+              <h2 style={dayListTitle}>募集一覧</h2>
 
-            <button type="button" className="sh-btn" onClick={scrollToFilter}>
-              絞り込み
-            </button>
+              <button type="button" className="sh-btn" onClick={scrollToFilter}>
+                絞り込み
+              </button>
+            </div>
+
+            <div style={detailFilterWrap}>
+              <DetailFilterChip
+                label="すべて"
+                count={slotsOnSelectedDate.length}
+                active={selectedDetailFilter === "all"}
+                onClick={() => setSelectedDetailFilter("all")}
+              />
+              <DetailFilterChip
+                label="決定済"
+                count={detailCountSummary.decided}
+                active={selectedDetailFilter === "decided"}
+                onClick={() =>
+                  setSelectedDetailFilter((prev) =>
+                    prev === "decided" ? "all" : "decided"
+                  )
+                }
+              />
+              <DetailFilterChip
+                label="募集中"
+                count={detailCountSummary.open}
+                active={selectedDetailFilter === "open"}
+                onClick={() =>
+                  setSelectedDetailFilter((prev) =>
+                    prev === "open" ? "all" : "open"
+                  )
+                }
+              />
+              <DetailFilterChip
+                label="他決定"
+                count={detailCountSummary.other}
+                active={selectedDetailFilter === "other"}
+                onClick={() =>
+                  setSelectedDetailFilter((prev) =>
+                    prev === "other" ? "all" : "other"
+                  )
+                }
+              />
+            </div>
+
+            <DaySlotList
+              selectedYmd={selectedYmd}
+              slots={visibleSlotsOnSelectedDate as any}
+              venues={venues}
+              allTeams={allTeams as any}
+              myTeams={myTeams as any}
+              meId={meId}
+              requestsForMonth={requestsForMonth}
+              selectedSlotId={selectedSlotId}
+              slotStatusResolver={getSlotStatus}
+              onToggleDetail={(slotId) => {
+                const next = selectedSlotId === slotId ? "" : slotId;
+                setSelectedSlotId(next);
+                setRequestComment("");
+              }}
+              requestTeamId={requestTeamId}
+              onChangeRequestTeamId={setRequestTeamId}
+              requestComment={requestComment}
+              onChangeRequestComment={setRequestComment}
+              onRequestSlot={requestSlot}
+              onCancelMyRequest={cancelMyRequest}
+              selectedSlot={selectedSlot}
+              selectedHostTeam={selectedHostTeam as any}
+              selectedSlotRequests={selectedSlotRequests}
+              isMineSlot={isMineSlot}
+              onAccept={accept}
+              onReject={reject}
+              onOpenChatWithTeam={openDmAndGo}
+              onToggleClosed={toggleClosed}
+              loading={loading}
+            />
           </div>
 
-          <div style={detailFilterWrap}>
-            <DetailFilterChip
-              label="すべて"
-              count={slotsOnSelectedDate.length}
-              active={selectedDetailFilter === "all"}
-              onClick={() => setSelectedDetailFilter("all")}
-            />
-            <DetailFilterChip
-              label="決定済"
-              count={detailCountSummary.decided}
-              active={selectedDetailFilter === "decided"}
-              onClick={() =>
-                setSelectedDetailFilter((prev) =>
-                  prev === "decided" ? "all" : "decided"
-                )
-              }
-            />
-            <DetailFilterChip
-              label="募集中"
-              count={detailCountSummary.open}
-              active={selectedDetailFilter === "open"}
-              onClick={() =>
-                setSelectedDetailFilter((prev) =>
-                  prev === "open" ? "all" : "open"
-                )
-              }
-            />
-            <DetailFilterChip
-              label="他決定"
-              count={detailCountSummary.other}
-              active={selectedDetailFilter === "other"}
-              onClick={() =>
-                setSelectedDetailFilter((prev) =>
-                  prev === "other" ? "all" : "other"
-                )
-              }
-            />
-          </div>
-
-          <DaySlotList
-            selectedYmd={selectedYmd}
-            slots={visibleSlotsOnSelectedDate as any}
-            venues={venues}
-            allTeams={allTeams as any}
-            myTeams={myTeams as any}
-            meId={meId}
-            requestsForMonth={requestsForMonth}
-            selectedSlotId={selectedSlotId}
-            slotStatusResolver={getSlotStatus}
-            onToggleDetail={(slotId) => {
-              const next = selectedSlotId === slotId ? "" : slotId;
-              setSelectedSlotId(next);
-              setRequestComment("");
-            }}
-            requestTeamId={requestTeamId}
-            onChangeRequestTeamId={setRequestTeamId}
-            requestComment={requestComment}
-            onChangeRequestComment={setRequestComment}
-            onRequestSlot={requestSlot}
-            onCancelMyRequest={cancelMyRequest}
-            selectedSlot={selectedSlot}
-            selectedHostTeam={selectedHostTeam as any}
-            selectedSlotRequests={selectedSlotRequests}
-            isMineSlot={isMineSlot}
-            onAccept={accept}
-            onReject={reject}
-            onOpenChatWithTeam={openDmAndGo}
-            onToggleClosed={toggleClosed}
+          <MatchFilterPanel
+            filterRef={filterRef}
             loading={loading}
+            draftKeyword={draftKeyword}
+            setDraftKeyword={setDraftKeyword}
+            draftCategoryFilter={draftCategoryFilter}
+            setDraftCategoryFilter={setDraftCategoryFilter}
+            draftPrefectureFilter={draftPrefectureFilter}
+            setDraftPrefectureFilter={setDraftPrefectureFilter}
+            draftCityFilter={draftCityFilter}
+            setDraftCityFilter={setDraftCityFilter}
+            draftTownFilter={draftTownFilter}
+            setDraftTownFilter={setDraftTownFilter}
+            draftGroundFilter={draftGroundFilter}
+            setDraftGroundFilter={setDraftGroundFilter}
+            draftStrengthFilter={draftStrengthFilter}
+            setDraftStrengthFilter={setDraftStrengthFilter}
+            draftBikeFilter={draftBikeFilter}
+            setDraftBikeFilter={setDraftBikeFilter}
+            draftBikeCapacityMin={draftBikeCapacityMin}
+            setDraftBikeCapacityMin={setDraftBikeCapacityMin}
+            draftMemberCountMin={draftMemberCountMin}
+            setDraftMemberCountMin={setDraftMemberCountMin}
+            hasDraftChanges={hasDraftChanges}
+            onApply={handleApplyAndJump}
+            onReset={handleResetFilters}
+            onBackToList={scrollToDayList}
+            onOpenStrengthHelp={() => setShowStrengthHelp(true)}
+            strengthGuides={STRENGTH_GUIDES}
           />
         </div>
 
-        <MatchFilterPanel
-          filterRef={filterRef}
-          loading={loading}
-          draftKeyword={draftKeyword}
-          setDraftKeyword={setDraftKeyword}
-          draftCategoryFilter={draftCategoryFilter}
-          setDraftCategoryFilter={setDraftCategoryFilter}
-          draftPrefectureFilter={draftPrefectureFilter}
-          setDraftPrefectureFilter={setDraftPrefectureFilter}
-          draftCityFilter={draftCityFilter}
-          setDraftCityFilter={setDraftCityFilter}
-          draftTownFilter={draftTownFilter}
-          setDraftTownFilter={setDraftTownFilter}
-          draftGroundFilter={draftGroundFilter}
-          setDraftGroundFilter={setDraftGroundFilter}
-          draftStrengthFilter={draftStrengthFilter}
-          setDraftStrengthFilter={setDraftStrengthFilter}
-          draftBikeFilter={draftBikeFilter}
-          setDraftBikeFilter={setDraftBikeFilter}
-          draftBikeCapacityMin={draftBikeCapacityMin}
-          setDraftBikeCapacityMin={setDraftBikeCapacityMin}
-          draftMemberCountMin={draftMemberCountMin}
-          setDraftMemberCountMin={setDraftMemberCountMin}
-          hasDraftChanges={hasDraftChanges}
-          onApply={handleApplyAndJump}
-          onReset={handleResetFilters}
-          onBackToList={scrollToDayList}
-          onOpenStrengthHelp={() => setShowStrengthHelp(true)}
+        <MatchHelpModals
+          showStrengthHelp={showStrengthHelp}
+          showCalendarHelp={showCalendarHelp}
+          onCloseStrengthHelp={() => setShowStrengthHelp(false)}
+          onCloseCalendarHelp={() => setShowCalendarHelp(false)}
           strengthGuides={STRENGTH_GUIDES}
         />
-      </div>
+      </main>
 
-      <MatchHelpModals
-        showStrengthHelp={showStrengthHelp}
-        showCalendarHelp={showCalendarHelp}
-        onCloseStrengthHelp={() => setShowStrengthHelp(false)}
-        onCloseCalendarHelp={() => setShowCalendarHelp(false)}
-        strengthGuides={STRENGTH_GUIDES}
-      />
-    </main>
+      <AppToast open={toastOpen} message={toastMessage} />
+    </>
   );
 }
 

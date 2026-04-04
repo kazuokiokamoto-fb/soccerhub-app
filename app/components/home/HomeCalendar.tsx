@@ -14,8 +14,6 @@ type Slot = {
   area_text?: string | null;
   category: string | null;
   is_closed?: boolean | null;
-
-  // 無くても落ちないよう optional
   strength_rank?: string | null;
   has_ground?: boolean | null;
   note?: string | null;
@@ -86,7 +84,7 @@ function matchArea(slot: Slot, areaKeyword: string) {
 function matchStrength(slot: Slot, selectedStrengths: string[]) {
   if (selectedStrengths.length === 0) return true;
   const value = String(slot.strength_rank ?? "");
-  if (!value) return true; // 列未整備でも極力落とさない
+  if (!value) return true;
   return selectedStrengths.includes(value);
 }
 
@@ -164,19 +162,24 @@ export default function HomeCalendar() {
   const [keyword, setKeyword] = useState("");
   const [openOnly, setOpenOnly] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [listExpanded, setListExpanded] = useState(false);
 
   const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem("sakamatch:home-calendar-filters:v1");
+      const raw = window.localStorage.getItem(
+        "sakamatch:home-calendar-filters:v1"
+      );
       if (!raw) return;
 
       const saved = JSON.parse(raw);
 
       setAreaKeyword(saved.areaKeyword ?? "");
       setCategoryFilter(saved.categoryFilter ?? "");
-      setStrengthFilter(Array.isArray(saved.strengthFilter) ? saved.strengthFilter : []);
+      setStrengthFilter(
+        Array.isArray(saved.strengthFilter) ? saved.strengthFilter : []
+      );
       setWeekdayFilter(saved.weekdayFilter ?? "");
       setTimeZoneFilter(saved.timeZoneFilter ?? "");
       setGroundFilter(saved.groundFilter ?? "");
@@ -336,6 +339,8 @@ export default function HomeCalendar() {
   }, [grouped, selectedDate]);
 
   const totalFilteredCount = filteredSlots.length;
+  const visibleCount = listExpanded ? 12 : 5;
+  const visibleSlots = selectedDateSlots.slice(0, visibleCount);
 
   return (
     <section style={wrap}>
@@ -566,49 +571,66 @@ export default function HomeCalendar() {
             </div>
           </div>
 
-          <div style={list}>
-            {loading ? (
-              <div style={empty}>読み込み中…</div>
-            ) : selectedDateSlots.length === 0 ? (
-              <div style={empty}>
-                この条件では募集がありません。
-                <br />
-                条件をゆるめるか、試合一覧で探してみてください。
-              </div>
-            ) : (
-              selectedDateSlots.slice(0, 5).map((s) => (
-                <Link
-                  key={s.id}
-                  href={`/match?date=${encodeURIComponent(s.date)}&slotId=${encodeURIComponent(s.id)}`}
-                  style={cardLink}
-                >
-                  <div style={card}>
-                    <div style={cardTop}>
-                      <div style={time}>
-                        {hhmm(s.start_time)}–{hhmm(s.end_time)}
+          <div style={compactListFrame}>
+            <div style={list}>
+              {loading ? (
+                <div style={empty}>読み込み中…</div>
+              ) : selectedDateSlots.length === 0 ? (
+                <div style={empty}>
+                  この条件では募集がありません。
+                  <br />
+                  条件をゆるめるか、試合一覧で探してみてください。
+                </div>
+              ) : (
+                visibleSlots.map((s) => (
+                  <Link
+                    key={s.id}
+                    href={`/match?date=${encodeURIComponent(
+                      s.date
+                    )}&slotId=${encodeURIComponent(s.id)}`}
+                    style={cardLink}
+                  >
+                    <div style={card}>
+                      <div style={cardTop}>
+                        <div style={time}>
+                          {hhmm(s.start_time)}–{hhmm(s.end_time)}
+                        </div>
+                        <div style={badge}>
+                          {s.is_closed ? "締切" : "募集中"}
+                        </div>
                       </div>
-                      <div style={badge}>募集中</div>
-                    </div>
 
-                    <div style={meta}>
-                      📍 {s.area_text ?? s.area ?? "エリア未設定"}
-                    </div>
+                      <div style={meta}>
+                        📍 {s.area_text ?? s.area ?? "エリア未設定"}
+                      </div>
 
-                    <div style={meta}>
-                      🏷 {categoryLabel(s.category) || s.category || "カテゴリ未設定"}
-                    </div>
+                      <div style={meta}>
+                        🏷{" "}
+                        {categoryLabel(s.category) || s.category || "カテゴリ未設定"}
+                      </div>
 
-                    <div style={meta}>
-                      💪 {s.strength_rank || "強さ未設定"}
+                      <div style={meta}>💪 {s.strength_rank || "強さ未設定"}</div>
+
+                      <div style={meta}>
+                        🏟 {s.has_ground ? "グラウンドあり" : "グラウンド未設定"}
+                      </div>
                     </div>
-                  </div>
-                </Link>
-              ))
-            )}
+                  </Link>
+                ))
+              )}
+            </div>
           </div>
 
           {!loading && selectedDateSlots.length > 5 ? (
             <div style={moreRow}>
+              <button
+                type="button"
+                style={ghostButton}
+                onClick={() => setListExpanded((prev) => !prev)}
+              >
+                {listExpanded ? "一覧をコンパクトに戻す" : "一覧を広く見る"}
+              </button>
+
               <Link
                 href={`/match?date=${encodeURIComponent(selectedDate)}`}
                 className="sh-btn"
@@ -914,6 +936,11 @@ const listSub: React.CSSProperties = {
   color: "#6b7280",
 };
 
+const compactListFrame: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+};
+
 const list: React.CSSProperties = {
   display: "grid",
   gap: 8,
@@ -977,4 +1004,6 @@ const empty: React.CSSProperties = {
 const moreRow: React.CSSProperties = {
   display: "flex",
   justifyContent: "flex-start",
+  gap: 10,
+  flexWrap: "wrap",
 };

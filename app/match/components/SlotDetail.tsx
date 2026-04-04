@@ -263,16 +263,12 @@ export function SlotDetail(props: {
   const slotCategoryDisplay = slotCategoryText(slot);
 
   const displayTeam = useMemo(() => {
-    if (!acceptedReq) {
-      return hostTeam;
-    }
-
+    if (!acceptedReq) return hostTeam;
     if (isMine) {
       return (
         allTeams.find((t) => t.id === acceptedReq.requester_team_id) || null
       );
     }
-
     return hostTeam;
   }, [acceptedReq, isMine, hostTeam, allTeams]);
 
@@ -410,10 +406,7 @@ export function SlotDetail(props: {
             label="グラウンド提供"
             value={displayTeam?.has_ground ? "あり" : "なし"}
           />
-          <InfoRow
-            label="駐輪場"
-            value={displayTeam?.bike_parking ?? "不明"}
-          />
+          <InfoRow label="駐輪場" value={displayTeam?.bike_parking ?? "不明"} />
           <InfoRow
             label="駐輪場台数"
             value={displayTeam?.bike_parking_capacity ?? "未設定"}
@@ -490,6 +483,7 @@ export function SlotDetail(props: {
                     type="button"
                     onClick={() => onCancelMyRequest(myRequest.id)}
                     disabled={!!loading}
+                    style={subActionButton}
                   >
                     申込み撤回
                   </button>
@@ -498,41 +492,47 @@ export function SlotDetail(props: {
             </div>
           ) : (
             <div style={requestFormWrap}>
-              <div style={requestLeadCard}>
-                <div style={requestLeadTitle}>この募集に申し込む</div>
-                <div style={requestLeadText}>
-                  申込み後はチャットでもやり取りできます。
+              <div style={lineRequestCard}>
+                <div style={lineRequestTop}>
+                  <div style={lineRequestIcon}>⚽️</div>
+                  <div>
+                    <div style={lineRequestTitle}>この募集に申し込む</div>
+                    <div style={lineRequestSub}>
+                      LINEのように、まず申込みしてからチャットで詳細調整できます。
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              <label style={fieldWrap}>
-                <span style={smallLabel}>申込みチーム</span>
-                <select
-                  value={requestTeamId}
-                  onChange={(e) => onChangeRequestTeamId(e.target.value)}
-                  style={input}
-                  disabled={!!loading || myTeams.length === 0}
-                >
-                  {myTeams.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <label style={fieldWrap}>
+                  <span style={smallLabel}>申込みチーム</span>
+                  <select
+                    value={requestTeamId}
+                    onChange={(e) => onChangeRequestTeamId(e.target.value)}
+                    style={input}
+                    disabled={!!loading || myTeams.length === 0}
+                  >
+                    {myTeams.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-              <label style={fieldWrap}>
-                <span style={smallLabel}>コメント</span>
-                <textarea
-                  value={displayRequestComment}
-                  onChange={(e) => onChangeRequestComment(e.target.value)}
-                  placeholder={DEFAULT_REQUEST_COMMENT}
-                  style={textarea}
-                  disabled={!!loading}
-                />
-              </label>
+                <label style={fieldWrap}>
+                  <span style={smallLabel}>コメント</span>
+                  <textarea
+                    value={displayRequestComment}
+                    onChange={(e) => onChangeRequestComment(e.target.value)}
+                    placeholder={DEFAULT_REQUEST_COMMENT}
+                    style={textarea}
+                    disabled={!!loading}
+                  />
+                  <div style={helperText}>
+                    そのまま送ってもOKです。必要なら日時や条件を追記してください。
+                  </div>
+                </label>
 
-              <div>
                 <button
                   className="sh-btn sh-btn--primary"
                   type="button"
@@ -540,8 +540,9 @@ export function SlotDetail(props: {
                   disabled={
                     !!loading || myTeams.length === 0 || slotStatus !== "open"
                   }
+                  style={linePrimaryButton}
                 >
-                  試合申込
+                  試合申込を送信
                 </button>
               </div>
             </div>
@@ -569,6 +570,7 @@ export function SlotDetail(props: {
               type="button"
               onClick={() => onToggleClosed(slot.id, !slot.is_closed)}
               disabled={!!loading || slotStatus === "decided"}
+              style={subActionButton}
             >
               {slot.is_closed ? "募集を再開する" : "募集を締切にする"}
             </button>
@@ -582,6 +584,7 @@ export function SlotDetail(props: {
             className="sh-btn"
             type="button"
             onClick={() => onOpenChat(otherTeamIdForChat, slot)}
+            style={chatButton}
           >
             💬 チャットを開く
           </button>
@@ -635,6 +638,7 @@ export function SlotDetail(props: {
                         !!slot.is_closed ||
                         slotStatus !== "open"
                       }
+                      style={approveButton}
                     >
                       承認
                     </button>
@@ -644,6 +648,7 @@ export function SlotDetail(props: {
                       type="button"
                       onClick={() => onReject(r.id)}
                       disabled={r.status !== "pending"}
+                      style={subActionButton}
                     >
                       却下
                     </button>
@@ -880,6 +885,46 @@ const requestLeadText: React.CSSProperties = {
   lineHeight: 1.6,
 };
 
+const lineRequestCard: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  padding: 14,
+  borderRadius: 16,
+  border: "1px solid #dfeee3",
+  background: "linear-gradient(180deg,#ffffff 0%,#f7fcf8 100%)",
+};
+
+const lineRequestTop: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "44px 1fr",
+  gap: 10,
+  alignItems: "start",
+};
+
+const lineRequestIcon: React.CSSProperties = {
+  width: 44,
+  height: 44,
+  borderRadius: 999,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "#dcfce7",
+  fontSize: 22,
+};
+
+const lineRequestTitle: React.CSSProperties = {
+  fontSize: 15,
+  fontWeight: 900,
+  color: "#16391f",
+};
+
+const lineRequestSub: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 12,
+  color: "#5b6d61",
+  lineHeight: 1.7,
+};
+
 const fieldWrap: React.CSSProperties = {
   display: "grid",
   gap: 6,
@@ -889,6 +934,12 @@ const smallLabel: React.CSSProperties = {
   fontSize: 12,
   color: "#555",
   fontWeight: 700,
+};
+
+const helperText: React.CSSProperties = {
+  fontSize: 12,
+  color: "#6b7280",
+  lineHeight: 1.6,
 };
 
 const input: React.CSSProperties = {
@@ -903,13 +954,38 @@ const textarea: React.CSSProperties = {
   width: "100%",
   minHeight: 96,
   padding: "10px 12px",
-  borderRadius: 10,
+  borderRadius: 14,
   border: "1px solid #d7ddd9",
   background: "white",
   resize: "vertical",
   fontFamily: "inherit",
   fontSize: 14,
   lineHeight: 1.7,
+  boxSizing: "border-box",
+};
+
+const linePrimaryButton: React.CSSProperties = {
+  width: "100%",
+  minHeight: 48,
+  borderRadius: 14,
+  fontWeight: 900,
+  fontSize: 15,
+};
+
+const subActionButton: React.CSSProperties = {
+  minHeight: 42,
+  borderRadius: 12,
+};
+
+const approveButton: React.CSSProperties = {
+  minHeight: 42,
+  borderRadius: 12,
+};
+
+const chatButton: React.CSSProperties = {
+  minHeight: 46,
+  borderRadius: 14,
+  fontWeight: 900,
 };
 
 const messageCard: React.CSSProperties = {

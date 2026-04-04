@@ -5,7 +5,7 @@ import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
-import { CATEGORY_OPTIONS } from "@/app/lib/categories";
+import { CATEGORY_OPTIONS, categoryLabel } from "@/app/lib/categories";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
 import type { StrengthRank } from "@/app/components/StrengthRankPicker";
@@ -189,12 +189,13 @@ function formatBikeParking(team: DbTeam) {
   return team.bike_parking ?? "不明";
 }
 
-function normalizeOptions(
-  options: Array<string | { value: string; label: string }>
-) {
-  return options.map((opt) =>
-    typeof opt === "string" ? { value: opt, label: opt } : opt
-  );
+function formatTeamCategory(team: DbTeam) {
+  if (Array.isArray(team.categories) && team.categories.length > 0) {
+    return team.categories
+      .map((v) => categoryLabel(v) || v)
+      .join(" / ");
+  }
+  return categoryLabel(team.category) || team.category || "未設定";
 }
 
 function matchesTeamFilters(
@@ -205,8 +206,8 @@ function matchesTeamFilters(
     Array.isArray(team.categories) && team.categories.length > 0
       ? team.categories
       : team.category
-      ? [team.category]
-      : [];
+        ? [team.category]
+        : [];
 
   if (filters.categoryFilter.length > 0) {
     if (!cats.some((c) => c && filters.categoryFilter.includes(String(c).trim()))) {
@@ -292,7 +293,7 @@ export default function TeamsSearchClient() {
   const [sendingOffer, setSendingOffer] = useState(false);
 
   const resultsRef = useRef<HTMLDivElement | null>(null);
-  const filterRef = useRef<HTMLDivElement | null>(null);
+  const filterRef = useRef<HTMLElement | null>(null);
 
   const {
     draftKeyword,
@@ -327,12 +328,6 @@ export default function TeamsSearchClient() {
     const t = setTimeout(() => setToast(null), 2800);
     return () => clearTimeout(t);
   }, [toast]);
-
-  const categoryOptions = useMemo(() => {
-    return normalizeOptions(
-      CATEGORY_OPTIONS as Array<string | { value: string; label: string }>
-    );
-  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -627,8 +622,8 @@ export default function TeamsSearchClient() {
             ...(toast.type === "success"
               ? toastSuccess
               : toast.type === "error"
-              ? toastError
-              : toastInfo),
+                ? toastError
+                : toastInfo),
           }}
           role="status"
           aria-live="polite"
@@ -670,7 +665,7 @@ export default function TeamsSearchClient() {
         </div>
       </div>
 
-      <div style={contentScrollBox}>
+      <div style={pageStack}>
         <div ref={resultsRef} style={dayListWrap}>
           <div style={dayListHeaderRow}>
             <h2 style={dayListTitle}>検索結果</h2>
@@ -698,10 +693,7 @@ export default function TeamsSearchClient() {
                         <div style={resultSub}>
                           📍 {buildAreaText(team)}
                           <br />
-                          🏷{" "}
-                          {Array.isArray(team.categories) && team.categories.length > 0
-                            ? team.categories.join(" / ")
-                            : team.category ?? "未設定"}
+                          🏷 {formatTeamCategory(team)}
                           {" / "}💪 強さ {getStrength(team)}
                         </div>
                       </div>
@@ -724,7 +716,8 @@ export default function TeamsSearchClient() {
                           <div style={detailBox}>
                             <div style={detailLabel}>グラウンド・駐輪場</div>
                             <div style={detailValue}>
-                              グラウンド {team.has_ground ? "あり" : "なし"} / 駐輪場 {formatBikeParking(team)}
+                              グラウンド {team.has_ground ? "あり" : "なし"} / 駐輪場{" "}
+                              {formatBikeParking(team)}
                             </div>
                           </div>
 
@@ -736,7 +729,8 @@ export default function TeamsSearchClient() {
                           <div style={detailBox}>
                             <div style={detailLabel}>ユニフォーム</div>
                             <div style={detailValue}>
-                              {team.uniform_main ?? "不明"}（メイン） / {team.uniform_sub ?? "不明"}（サブ）
+                              {team.uniform_main ?? "不明"}（メイン） /{" "}
+                              {team.uniform_sub ?? "不明"}（サブ）
                             </div>
                           </div>
 
@@ -851,7 +845,9 @@ export default function TeamsSearchClient() {
                     type="button"
                     className="sh-btn sh-btn--ghost"
                     onClick={() =>
-                      setDraftStrengthFilter(STRENGTH_OPTIONS.map((o) => o.value as StrengthRank))
+                      setDraftStrengthFilter(
+                        STRENGTH_OPTIONS.map((o) => o.value as StrengthRank)
+                      )
                     }
                     disabled={loading}
                   >
@@ -892,7 +888,9 @@ export default function TeamsSearchClient() {
                         border: active ? "1px solid #145c2a" : "1px solid #d6eadb",
                         background: active ? "#145c2a" : "#fff",
                         color: active ? "#fff" : "#23412c",
-                        boxShadow: active ? "0 6px 14px rgba(20,92,42,0.14)" : "none",
+                        boxShadow: active
+                          ? "0 6px 14px rgba(20,92,42,0.14)"
+                          : "none",
                         ...(loading ? strengthSimpleButtonDisabled : {}),
                       }}
                     >
@@ -1085,7 +1083,9 @@ export default function TeamsSearchClient() {
                 <div style={detailLabel}>送信先</div>
                 <div style={detailValue}>
                   {offerTargetTeam.name ?? "未設定"}
-                  {offerTargetTeam.category ? `（${offerTargetTeam.category}）` : ""}
+                  {offerTargetTeam.category
+                    ? `（${categoryLabel(offerTargetTeam.category) || offerTargetTeam.category}）`
+                    : ""}
                   <br />
                   {buildAreaText(offerTargetTeam)}
                 </div>
@@ -1105,7 +1105,9 @@ export default function TeamsSearchClient() {
                     myTeams.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name ?? "チーム未設定"}
-                        {t.category ? `（${t.category}）` : ""}
+                        {t.category
+                          ? `（${categoryLabel(t.category) || t.category}）`
+                          : ""}
                       </option>
                     ))
                   )}
@@ -1168,10 +1170,9 @@ const summaryHeaderRow: React.CSSProperties = {
   flexWrap: "wrap" as const,
 };
 
-const contentScrollBox: React.CSSProperties = {
-  maxHeight: "calc(100vh - 260px)",
-  overflowY: "auto",
-  WebkitOverflowScrolling: "touch",
+const pageStack: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
 };
 
 const filterWrap: React.CSSProperties = {

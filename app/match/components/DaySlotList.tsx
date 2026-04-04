@@ -68,10 +68,10 @@ function statusBadgeStyle(status: DbRequest["status"]) {
       status === "accepted"
         ? "#ecfdf3"
         : status === "rejected"
-        ? "#fef2f2"
-        : status === "cancelled"
-          ? "#f3f4f6"
-          : "#eff6ff",
+          ? "#fef2f2"
+          : status === "cancelled"
+            ? "#f3f4f6"
+            : "#eff6ff",
     color:
       status === "accepted"
         ? "#166534"
@@ -215,10 +215,13 @@ export function DaySlotList(props: {
 
   return (
     <section style={{ ...card, marginTop: 14 }}>
-      <h2 style={h2}>{selectedYmd} の募集一覧</h2>
+      <div style={sectionHead}>
+        <h2 style={h2}>{selectedYmd} の募集一覧</h2>
+        <div style={sectionSub}>{slots.length}件</div>
+      </div>
 
       {slots.length === 0 ? (
-        <p style={{ margin: "10px 0 0", color: "#777" }}>
+        <p style={{ margin: "10px 0 0", color: "#777", lineHeight: 1.8 }}>
           この条件に合う募集はありません。
         </p>
       ) : (
@@ -272,97 +275,105 @@ export function DaySlotList(props: {
               <div
                 key={s.id}
                 style={{
-                  padding: 14,
-                  borderRadius: 14,
-                  border: isExpanded ? "2px solid #86efac" : "1px solid #e5e7eb",
-                  background: isExpanded ? "#f0fdf4" : "#fff",
-                  display: "grid",
-                  gap: 12,
+                  ...slotCard,
+                  ...(isExpanded ? slotCardExpanded : {}),
                 }}
               >
-                <div style={slotHeaderRow}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={slotMainLine}>
-                      {hhmm(s.start_time)}–{hhmm(s.end_time)} /{" "}
-                      {s.area_text ?? s.area ?? "エリア未設定"} / {categoryText}
-                      {isMine ? "（あなた）" : ""}
+                <div style={slotBubbleRow}>
+                  <div style={avatarCircle}>⚽️</div>
+
+                  <div style={slotBubbleMain}>
+                    <div style={slotTopRow}>
+                      <div style={timeBadge}>
+                        {hhmm(s.start_time)}–{hhmm(s.end_time)}
+                      </div>
+
+                      <div style={rightBadgeRow}>
+                        <span
+                          style={{
+                            ...slotStatusBadge,
+                            ...slotStatusBadgeStyle(slotStatus),
+                          }}
+                        >
+                          {slotStatusLabel(slotStatus)}
+                        </span>
+
+                        {s.is_closed && slotStatus === "open" ? (
+                          <span
+                            style={{
+                              ...statusBadgeStyle("cancelled"),
+                              marginLeft: 0,
+                            }}
+                          >
+                            締切
+                          </span>
+                        ) : null}
+
+                        {!isMine && myReq ? (
+                          <span
+                            style={{
+                              ...statusBadgeStyle(myReq.status),
+                              marginLeft: 0,
+                            }}
+                          >
+                            {statusLabel(myReq.status)}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
 
-                    <div style={metaRow}>
-                      <span
-                        style={{
-                          ...slotStatusBadge,
-                          ...slotStatusBadgeStyle(slotStatus),
-                        }}
+                    <div style={teamNameRow}>
+                      <span style={teamName}>{hostTeamName}</span>
+                      {isMine ? <span style={mineBadge}>あなたの募集</span> : null}
+                    </div>
+
+                    <div style={slotSubLine}>
+                      📍 {s.area_text ?? s.area ?? "エリア未設定"}
+                    </div>
+
+                    <div style={slotSubLine}>
+                      🏷 {categoryText}
+                    </div>
+
+                    <div style={slotMetaGrid}>
+                      <div style={metaPill}>
+                        <span style={metaPillLabel}>強さ</span>
+                        <span style={metaPillValue}>{rankText}</span>
+                      </div>
+
+                      <div style={metaPill}>
+                        <span style={metaPillLabel}>希望相手</span>
+                        <span style={metaPillValue}>
+                          {renderWantedLevelRange(s)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={buttonRow}>
+                      <button
+                        className="sh-btn sh-btn--primary"
+                        type="button"
+                        onClick={() => onToggleDetail(s.id)}
+                        style={buttonWide}
                       >
-                        {slotStatusLabel(slotStatus)}
-                      </span>
+                        {isExpanded ? "閉じる" : "募集詳細"}
+                      </button>
 
-                      {s.is_closed && slotStatus === "open" ? (
-                        <span
-                          style={{
-                            ...statusBadgeStyle("cancelled"),
-                            marginLeft: 0,
-                          }}
+                      {displayTeamForLink?.id ? (
+                        <Link
+                          href={`/teams/${displayTeamForLink.id}?${teamDetailQuery}`}
+                          className="sh-btn"
+                          style={buttonLink}
                         >
-                          締切
-                        </span>
+                          チーム詳細
+                        </Link>
                       ) : null}
-
-                      {!isMine && myReq ? (
-                        <span
-                          style={{
-                            ...statusBadgeStyle(myReq.status),
-                            marginLeft: 0,
-                          }}
-                        >
-                          {statusLabel(myReq.status)}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    <div style={hostTeamText}>
-                      募集中チーム：<b>{hostTeamName}</b>
-                    </div>
-
-                    <div style={rankTextStyle}>
-                      強さランク：<b>{rankText}</b>
-                    </div>
-
-                    <div style={wantedTextStyle}>
-                      希望相手：<b>{renderWantedLevelRange(s)}</b>
                     </div>
                   </div>
                 </div>
 
-                <div style={buttonRow}>
-                  <button
-                    className="sh-btn sh-btn--primary"
-                    type="button"
-                    onClick={() => onToggleDetail(s.id)}
-                    style={buttonWide}
-                  >
-                    {isExpanded ? "閉じる" : "募集詳細"}
-                  </button>
-
-                  {displayTeamForLink?.id ? (
-                    <Link
-                      href={`/teams/${displayTeamForLink.id}?${teamDetailQuery}`}
-                      className="sh-btn"
-                      style={buttonLink}
-                    >
-                      チーム詳細
-                    </Link>
-                  ) : null}
-                </div>
-
                 {isExpanded ? (
-                  <div
-                    style={{
-                      paddingTop: 12,
-                      borderTop: "1px solid #eaeaea",
-                    }}
-                  >
+                  <div style={detailWrap}>
                     <SlotDetail
                       slot={s}
                       slotStatus={slotStatus}
@@ -400,17 +411,72 @@ export function DaySlotList(props: {
 const card: React.CSSProperties = {
   padding: 14,
   border: "1px solid #eee",
-  borderRadius: 14,
+  borderRadius: 18,
   background: "#fff",
+};
+
+const sectionHead: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const sectionSub: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#6b7280",
 };
 
 const h2: React.CSSProperties = {
   margin: 0,
   fontSize: 16,
   fontWeight: 900,
+  color: "#16391f",
 };
 
-const slotHeaderRow: React.CSSProperties = {
+const slotCard: React.CSSProperties = {
+  borderRadius: 18,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  overflow: "hidden",
+  boxShadow: "0 2px 10px rgba(0,0,0,0.03)",
+};
+
+const slotCardExpanded: React.CSSProperties = {
+  border: "2px solid #86efac",
+  background: "#f0fdf4",
+  boxShadow: "0 8px 24px rgba(20,92,42,0.08)",
+};
+
+const slotBubbleRow: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "44px 1fr",
+  gap: 10,
+  padding: 14,
+  alignItems: "start",
+};
+
+const avatarCircle: React.CSSProperties = {
+  width: 44,
+  height: 44,
+  borderRadius: 999,
+  background: "#dcfce7",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 22,
+  flexShrink: 0,
+};
+
+const slotBubbleMain: React.CSSProperties = {
+  minWidth: 0,
+  display: "grid",
+  gap: 8,
+};
+
+const slotTopRow: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   gap: 10,
@@ -418,18 +484,24 @@ const slotHeaderRow: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
-const slotMainLine: React.CSSProperties = {
+const timeBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 28,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#145c2a",
+  color: "#fff",
+  fontSize: 12,
   fontWeight: 900,
-  lineHeight: 1.6,
-  fontSize: 16,
-  color: "#16391f",
 };
 
-const metaRow: React.CSSProperties = {
-  marginTop: 8,
+const rightBadgeRow: React.CSSProperties = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
+  alignItems: "center",
 };
 
 const slotStatusBadge: React.CSSProperties = {
@@ -439,32 +511,76 @@ const slotStatusBadge: React.CSSProperties = {
   fontWeight: 900,
 };
 
-const hostTeamText: React.CSSProperties = {
-  marginTop: 10,
-  color: "#4b5563",
-  fontSize: 14,
-  lineHeight: 1.5,
+const teamNameRow: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  alignItems: "center",
+  flexWrap: "wrap",
 };
 
-const rankTextStyle: React.CSSProperties = {
-  marginTop: 4,
-  color: "#4b5563",
-  fontSize: 14,
-  lineHeight: 1.5,
+const teamName: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#16391f",
+  lineHeight: 1.4,
 };
 
-const wantedTextStyle: React.CSSProperties = {
-  marginTop: 4,
+const mineBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 24,
+  padding: "0 8px",
+  borderRadius: 999,
+  background: "#fef3c7",
+  color: "#92400e",
+  border: "1px solid #fde68a",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
+const slotSubLine: React.CSSProperties = {
+  fontSize: 14,
+  color: "#4b5563",
+  lineHeight: 1.6,
+};
+
+const slotMetaGrid: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginTop: 2,
+};
+
+const metaPill: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  minHeight: 30,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#f7faf8",
+  border: "1px solid #e5ece7",
+  flexWrap: "wrap",
+};
+
+const metaPillLabel: React.CSSProperties = {
+  fontSize: 11,
+  color: "#6b7280",
+  fontWeight: 800,
+};
+
+const metaPillValue: React.CSSProperties = {
+  fontSize: 12,
   color: "#1f5d30",
-  fontSize: 14,
-  lineHeight: 1.5,
-  fontWeight: 700,
+  fontWeight: 900,
 };
 
 const buttonRow: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 8,
+  marginTop: 4,
 };
 
 const buttonWide: React.CSSProperties = {
@@ -476,4 +592,9 @@ const buttonLink: React.CSSProperties = {
   width: "100%",
   textAlign: "center",
   boxSizing: "border-box",
+};
+
+const detailWrap: React.CSSProperties = {
+  padding: "0 14px 14px",
+  borderTop: "1px solid #dbe9de",
 };
