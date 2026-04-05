@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
 import { categoryLabel } from "@/app/lib/categories";
+import Link from "next/link";
 
 type Slot = {
   id: string;
@@ -19,6 +19,12 @@ type Slot = {
   note?: string | null;
 };
 
+type DayCalendarSummary = {
+  label: "決" | "募" | "他";
+  count: number;
+  tone: "decided" | "open" | "other";
+};
+
 function ymdToday() {
   const d = new Date();
   const y = d.getFullYear();
@@ -27,35 +33,55 @@ function ymdToday() {
   return `${y}-${m}-${day}`;
 }
 
-function buildNextDays(count: number) {
-  const arr: string[] = [];
-  const base = new Date();
-
-  for (let i = 0; i < count; i++) {
-    const d = new Date(base);
-    d.setDate(d.getDate() + i);
-
-    const y = d.getFullYear();
-    const m = `${d.getMonth() + 1}`.padStart(2, "0");
-    const day = `${d.getDate()}`.padStart(2, "0");
-    arr.push(`${y}-${m}-${day}`);
-  }
-
-  return arr;
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
 }
 
-function formatDayChip(ymd: string) {
-  const d = new Date(`${ymd}T00:00:00`);
-  const week = ["日", "月", "火", "水", "木", "金", "土"];
-  return {
-    md: `${d.getMonth() + 1}/${d.getDate()}`,
-    week: week[d.getDay()],
-  };
+function addMonths(date: Date, diff: number) {
+  return new Date(date.getFullYear(), date.getMonth() + diff, 1);
+}
+
+function toMonthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function buildCalendarCells(monthDate: Date) {
+  const year = monthDate.getFullYear();
+  const month = monthDate.getMonth();
+
+  const firstDay = new Date(year, month, 1);
+  const firstWeekday = (firstDay.getDay() + 6) % 7;
+  const start = new Date(year, month, 1 - firstWeekday);
+
+  return Array.from({ length: 42 }).map((_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+
+    return {
+      ymd: `${y}-${m}-${day}`,
+      dayNum: d.getDate(),
+      inMonth: d.getMonth() === month,
+    };
+  });
 }
 
 function hhmm(v?: string | null) {
   if (!v) return "";
   return String(v).slice(0, 5);
+}
+
+function isPastDate(ymd: string) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const target = new Date(y, (m || 1) - 1, d || 1);
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  return target < today;
 }
 
 function getWeekdayKey(dateStr?: string | null) {
@@ -74,10 +100,8 @@ function matchCategory(slot: Slot, category: string) {
 
 function matchArea(slot: Slot, areaKeyword: string) {
   if (!areaKeyword.trim()) return true;
-
   const q = areaKeyword.trim().toLowerCase();
   const haystack = [slot.area ?? "", slot.area_text ?? ""].join(" ").toLowerCase();
-
   return haystack.includes(q);
 }
 
@@ -105,17 +129,9 @@ function matchTimeZone(slot: Slot, timeZoneFilter: string) {
 
   const start = String(slot.start_time ?? "");
 
-  if (timeZoneFilter === "morning") {
-    return start >= "06:00" && start < "12:00";
-  }
-
-  if (timeZoneFilter === "afternoon") {
-    return start >= "12:00" && start < "17:00";
-  }
-
-  if (timeZoneFilter === "evening") {
-    return start >= "17:00" && start <= "21:00";
-  }
+  if (timeZoneFilter === "morning") return start >= "06:00" && start < "12:00";
+  if (timeZoneFilter === "afternoon") return start >= "12:00" && start < "17:00";
+  if (timeZoneFilter === "evening") return start >= "17:00" && start <= "21:00";
 
   return true;
 }
@@ -148,10 +164,18 @@ function matchKeyword(slot: Slot, keyword: string) {
   return text.includes(q);
 }
 
+function getSummaryLabel(summary: DayCalendarSummary) {
+  if (summary.tone === "decided") return "決定済";
+  if (summary.tone === "open") return "募集中";
+  return "他決定";
+}
+
 export default function HomeCalendar() {
   const [slots, setSlots] = useState<Slot[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>(ymdToday());
   const [loading, setLoading] = useState(true);
+
+  const [monthDate, setMonthDate] = useState<Date>(() => startOfMonth(new Date()));
+  const [selectedDate, setSelectedDate] = useState<string>(ymdToday());
 
   const [areaKeyword, setAreaKeyword] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -162,37 +186,35 @@ export default function HomeCalendar() {
   const [keyword, setKeyword] = useState("");
   const [openOnly, setOpenOnly] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [listExpanded, setListExpanded] = useState(false);
 
   const listRef = useRef<HTMLDivElement | null>(null);
+  const filterRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(
-        "sakamatch:home-calendar-filters:v1"
-      );
+      const raw = window.localStorage.getItem("sakamatch:home-calendar-filters:v1");
       if (!raw) return;
 
       const saved = JSON.parse(raw);
 
       setAreaKeyword(saved.areaKeyword ?? "");
       setCategoryFilter(saved.categoryFilter ?? "");
-      setStrengthFilter(
-        Array.isArray(saved.strengthFilter) ? saved.strengthFilter : []
-      );
+      setStrengthFilter(Array.isArray(saved.strengthFilter) ? saved.strengthFilter : []);
       setWeekdayFilter(saved.weekdayFilter ?? "");
       setTimeZoneFilter(saved.timeZoneFilter ?? "");
       setGroundFilter(saved.groundFilter ?? "");
       setKeyword(saved.keyword ?? "");
       setOpenOnly(typeof saved.openOnly === "boolean" ? saved.openOnly : true);
-    } catch {}
+    } catch {
+      // no-op
+    }
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
 
     const channel = supabase
-      .channel("home-calendar-slots")
+      .channel("home-calendar-slots-unified")
       .on(
         "postgres_changes",
         {
@@ -201,13 +223,13 @@ export default function HomeCalendar() {
           table: "match_slots",
         },
         () => {
-          load();
+          void load();
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      void supabase.removeChannel(channel);
     };
   }, []);
 
@@ -222,7 +244,7 @@ export default function HomeCalendar() {
       .gte("date", ymdToday())
       .order("date", { ascending: true })
       .order("start_time", { ascending: true })
-      .limit(300);
+      .limit(500);
 
     if (error) {
       console.error("HomeCalendar load error:", error);
@@ -285,8 +307,6 @@ export default function HomeCalendar() {
     });
   }
 
-  const days = useMemo(() => buildNextDays(14), []);
-
   const filteredSlots = useMemo(() => {
     return slots.filter((slot) => {
       if (openOnly && slot.is_closed) return false;
@@ -315,62 +335,103 @@ export default function HomeCalendar() {
 
   const grouped = useMemo(() => {
     const m = new Map<string, Slot[]>();
-
     for (const s of filteredSlots) {
       if (!m.has(s.date)) m.set(s.date, []);
       m.get(s.date)!.push(s);
     }
-
     return m;
   }, [filteredSlots]);
+
+  const monthCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
+  const monthKey = useMemo(() => toMonthKey(monthDate), [monthDate]);
+
+  const dayStatusSummaryByDate = useMemo(() => {
+    const map = new Map<string, DayCalendarSummary>();
+
+    for (const [date, daySlots] of grouped.entries()) {
+      const openCount = daySlots.filter((s) => !s.is_closed).length;
+      const decidedCount = daySlots.filter((s) => !!s.is_closed).length;
+
+      if (openCount > 0) {
+        map.set(date, {
+          label: "募",
+          count: openCount,
+          tone: "open",
+        });
+      } else if (decidedCount > 0) {
+        map.set(date, {
+          label: "決",
+          count: decidedCount,
+          tone: "decided",
+        });
+      }
+    }
+
+    return map;
+  }, [grouped]);
 
   useEffect(() => {
     const currentCount = grouped.get(selectedDate)?.length ?? 0;
     if (currentCount > 0) return;
 
-    const firstAvailable = days.find((d) => (grouped.get(d)?.length ?? 0) > 0);
+    const firstAvailable = Array.from(grouped.keys()).sort()[0];
     if (firstAvailable) {
       setSelectedDate(firstAvailable);
     }
-  }, [grouped, selectedDate, days]);
+  }, [grouped, selectedDate]);
+
+  useEffect(() => {
+    const target = new Date(`${selectedDate}T00:00:00`);
+    if (
+      target.getFullYear() !== monthDate.getFullYear() ||
+      target.getMonth() !== monthDate.getMonth()
+    ) {
+      setMonthDate(startOfMonth(target));
+    }
+  }, [selectedDate, monthDate]);
 
   const selectedDateSlots = useMemo(() => {
     return grouped.get(selectedDate) ?? [];
   }, [grouped, selectedDate]);
 
   const totalFilteredCount = filteredSlots.length;
-  const visibleCount = listExpanded ? 12 : 5;
-  const visibleSlots = selectedDateSlots.slice(0, visibleCount);
+
+  const filterSummaryText = useMemo(() => {
+    const parts: string[] = [];
+
+    if (keyword.trim()) parts.push(`キーワード: ${keyword.trim()}`);
+    if (areaKeyword.trim()) parts.push(`エリア: ${areaKeyword.trim()}`);
+    if (categoryFilter) {
+      parts.push(`カテゴリ: ${categoryLabel(categoryFilter) || categoryFilter}`);
+    }
+    if (strengthFilter.length > 0) parts.push(`強さ: ${strengthFilter.join(" / ")}`);
+    if (weekdayFilter) parts.push("曜日条件あり");
+    if (timeZoneFilter) parts.push("時間帯条件あり");
+    if (groundFilter) parts.push("グラウンド条件あり");
+    if (openOnly) parts.push("募集中のみ");
+
+    return parts.join(" / ");
+  }, [
+    keyword,
+    areaKeyword,
+    categoryFilter,
+    strengthFilter,
+    weekdayFilter,
+    timeZoneFilter,
+    groundFilter,
+    openOnly,
+  ]);
 
   return (
     <section style={wrap}>
-      <div style={heroCard}>
-        <div style={heroHead}>
-          <div>
-            <div style={eyebrow}>HOME CALENDAR</div>
-            <h2 style={title}>試合を探す</h2>
-            <p style={desc}>
-              日付ごとの募集件数を見ながら、エリア・カテゴリ・強さなどで絞り込めます。
-            </p>
-          </div>
-
-          <div style={heroActions}>
-            <Link href="/match" className="sh-btn">
-              もっと見る
-            </Link>
-            <Link href="/match/new" className="sh-btn sh-btn--primary">
-              募集する
-            </Link>
-          </div>
-        </div>
-
+      <div ref={filterRef} style={heroCard}>
         <div style={filterCard}>
           <div style={filterTop}>
             <div style={filterTitleWrap}>
-              <div style={filterEyebrow}>条件から探す</div>
-              <div style={filterTitle}>対戦相手・募集をすばやく絞り込み</div>
+              <div style={filterEyebrow}>HOME MATCH SEARCH</div>
+              <div style={filterTitle}>ホームでそのまま探す</div>
               <div style={filterDesc}>
-                SUUMOのように条件で探して、LINEのようにすぐ連絡できる入口です。
+                カレンダーと絞り込みをこのページに集約しました。
               </div>
             </div>
 
@@ -530,115 +591,208 @@ export default function HomeCalendar() {
           </div>
         </div>
 
-        <div style={dayRow}>
-          {days.map((d) => {
-            const info = formatDayChip(d);
-            const count = grouped.get(d)?.length ?? 0;
-            const active = selectedDate === d;
+        <section style={{ ...calendarCard, marginTop: 0 }}>
+          <div style={topHead}>
+            <div style={topHeadLeft}>
+              <div style={topEyebrow}>MATCH CALENDAR</div>
+              <div style={topTitle}>カレンダーから試合を探す</div>
+            </div>
 
-            return (
+            <div style={topHeadActions}>
               <button
-                key={d}
                 type="button"
-                onClick={() => setSelectedDate(d)}
+                className="sh-btn"
+                onClick={() => {
+                  filterRef.current?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
+                }}
+                disabled={loading}
+              >
+                条件変更
+              </button>
+
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={handleClearFilters}
+                disabled={loading}
+              >
+                リセット
+              </button>
+            </div>
+          </div>
+
+          <div style={filterSummaryBox}>
+            <div style={filterSummaryLabel}>表示条件</div>
+            <div style={filterSummaryTextStyle}>
+              {filterSummaryText.trim() || "すべての条件で表示中"}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setOpenOnly((prev) => !prev)}
+              style={{
+                ...openOnlyChip,
+                ...(openOnly ? openOnlyChipActive : null),
+              }}
+              aria-pressed={openOnly}
+            >
+              {openOnly ? "募集中のみ表示中" : "募集中のみ表示"}
+            </button>
+          </div>
+
+          <div style={headerRow}>
+            <button
+              className="sh-btn"
+              type="button"
+              onClick={() => setMonthDate(addMonths(monthDate, -1))}
+            >
+              ← 前月
+            </button>
+
+            <div style={monthTitle}>{monthKey}</div>
+
+            <button
+              className="sh-btn"
+              type="button"
+              onClick={() => setMonthDate(addMonths(monthDate, 1))}
+            >
+              次月 →
+            </button>
+          </div>
+
+          <div style={weekHeaderGrid}>
+            {["月", "火", "水", "木", "金", "土", "日"].map((w, i) => (
+              <div
+                key={w}
                 style={{
-                  ...dayChip,
-                  ...(active ? dayChipActive : {}),
+                  ...weekLabel,
+                  color: i === 5 ? "#2563eb" : i === 6 ? "#dc2626" : "#666666",
                 }}
               >
-                <div style={dayChipDate}>{info.md}</div>
-                <div style={dayChipWeek}>{info.week}</div>
-                <div
+                {w}
+              </div>
+            ))}
+          </div>
+
+          <div style={calendarGrid}>
+            {monthCells.map((c, index) => {
+              const daySummary = dayStatusSummaryByDate.get(c.ymd);
+              const isSelected = c.ymd === selectedDate;
+              const isPast = isPastDate(c.ymd);
+              const weekday = index % 7;
+
+              const dayColor =
+                weekday === 5 ? "#2563eb" : weekday === 6 ? "#dc2626" : "#374151";
+
+              return (
+                <button
+                  key={c.ymd}
+                  type="button"
+                  onClick={() => {
+                    setSelectedDate(c.ymd);
+                    setTimeout(() => {
+                      listRef.current?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start",
+                      });
+                    }, 80);
+                  }}
                   style={{
-                    ...dayCount,
-                    ...(active ? dayCountActive : {}),
+                    ...calCell,
+                    ...(isSelected ? calCellSelected : null),
+                    ...(isPast ? calCellPast : null),
+                    opacity: c.inMonth ? 1 : 0.42,
                   }}
                 >
-                  {count}件
-                </div>
-              </button>
-            );
-          })}
-        </div>
+                  <div
+                    style={{
+                      ...dayNumText,
+                      color: c.inMonth ? (isPast ? "#9ca3af" : dayColor) : "#c5cbd3",
+                    }}
+                  >
+                    {c.dayNum}
+                  </div>
+
+                  <div
+                    style={{
+                      ...statusText,
+                      color: isPast
+                        ? "#94a3b8"
+                        : daySummary
+                        ? daySummary.tone === "decided"
+                          ? "#166534"
+                          : daySummary.tone === "open"
+                          ? "#1d4ed8"
+                          : "#4b5563"
+                        : "#9ca3af",
+                    }}
+                  >
+                    {daySummary ? getSummaryLabel(daySummary) : "-"}
+                  </div>
+
+                  <div
+                    style={{
+                      ...summaryCountText,
+                      color: isPast ? "#94a3b8" : daySummary ? "#065f46" : "#9ca3af",
+                    }}
+                  >
+                    {daySummary ? `${daySummary.count}件` : "-"}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={bottomRow}>
+            <Link href="/match/new" className="sh-btn sh-btn--primary">
+              募集する
+            </Link>
+          </div>
+        </section>
 
         <div ref={listRef} style={listWrap}>
           <div style={listHead}>
-            <div style={listTitle}>
-              {selectedDate.replaceAll("-", "/")} の募集
-            </div>
-            <div style={listSub}>
-              {loading ? "読み込み中…" : `${selectedDateSlots.length}件`}
-            </div>
+            <div style={listTitle}>{selectedDate.replaceAll("-", "/")} の募集</div>
+            <div style={listSub}>{loading ? "読み込み中…" : `${selectedDateSlots.length}件`}</div>
           </div>
 
-          <div style={compactListFrame}>
-            <div style={list}>
-              {loading ? (
-                <div style={empty}>読み込み中…</div>
-              ) : selectedDateSlots.length === 0 ? (
-                <div style={empty}>
-                  この条件では募集がありません。
-                  <br />
-                  条件をゆるめるか、試合一覧で探してみてください。
-                </div>
-              ) : (
-                visibleSlots.map((s) => (
-                  <Link
-                    key={s.id}
-                    href={`/match?date=${encodeURIComponent(
-                      s.date
-                    )}&slotId=${encodeURIComponent(s.id)}`}
-                    style={cardLink}
-                  >
-                    <div style={card}>
-                      <div style={cardTop}>
-                        <div style={time}>
-                          {hhmm(s.start_time)}–{hhmm(s.end_time)}
-                        </div>
-                        <div style={badge}>
-                          {s.is_closed ? "締切" : "募集中"}
-                        </div>
-                      </div>
-
-                      <div style={meta}>
-                        📍 {s.area_text ?? s.area ?? "エリア未設定"}
-                      </div>
-
-                      <div style={meta}>
-                        🏷{" "}
-                        {categoryLabel(s.category) || s.category || "カテゴリ未設定"}
-                      </div>
-
-                      <div style={meta}>💪 {s.strength_rank || "強さ未設定"}</div>
-
-                      <div style={meta}>
-                        🏟 {s.has_ground ? "グラウンドあり" : "グラウンド未設定"}
-                      </div>
+          <div style={list}>
+            {loading ? (
+              <div style={empty}>読み込み中…</div>
+            ) : selectedDateSlots.length === 0 ? (
+              <div style={empty}>
+                この条件では募集がありません。
+                <br />
+                条件をゆるめて再度ご確認ください。
+              </div>
+            ) : (
+              selectedDateSlots.map((s) => (
+                <div key={s.id} style={card}>
+                  <div style={cardTop}>
+                    <div style={time}>
+                      {hhmm(s.start_time)}–{hhmm(s.end_time)}
                     </div>
-                  </Link>
-                ))
-              )}
-            </div>
+                    <div style={badge}>{s.is_closed ? "締切" : "募集中"}</div>
+                  </div>
+
+                  <div style={meta}>📍 {s.area_text ?? s.area ?? "エリア未設定"}</div>
+
+                  <div style={meta}>
+                    🏷 {categoryLabel(s.category) || s.category || "カテゴリ未設定"}
+                  </div>
+
+                  <div style={meta}>💪 {s.strength_rank || "強さ未設定"}</div>
+
+                  <div style={meta}>
+                    🏟 {s.has_ground ? "グラウンドあり" : "グラウンド未設定"}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
-
-          {!loading && selectedDateSlots.length > 5 ? (
-            <div style={moreRow}>
-              <button
-                type="button"
-                style={ghostButton}
-                onClick={() => setListExpanded((prev) => !prev)}
-              >
-                {listExpanded ? "一覧をコンパクトに戻す" : "一覧を広く見る"}
-              </button>
-
-              <Link
-                href={`/match?date=${encodeURIComponent(selectedDate)}`}
-                className="sh-btn"
-              >
-                この日の募集をもっと見る
-              </Link>
-            </div>
-          ) : null}
         </div>
       </div>
     </section>
@@ -650,47 +804,8 @@ const wrap: React.CSSProperties = {
 };
 
 const heroCard: React.CSSProperties = {
-  borderRadius: 18,
-  border: "1px solid #e5ece7",
-  background: "#fff",
-  padding: 16,
   display: "grid",
   gap: 14,
-};
-
-const heroHead: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 12,
-  alignItems: "flex-start",
-  flexWrap: "wrap",
-};
-
-const eyebrow: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 900,
-  letterSpacing: "0.08em",
-  color: "#5b6d61",
-};
-
-const title: React.CSSProperties = {
-  margin: "4px 0 0",
-  fontWeight: 900,
-  fontSize: 24,
-  color: "#16391f",
-};
-
-const desc: React.CSSProperties = {
-  margin: "8px 0 0",
-  fontSize: 14,
-  color: "#4b5563",
-  lineHeight: 1.7,
-};
-
-const heroActions: React.CSSProperties = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
 };
 
 const filterCard: React.CSSProperties = {
@@ -733,6 +848,28 @@ const filterDesc: React.CSSProperties = {
   lineHeight: 1.7,
 };
 
+const summaryBox: React.CSSProperties = {
+  minWidth: 84,
+  border: "1px solid #e5ece7",
+  borderRadius: 12,
+  padding: "10px 12px",
+  background: "#f8fcf9",
+};
+
+const summaryLabel: React.CSSProperties = {
+  fontSize: 11,
+  color: "#6b7280",
+  fontWeight: 700,
+};
+
+const summaryValue: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 20,
+  fontWeight: 900,
+  color: "#145c2a",
+  lineHeight: 1,
+};
+
 const filterBox: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "1.4fr 1fr auto",
@@ -763,28 +900,6 @@ const checkboxField: React.CSSProperties = {
   fontSize: 14,
   fontWeight: 800,
   color: "#294234",
-};
-
-const summaryBox: React.CSSProperties = {
-  minWidth: 84,
-  border: "1px solid #e5ece7",
-  borderRadius: 12,
-  padding: "10px 12px",
-  background: "#f8fcf9",
-};
-
-const summaryLabel: React.CSSProperties = {
-  fontSize: 11,
-  color: "#6b7280",
-  fontWeight: 700,
-};
-
-const summaryValue: React.CSSProperties = {
-  marginTop: 4,
-  fontSize: 20,
-  fontWeight: 900,
-  color: "#145c2a",
-  lineHeight: 1,
 };
 
 const strengthWrap: React.CSSProperties = {
@@ -863,56 +978,197 @@ const ghostButton: React.CSSProperties = {
   cursor: "pointer",
 };
 
-const dayRow: React.CSSProperties = {
+const calendarCard: React.CSSProperties = {
+  padding: 14,
+  border: "1px solid #eee",
+  borderRadius: 14,
+  background: "#fff",
+};
+
+const topHead: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const topHeadLeft: React.CSSProperties = {
+  display: "grid",
+  gap: 4,
+};
+
+const topEyebrow: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "0.08em",
+  color: "#5b6d61",
+};
+
+const topTitle: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#16391f",
+  lineHeight: 1.3,
+};
+
+const topHeadActions: React.CSSProperties = {
   display: "flex",
   gap: 8,
-  overflowX: "auto",
-  paddingBottom: 2,
+  flexWrap: "wrap",
 };
 
-const dayChip: React.CSSProperties = {
-  minWidth: 74,
-  padding: "10px 10px 9px",
-  borderRadius: 14,
-  border: "1px solid #dbe5de",
-  background: "#fff",
-  cursor: "pointer",
-  textAlign: "center",
-  flexShrink: 0,
+const filterSummaryBox: React.CSSProperties = {
+  marginTop: 12,
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: "1px solid #dfeee3",
+  background: "linear-gradient(135deg,#f5fbf6 0%,#eef8f0 100%)",
+  display: "grid",
+  gap: 6,
 };
 
-const dayChipActive: React.CSSProperties = {
-  background: "#145c2a",
-  color: "#fff",
-  border: "1px solid #145c2a",
-};
-
-const dayChipDate: React.CSSProperties = {
-  fontSize: 14,
-  fontWeight: 900,
-  lineHeight: 1.2,
-};
-
-const dayChipWeek: React.CSSProperties = {
-  marginTop: 2,
+const filterSummaryLabel: React.CSSProperties = {
   fontSize: 11,
-  opacity: 0.8,
+  fontWeight: 900,
+  color: "#5b6d61",
+  letterSpacing: "0.05em",
 };
 
-const dayCount: React.CSSProperties = {
-  marginTop: 6,
+const filterSummaryTextStyle: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#23412c",
+  lineHeight: 1.6,
+};
+
+const openOnlyChip: React.CSSProperties = {
+  marginTop: 2,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "fit-content",
+  minHeight: 30,
+  padding: "0 12px",
+  borderRadius: 999,
+  border: "1px solid #d8e5dc",
+  background: "#fff",
+  color: "#294234",
   fontSize: 12,
   fontWeight: 800,
-  color: "#145c2a",
+  cursor: "pointer",
 };
 
-const dayCountActive: React.CSSProperties = {
+const openOnlyChipActive: React.CSSProperties = {
+  border: "1px solid #145c2a",
+  background: "#145c2a",
   color: "#fff",
+};
+
+const headerRow: React.CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+};
+
+const monthTitle: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 18,
+  lineHeight: 1.2,
+  textAlign: "center",
+};
+
+const weekHeaderGrid: React.CSSProperties = {
+  marginTop: 12,
+  display: "grid",
+  gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+  gap: 6,
+};
+
+const weekLabel: React.CSSProperties = {
+  textAlign: "center",
+  fontWeight: 800,
+  fontSize: 12,
+  minWidth: 0,
+};
+
+const calendarGrid: React.CSSProperties = {
+  marginTop: 6,
+  display: "grid",
+  gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+  gap: 6,
+};
+
+const calCell: React.CSSProperties = {
+  minWidth: 0,
+  width: "100%",
+  height: 57,
+  padding: "5px 5px 4px",
+  borderRadius: 12,
+  border: "1px solid #e5e7eb",
+  background: "#ffffff",
+  cursor: "pointer",
+  textAlign: "left",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-start",
+  justifyContent: "flex-start",
+  gap: 1,
+  overflow: "hidden",
+};
+
+const calCellPast: React.CSSProperties = {
+  background: "#f8fafc",
+};
+
+const calCellSelected: React.CSSProperties = {
+  border: "2px solid #86efac",
+  background: "#f0fdf4",
+  boxShadow: "0 0 0 3px rgba(134,239,172,0.18)",
+};
+
+const dayNumText: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 13,
+  lineHeight: 1,
+};
+
+const statusText: React.CSSProperties = {
+  width: "100%",
+  marginTop: 1,
+  fontSize: 10,
+  fontWeight: 900,
+  lineHeight: 1.05,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const summaryCountText: React.CSSProperties = {
+  width: "100%",
+  marginTop: 0,
+  fontSize: 11,
+  fontWeight: 900,
+  lineHeight: 1.05,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
+const bottomRow: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  marginTop: 12,
 };
 
 const listWrap: React.CSSProperties = {
-  borderTop: "1px solid #eef2ef",
-  paddingTop: 12,
+  border: "1px solid #eee",
+  borderRadius: 14,
+  background: "#fff",
+  padding: 14,
   display: "grid",
   gap: 10,
 };
@@ -936,18 +1192,9 @@ const listSub: React.CSSProperties = {
   color: "#6b7280",
 };
 
-const compactListFrame: React.CSSProperties = {
-  display: "grid",
-  gap: 8,
-};
-
 const list: React.CSSProperties = {
   display: "grid",
   gap: 8,
-};
-
-const cardLink: React.CSSProperties = {
-  textDecoration: "none",
 };
 
 const card: React.CSSProperties = {
@@ -999,11 +1246,4 @@ const empty: React.CSSProperties = {
   borderRadius: 12,
   background: "#fafcfb",
   lineHeight: 1.8,
-};
-
-const moreRow: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "flex-start",
-  gap: 10,
-  flexWrap: "wrap",
 };

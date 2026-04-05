@@ -124,65 +124,11 @@ export default function HomePage() {
     <main style={wrap}>
       <AppTabNav />
 
-      <HomeCalendar />
-
-      <section style={searchHero}>
-        <div style={searchHeroTextWrap}>
-          <div style={searchEyebrow}>SOCCER MATCHING</div>
-          <h1 style={searchHeroTitle}>相手を探す。募集する。すぐ話す。</h1>
-          <p style={searchHeroDesc}>
-            サカまちは、LINEのように連絡しやすく、
-            SUUMOのように探しやすいサッカー練習試合マッチングです。
-          </p>
-        </div>
-
-        <div style={searchHeroActions}>
-          <Link href="/match" className="sh-btn sh-btn--primary">
-            試合を探す
-          </Link>
-          <Link href="/teams/search" className="sh-btn">
-            チーム検索
-          </Link>
-          <Link href="/match/new" className="sh-btn">
-            募集する
-          </Link>
-        </div>
-      </section>
-
-      <section style={quickGrid}>
-        <Link href="/teams/search" style={quickCardLink}>
-          <div style={quickCard}>
-            <div style={quickTitle}>🔎 SUUMOみたいに探す</div>
-            <div style={quickText}>
-              エリア、カテゴリ、強さ、人数感などから相手チームを探せます。
-            </div>
-          </div>
-        </Link>
-
-        <Link href="/match" style={quickCardLink}>
-          <div style={quickCard}>
-            <div style={quickTitle}>📅 カレンダーから探す</div>
-            <div style={quickText}>
-              日付ごとの募集件数を見ながら、そのまま試合相手を探せます。
-            </div>
-          </div>
-        </Link>
-
-        <Link href="/chat" style={quickCardLink}>
-          <div style={quickCard}>
-            <div style={quickTitle}>💬 LINEみたいに連絡</div>
-            <div style={quickText}>
-              申込後はそのままチャットで日程や詳細をすぐ調整できます。
-            </div>
-          </div>
-        </Link>
-      </section>
-
       {!teamLoading && !hasTeam ? (
         <section style={ctaBox}>
           <div style={ctaTitle}>まずはチーム登録から始めましょう</div>
           <div style={ctaText}>
-            チームを登録すると、試合の募集・申込・招待・チャットが使えるようになります。
+            チームを登録すると、試合の募集・申込・チャットが使えるようになります。
           </div>
           <div style={ctaActions}>
             <Link href="/teams/new" className="sh-btn sh-btn--primary">
@@ -194,6 +140,8 @@ export default function HomePage() {
           </div>
         </section>
       ) : null}
+
+      <HomeCalendar />
 
       <section style={foldSection}>
         <button
@@ -215,14 +163,14 @@ export default function HomePage() {
             </div>
 
             <div style={guideBlock}>
-              <div style={guideStep}>2. 試合を探す / 募集する</div>
+              <div style={guideStep}>2. ホームで探す / 募集する</div>
               <div style={guideText}>
-                カレンダーや検索から相手を探したり、自分で募集を出したりできます。
+                ホームのカレンダーと絞り込みから、そのまま相手を探したり募集を出したりできます。
               </div>
             </div>
 
             <div style={guideBlock}>
-              <div style={guideStep}>3. チャットで連絡する</div>
+              <div style={guideStep}>3. チャットで調整する</div>
               <div style={guideText}>
                 申込後はそのままチャットに進み、日程や詳細を調整できます。
               </div>
@@ -246,7 +194,7 @@ export default function HomePage() {
             <div style={qaItem}>
               <div style={qaQ}>Q. まず何をすればいいですか？</div>
               <div style={qaA}>
-                A. まずはチーム登録です。登録情報があると検索にも募集にも進みやすくなります。
+                A. まずはチーム登録です。登録情報があると申込や募集ができます。
               </div>
             </div>
 
@@ -258,9 +206,9 @@ export default function HomePage() {
             </div>
 
             <div style={qaItem}>
-              <div style={qaQ}>Q. 募集するだけでなく探すこともできますか？</div>
+              <div style={qaQ}>Q. 試合を探すのはどこですか？</div>
               <div style={qaA}>
-                A. できます。カレンダーと検索の両方から探せます。
+                A. ホームのカレンダーと絞り込みから、そのまま探せます。
               </div>
             </div>
 
@@ -301,78 +249,6 @@ const loadingPanel: React.CSSProperties = {
   background: "#fff",
   color: "#666",
   textAlign: "center",
-};
-
-const searchHero: React.CSSProperties = {
-  marginTop: 16,
-  borderRadius: 18,
-  background: "linear-gradient(135deg,#1e7f3c,#145c2a)",
-  color: "#fff",
-  padding: 18,
-  display: "grid",
-  gap: 14,
-};
-
-const searchHeroTextWrap: React.CSSProperties = {
-  display: "grid",
-  gap: 6,
-};
-
-const searchEyebrow: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 900,
-  letterSpacing: "0.08em",
-  color: "rgba(255,255,255,0.8)",
-};
-
-const searchHeroTitle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 28,
-  lineHeight: 1.3,
-  fontWeight: 900,
-};
-
-const searchHeroDesc: React.CSSProperties = {
-  margin: 0,
-  fontSize: 14,
-  lineHeight: 1.8,
-  color: "rgba(255,255,255,0.92)",
-};
-
-const searchHeroActions: React.CSSProperties = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
-};
-
-const quickGrid: React.CSSProperties = {
-  marginTop: 16,
-  display: "grid",
-  gap: 12,
-};
-
-const quickCardLink: React.CSSProperties = {
-  textDecoration: "none",
-};
-
-const quickCard: React.CSSProperties = {
-  padding: 16,
-  borderRadius: 16,
-  border: "1px solid #e5ece7",
-  background: "#fff",
-};
-
-const quickTitle: React.CSSProperties = {
-  fontSize: 17,
-  fontWeight: 900,
-  color: "#16391f",
-};
-
-const quickText: React.CSSProperties = {
-  marginTop: 6,
-  fontSize: 14,
-  color: "#4b5563",
-  lineHeight: 1.7,
 };
 
 const ctaBox: React.CSSProperties = {

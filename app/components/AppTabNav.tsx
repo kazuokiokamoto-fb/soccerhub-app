@@ -1,4 +1,3 @@
-// app/components/AppTabNav.tsx
 "use client";
 
 import Link from "next/link";
@@ -7,14 +6,14 @@ import React from "react";
 
 const TABS = [
   { href: "/", label: "ホーム" },
-  { href: "/match", label: "試合" },
-  { href: "/teams/search", label: "チーム" },
-  { href: "/chat", label: "連絡" },
-  { href: "/mypage", label: "設定" },
+  { href: "/chat", label: "チャット" },
+  { href: "/mypage", label: "マイページ" },
 ];
 
 function isActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
+  if (href === "/") {
+    return pathname === "/" || pathname === "/match" || pathname === "/teams/search";
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -51,17 +50,17 @@ const wrap: React.CSSProperties = {
 
 const tabRow: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
   gap: 8,
 };
 
 const tabBase: React.CSSProperties = {
-  minHeight: 42,
+  minHeight: 44,
   padding: "10px 8px",
   borderRadius: 999,
   textAlign: "center",
   textDecoration: "none",
-  fontSize: 13,
+  fontSize: 14,
   fontWeight: 900,
   whiteSpace: "nowrap",
   overflow: "hidden",
