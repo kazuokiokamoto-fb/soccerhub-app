@@ -176,6 +176,10 @@ function appliedFilterSummaryText(filters: {
   return parts.join(" / ");
 }
 
+function firstDayYmdOfMonth(date: Date) {
+  return `${toMonthKey(date)}-01`;
+}
+
 export default function HomeCalendar() {
   const [monthDate, setMonthDate] = useState<Date>(() =>
     startOfMonth(new Date())
@@ -870,18 +874,24 @@ export default function HomeCalendar() {
         onPrevMonth={() => {
           const nextMonth = addMonths(monthDate, -1);
           setMonthDate(nextMonth);
-          setSelectedYmd(ymdToday());
+          setSelectedYmd(firstDayYmdOfMonth(nextMonth));
+          setSelectedSlotId("");
+          setRequestComment("");
         }}
         onNextMonth={() => {
           const nextMonth = addMonths(monthDate, 1);
           setMonthDate(nextMonth);
-          setSelectedYmd(ymdToday());
+          setSelectedYmd(firstDayYmdOfMonth(nextMonth));
+          setSelectedSlotId("");
+          setRequestComment("");
         }}
         onCreateForDate={(ymd) => goToCreatePage(ymd)}
         disableCreate={myTeams.length === 0}
         filterSummaryText={filterSummaryText}
         onOpenFilters={scrollToFilter}
         onResetFilters={handleResetFilters}
+        bandText="日程"
+        titleText="試合日で探す"
       />
 
       <div ref={dayListRef}>
@@ -982,6 +992,9 @@ export default function HomeCalendar() {
         onBackToList={scrollToDayList}
         onOpenStrengthHelp={() => setShowStrengthHelp(true)}
         strengthGuides={STRENGTH_GUIDES}
+        bandText="条件検索"
+        titleText="相手を探す"
+        descriptionText="レベル・エリア・人数感などから対戦相手を探せます。"
       />
 
       <MatchHelpModals

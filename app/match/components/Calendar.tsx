@@ -43,6 +43,9 @@ export function Calendar(props: {
 
   openOnly?: boolean;
   onToggleOpenOnly?: () => void;
+
+  bandText?: string;
+  titleText?: string;
 }) {
   const {
     monthKey,
@@ -60,6 +63,8 @@ export function Calendar(props: {
     onResetFilters,
     openOnly = false,
     onToggleOpenOnly,
+    bandText = "日程検索",
+    titleText = "試合日で探す",
   } = props;
 
   const weekLabels = ["月", "火", "水", "木", "金", "土", "日"];
@@ -68,8 +73,8 @@ export function Calendar(props: {
     <section style={{ ...card, marginTop: 14 }}>
       <div style={topHead}>
         <div style={topHeadLeft}>
-          <div style={topEyebrow}>MATCH CALENDAR</div>
-          <div style={topTitle}>カレンダーから試合を探す</div>
+          <div style={sectionBand}>{bandText}</div>
+          <div style={topTitle}>{titleText}</div>
         </div>
 
         <div style={topHeadActions}>
@@ -155,8 +160,8 @@ export function Calendar(props: {
             weekday === 5
               ? "#2563eb"
               : weekday === 6
-              ? "#dc2626"
-              : "#374151";
+                ? "#dc2626"
+                : "#374151";
 
           return (
             <button
@@ -186,18 +191,18 @@ export function Calendar(props: {
                     ? summary.tone === "decided"
                       ? statusTextDecided
                       : summary.tone === "open"
-                      ? statusTextOpen
-                      : statusTextOther
+                        ? statusTextOpen
+                        : statusTextOther
                     : statusTextEmpty),
                   color: isPast
                     ? "#94a3b8"
                     : summary
-                    ? summary.tone === "decided"
-                      ? "#166534"
-                      : summary.tone === "open"
-                      ? "#1d4ed8"
-                      : "#4b5563"
-                    : "#9ca3af",
+                      ? summary.tone === "decided"
+                        ? "#166534"
+                        : summary.tone === "open"
+                          ? "#1d4ed8"
+                          : "#4b5563"
+                      : "#9ca3af",
                 }}
               >
                 {summary ? summaryLabel(summary) : "-"}
@@ -233,7 +238,7 @@ export function Calendar(props: {
 const card: React.CSSProperties = {
   padding: 14,
   border: "1px solid #eee",
-  borderRadius: 14,
+  borderRadius: 16,
   background: "#fff",
 };
 
@@ -247,18 +252,27 @@ const topHead: React.CSSProperties = {
 
 const topHeadLeft: React.CSSProperties = {
   display: "grid",
-  gap: 4,
+  gap: 8,
 };
 
-const topEyebrow: React.CSSProperties = {
+const sectionBand: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "fit-content",
+  minHeight: 28,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#e8f5ec",
+  color: "#145c2a",
+  border: "1px solid #cfe8d7",
   fontSize: 11,
   fontWeight: 900,
-  letterSpacing: "0.08em",
-  color: "#5b6d61",
+  letterSpacing: "0.06em",
 };
 
 const topTitle: React.CSSProperties = {
-  fontSize: 18,
+  fontSize: 22,
   fontWeight: 900,
   color: "#16391f",
   lineHeight: 1.3,

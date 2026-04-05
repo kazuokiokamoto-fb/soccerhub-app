@@ -68,6 +68,10 @@ type Props = {
   onOpenStrengthHelp: () => void;
 
   strengthGuides: StrengthGuide[];
+
+  bandText?: string;
+  titleText?: string;
+  descriptionText?: string;
 };
 
 export function MatchFilterPanel({
@@ -99,10 +103,19 @@ export function MatchFilterPanel({
   onBackToList,
   onOpenStrengthHelp,
   strengthGuides,
+  bandText = "条件検索",
+  titleText = "相手を探す",
+  descriptionText = "レベル・エリア・人数感などから対戦相手を探せます。",
 }: Props) {
   return (
     <section ref={filterRef} style={filterWrap}>
       <div style={{ display: "grid", gap: 12 }}>
+        <div style={sectionLeadWrap}>
+          <div style={sectionBand}>{bandText}</div>
+          <div style={sectionLeadTitle}>{titleText}</div>
+          <div style={sectionLeadDesc}>{descriptionText}</div>
+        </div>
+
         <div style={filterHeaderRow}>
           <h2 style={filterTitle}>絞り込み条件</h2>
 
@@ -172,9 +185,7 @@ export function MatchFilterPanel({
                 type="button"
                 className="sh-btn sh-btn--ghost"
                 onClick={() =>
-                  setDraftStrengthFilter(
-                    strengthGuides.map((o) => o.rank)
-                  )
+                  setDraftStrengthFilter(strengthGuides.map((o) => o.rank))
                 }
                 disabled={loading}
               >
@@ -275,9 +286,7 @@ export function MatchFilterPanel({
 
             <select
               value={draftBikeFilter}
-              onChange={(e) =>
-                setDraftBikeFilter(e.target.value as BikeFilter)
-              }
+              onChange={(e) => setDraftBikeFilter(e.target.value as BikeFilter)}
               className="sh-select"
               disabled={loading}
             >
@@ -333,6 +342,41 @@ export function MatchFilterPanel({
     </section>
   );
 }
+
+const sectionLeadWrap: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+  paddingBottom: 4,
+};
+
+const sectionBand: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "fit-content",
+  minHeight: 28,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#e8f5ec",
+  color: "#145c2a",
+  border: "1px solid #cfe8d7",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "0.06em",
+};
+
+const sectionLeadTitle: React.CSSProperties = {
+  fontSize: 22,
+  fontWeight: 900,
+  color: "#16391f",
+  lineHeight: 1.3,
+};
+
+const sectionLeadDesc: React.CSSProperties = {
+  fontSize: 14,
+  color: "#5b6470",
+  lineHeight: 1.7,
+};
 
 const strengthCard: React.CSSProperties = {
   border: "1px solid #e5ece7",
