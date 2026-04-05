@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
 import { categoryLabel } from "@/app/lib/categories";
@@ -39,6 +40,9 @@ type DayCalendarSummary = {
   count: number;
   tone: CalendarShortStatus;
 };
+
+type PanelMode = "none" | "match" | "team";
+type VisibleMode = "none" | "match" | "team";
 
 const STRENGTH_GUIDES: StrengthGuide[] = [
   {
@@ -103,6 +107,20 @@ const STRENGTH_GUIDES: StrengthGuide[] = [
   },
 ];
 
+function norm(v?: string | null) {
+  return String(v ?? "").trim();
+}
+
+function levelToRank(level?: number | null) {
+  const n = Number(level ?? 0);
+  if (!Number.isFinite(n)) return "";
+  if (n >= 9) return "SS";
+  if (n >= 7) return "S";
+  if (n >= 5) return "A";
+  if (n >= 3) return "B";
+  return "C";
+}
+
 function teamStrengthLabel(team: any) {
   if (!team) return "未設定";
   if (team.strength_rank) return team.strength_rank;
@@ -114,6 +132,14 @@ function teamStrengthLabel(team: any) {
   if (level >= 5) return "A";
   if (level >= 3) return "B";
   return "C";
+}
+
+function parseBikeCapacity(value?: string | null) {
+  const v = String(value ?? "").trim();
+  if (!v || v === "不明") return null;
+  if (v.includes("50")) return 50;
+  const n = Number(v.replace(/[^\d]/g, ""));
+  return Number.isFinite(n) ? n : null;
 }
 
 function buildMatchCarryQuery(params: {
@@ -181,6 +207,102 @@ function firstDayYmdOfMonth(date: Date) {
   return `${toMonthKey(date)}-01`;
 }
 
+function teamMatchesFilters(
+  team: any,
+  filters: {
+    keyword: string;
+    categoryFilter: string[];
+    prefectureFilter: string;
+    cityFilter: string;
+    townFilter: string;
+    groundFilter: "all" | "あり" | "なし";
+    strengthFilter: StrengthRank[];
+    bikeFilter: "all" | "あり" | "なし" | "不明";
+    bikeCapacityMin: string;
+    memberCountMin: string;
+  }
+) {
+  if (!team) return false;
+
+  const teamCategories =
+    Array.isArray(team.categories) && team.categories.length > 0
+      ? team.categories
+      : team.category
+        ? [team.category]
+        : [];
+
+  if (filters.categoryFilter.length > 0) {
+    const ok = teamCategories.some((c: string) =>
+      filters.categoryFilter.includes(String(c).trim())
+    );
+    if (!ok) return false;
+  }
+
+  if (filters.prefectureFilter && norm(team.prefecture) !== filters.prefectureFilter) {
+    return false;
+  }
+
+  if (filters.cityFilter && norm(team.city) !== filters.cityFilter) {
+    return false;
+  }
+
+  if (filters.townFilter && norm(team.town) !== filters.townFilter) {
+    return false;
+  }
+
+  if (filters.groundFilter !== "all") {
+    const ground = team.has_ground ? "あり" : "なし";
+    if (ground !== filters.groundFilter) return false;
+  }
+
+  if (filters.strengthFilter.length > 0) {
+    const rank = team.strength_rank || levelToRank(team.level);
+    if (!filters.strengthFilter.includes(rank)) return false;
+  }
+
+  if (filters.bikeFilter !== "all") {
+    const bike = (team.bike_parking ?? "不明") as "あり" | "なし" | "不明";
+    if (bike !== filters.bikeFilter) return false;
+  }
+
+  if (filters.bikeCapacityMin) {
+    const cap = parseBikeCapacity(team.bike_parking_capacity);
+    if (cap == null || cap < Number(filters.bikeCapacityMin)) return false;
+  }
+
+  if (filters.memberCountMin) {
+    const count = Number(team.member_count ?? 0);
+    if (count < Number(filters.memberCountMin)) return false;
+  }
+
+  if (filters.keyword.trim()) {
+    const q = filters.keyword.trim().toLowerCase();
+    const hay = [
+      team.name,
+      team.area,
+      team.prefecture,
+      team.city,
+      team.town,
+      team.category,
+      ...(teamCategories ?? []),
+      team.uniform_main,
+      team.uniform_sub,
+      team.note,
+      team.bike_parking,
+      team.bike_parking_capacity,
+      String(team.member_count ?? ""),
+      String(team.strength_rank ?? ""),
+      levelToRank(team.level),
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    if (!hay.includes(q)) return false;
+  }
+
+  return true;
+}
+
 export default function HomeCalendar() {
   const { user, loading: authLoading } = useAuth();
   const authUserId = user?.id ?? "";
@@ -197,7 +319,11 @@ export default function HomeCalendar() {
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
   const [showCalendarHelp, setShowCalendarHelp] = useState(false);
 
+  const [panelMode, setPanelMode] = useState<PanelMode>("none");
+  const [visibleMode, setVisibleMode] = useState<VisibleMode>("match");
+
   const dayListRef = useRef<HTMLDivElement | null>(null);
+  const teamListRef = useRef<HTMLDivElement | null>(null);
   const filterRef = useRef<HTMLElement | null>(null);
 
   const {
@@ -270,6 +396,20 @@ export default function HomeCalendar() {
       matchesSlotFilters(s, teamMap as any, draftFilters)
     );
   }, [slotsInMonth, teamMap, draftFilters]);
+
+  const appliedFilteredTeams = useMemo(() => {
+    return allTeams.filter((team: any) => {
+      if (myTeamIds.includes(team.id)) return false;
+      return teamMatchesFilters(team, appliedFilters);
+    });
+  }, [allTeams, myTeamIds, appliedFilters]);
+
+  const draftFilteredTeams = useMemo(() => {
+    return allTeams.filter((team: any) => {
+      if (myTeamIds.includes(team.id)) return false;
+      return teamMatchesFilters(team, draftFilters);
+    });
+  }, [allTeams, myTeamIds, draftFilters]);
 
   const countByDate = useMemo(() => {
     const m = new Map<string, number>();
@@ -408,6 +548,15 @@ export default function HomeCalendar() {
     }, 120);
   };
 
+  const scrollToTeamList = () => {
+    setTimeout(() => {
+      teamListRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
+  };
+
   const scrollToFilter = () => {
     setTimeout(() => {
       filterRef.current?.scrollIntoView({
@@ -417,18 +566,60 @@ export default function HomeCalendar() {
     }, 120);
   };
 
+  const openMatchFilterPanel = () => {
+    setPanelMode("match");
+    scrollToFilter();
+  };
+
+  const openTeamFilterPanel = () => {
+    setPanelMode("team");
+    scrollToFilter();
+  };
+
+  const showMatchList = () => {
+    setVisibleMode("match");
+    setPanelMode("none");
+    scrollToDayList();
+  };
+
+  const showTeamList = () => {
+    setVisibleMode("team");
+    setPanelMode("none");
+    scrollToTeamList();
+  };
+
   const handleApplyAndJump = () => {
     applyDraftToApplied();
     setSelectedSlotId("");
     setRequestComment("");
+    setPanelMode("none");
+
+    if (panelMode === "team") {
+      setVisibleMode("team");
+      scrollToTeamList();
+      return;
+    }
+
+    setVisibleMode("match");
     scrollToDayList();
   };
 
-  const handleResetFilters = () => {
+  const handleResetMatchFilters = () => {
     clearAllFilters();
     setSelectedSlotId("");
     setRequestComment("");
+    setVisibleMode("match");
+    setPanelMode("none");
     scrollToDayList();
+  };
+
+  const handleResetTeamFilters = () => {
+    clearAllFilters();
+    setSelectedSlotId("");
+    setRequestComment("");
+    setVisibleMode("team");
+    setPanelMode("none");
+    scrollToTeamList();
   };
 
   const goToCreatePage = (ymd: string) => {
@@ -855,8 +1046,17 @@ export default function HomeCalendar() {
   };
 
   const filterSummaryText = useMemo(() => {
-    return appliedFilterSummaryText(appliedFilters);
+    const text = appliedFilterSummaryText(appliedFilters);
+    return text || "すべての条件で表示中";
   }, [appliedFilters]);
+
+  const matchSummaryText = useMemo(() => {
+    return `${filterSummaryText} / ${slotsOnSelectedDate.length}件`;
+  }, [filterSummaryText, slotsOnSelectedDate.length]);
+
+  const teamSummaryText = useMemo(() => {
+    return `${filterSummaryText} / ${appliedFilteredTeams.length}チーム`;
+  }, [filterSummaryText, appliedFilteredTeams.length]);
 
   return (
     <section style={wrap}>
@@ -871,6 +1071,7 @@ export default function HomeCalendar() {
           setSelectedYmd(ymd);
           setSelectedSlotId("");
           setRequestComment("");
+          setVisibleMode("match");
           scrollToDayList();
         }}
         onPrevMonth={() => {
@@ -889,115 +1090,238 @@ export default function HomeCalendar() {
         }}
         onCreateForDate={(ymd) => goToCreatePage(ymd)}
         disableCreate={myTeams.length === 0}
-        filterSummaryText={filterSummaryText}
-        onOpenFilters={scrollToFilter}
-        onResetFilters={handleResetFilters}
+        filterSummaryText={matchSummaryText}
+        onOpenFilters={openMatchFilterPanel}
+        onResetFilters={handleResetMatchFilters}
+        onShowList={showMatchList}
         bandText="日程"
         titleText="試合日で探す"
       />
 
-      <div ref={dayListRef}>
-        <div style={summaryBox}>
-          <div style={summaryDate}>📅 {selectedYmd}</div>
-          <div style={summaryCount}>
-            入力中の募集（{draftSlotsOnSelectedDate.length}件／
-            {slotsOnSelectedDate.length}件）
+      <section style={summaryBox}>
+        <div style={summaryHead}>
+          <div>
+            <div style={summaryBand}>相手を探す</div>
+            <div style={summaryTitle}>チーム条件</div>
           </div>
 
-          <div style={summaryActions}>
+          <div style={summaryButtonRow}>
             <button
               type="button"
               className="sh-btn"
-              onClick={() => setShowCalendarHelp(true)}
+              onClick={openTeamFilterPanel}
+              disabled={loading}
             >
-              決・募・他 の見方
-            </button>
-
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={scrollToFilter}
-            >
-              絞り込み
+              条件変更
             </button>
 
             <button
               type="button"
               className="sh-btn sh-btn--primary"
-              onClick={() => goToCreatePage(selectedYmd)}
-              disabled={loading || myTeams.length === 0}
+              onClick={showTeamList}
+              disabled={loading}
             >
-              募集する
+              チーム表示
             </button>
           </div>
         </div>
 
-        <DaySlotList
-          selectedYmd={selectedYmd}
-          slots={slotsOnSelectedDate as any}
-          venues={venues}
-          allTeams={allTeams as any}
-          myTeams={myTeams as any}
-          meId={currentUserId}
-          requestsForMonth={requestsForMonth}
-          selectedSlotId={selectedSlotId}
-          slotStatusResolver={getSlotStatus}
-          onToggleDetail={(slotId) => {
-            const next = selectedSlotId === slotId ? "" : slotId;
-            setSelectedSlotId(next);
-            setRequestComment("");
-          }}
-          requestTeamId={requestTeamId}
-          onChangeRequestTeamId={setRequestTeamId}
-          requestComment={requestComment}
-          onChangeRequestComment={setRequestComment}
-          onRequestSlot={requestSlot}
-          onCancelMyRequest={cancelMyRequest}
-          selectedSlot={selectedSlot}
-          selectedHostTeam={selectedHostTeam as any}
-          selectedSlotRequests={selectedSlotRequests}
-          isMineSlot={isMineSlot}
-          onAccept={accept}
-          onReject={reject}
-          onOpenChatWithTeam={openDmAndGo}
-          onToggleClosed={toggleClosed}
-          loading={loading}
-        />
-      </div>
+        <div style={summaryCount}>表示条件：{teamSummaryText}</div>
+      </section>
 
-      <MatchFilterPanel
-        filterRef={filterRef}
-        loading={loading}
-        draftKeyword={draftKeyword}
-        setDraftKeyword={setDraftKeyword}
-        draftCategoryFilter={draftCategoryFilter}
-        setDraftCategoryFilter={setDraftCategoryFilter}
-        draftPrefectureFilter={draftPrefectureFilter}
-        setDraftPrefectureFilter={setDraftPrefectureFilter}
-        draftCityFilter={draftCityFilter}
-        setDraftCityFilter={setDraftCityFilter}
-        draftTownFilter={draftTownFilter}
-        setDraftTownFilter={setDraftTownFilter}
-        draftGroundFilter={draftGroundFilter}
-        setDraftGroundFilter={setDraftGroundFilter}
-        draftStrengthFilter={draftStrengthFilter}
-        setDraftStrengthFilter={setDraftStrengthFilter}
-        draftBikeFilter={draftBikeFilter}
-        setDraftBikeFilter={setDraftBikeFilter}
-        draftBikeCapacityMin={draftBikeCapacityMin}
-        setDraftBikeCapacityMin={setDraftBikeCapacityMin}
-        draftMemberCountMin={draftMemberCountMin}
-        setDraftMemberCountMin={setDraftMemberCountMin}
-        hasDraftChanges={hasDraftChanges}
-        onApply={handleApplyAndJump}
-        onReset={handleResetFilters}
-        onBackToList={scrollToDayList}
-        onOpenStrengthHelp={() => setShowStrengthHelp(true)}
-        strengthGuides={STRENGTH_GUIDES}
-        bandText="条件検索"
-        titleText="相手を探す"
-        descriptionText="レベル・エリア・人数感などから対戦相手を探せます。"
-      />
+      {visibleMode === "match" ? (
+        <div ref={dayListRef}>
+          <section style={listSummaryBox}>
+            <div style={listSummaryTop}>
+              <div style={summaryDate}>📅 {selectedYmd}</div>
+              <div style={summaryCount}>
+                募集件数：{slotsOnSelectedDate.length}件
+                {hasDraftChanges ? `（入力中 ${draftSlotsOnSelectedDate.length}件）` : ""}
+              </div>
+            </div>
+
+            <div style={summaryActions}>
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={() => setShowCalendarHelp(true)}
+              >
+                決・募・他 の見方
+              </button>
+
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={openMatchFilterPanel}
+              >
+                条件変更
+              </button>
+
+              <button
+                type="button"
+                className="sh-btn sh-btn--primary"
+                onClick={() => goToCreatePage(selectedYmd)}
+                disabled={loading || myTeams.length === 0}
+              >
+                募集する
+              </button>
+            </div>
+          </section>
+
+          <DaySlotList
+            selectedYmd={selectedYmd}
+            slots={slotsOnSelectedDate as any}
+            venues={venues}
+            allTeams={allTeams as any}
+            myTeams={myTeams as any}
+            meId={currentUserId}
+            requestsForMonth={requestsForMonth}
+            selectedSlotId={selectedSlotId}
+            slotStatusResolver={getSlotStatus}
+            onToggleDetail={(slotId) => {
+              const next = selectedSlotId === slotId ? "" : slotId;
+              setSelectedSlotId(next);
+              setRequestComment("");
+            }}
+            requestTeamId={requestTeamId}
+            onChangeRequestTeamId={setRequestTeamId}
+            requestComment={requestComment}
+            onChangeRequestComment={setRequestComment}
+            onRequestSlot={requestSlot}
+            onCancelMyRequest={cancelMyRequest}
+            selectedSlot={selectedSlot}
+            selectedHostTeam={selectedHostTeam as any}
+            selectedSlotRequests={selectedSlotRequests}
+            isMineSlot={isMineSlot}
+            onAccept={accept}
+            onReject={reject}
+            onOpenChatWithTeam={openDmAndGo}
+            onToggleClosed={toggleClosed}
+            loading={loading}
+          />
+        </div>
+      ) : null}
+
+      {visibleMode === "team" ? (
+        <div ref={teamListRef}>
+          <section style={listSummaryBox}>
+            <div style={listSummaryTop}>
+              <div style={summaryDate}>👥 相手チーム一覧</div>
+              <div style={summaryCount}>
+                チーム件数：{appliedFilteredTeams.length}件
+                {hasDraftChanges ? `（入力中 ${draftFilteredTeams.length}件）` : ""}
+              </div>
+            </div>
+
+            <div style={summaryActions}>
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={openTeamFilterPanel}
+              >
+                条件変更
+              </button>
+            </div>
+          </section>
+
+          <section style={teamListCard}>
+            {appliedFilteredTeams.length === 0 ? (
+              <div style={emptyText}>この条件に合うチームはありません。</div>
+            ) : (
+              <div style={teamGrid}>
+                {appliedFilteredTeams.map((team: any) => {
+                  const rank = teamStrengthLabel(team);
+                  const areaText =
+                    norm(team.area) ||
+                    `${team.prefecture ?? ""} ${team.city ?? ""}${team.town ? `・${team.town}` : ""}`.trim() ||
+                    "未設定";
+
+                  return (
+                    <div key={team.id} style={teamCard}>
+                      <div style={teamCardTitle}>{team.name || "チーム未設定"}</div>
+
+                      <div style={teamCardMeta}>
+                        📍 {areaText}
+                        <br />
+                        🏷 {categoryLabel(team.category) || team.category || "未設定"}
+                        <br />
+                        💪 強さ {rank}
+                        <br />
+                        👥 所属人数 {team.member_count ?? 0}人
+                      </div>
+
+                      <div style={teamCardButtons}>
+                        <Link href={`/teams/${team.id}`} className="sh-btn">
+                          チーム詳細
+                        </Link>
+
+                        <button
+                          type="button"
+                          className="sh-btn sh-btn--primary"
+                          onClick={() => openDmAndGo(team.id, null)}
+                          disabled={loading || myTeams.length === 0}
+                        >
+                          チャット
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </div>
+      ) : null}
+
+      {panelMode !== "none" ? (
+        <MatchFilterPanel
+          filterRef={filterRef}
+          loading={loading}
+          draftKeyword={draftKeyword}
+          setDraftKeyword={setDraftKeyword}
+          draftCategoryFilter={draftCategoryFilter}
+          setDraftCategoryFilter={setDraftCategoryFilter}
+          draftPrefectureFilter={draftPrefectureFilter}
+          setDraftPrefectureFilter={setDraftPrefectureFilter}
+          draftCityFilter={draftCityFilter}
+          setDraftCityFilter={setDraftCityFilter}
+          draftTownFilter={draftTownFilter}
+          setDraftTownFilter={setDraftTownFilter}
+          draftGroundFilter={draftGroundFilter}
+          setDraftGroundFilter={setDraftGroundFilter}
+          draftStrengthFilter={draftStrengthFilter}
+          setDraftStrengthFilter={setDraftStrengthFilter}
+          draftBikeFilter={draftBikeFilter}
+          setDraftBikeFilter={setDraftBikeFilter}
+          draftBikeCapacityMin={draftBikeCapacityMin}
+          setDraftBikeCapacityMin={setDraftBikeCapacityMin}
+          draftMemberCountMin={draftMemberCountMin}
+          setDraftMemberCountMin={setDraftMemberCountMin}
+          hasDraftChanges={hasDraftChanges}
+          onApply={handleApplyAndJump}
+          onReset={panelMode === "team" ? handleResetTeamFilters : handleResetMatchFilters}
+          onBackToList={panelMode === "team" ? showTeamList : showMatchList}
+          onOpenStrengthHelp={() => setShowStrengthHelp(true)}
+          strengthGuides={STRENGTH_GUIDES}
+          bandText="条件検索"
+          titleText={panelMode === "team" ? "相手を探す" : "募集を探す"}
+          descriptionText={
+            panelMode === "team"
+              ? "レベル・エリア・人数感などから相手チームを探せます。"
+              : "日程に合う募集を条件で絞り込めます。"
+          }
+          liveCountLabel={
+            panelMode === "team"
+              ? "現在のヒット件数（チーム）"
+              : "現在のヒット件数（募集）"
+          }
+          liveCountText={
+            panelMode === "team"
+              ? `${draftFilteredTeams.length}チーム`
+              : `${draftFilteredSlotsInMonth.length}件`
+          }
+        />
+      ) : null}
 
       <MatchHelpModals
         showStrengthHelp={showStrengthHelp}
@@ -1017,11 +1341,42 @@ const wrap: React.CSSProperties = {
 };
 
 const summaryBox: React.CSSProperties = {
-  marginTop: 4,
+  marginTop: 2,
   padding: "14px 16px",
   borderRadius: 16,
   border: "1px solid #dce9df",
   background: "#f7fbf8",
+};
+
+const summaryHead: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const summaryBand: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 28,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#e8f5ec",
+  color: "#145c2a",
+  border: "1px solid #cfe8d7",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: "0.06em",
+};
+
+const summaryTitle: React.CSSProperties = {
+  marginTop: 8,
+  fontWeight: 900,
+  fontSize: 22,
+  color: "#16391f",
+  lineHeight: 1.3,
 };
 
 const summaryDate: React.CSSProperties = {
@@ -1031,9 +1386,29 @@ const summaryDate: React.CSSProperties = {
 };
 
 const summaryCount: React.CSSProperties = {
-  marginTop: 4,
+  marginTop: 6,
   fontSize: 14,
   color: "#3b6a49",
+  lineHeight: 1.7,
+};
+
+const summaryButtonRow: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const listSummaryBox: React.CSSProperties = {
+  marginTop: 4,
+  padding: "14px 16px",
+  borderRadius: 16,
+  border: "1px solid #dce9df",
+  background: "#f7fbf8",
+};
+
+const listSummaryTop: React.CSSProperties = {
+  display: "grid",
+  gap: 4,
 };
 
 const summaryActions: React.CSSProperties = {
@@ -1041,4 +1416,50 @@ const summaryActions: React.CSSProperties = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
+};
+
+const teamListCard: React.CSSProperties = {
+  padding: 14,
+  border: "1px solid #eee",
+  borderRadius: 18,
+  background: "#fff",
+};
+
+const teamGrid: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+};
+
+const teamCard: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 16,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  boxShadow: "0 2px 10px rgba(0,0,0,0.03)",
+};
+
+const teamCardTitle: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#16391f",
+  lineHeight: 1.4,
+};
+
+const teamCardMeta: React.CSSProperties = {
+  marginTop: 8,
+  fontSize: 14,
+  color: "#4b5563",
+  lineHeight: 1.8,
+};
+
+const teamCardButtons: React.CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const emptyText: React.CSSProperties = {
+  color: "#777",
+  lineHeight: 1.8,
 };

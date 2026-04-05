@@ -72,6 +72,9 @@ type Props = {
   bandText?: string;
   titleText?: string;
   descriptionText?: string;
+
+  liveCountLabel?: string;
+  liveCountText?: string;
 };
 
 export function MatchFilterPanel({
@@ -106,10 +109,17 @@ export function MatchFilterPanel({
   bandText = "条件検索",
   titleText = "相手を探す",
   descriptionText = "レベル・エリア・人数感などから対戦相手を探せます。",
+  liveCountLabel = "現在のヒット件数",
+  liveCountText = "0件",
 }: Props) {
   return (
     <section ref={filterRef} style={filterWrap}>
       <div style={{ display: "grid", gap: 12 }}>
+        <div style={stickyCountBox}>
+          <div style={stickyCountLabel}>{liveCountLabel}</div>
+          <div style={stickyCountValue}>{liveCountText}</div>
+        </div>
+
         <div style={sectionLeadWrap}>
           <div style={sectionBand}>{bandText}</div>
           <div style={sectionLeadTitle}>{titleText}</div>
@@ -119,8 +129,13 @@ export function MatchFilterPanel({
         <div style={filterHeaderRow}>
           <h2 style={filterTitle}>絞り込み条件</h2>
 
-          <button type="button" className="sh-btn" onClick={onBackToList}>
-            募集一覧へ
+          <button
+            type="button"
+            className="sh-btn"
+            onClick={onBackToList}
+            disabled={loading}
+          >
+            一覧へ戻る
           </button>
         </div>
 
@@ -324,9 +339,9 @@ export function MatchFilterPanel({
             type="button"
             className="sh-btn sh-btn--primary"
             onClick={onApply}
-            disabled={!hasDraftChanges || loading}
+            disabled={loading}
           >
-            この条件で一覧表示
+            条件決定
           </button>
 
           <button
@@ -342,6 +357,33 @@ export function MatchFilterPanel({
     </section>
   );
 }
+
+const stickyCountBox: React.CSSProperties = {
+  position: "sticky",
+  top: 12,
+  zIndex: 5,
+  display: "grid",
+  gap: 4,
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: "1px solid #bbf7d0",
+  background: "#f0fdf4",
+  boxShadow: "0 8px 20px rgba(20,92,42,0.08)",
+};
+
+const stickyCountLabel: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 900,
+  color: "#166534",
+  letterSpacing: "0.04em",
+};
+
+const stickyCountValue: React.CSSProperties = {
+  fontSize: 22,
+  fontWeight: 900,
+  color: "#14532d",
+  lineHeight: 1.2,
+};
 
 const sectionLeadWrap: React.CSSProperties = {
   display: "grid",

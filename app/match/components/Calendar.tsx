@@ -40,6 +40,7 @@ export function Calendar(props: {
   filterSummaryText?: string;
   onOpenFilters?: () => void;
   onResetFilters?: () => void;
+  onShowList?: () => void;
 
   openOnly?: boolean;
   onToggleOpenOnly?: () => void;
@@ -61,6 +62,7 @@ export function Calendar(props: {
     filterSummaryText,
     onOpenFilters,
     onResetFilters,
+    onShowList,
     openOnly = false,
     onToggleOpenOnly,
     bandText = "日程検索",
@@ -89,6 +91,17 @@ export function Calendar(props: {
             </button>
           ) : null}
 
+          {onShowList ? (
+            <button
+              type="button"
+              className="sh-btn sh-btn--primary"
+              onClick={onShowList}
+              disabled={loading}
+            >
+              募集表示
+            </button>
+          ) : null}
+
           {onResetFilters ? (
             <button
               type="button"
@@ -104,6 +117,7 @@ export function Calendar(props: {
 
       <div style={filterSummaryBox}>
         <div style={filterSummaryLabel}>表示条件</div>
+
         <div style={filterSummaryTextStyle}>
           {filterSummaryText?.trim() || "すべての条件で表示中"}
         </div>
