@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
@@ -14,7 +14,7 @@ function safeRedirectPath(value: string | null) {
   return value;
 }
 
-export default function LoginPage() {
+function LoginPageInner() {
   const searchParams = useSearchParams();
 
   const redirectPath = useMemo(() => {
@@ -258,6 +258,14 @@ export default function LoginPage() {
         </div>
       </section>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<main style={pageWrap}>読み込み中…</main>}>
+      <LoginPageInner />
+    </Suspense>
   );
 }
 
