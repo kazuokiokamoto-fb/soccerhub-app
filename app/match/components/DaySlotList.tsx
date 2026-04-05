@@ -59,11 +59,12 @@ function statusLabel(status: DbRequest["status"]) {
 
 function statusBadgeStyle(status: DbRequest["status"]) {
   return {
-    marginLeft: 8,
+    marginLeft: 0,
     padding: "2px 8px",
     borderRadius: 999,
     border: "1px solid #eee",
     fontSize: 12,
+    fontWeight: 900,
     background:
       status === "accepted"
         ? "#ecfdf3"
@@ -119,6 +120,43 @@ function slotStatusBadgeStyle(status: "decided" | "open" | "other") {
       background: "#dbeafe",
       color: "#1d4ed8",
       border: "1px solid #bfdbfe",
+    } as React.CSSProperties;
+  }
+
+  return {
+    background: "#f3f4f6",
+    color: "#4b5563",
+    border: "1px solid #e5e7eb",
+  } as React.CSSProperties;
+}
+
+function strengthBadgeStyle(rankText: string) {
+  if (rankText === "SS") {
+    return {
+      background: "#14532d",
+      color: "#fff",
+      border: "1px solid #14532d",
+    } as React.CSSProperties;
+  }
+  if (rankText === "S") {
+    return {
+      background: "#166534",
+      color: "#fff",
+      border: "1px solid #166534",
+    } as React.CSSProperties;
+  }
+  if (rankText === "A") {
+    return {
+      background: "#dcfce7",
+      color: "#166534",
+      border: "1px solid #bbf7d0",
+    } as React.CSSProperties;
+  }
+  if (rankText === "B") {
+    return {
+      background: "#fef3c7",
+      color: "#92400e",
+      border: "1px solid #fde68a",
     } as React.CSSProperties;
   }
 
@@ -302,7 +340,6 @@ export function DaySlotList(props: {
                           <span
                             style={{
                               ...statusBadgeStyle("cancelled"),
-                              marginLeft: 0,
                             }}
                           >
                             締切
@@ -313,7 +350,6 @@ export function DaySlotList(props: {
                           <span
                             style={{
                               ...statusBadgeStyle(myReq.status),
-                              marginLeft: 0,
                             }}
                           >
                             {statusLabel(myReq.status)}
@@ -335,17 +371,18 @@ export function DaySlotList(props: {
                       🏷 {categoryText}
                     </div>
 
-                    <div style={slotMetaGrid}>
-                      <div style={metaPill}>
-                        <span style={metaPillLabel}>強さ</span>
-                        <span style={metaPillValue}>{rankText}</span>
+                    <div style={slotInfoRow}>
+                      <div
+                        style={{
+                          ...rankBadge,
+                          ...strengthBadgeStyle(rankText),
+                        }}
+                      >
+                        強さ {rankText}
                       </div>
 
-                      <div style={metaPill}>
-                        <span style={metaPillLabel}>希望相手</span>
-                        <span style={metaPillValue}>
-                          {renderWantedLevelRange(s)}
-                        </span>
+                      <div style={wantedBadge}>
+                        希望相手 {renderWantedLevelRange(s)}
                       </div>
                     </div>
 
@@ -545,34 +582,35 @@ const slotSubLine: React.CSSProperties = {
   lineHeight: 1.6,
 };
 
-const slotMetaGrid: React.CSSProperties = {
+const slotInfoRow: React.CSSProperties = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
   marginTop: 2,
 };
 
-const metaPill: React.CSSProperties = {
+const rankBadge: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
-  gap: 6,
+  justifyContent: "center",
   minHeight: 30,
-  padding: "0 10px",
+  padding: "0 12px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 900,
+};
+
+const wantedBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 30,
+  padding: "0 12px",
   borderRadius: 999,
   background: "#f7faf8",
   border: "1px solid #e5ece7",
-  flexWrap: "wrap",
-};
-
-const metaPillLabel: React.CSSProperties = {
-  fontSize: 11,
-  color: "#6b7280",
-  fontWeight: 800,
-};
-
-const metaPillValue: React.CSSProperties = {
-  fontSize: 12,
   color: "#1f5d30",
+  fontSize: 12,
   fontWeight: 900,
 };
 
