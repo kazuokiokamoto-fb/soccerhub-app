@@ -1092,8 +1092,6 @@ export default function HomeCalendar() {
         disableCreate={myTeams.length === 0}
         filterSummaryText={matchSummaryText}
         onOpenFilters={openMatchFilterPanel}
-        onResetFilters={handleResetMatchFilters}
-        onShowList={showMatchList}
         bandText="日程"
         titleText="試合日で探す"
       />

@@ -39,7 +39,6 @@ export function Calendar(props: {
 
   filterSummaryText?: string;
   onOpenFilters?: () => void;
-  onResetFilters?: () => void;
   onShowList?: () => void;
 
   openOnly?: boolean;
@@ -61,7 +60,6 @@ export function Calendar(props: {
     disableCreate,
     filterSummaryText,
     onOpenFilters,
-    onResetFilters,
     onShowList,
     openOnly = false,
     onToggleOpenOnly,
@@ -99,17 +97,6 @@ export function Calendar(props: {
               disabled={loading}
             >
               募集表示
-            </button>
-          ) : null}
-
-          {onResetFilters ? (
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={onResetFilters}
-              disabled={loading}
-            >
-              リセット
             </button>
           ) : null}
         </div>
