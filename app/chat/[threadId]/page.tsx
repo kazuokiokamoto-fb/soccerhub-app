@@ -109,6 +109,17 @@ function getBackLink(params: {
   const { from, slotId, date } = params;
 
   switch (from) {
+    case "home": {
+      const qs = new URLSearchParams();
+      if (date) qs.set("date", date);
+      if (slotId) qs.set("slotId", slotId);
+
+      return {
+        href: qs.toString() ? `/?${qs.toString()}` : "/",
+        label: "← ホームに戻る",
+      };
+    }
+
     case "match-calendar": {
       const qs = new URLSearchParams();
       if (date) qs.set("date", date);
@@ -215,6 +226,11 @@ export default function ChatThreadPage() {
     () => buildQueryString({ from, slotId, date }),
     [from, slotId, date]
   );
+
+  const loginRedirectPath = useMemo(() => {
+    const qs = carriedQueryString ? `?${carriedQueryString}` : "";
+    return `/chat/${threadId}${qs}`;
+  }, [threadId, carriedQueryString]);
 
   const [authLoading, setAuthLoading] = useState(true);
   const [meId, setMeId] = useState<string>("");
@@ -789,6 +805,28 @@ export default function ChatThreadPage() {
     );
   }
 
+  if (!meId) {
+    return (
+      <main style={pageWrap}>
+        <section style={chatPanel}>
+          <div style={authLoadingBox}>
+            <div style={{ textAlign: "center", lineHeight: 1.8 }}>
+              このチャットを見るにはログインが必要です。
+              <div style={{ marginTop: 12 }}>
+                <Link
+                  href={`/login?redirect=${encodeURIComponent(loginRedirectPath)}`}
+                  className="sh-btn sh-btn--primary"
+                >
+                  ログインする
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main style={pageWrap}>
       <section style={chatPanel}>
@@ -836,9 +874,14 @@ export default function ChatThreadPage() {
           {loading ? <p style={{ color: "#666" }}>読み込み中…</p> : null}
 
           {!loading && !isMember ? (
-            <p style={{ color: "#991b1b" }}>
-              このスレッドに参加していません
-            </p>
+            <div style={notMemberBox}>
+              このスレッドに参加していません。
+              <div style={{ marginTop: 12 }}>
+                <Link href={backLink.href} className="sh-btn">
+                  戻る
+                </Link>
+              </div>
+            </div>
           ) : null}
 
           {!loading && isMember && messages.length === 0 ? (
@@ -911,8 +954,8 @@ export default function ChatThreadPage() {
                             {optimistic
                               ? ""
                               : isRead
-                              ? `既読 ${formatReadTime(otherLastReadAt)}`
-                              : "未読"}
+                                ? `既読 ${formatReadTime(otherLastReadAt)}`
+                                : "未読"}
                           </span>
                         ) : null}
                       </div>
@@ -1058,6 +1101,15 @@ const chatBody: React.CSSProperties = {
 const messageList: React.CSSProperties = {
   display: "grid",
   gap: 10,
+};
+
+const notMemberBox: React.CSSProperties = {
+  padding: 16,
+  borderRadius: 14,
+  background: "#fff",
+  border: "1px solid #e5ece7",
+  color: "#991b1b",
+  lineHeight: 1.8,
 };
 
 const dateDividerWrap: React.CSSProperties = {

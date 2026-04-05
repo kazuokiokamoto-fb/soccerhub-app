@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
+import { useAuth } from "@/app/lib/auth";
 import { categoryLabel } from "@/app/lib/categories";
 
 import { Calendar } from "@/app/match/components/Calendar";
@@ -181,6 +182,9 @@ function firstDayYmdOfMonth(date: Date) {
 }
 
 export default function HomeCalendar() {
+  const { user, loading: authLoading } = useAuth();
+  const authUserId = user?.id ?? "";
+
   const [monthDate, setMonthDate] = useState<Date>(() =>
     startOfMonth(new Date())
   );
@@ -236,7 +240,8 @@ export default function HomeCalendar() {
     loadMonth,
   } = useMatchData(monthDate);
 
-  const loading = loadingBase || loadingMonth;
+  const loading = authLoading || loadingBase || loadingMonth;
+  const currentUserId = authUserId || meId;
 
   useEffect(() => {
     if (!requestTeamId && myTeams[0]?.id) {
@@ -374,8 +379,8 @@ export default function HomeCalendar() {
 
   const isMineSlot = useMemo(() => {
     if (!selectedSlot) return false;
-    return !!meId && selectedSlot.owner_id === meId;
-  }, [selectedSlot, meId]);
+    return !!currentUserId && selectedSlot.owner_id === currentUserId;
+  }, [selectedSlot, currentUserId]);
 
   const calendarCells = useMemo(() => {
     return buildCalendarCells(monthDate);
@@ -513,8 +518,7 @@ export default function HomeCalendar() {
       return;
     }
 
-    const { data: u } = await supabase.auth.getUser();
-    const uid = u?.user?.id;
+    const uid = currentUserId;
     if (!uid) {
       alert("ログインが必要です");
       return;
@@ -730,8 +734,7 @@ export default function HomeCalendar() {
         .eq("id", target.slot_id);
 
       try {
-        const { data: u } = await supabase.auth.getUser();
-        const uid = u?.user?.id;
+        const uid = currentUserId;
         if (uid) {
           const threadId = await getOrCreateDmThread(
             slot.host_team_id,
@@ -808,8 +811,7 @@ export default function HomeCalendar() {
 
     try {
       const slot = filteredSlotsInMonth.find((s) => s.id === req.slot_id);
-      const { data: u } = await supabase.auth.getUser();
-      const uid = u?.user?.id;
+      const uid = currentUserId;
       if (slot && uid) {
         const threadId = await getOrCreateDmThread(
           req.requester_team_id,
@@ -936,7 +938,7 @@ export default function HomeCalendar() {
           venues={venues}
           allTeams={allTeams as any}
           myTeams={myTeams as any}
-          meId={meId}
+          meId={currentUserId}
           requestsForMonth={requestsForMonth}
           selectedSlotId={selectedSlotId}
           slotStatusResolver={getSlotStatus}

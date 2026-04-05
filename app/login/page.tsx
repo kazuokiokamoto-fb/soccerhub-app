@@ -2,10 +2,25 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import AppHero from "@/app/components/AppHero";
 
+function safeRedirectPath(value: string | null) {
+  if (!value) return "/";
+  if (!value.startsWith("/")) return "/";
+  if (value.startsWith("//")) return "/";
+  if (value.startsWith("/login")) return "/";
+  return value;
+}
+
 export default function LoginPage() {
+  const searchParams = useSearchParams();
+
+  const redirectPath = useMemo(() => {
+    return safeRedirectPath(searchParams.get("redirect"));
+  }, [searchParams]);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -51,13 +66,15 @@ export default function LoginPage() {
 
     setLoadingGoogle(true);
 
+    const redirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}${redirectPath}`
+        : undefined;
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo:
-          typeof window !== "undefined"
-            ? `${window.location.origin}/`
-            : undefined,
+        redirectTo,
       },
     });
 
@@ -89,7 +106,7 @@ export default function LoginPage() {
       return;
     }
 
-    window.location.href = "/";
+    window.location.href = redirectPath;
   };
 
   const handleSignup = async () => {
@@ -101,9 +118,17 @@ export default function LoginPage() {
     setLoadingSignup(true);
     setMessage("");
 
+    const emailRedirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}${redirectPath}`
+        : undefined;
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo,
+      },
     });
 
     setLoadingSignup(false);
@@ -113,7 +138,9 @@ export default function LoginPage() {
       return;
     }
 
-    setMessage("新規登録を受け付けました。確認メールをチェックしてください。");
+    setMessage(
+      "新規登録を受け付けました。確認メールをチェックしてください。確認後は元のページに戻ります。"
+    );
   };
 
   return (
@@ -126,6 +153,12 @@ export default function LoginPage() {
 
       <section style={card}>
         <div style={blockTitle}>Googleで続ける</div>
+
+        {redirectPath !== "/" ? (
+          <div style={redirectInfoBox}>
+            ログイン後は <b>{redirectPath}</b> に戻ります。
+          </div>
+        ) : null}
 
         <div style={{ marginTop: 14 }}>
           <button
@@ -247,6 +280,17 @@ const blockTitle: React.CSSProperties = {
   fontSize: 18,
   fontWeight: 900,
   color: "#1f5d30",
+};
+
+const redirectInfoBox: React.CSSProperties = {
+  marginTop: 12,
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: "1px solid #dbe7df",
+  background: "#f7fbf8",
+  color: "#2d4a37",
+  fontSize: 13,
+  lineHeight: 1.7,
 };
 
 const topButton: React.CSSProperties = {

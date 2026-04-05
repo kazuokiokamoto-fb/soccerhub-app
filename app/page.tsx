@@ -2,9 +2,10 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { supabase } from "./lib/supabase";
 import AppTabNav from "@/app/components/AppTabNav";
 import HomeCalendar from "@/app/components/home/HomeCalendar";
+import { supabase } from "@/app/lib/supabase";
+import { useAuth } from "@/app/lib/auth";
 
 type TeamRow = {
   id: string;
@@ -14,51 +15,15 @@ type TeamRow = {
 };
 
 export default function HomePage() {
-  const [meId, setMeId] = useState("");
-  const [authLoading, setAuthLoading] = useState(true);
+  const { user, loading: authLoading } = useAuth();
+
+  const meId = user?.id ?? "";
+
   const [myTeams, setMyTeams] = useState<TeamRow[]>([]);
   const [teamLoading, setTeamLoading] = useState(true);
 
   const [showGuide, setShowGuide] = useState(false);
   const [showQa, setShowQa] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const initAuth = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        if (!mounted) return;
-        setMeId(session?.user?.id ?? "");
-      } catch (e) {
-        console.error("getSession error:", e);
-        if (!mounted) return;
-        setMeId("");
-      } finally {
-        if (mounted) {
-          setAuthLoading(false);
-        }
-      }
-    };
-
-    initAuth();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
-      setMeId(session?.user?.id ?? "");
-      setAuthLoading(false);
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -124,7 +89,7 @@ export default function HomePage() {
     <main style={wrap}>
       <AppTabNav />
 
-      {!teamLoading && !hasTeam ? (
+      {!teamLoading && !!meId && !hasTeam ? (
         <section style={ctaBox}>
           <div style={ctaTitle}>まずはチーム登録から始めましょう</div>
           <div style={ctaText}>

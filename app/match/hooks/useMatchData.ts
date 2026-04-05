@@ -1,16 +1,18 @@
 // app/match/hooks/useMatchData.ts
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
+import { useAuth } from "@/app/lib/auth";
 import type { DbVenue, DbSlot, DbRequest, DbTeam } from "../types";
 import { formatYmd, startOfMonth, endOfMonth } from "../utils/date";
 
 export function useMatchData(monthDate: Date) {
+  const { user, loading: authLoading } = useAuth();
+  const meId = user?.id ?? "";
+
   const [loadingBase, setLoadingBase] = useState(false);
   const [loadingMonth, setLoadingMonth] = useState(false);
-
-  const [meId, setMeId] = useState("");
 
   const [allTeams, setAllTeams] = useState<DbTeam[]>([]);
   const [myTeams, setMyTeams] = useState<DbTeam[]>([]);
@@ -19,48 +21,52 @@ export function useMatchData(monthDate: Date) {
   const [slotsInMonth, setSlotsInMonth] = useState<DbSlot[]>([]);
   const [requestsForMonth, setRequestsForMonth] = useState<DbRequest[]>([]);
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setMeId(data?.user?.id || "");
-    });
-  }, []);
+  const loadBase = useCallback(async () => {
+    if (authLoading) return;
 
-  async function loadBase() {
     setLoadingBase(true);
 
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const uid = userData?.user?.id || "";
-
-      const { data: teamRows } = await supabase
+      const { data: teamRows, error: teamErr } = await supabase
         .from("teams")
         .select(
           "id,owner_id,name,area,category,categories,prefecture,city,town,level,strength_rank,has_ground,bike_parking,bike_parking_capacity,member_count,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at"
         );
 
-      const teams = (teamRows ?? []) as DbTeam[];
-      setAllTeams(teams);
-      setMyTeams(teams.filter((t) => t.owner_id === uid));
+      if (teamErr) {
+        console.error("loadBase teams error:", teamErr);
+        setAllTeams([]);
+        setMyTeams([]);
+      } else {
+        const teams = (teamRows ?? []) as DbTeam[];
+        setAllTeams(teams);
+        setMyTeams(teams.filter((t) => t.owner_id === meId));
+      }
 
-      const { data: venueRows } = await supabase
+      const { data: venueRows, error: venueErr } = await supabase
         .from("venues")
         .select("id,name,area,address,has_parking,has_bike_parking,note")
         .order("name", { ascending: true });
 
-      setVenues((venueRows ?? []) as DbVenue[]);
+      if (venueErr) {
+        console.error("loadBase venues error:", venueErr);
+        setVenues([]);
+      } else {
+        setVenues((venueRows ?? []) as DbVenue[]);
+      }
     } finally {
       setLoadingBase(false);
     }
-  }
+  }, [authLoading, meId]);
 
-  async function loadMonth() {
+  const loadMonth = useCallback(async () => {
     setLoadingMonth(true);
 
     try {
       const start = formatYmd(startOfMonth(monthDate));
       const end = formatYmd(endOfMonth(monthDate));
 
-      const { data: slotRows } = await supabase
+      const { data: slotRows, error: slotErr } = await supabase
         .from("match_slots")
         .select(
           "id,owner_id,host_team_id,date,start_time,end_time,venue_id,area,area_text,area_detail,category,level_min,level_max,status,prefecture,city,town,neighborhood,city_group,is_closed,created_at,updated_at"
@@ -69,6 +75,13 @@ export function useMatchData(monthDate: Date) {
         .lte("date", end)
         .order("date", { ascending: true })
         .order("start_time", { ascending: true });
+
+      if (slotErr) {
+        console.error("loadMonth slots error:", slotErr);
+        setSlotsInMonth([]);
+        setRequestsForMonth([]);
+        return;
+      }
 
       const slots = (slotRows ?? []) as DbSlot[];
       setSlotsInMonth(slots);
@@ -80,25 +93,33 @@ export function useMatchData(monthDate: Date) {
         return;
       }
 
-      const { data: reqRows } = await supabase
+      const { data: reqRows, error: reqErr } = await supabase
         .from("match_requests")
-        .select("id,slot_id,requester_team_id,requester_user_id,status,comment,created_at")
+        .select(
+          "id,slot_id,requester_team_id,requester_user_id,status,comment,created_at"
+        )
         .in("slot_id", slotIds)
         .order("created_at", { ascending: false });
+
+      if (reqErr) {
+        console.error("loadMonth requests error:", reqErr);
+        setRequestsForMonth([]);
+        return;
+      }
 
       setRequestsForMonth((reqRows ?? []) as DbRequest[]);
     } finally {
       setLoadingMonth(false);
     }
-  }
-
-  useEffect(() => {
-    loadMonth();
   }, [monthDate]);
 
   useEffect(() => {
+    loadMonth();
+  }, [loadMonth]);
+
+  useEffect(() => {
     loadBase();
-  }, []);
+  }, [loadBase]);
 
   return {
     loadingBase,

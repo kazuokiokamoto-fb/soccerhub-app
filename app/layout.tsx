@@ -58,7 +58,6 @@ export default function RootLayout({
           {children}
         </AuthProvider>
 
-        {/* ✅ Service Worker登録 */}
         <script
           dangerouslySetInnerHTML={{
             __html: `

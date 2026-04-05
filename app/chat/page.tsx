@@ -174,17 +174,24 @@ export default function ChatListPage() {
 
         const threadIds = Array.from(
           new Set(
-            ((myMemberRows ?? []) as any[])
+            ((myMemberRows ?? []) as Array<{
+              thread_id: string;
+              last_read_at?: string | null;
+              created_at?: string | null;
+            }>)
               .map((r) => r.thread_id)
               .filter(Boolean)
           )
         );
 
         const myLastReadMap = new Map<string, string | null>();
-        for (const r of (myMemberRows ?? []) as any[]) {
+        for (const r of ((myMemberRows ?? []) as Array<{
+          thread_id: string;
+          last_read_at?: string | null;
+        }>)) {
           if (!r?.thread_id) continue;
           if (!myLastReadMap.has(r.thread_id)) {
-            myLastReadMap.set(r.thread_id, (r.last_read_at ?? null) as string | null);
+            myLastReadMap.set(r.thread_id, r.last_read_at ?? null);
           }
         }
 
@@ -218,9 +225,12 @@ export default function ChatListPage() {
         const memberTeamsByThread = new Map<string, string[]>();
         const allTeamIds: string[] = [];
 
-        for (const r of (membersRows ?? []) as any[]) {
-          const tid = r.thread_id as string;
-          const teamId = r.team_id as string;
+        for (const r of ((membersRows ?? []) as Array<{
+          thread_id: string;
+          team_id: string | null;
+        }>)) {
+          const tid = r.thread_id;
+          const teamId = r.team_id ?? "";
           if (!tid || !teamId) continue;
 
           if (!memberTeamsByThread.has(tid)) {
@@ -242,7 +252,11 @@ export default function ChatListPage() {
           if (teamErr) {
             console.error(teamErr);
           } else {
-            for (const t of (teamRows ?? []) as any[]) {
+            for (const t of ((teamRows ?? []) as Array<{
+              id: string;
+              name: string | null;
+              category?: string | null;
+            }>)) {
               teamMap.set(t.id, {
                 id: t.id,
                 name: t.name ?? null,
@@ -265,8 +279,12 @@ export default function ChatListPage() {
         if (msgErr) {
           console.error(msgErr);
         } else {
-          for (const m of (msgRows ?? []) as any[]) {
-            const tid = m.thread_id as string;
+          for (const m of ((msgRows ?? []) as Array<{
+            thread_id: string;
+            body: string | null;
+            created_at: string;
+          }>)) {
+            const tid = m.thread_id;
             if (!tid) continue;
 
             if (!lastMsgByThread.has(tid)) {
@@ -279,8 +297,12 @@ export default function ChatListPage() {
           }
         }
 
-        const merged: ThreadRow[] = ((thRows ?? []) as any[]).map((t) => {
-          const tid = t.id as string;
+        const merged: ThreadRow[] = ((thRows ?? []) as Array<{
+          id: string;
+          created_at: string;
+          updated_at: string | null;
+        }>).map((t) => {
+          const tid = t.id;
           const memberTeamIds = memberTeamsByThread.get(tid) ?? [];
 
           const otherTeamId =
@@ -372,6 +394,16 @@ export default function ChatListPage() {
 
       {authLoading || loading ? (
         <div style={emptyBox}>読み込み中…</div>
+      ) : !meId ? (
+        <div style={emptyBox}>
+          ログインが必要です。
+          <br />
+          <div style={{ marginTop: 12 }}>
+            <Link href="/login?redirect=/chat" className="sh-btn sh-btn--primary">
+              ログインする
+            </Link>
+          </div>
+        </div>
       ) : threads.length === 0 ? (
         <div style={emptyBox}>
           まだチャットはありません。
@@ -393,7 +425,7 @@ export default function ChatListPage() {
             return (
               <Link
                 key={t.id}
-                href={`/chat/${t.id}`}
+                href={`/chat/${t.id}?from=chat-list`}
                 style={{
                   ...threadCard,
                   borderBottom:

@@ -1,16 +1,21 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/app/lib/supabase";
 
 type AuthCtx = {
   session: Session | null;
   user: User | null;
-
   loading: boolean;
 
-  // 管理者判定
   isAdmin: boolean;
   adminLoading: boolean;
   refreshAdmin: () => Promise<void>;
@@ -25,75 +30,88 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const [isAdmin, setIsAdmin] = useState(false);
-  const [adminLoading, setAdminLoading] = useState(true);
+  const [adminLoading, setAdminLoading] = useState(false);
 
   const user = session?.user ?? null;
 
-  // 自分が admins に入ってるか確認（RLSで「本人の select のみ許可」想定）
-  const refreshAdmin = async () => {
-    // user がいないなら admin でもない
-    if (!user) {
+  const refreshAdmin = useCallback(async (targetUser?: User | null) => {
+    const currentUser = targetUser ?? user ?? null;
+
+    if (!currentUser?.id) {
       setIsAdmin(false);
       setAdminLoading(false);
       return;
     }
 
     setAdminLoading(true);
+
     try {
       const { data, error } = await supabase
         .from("admins")
         .select("user_id")
-        .eq("user_id", user.id)
+        .eq("user_id", currentUser.id)
         .maybeSingle();
 
-      // maybeSingle() は「行なし」でも error にならず data=null のはず
       if (error) {
         console.error("[admins] check error:", error);
         setIsAdmin(false);
-      } else {
-        setIsAdmin(!!data);
+        return;
       }
+
+      setIsAdmin(!!data);
+    } catch (e) {
+      console.error("[admins] unexpected error:", e);
+      setIsAdmin(false);
     } finally {
       setAdminLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     let mounted = true;
 
-    // 初回セッション取得
-    supabase.auth
-      .getSession()
-      .then(({ data }) => {
+    const init = async () => {
+      try {
+        const {
+          data: { session: initialSession },
+        } = await supabase.auth.getSession();
+
         if (!mounted) return;
-        setSession(data.session ?? null);
+
+        setSession(initialSession ?? null);
         setLoading(false);
-      })
-      .catch((e) => {
+
+        await refreshAdmin(initialSession?.user ?? null);
+      } catch (e) {
         console.error("[auth] getSession error:", e);
+
+        if (!mounted) return;
+
         setSession(null);
         setLoading(false);
-      });
+        setIsAdmin(false);
+        setAdminLoading(false);
+      }
+    };
 
-    // 以降のログイン/ログアウトを購読
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    init();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+      if (!mounted) return;
+
       setSession(newSession ?? null);
       setLoading(false);
+
+      await refreshAdmin(newSession?.user ?? null);
     });
 
     return () => {
       mounted = false;
-      sub.subscription.unsubscribe();
+      subscription.unsubscribe();
     };
-  }, []);
-
-  // session/user が変わるたびに管理者判定も更新
-  useEffect(() => {
-    // auth のロード中は待つ
-    if (loading) return;
-    refreshAdmin();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, user?.id]);
+  }, [refreshAdmin]);
 
   const value = useMemo<AuthCtx>(
     () => ({
@@ -102,12 +120,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       isAdmin,
       adminLoading,
-      refreshAdmin,
+      refreshAdmin: async () => {
+        await refreshAdmin(user);
+      },
       signOut: async () => {
         await supabase.auth.signOut();
+        setSession(null);
+        setIsAdmin(false);
+        setAdminLoading(false);
       },
     }),
-    [session, user, loading, isAdmin, adminLoading]
+    [session, user, loading, isAdmin, adminLoading, refreshAdmin]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
