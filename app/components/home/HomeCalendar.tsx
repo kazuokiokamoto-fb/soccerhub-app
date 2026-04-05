@@ -3,1247 +3,1027 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { categoryLabel } from "@/app/lib/categories";
-import Link from "next/link";
 
-type Slot = {
-  id: string;
-  date: string;
-  start_time: string;
-  end_time: string;
-  area: string | null;
-  area_text?: string | null;
-  category: string | null;
-  is_closed?: boolean | null;
-  strength_rank?: string | null;
-  has_ground?: boolean | null;
-  note?: string | null;
+import { Calendar } from "@/app/match/components/Calendar";
+import { DaySlotList } from "@/app/match/components/DaySlotList";
+import { MatchFilterPanel } from "@/app/match/components/MatchFilterPanel";
+import { MatchHelpModals } from "@/app/match/components/MatchHelpModals";
+
+import { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
+import { useMatchData } from "@/app/match/hooks/useMatchData";
+
+import {
+  buildCalendarCells,
+  addMonths,
+  startOfMonth,
+  toMonthKey,
+  ymdToday,
+} from "@/app/match/utils/date";
+import { matchesSlotFilters } from "@/app/match/utils/filters";
+
+import type { StrengthRank } from "@/app/components/StrengthRankPicker";
+
+type StrengthGuide = {
+  rank: StrengthRank;
+  short: string;
+  title: string;
+  bullets: string[];
+  note: string;
 };
+
+type CalendarShortStatus = "decided" | "open" | "other";
 
 type DayCalendarSummary = {
   label: "決" | "募" | "他";
   count: number;
-  tone: "decided" | "open" | "other";
+  tone: CalendarShortStatus;
 };
 
-function ymdToday() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = `${d.getMonth() + 1}`.padStart(2, "0");
-  const day = `${d.getDate()}`.padStart(2, "0");
-  return `${y}-${m}-${day}`;
+const STRENGTH_GUIDES: StrengthGuide[] = [
+  {
+    rank: "SS",
+    short: "都・県リーグ1・2部",
+    title: "公式戦上位レベルの強度を想定したカテゴリー",
+    bullets: [
+      "都・県リーグ上位所属",
+      "試合強度：★★★★★（非常に高い）",
+      "球際・切り替えが速く、戦術理解度が高い",
+      "公式戦同等レベルの緊張感ある試合を希望",
+    ],
+    note: "「強度の高い実戦形式」を求めるチーム向け",
+  },
+  {
+    rank: "S",
+    short: "都・県リーグ3・4部",
+    title: "公式戦基準の競争力を持つカテゴリー",
+    bullets: [
+      "都・県リーグ所属",
+      "試合強度：★★★★☆（高い）",
+      "基礎技術が安定し、組織的な守備・攻撃ができる",
+      "上位リーグ昇格を目指すレベル",
+    ],
+    note: "「しっかり競り合える相手」を求めるチーム向け",
+  },
+  {
+    rank: "A",
+    short: "地域リーグ1・2部",
+    title: "育成と競争のバランス型カテゴリー",
+    bullets: [
+      "地域リーグ上位所属",
+      "試合強度：★★★☆☆（中〜やや高）",
+      "個人技術向上＋チーム連携を重視",
+      "チャレンジマッチにも適したレベル",
+    ],
+    note: "「公式戦を想定しつつ育成も重視」するチーム向け",
+  },
+  {
+    rank: "B",
+    short: "地域リーグ3・4部",
+    title: "成長重視の実戦経験カテゴリー",
+    bullets: [
+      "地域リーグ所属",
+      "試合強度：★★☆☆☆（やや穏やか）",
+      "試合経験を積みながら基礎力を伸ばす段階",
+      "バランスの良いマッチング向き",
+    ],
+    note: "「経験を積みたい」「自信をつけたい」チーム向け",
+  },
+  {
+    rank: "C",
+    short: "フレンドリー",
+    title: "交流・経験重視カテゴリー",
+    bullets: [
+      "リーグ所属問わず",
+      "試合強度：★☆☆☆☆（交流中心）",
+      "新チーム編成・初心者中心・交流目的",
+      "勝敗よりも経験や交流を重視",
+    ],
+    note: "「楽しく真剣に」「幅広い交流」を希望するチーム向け",
+  },
+];
+
+function teamStrengthLabel(team: any) {
+  if (!team) return "未設定";
+  if (team.strength_rank) return team.strength_rank;
+
+  const level = Number(team.level ?? 0);
+  if (!Number.isFinite(level)) return "未設定";
+  if (level >= 9) return "SS";
+  if (level >= 7) return "S";
+  if (level >= 5) return "A";
+  if (level >= 3) return "B";
+  return "C";
 }
 
-function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
+function buildMatchCarryQuery(params: {
+  slotId?: string | null;
+  date?: string | null;
+}) {
+  const qs = new URLSearchParams();
+  qs.set("from", "home");
+  if (params.slotId) qs.set("slotId", params.slotId);
+  if (params.date) qs.set("date", params.date);
+  return qs.toString();
 }
 
-function addMonths(date: Date, diff: number) {
-  return new Date(date.getFullYear(), date.getMonth() + diff, 1);
-}
+function appliedFilterSummaryText(filters: {
+  keyword: string;
+  categoryFilter: string[];
+  prefectureFilter: string;
+  cityFilter: string;
+  townFilter: string;
+  groundFilter: "all" | "あり" | "なし";
+  strengthFilter: StrengthRank[];
+  bikeFilter: "all" | "あり" | "なし" | "不明";
+  bikeCapacityMin: string;
+  memberCountMin: string;
+}) {
+  const parts: string[] = [];
 
-function toMonthKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
+  if (filters.keyword.trim()) parts.push(`キーワード: ${filters.keyword.trim()}`);
+  if (filters.prefectureFilter) parts.push(`都道府県: ${filters.prefectureFilter}`);
+  if (filters.cityFilter) parts.push(`市区町村: ${filters.cityFilter}`);
+  if (filters.townFilter) parts.push(`町名: ${filters.townFilter}`);
 
-function buildCalendarCells(monthDate: Date) {
-  const year = monthDate.getFullYear();
-  const month = monthDate.getMonth();
-
-  const firstDay = new Date(year, month, 1);
-  const firstWeekday = (firstDay.getDay() + 6) % 7;
-  const start = new Date(year, month, 1 - firstWeekday);
-
-  return Array.from({ length: 42 }).map((_, i) => {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-
-    return {
-      ymd: `${y}-${m}-${day}`,
-      dayNum: d.getDate(),
-      inMonth: d.getMonth() === month,
-    };
-  });
-}
-
-function hhmm(v?: string | null) {
-  if (!v) return "";
-  return String(v).slice(0, 5);
-}
-
-function isPastDate(ymd: string) {
-  const [y, m, d] = ymd.split("-").map(Number);
-  const target = new Date(y, (m || 1) - 1, d || 1);
-
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-  return target < today;
-}
-
-function getWeekdayKey(dateStr?: string | null) {
-  if (!dateStr) return "";
-  const d = new Date(`${dateStr}T00:00:00`);
-  const day = d.getDay();
-  if (day === 0) return "sun";
-  if (day === 6) return "sat";
-  return "weekday";
-}
-
-function matchCategory(slot: Slot, category: string) {
-  if (!category) return true;
-  return (slot.category ?? "") === category;
-}
-
-function matchArea(slot: Slot, areaKeyword: string) {
-  if (!areaKeyword.trim()) return true;
-  const q = areaKeyword.trim().toLowerCase();
-  const haystack = [slot.area ?? "", slot.area_text ?? ""].join(" ").toLowerCase();
-  return haystack.includes(q);
-}
-
-function matchStrength(slot: Slot, selectedStrengths: string[]) {
-  if (selectedStrengths.length === 0) return true;
-  const value = String(slot.strength_rank ?? "");
-  if (!value) return true;
-  return selectedStrengths.includes(value);
-}
-
-function matchWeekday(slot: Slot, weekdayFilter: string) {
-  if (!weekdayFilter) return true;
-
-  const key = getWeekdayKey(slot.date);
-
-  if (weekdayFilter === "holiday") {
-    return key === "sat" || key === "sun";
+  if (filters.categoryFilter.length > 0) {
+    parts.push(
+      `カテゴリ: ${filters.categoryFilter
+        .map((v) => categoryLabel(v) || v)
+        .join(" / ")}`
+    );
   }
 
-  return key === weekdayFilter;
-}
+  if (filters.groundFilter !== "all") {
+    parts.push(`グラウンド: ${filters.groundFilter}`);
+  }
 
-function matchTimeZone(slot: Slot, timeZoneFilter: string) {
-  if (!timeZoneFilter) return true;
+  if (filters.strengthFilter.length > 0) {
+    parts.push(`強さ: ${filters.strengthFilter.join(" / ")}`);
+  }
 
-  const start = String(slot.start_time ?? "");
+  if (filters.bikeFilter !== "all") {
+    parts.push(`駐輪場: ${filters.bikeFilter}`);
+  }
 
-  if (timeZoneFilter === "morning") return start >= "06:00" && start < "12:00";
-  if (timeZoneFilter === "afternoon") return start >= "12:00" && start < "17:00";
-  if (timeZoneFilter === "evening") return start >= "17:00" && start <= "21:00";
+  if (filters.bikeCapacityMin) {
+    parts.push(`駐輪場台数: ${filters.bikeCapacityMin}台以上`);
+  }
 
-  return true;
-}
+  if (filters.memberCountMin) {
+    parts.push(`所属人数: ${filters.memberCountMin}人以上`);
+  }
 
-function matchGround(slot: Slot, groundFilter: string) {
-  if (!groundFilter) return true;
-
-  const hasGround = !!slot.has_ground;
-
-  if (groundFilter === "yes") return hasGround;
-  if (groundFilter === "no") return !hasGround;
-
-  return true;
-}
-
-function matchKeyword(slot: Slot, keyword: string) {
-  if (!keyword.trim()) return true;
-
-  const q = keyword.trim().toLowerCase();
-  const text = [
-    slot.area ?? "",
-    slot.area_text ?? "",
-    slot.category ?? "",
-    slot.note ?? "",
-    slot.strength_rank ?? "",
-  ]
-    .join(" ")
-    .toLowerCase();
-
-  return text.includes(q);
-}
-
-function daySummaryText(summary: DayCalendarSummary) {
-  if (summary.tone === "decided") return "決定済";
-  if (summary.tone === "open") return "募集中";
-  return "他決定";
+  return parts.join(" / ");
 }
 
 export default function HomeCalendar() {
-  const [slots, setSlots] = useState<Slot[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [monthDate, setMonthDate] = useState<Date>(() =>
+    startOfMonth(new Date())
+  );
+  const [selectedYmd, setSelectedYmd] = useState<string>(ymdToday());
+  const [selectedSlotId, setSelectedSlotId] = useState<string>("");
 
-  const [monthDate, setMonthDate] = useState<Date>(() => startOfMonth(new Date()));
-  const [selectedDate, setSelectedDate] = useState<string>(ymdToday());
+  const [requestTeamId, setRequestTeamId] = useState<string>("");
+  const [requestComment, setRequestComment] = useState<string>("");
 
-  const [areaKeyword, setAreaKeyword] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [strengthFilter, setStrengthFilter] = useState<string[]>([]);
-  const [weekdayFilter, setWeekdayFilter] = useState("");
-  const [timeZoneFilter, setTimeZoneFilter] = useState("");
-  const [groundFilter, setGroundFilter] = useState("");
-  const [keyword, setKeyword] = useState("");
-  const [openOnly, setOpenOnly] = useState(true);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showStrengthHelp, setShowStrengthHelp] = useState(false);
+  const [showCalendarHelp, setShowCalendarHelp] = useState(false);
 
-  const listRef = useRef<HTMLDivElement | null>(null);
-  const filterRef = useRef<HTMLDivElement | null>(null);
+  const dayListRef = useRef<HTMLDivElement | null>(null);
+  const filterRef = useRef<HTMLElement | null>(null);
+
+  const {
+    draftKeyword,
+    setDraftKeyword,
+    draftCategoryFilter,
+    setDraftCategoryFilter,
+    draftPrefectureFilter,
+    setDraftPrefectureFilter,
+    draftCityFilter,
+    setDraftCityFilter,
+    draftTownFilter,
+    setDraftTownFilter,
+    draftGroundFilter,
+    setDraftGroundFilter,
+    draftStrengthFilter,
+    setDraftStrengthFilter,
+    draftBikeFilter,
+    setDraftBikeFilter,
+    draftBikeCapacityMin,
+    setDraftBikeCapacityMin,
+    draftMemberCountMin,
+    setDraftMemberCountMin,
+    appliedFilters,
+    draftFilters,
+    hasDraftChanges,
+    applyDraftToApplied,
+    clearAllFilters,
+  } = useMatchFilters();
+
+  const {
+    loadingBase,
+    loadingMonth,
+    meId,
+    allTeams,
+    myTeams,
+    venues,
+    slotsInMonth,
+    requestsForMonth,
+    loadMonth,
+  } = useMatchData(monthDate);
+
+  const loading = loadingBase || loadingMonth;
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem("sakamatch:home-calendar-filters:v1");
-      if (!raw) return;
-
-      const saved = JSON.parse(raw);
-
-      setAreaKeyword(saved.areaKeyword ?? "");
-      setCategoryFilter(saved.categoryFilter ?? "");
-      setStrengthFilter(Array.isArray(saved.strengthFilter) ? saved.strengthFilter : []);
-      setWeekdayFilter(saved.weekdayFilter ?? "");
-      setTimeZoneFilter(saved.timeZoneFilter ?? "");
-      setGroundFilter(saved.groundFilter ?? "");
-      setKeyword(saved.keyword ?? "");
-      setOpenOnly(typeof saved.openOnly === "boolean" ? saved.openOnly : true);
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    load();
-
-    const channel = supabase
-      .channel("home-calendar-slots-unified")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "match_slots",
-        },
-        () => {
-          load();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  async function load() {
-    setLoading(true);
-
-    const { data, error } = await supabase
-      .from("match_slots")
-      .select(
-        "id,date,start_time,end_time,area,area_text,category,is_closed,strength_rank,has_ground,note"
-      )
-      .gte("date", ymdToday())
-      .order("date", { ascending: true })
-      .order("start_time", { ascending: true })
-      .limit(500);
-
-    if (error) {
-      console.error("HomeCalendar load error:", error);
-      setSlots([]);
-      setLoading(false);
-      return;
+    if (!requestTeamId && myTeams[0]?.id) {
+      setRequestTeamId(myTeams[0].id);
     }
+  }, [myTeams, requestTeamId]);
 
-    setSlots((data ?? []) as Slot[]);
-    setLoading(false);
-  }
+  const myTeamIds = useMemo(() => myTeams.map((t: any) => t.id), [myTeams]);
 
-  function handleSaveFilters() {
-    try {
-      window.localStorage.setItem(
-        "sakamatch:home-calendar-filters:v1",
-        JSON.stringify({
-          areaKeyword,
-          categoryFilter,
-          strengthFilter,
-          weekdayFilter,
-          timeZoneFilter,
-          groundFilter,
-          keyword,
-          openOnly,
-        })
-      );
-      alert("条件を保存しました");
-    } catch {
-      alert("条件の保存に失敗しました");
-    }
-  }
+  const teamMap = useMemo(() => {
+    return new Map(allTeams.map((t) => [t.id, t]));
+  }, [allTeams]);
 
-  function handleClearFilters() {
-    setAreaKeyword("");
-    setCategoryFilter("");
-    setStrengthFilter([]);
-    setWeekdayFilter("");
-    setTimeZoneFilter("");
-    setGroundFilter("");
-    setKeyword("");
-    setOpenOnly(true);
-  }
+  const requestTeamNameMap = useMemo(() => {
+    return new Map(allTeams.map((t) => [t.id, t.name || "チーム未設定"]));
+  }, [allTeams]);
 
-  function handleApplyFilters() {
-    setTimeout(() => {
-      listRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 80);
-  }
+  const filteredSlotsInMonth = useMemo(() => {
+    return slotsInMonth.filter((s: any) =>
+      matchesSlotFilters(s, teamMap as any, appliedFilters)
+    );
+  }, [slotsInMonth, teamMap, appliedFilters]);
 
-  function toggleStrength(rank: string) {
-    setStrengthFilter((prev) => {
-      if (prev.includes(rank)) {
-        return prev.filter((v) => v !== rank);
-      }
-      return [...prev, rank];
-    });
-  }
+  const draftFilteredSlotsInMonth = useMemo(() => {
+    return slotsInMonth.filter((s: any) =>
+      matchesSlotFilters(s, teamMap as any, draftFilters)
+    );
+  }, [slotsInMonth, teamMap, draftFilters]);
 
-  const filteredSlots = useMemo(() => {
-    return slots.filter((slot) => {
-      if (openOnly && slot.is_closed) return false;
-
-      return (
-        matchCategory(slot, categoryFilter) &&
-        matchArea(slot, areaKeyword) &&
-        matchStrength(slot, strengthFilter) &&
-        matchWeekday(slot, weekdayFilter) &&
-        matchTimeZone(slot, timeZoneFilter) &&
-        matchGround(slot, groundFilter) &&
-        matchKeyword(slot, keyword)
-      );
-    });
-  }, [
-    slots,
-    categoryFilter,
-    areaKeyword,
-    strengthFilter,
-    weekdayFilter,
-    timeZoneFilter,
-    groundFilter,
-    keyword,
-    openOnly,
-  ]);
-
-  const grouped = useMemo(() => {
-    const m = new Map<string, Slot[]>();
-    for (const s of filteredSlots) {
-      if (!m.has(s.date)) m.set(s.date, []);
-      m.get(s.date)!.push(s);
+  const countByDate = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of filteredSlotsInMonth) {
+      m.set(s.date, (m.get(s.date) ?? 0) + 1);
     }
     return m;
-  }, [filteredSlots]);
+  }, [filteredSlotsInMonth]);
 
-  const monthCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
-  const monthKey = useMemo(() => toMonthKey(monthDate), [monthDate]);
+  const requestsBySlotId = useMemo(() => {
+    const m = new Map<string, any[]>();
+    for (const r of requestsForMonth) {
+      if (!m.has(r.slot_id)) m.set(r.slot_id, []);
+      m.get(r.slot_id)!.push(r);
+    }
+    return m;
+  }, [requestsForMonth]);
+
+  const getSlotStatus = React.useCallback(
+    (slot: any): CalendarShortStatus => {
+      const reqs = requestsBySlotId.get(slot.id) ?? [];
+      const acceptedReq = reqs.find((r) => r.status === "accepted");
+
+      if (acceptedReq) {
+        if (
+          myTeamIds.includes(slot.host_team_id) ||
+          myTeamIds.includes(acceptedReq.requester_team_id)
+        ) {
+          return "decided";
+        }
+        return "other";
+      }
+
+      return "open";
+    },
+    [requestsBySlotId, myTeamIds]
+  );
 
   const dayStatusSummaryByDate = useMemo(() => {
-    const map = new Map<string, DayCalendarSummary>();
+    const grouped = new Map<string, any[]>();
 
-    for (const [date, daySlots] of grouped.entries()) {
-      const openCount = daySlots.filter((s) => !s.is_closed).length;
-      const decidedCount = daySlots.filter((s) => !!s.is_closed).length;
+    for (const slot of filteredSlotsInMonth) {
+      const ymd = slot.date;
+      if (!grouped.has(ymd)) grouped.set(ymd, []);
+      grouped.get(ymd)!.push(slot);
+    }
 
-      if (openCount > 0) {
-        map.set(date, {
-          label: "募",
-          count: openCount,
-          tone: "open",
-        });
-      } else if (decidedCount > 0) {
-        map.set(date, {
+    const result = new Map<string, DayCalendarSummary>();
+
+    for (const [ymd, daySlots] of grouped.entries()) {
+      let decidedCount = 0;
+      let openCount = 0;
+      let otherCount = 0;
+
+      for (const slot of daySlots) {
+        const status = getSlotStatus(slot);
+        if (status === "decided") decidedCount += 1;
+        else if (status === "open") openCount += 1;
+        else if (status === "other") otherCount += 1;
+      }
+
+      if (decidedCount > 0) {
+        result.set(ymd, {
           label: "決",
           count: decidedCount,
           tone: "decided",
         });
+      } else if (openCount > 0) {
+        result.set(ymd, {
+          label: "募",
+          count: openCount,
+          tone: "open",
+        });
+      } else if (otherCount > 0) {
+        result.set(ymd, {
+          label: "他",
+          count: otherCount,
+          tone: "other",
+        });
       }
     }
 
-    return map;
-  }, [grouped]);
+    return result;
+  }, [filteredSlotsInMonth, getSlotStatus]);
+
+  const slotsOnSelectedDate = useMemo(() => {
+    return filteredSlotsInMonth.filter((s: any) => s.date === selectedYmd);
+  }, [filteredSlotsInMonth, selectedYmd]);
+
+  const draftSlotsOnSelectedDate = useMemo(() => {
+    return draftFilteredSlotsInMonth.filter((s: any) => s.date === selectedYmd);
+  }, [draftFilteredSlotsInMonth, selectedYmd]);
+
+  const selectedSlot = useMemo(() => {
+    return filteredSlotsInMonth.find((s) => s.id === selectedSlotId) || null;
+  }, [filteredSlotsInMonth, selectedSlotId]);
+
+  const selectedHostTeam = useMemo(() => {
+    if (!selectedSlot) return null;
+    return teamMap.get(selectedSlot.host_team_id) || null;
+  }, [selectedSlot, teamMap]);
+
+  const selectedSlotRequests = useMemo(() => {
+    if (!selectedSlotId) return [];
+    return requestsForMonth.filter((r) => r.slot_id === selectedSlotId);
+  }, [requestsForMonth, selectedSlotId]);
+
+  const isMineSlot = useMemo(() => {
+    if (!selectedSlot) return false;
+    return !!meId && selectedSlot.owner_id === meId;
+  }, [selectedSlot, meId]);
+
+  const calendarCells = useMemo(() => {
+    return buildCalendarCells(monthDate);
+  }, [monthDate]);
+
+  const monthKey = useMemo(() => toMonthKey(monthDate), [monthDate]);
 
   useEffect(() => {
-    const currentCount = grouped.get(selectedDate)?.length ?? 0;
+    const currentCount = slotsOnSelectedDate.length;
     if (currentCount > 0) return;
 
-    const firstAvailable = Array.from(grouped.keys()).sort()[0];
+    const firstAvailable = filteredSlotsInMonth[0]?.date;
     if (firstAvailable) {
-      setSelectedDate(firstAvailable);
+      setSelectedYmd(firstAvailable);
+      setMonthDate(startOfMonth(new Date(firstAvailable)));
     }
-  }, [grouped, selectedDate]);
+  }, [filteredSlotsInMonth, slotsOnSelectedDate]);
 
-  const selectedDateSlots = useMemo(() => {
-    return grouped.get(selectedDate) ?? [];
-  }, [grouped, selectedDate]);
+  const scrollToDayList = () => {
+    setTimeout(() => {
+      dayListRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
+  };
 
-  const totalFilteredCount = filteredSlots.length;
+  const scrollToFilter = () => {
+    setTimeout(() => {
+      filterRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
+  };
+
+  const handleApplyAndJump = () => {
+    applyDraftToApplied();
+    setSelectedSlotId("");
+    setRequestComment("");
+    scrollToDayList();
+  };
+
+  const handleResetFilters = () => {
+    clearAllFilters();
+    setSelectedSlotId("");
+    setRequestComment("");
+    scrollToDayList();
+  };
+
+  const goToCreatePage = (ymd: string) => {
+    const params = new URLSearchParams();
+
+    if (ymd) params.set("date", ymd);
+
+    const firstTeam = myTeams[0];
+    if (firstTeam?.id) params.set("hostTeamId", firstTeam.id);
+    if (firstTeam?.category) params.set("category", firstTeam.category);
+    if (firstTeam?.area) params.set("area", firstTeam.area);
+
+    const query = params.toString();
+    window.location.href = query ? `/match/new?${query}` : "/match/new";
+  };
+
+  const getOrCreateDmThread = async (myTeamId: string, otherTeamId: string) => {
+    const { data, error } = await supabase.rpc("rpc_get_or_create_dm_thread", {
+      my_team_id: myTeamId,
+      other_team_id: otherTeamId,
+    });
+
+    if (error) throw error;
+    return data as string;
+  };
+
+  const insertChatMessage = async (params: {
+    threadId: string;
+    senderId: string;
+    senderTeamId: string | null;
+    body: string;
+  }) => {
+    const { threadId, senderId, senderTeamId, body } = params;
+
+    const { error } = await supabase.from("chat_messages").insert({
+      thread_id: threadId,
+      sender_id: senderId,
+      sender_team_id: senderTeamId,
+      body,
+    });
+
+    if (error) throw error;
+  };
+
+  const openDmAndGo = async (otherTeamId: string, slot?: any | null) => {
+    try {
+      const myTeamId = requestTeamId || myTeams[0]?.id;
+      if (!myTeamId) {
+        alert("自分のチームがありません");
+        return;
+      }
+      if (!otherTeamId || myTeamId === otherTeamId) return;
+
+      const threadId = await getOrCreateDmThread(myTeamId, otherTeamId);
+
+      const carryQuery = buildMatchCarryQuery({
+        slotId: slot?.id ?? selectedSlotId ?? "",
+        date: slot?.date ?? selectedYmd,
+      });
+
+      window.location.href = `/chat/${threadId}?${carryQuery}`;
+    } catch (e: any) {
+      console.error(e);
+      alert(`チャットを開けません: ${e?.message ?? "unknown error"}`);
+    }
+  };
+
+  const requestSlot = async (slotId: string) => {
+    const slot = filteredSlotsInMonth.find((s) => s.id === slotId);
+    if (!slot) return;
+
+    if (slot.is_closed) {
+      alert("この募集は締切です");
+      return;
+    }
+
+    const acceptedExists = requestsForMonth.some(
+      (r) => r.slot_id === slotId && r.status === "accepted"
+    );
+    if (acceptedExists) {
+      alert("この募集はすでに成立済みです");
+      return;
+    }
+
+    if (!requestTeamId) {
+      alert("申込みチームを選んでください");
+      return;
+    }
+
+    const { data: u } = await supabase.auth.getUser();
+    const uid = u?.user?.id;
+    if (!uid) {
+      alert("ログインが必要です");
+      return;
+    }
+
+    const already = requestsForMonth.some(
+      (r) =>
+        r.slot_id === slotId &&
+        r.requester_team_id === requestTeamId &&
+        r.status !== "cancelled"
+    );
+    if (already) {
+      alert("この募集にはこのチームですでに申込済みです");
+      return;
+    }
+
+    const defaultComment =
+      "はじめまして。練習試合を希望しています。条件が合えばぜひお願いします。";
+
+    const finalComment = (requestComment.trim() || defaultComment).trim();
+
+    const confirmText = `この内容で試合申込しますか？\n\nコメント:\n${finalComment}`;
+
+    if (!window.confirm(confirmText)) return;
+
+    const payload = {
+      slot_id: slotId,
+      requester_team_id: requestTeamId,
+      requester_user_id: uid,
+      status: "pending" as const,
+      comment: finalComment || null,
+    };
+
+    const { data: insertedRequest, error } = await supabase
+      .from("match_requests")
+      .insert(payload)
+      .select(
+        "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
+      )
+      .single();
+
+    if (error) {
+      console.error(error);
+
+      if (
+        error.message?.includes("match_requests_slot_id_requester_team_id_key") ||
+        error.message?.includes("match_requests_active_unique_idx")
+      ) {
+        alert("この募集にはこのチームですでに申込済みです");
+        return;
+      }
+
+      alert(`申込みに失敗しました: ${error.message}`);
+      return;
+    }
+
+    const hostTeam = teamMap.get(slot.host_team_id);
+    const requesterTeam = myTeams.find((t) => t.id === requestTeamId);
+
+    let threadId = "";
+    try {
+      threadId = await getOrCreateDmThread(requestTeamId, slot.host_team_id);
+    } catch (e) {
+      console.error("thread create failed:", e);
+    }
+
+    try {
+      const { data: hostTeamRow, error: hostTeamErr } = await supabase
+        .from("teams")
+        .select("owner_id")
+        .eq("id", slot.host_team_id)
+        .maybeSingle();
+
+      if (hostTeamErr) {
+        console.error("host team owner fetch error:", hostTeamErr);
+      }
+
+      const hostUserId =
+        (hostTeamRow as { owner_id?: string | null } | null)?.owner_id ?? "";
+
+      if (hostUserId) {
+        const notificationTitle = "新しい試合申込み";
+        const notificationBody = `${
+          requesterTeam?.name ?? "相手チーム"
+        } から申込みが届きました`;
+
+        const carryQuery = buildMatchCarryQuery({
+          slotId: slot.id,
+          date: slot.date,
+        });
+        const notificationUrl = threadId
+          ? `/chat/${threadId}?${carryQuery}`
+          : "/chat";
+
+        const { error: notificationErr } = await supabase
+          .from("notifications")
+          .insert({
+            user_id: hostUserId,
+            type: "match_request",
+            title: notificationTitle,
+            body: notificationBody,
+            target_url: notificationUrl,
+            is_read: false,
+            related_team_id: requestTeamId,
+            related_request_id: insertedRequest.id,
+            related_thread_id: threadId || null,
+          });
+
+        if (notificationErr) {
+          console.error("notification insert error:", notificationErr);
+        } else {
+          try {
+            const pushRes = await fetch("/api/push/send", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                userId: hostUserId,
+                title: notificationTitle,
+                body: notificationBody,
+                url: notificationUrl,
+              }),
+            });
+
+            if (!pushRes.ok) {
+              const pushJson = await pushRes.json().catch(() => null);
+              console.error("push send error:", pushJson ?? pushRes.statusText);
+            }
+          } catch (e) {
+            console.error("push send fetch error:", e);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("request notification error:", e);
+    }
+
+    try {
+      if (!threadId) {
+        threadId = await getOrCreateDmThread(requestTeamId, slot.host_team_id);
+      }
+
+      const bodyLines = [
+        "━━━━━━━━━━━━",
+        "⚽️ 試合申込",
+        "━━━━━━━━━━━━",
+        `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(
+          0,
+          5
+        )}`,
+        `📍 ${slot.area_text ?? slot.area ?? "未設定"}`,
+        `🏷 ${categoryLabel(slot.category) || slot.category || "未設定"}`,
+        "",
+        `👥 申込チーム：${requesterTeam?.name ?? "未設定"}`,
+        `💪 強さ：${teamStrengthLabel(requesterTeam)}`,
+        "",
+        `👥 募集チーム：${hostTeam?.name ?? "未設定"}`,
+        `💪 強さ：${teamStrengthLabel(hostTeam)}`,
+        "",
+        `💬 ${finalComment}`,
+      ].filter(Boolean);
+
+      await insertChatMessage({
+        threadId,
+        senderId: uid,
+        senderTeamId: requestTeamId,
+        body: bodyLines.join("\n"),
+      });
+
+      const carryQuery = buildMatchCarryQuery({
+        slotId: slot.id,
+        date: slot.date,
+      });
+
+      window.location.href = `/chat/${threadId}?${carryQuery}`;
+      return;
+    } catch (e) {
+      console.error("chat relay failed:", e);
+    }
+
+    setRequestComment("");
+    setSelectedSlotId(slotId);
+    await loadMonth();
+    scrollToDayList();
+  };
+
+  const updateRequestStatus = async (
+    requestId: string,
+    status: "accepted" | "rejected"
+  ) => {
+    const target = requestsForMonth.find((r) => r.id === requestId);
+    if (!target) return false;
+
+    const slot = filteredSlotsInMonth.find((s) => s.id === target.slot_id);
+    if (!slot) return false;
+
+    const { error } = await supabase
+      .from("match_requests")
+      .update({ status })
+      .eq("id", requestId);
+
+    if (error) {
+      console.error(error);
+      alert(`更新に失敗しました: ${error.message}`);
+      return false;
+    }
+
+    if (status === "accepted") {
+      await supabase
+        .from("match_slots")
+        .update({ is_closed: true })
+        .eq("id", target.slot_id);
+
+      try {
+        const { data: u } = await supabase.auth.getUser();
+        const uid = u?.user?.id;
+        if (uid) {
+          const threadId = await getOrCreateDmThread(
+            slot.host_team_id,
+            target.requester_team_id
+          );
+
+          const requesterTeamName =
+            requestTeamNameMap.get(target.requester_team_id) ?? "相手チーム";
+          const hostTeamName =
+            requestTeamNameMap.get(slot.host_team_id) ?? "募集チーム";
+          const requesterTeam = teamMap.get(target.requester_team_id);
+          const hostTeam = teamMap.get(slot.host_team_id);
+
+          await insertChatMessage({
+            threadId,
+            senderId: uid,
+            senderTeamId: slot.host_team_id,
+            body: [
+              "━━━━━━━━━━━━",
+              "✅ 試合成立（承認）",
+              "━━━━━━━━━━━━",
+              `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(
+                0,
+                5
+              )}`,
+              `🏷 ${categoryLabel(slot.category) || slot.category || "未設定"}`,
+              "",
+              `👥 募集チーム：${hostTeamName}`,
+              `💪 強さ：${teamStrengthLabel(hostTeam)}`,
+              "",
+              `👥 対戦チーム：${requesterTeamName}`,
+              `💪 強さ：${teamStrengthLabel(requesterTeam)}`,
+              "",
+              "📩 このチャットで詳細を調整してください",
+            ].join("\n"),
+          });
+        }
+      } catch (e) {
+        console.error("accepted auto chat failed:", e);
+      }
+    }
+
+    return true;
+  };
+
+  const accept = async (requestId: string) => {
+    const ok = await updateRequestStatus(requestId, "accepted");
+    if (!ok) return;
+    await loadMonth();
+  };
+
+  const reject = async (requestId: string) => {
+    const ok = await updateRequestStatus(requestId, "rejected");
+    if (!ok) return;
+    await loadMonth();
+  };
+
+  const cancelMyRequest = async (requestId: string) => {
+    if (!window.confirm("申込みを撤回しますか？")) return;
+
+    const req = requestsForMonth.find((r) => r.id === requestId);
+    if (!req) return;
+
+    const { error } = await supabase
+      .from("match_requests")
+      .update({ status: "cancelled" })
+      .eq("id", requestId);
+
+    if (error) {
+      console.error(error);
+      alert(`申込み撤回に失敗しました: ${error.message}`);
+      return;
+    }
+
+    try {
+      const slot = filteredSlotsInMonth.find((s) => s.id === req.slot_id);
+      const { data: u } = await supabase.auth.getUser();
+      const uid = u?.user?.id;
+      if (slot && uid) {
+        const threadId = await getOrCreateDmThread(
+          req.requester_team_id,
+          slot.host_team_id
+        );
+        const requesterTeamName =
+          requestTeamNameMap.get(req.requester_team_id) ?? "申込チーム";
+
+        await insertChatMessage({
+          threadId,
+          senderId: uid,
+          senderTeamId: req.requester_team_id,
+          body: [
+            "━━━━━━━━━━━━",
+            "⚠️ 試合申込 取消",
+            "━━━━━━━━━━━━",
+            `${requesterTeamName} が申込みをキャンセルしました`,
+          ].join("\n"),
+        });
+      }
+    } catch (e) {
+      console.error("cancel chat relay failed:", e);
+    }
+
+    await loadMonth();
+  };
+
+  const toggleClosed = async (slotId: string, nextClosed: boolean) => {
+    const { error } = await supabase
+      .from("match_slots")
+      .update({ is_closed: nextClosed })
+      .eq("id", slotId);
+
+    if (error) {
+      console.error(error);
+      alert(`募集状態の更新に失敗しました: ${error.message}`);
+      return;
+    }
+
+    await loadMonth();
+  };
 
   const filterSummaryText = useMemo(() => {
-    const parts: string[] = [];
-
-    if (keyword.trim()) parts.push(`キーワード: ${keyword.trim()}`);
-    if (areaKeyword.trim()) parts.push(`エリア: ${areaKeyword.trim()}`);
-    if (categoryFilter) parts.push(`カテゴリ: ${categoryLabel(categoryFilter) || categoryFilter}`);
-    if (strengthFilter.length > 0) parts.push(`強さ: ${strengthFilter.join(" / ")}`);
-    if (weekdayFilter) parts.push("曜日条件あり");
-    if (timeZoneFilter) parts.push("時間帯条件あり");
-    if (groundFilter) parts.push("グラウンド条件あり");
-    if (openOnly) parts.push("募集中のみ");
-
-    return parts.join(" / ");
-  }, [
-    keyword,
-    areaKeyword,
-    categoryFilter,
-    strengthFilter,
-    weekdayFilter,
-    timeZoneFilter,
-    groundFilter,
-    openOnly,
-  ]);
+    return appliedFilterSummaryText(appliedFilters);
+  }, [appliedFilters]);
 
   return (
     <section style={wrap}>
-      <div style={heroCard}>
-        <section style={calendarCard}>
-          <div style={topHead}>
-            <div style={topHeadLeft}>
-              <div style={topEyebrow}>MATCH CALENDAR</div>
-              <div style={topTitle}>カレンダーから試合を探す</div>
-            </div>
+      <Calendar
+        monthKey={monthKey}
+        loading={loading}
+        cells={calendarCells}
+        selectedYmd={selectedYmd}
+        countByDate={countByDate}
+        dayStatusSummaryByDate={dayStatusSummaryByDate}
+        onSelectDate={(ymd) => {
+          setSelectedYmd(ymd);
+          setSelectedSlotId("");
+          setRequestComment("");
+          scrollToDayList();
+        }}
+        onPrevMonth={() => {
+          const nextMonth = addMonths(monthDate, -1);
+          setMonthDate(nextMonth);
+          setSelectedYmd(ymdToday());
+        }}
+        onNextMonth={() => {
+          const nextMonth = addMonths(monthDate, 1);
+          setMonthDate(nextMonth);
+          setSelectedYmd(ymdToday());
+        }}
+        onCreateForDate={(ymd) => goToCreatePage(ymd)}
+        disableCreate={myTeams.length === 0}
+        filterSummaryText={filterSummaryText}
+        onOpenFilters={scrollToFilter}
+        onResetFilters={handleResetFilters}
+      />
 
-            <div style={topHeadActions}>
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={() => {
-                  filterRef.current?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "start",
-                  });
-                }}
-                disabled={loading}
-              >
-                条件変更
-              </button>
-
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={handleClearFilters}
-                disabled={loading}
-              >
-                リセット
-              </button>
-            </div>
+      <div ref={dayListRef}>
+        <div style={summaryBox}>
+          <div style={summaryDate}>📅 {selectedYmd}</div>
+          <div style={summaryCount}>
+            入力中の募集（{draftSlotsOnSelectedDate.length}件／
+            {slotsOnSelectedDate.length}件）
           </div>
 
-          <div style={filterSummaryBox}>
-            <div style={filterSummaryCaption}>表示条件</div>
-            <div style={filterSummaryTextStyle}>
-              {filterSummaryText?.trim() || "すべての条件で表示中"}
-            </div>
-
+          <div style={summaryActions}>
             <button
               type="button"
-              onClick={() => setOpenOnly((prev) => !prev)}
-              style={{
-                ...openOnlyChip,
-                ...(openOnly ? openOnlyChipActive : null),
-              }}
-              aria-pressed={openOnly}
-            >
-              {openOnly ? "募集中のみ表示中" : "募集中のみ表示"}
-            </button>
-          </div>
-
-          <div style={headerRow}>
-            <button
               className="sh-btn"
-              type="button"
-              onClick={() => {
-                const nextMonth = addMonths(monthDate, -1);
-                setMonthDate(nextMonth);
-                setSelectedDate(`${toMonthKey(nextMonth)}-01`);
-              }}
+              onClick={() => setShowCalendarHelp(true)}
             >
-              ← 前月
+              決・募・他 の見方
             </button>
-
-            <div style={monthTitle}>{monthKey}</div>
 
             <button
-              className="sh-btn"
               type="button"
-              onClick={() => {
-                const nextMonth = addMonths(monthDate, 1);
-                setMonthDate(nextMonth);
-                setSelectedDate(`${toMonthKey(nextMonth)}-01`);
-              }}
+              className="sh-btn"
+              onClick={scrollToFilter}
             >
-              次月 →
+              絞り込み
             </button>
-          </div>
 
-          <div style={weekHeaderGrid}>
-            {["月", "火", "水", "木", "金", "土", "日"].map((w, i) => (
-              <div
-                key={w}
-                style={{
-                  ...weekLabel,
-                  color: i === 5 ? "#2563eb" : i === 6 ? "#dc2626" : "#666666",
-                }}
-              >
-                {w}
-              </div>
-            ))}
-          </div>
-
-          <div style={calendarGrid}>
-            {monthCells.map((c, index) => {
-              const summary = dayStatusSummaryByDate.get(c.ymd);
-              const isSelected = c.ymd === selectedDate;
-              const isPast = isPastDate(c.ymd);
-              const weekday = index % 7;
-
-              const dayColor =
-                weekday === 5 ? "#2563eb" : weekday === 6 ? "#dc2626" : "#374151";
-
-              return (
-                <button
-                  key={c.ymd}
-                  type="button"
-                  onClick={() => {
-                    setSelectedDate(c.ymd);
-                    setTimeout(() => {
-                      listRef.current?.scrollIntoView({
-                        behavior: "smooth",
-                        block: "start",
-                      });
-                    }, 80);
-                  }}
-                  style={{
-                    ...calCell,
-                    ...(isSelected ? calCellSelected : null),
-                    ...(isPast ? calCellPast : null),
-                    opacity: c.inMonth ? 1 : 0.42,
-                  }}
-                >
-                  <div
-                    style={{
-                      ...dayNumText,
-                      color: c.inMonth ? (isPast ? "#9ca3af" : dayColor) : "#c5cbd3",
-                    }}
-                  >
-                    {c.dayNum}
-                  </div>
-
-                  <div
-                    style={{
-                      ...statusText,
-                      color: isPast
-                        ? "#94a3b8"
-                        : summary
-                          ? summary.tone === "decided"
-                            ? "#166534"
-                            : summary.tone === "open"
-                              ? "#1d4ed8"
-                              : "#4b5563"
-                          : "#9ca3af",
-                    }}
-                  >
-                    {summary ? daySummaryText(summary) : "-"}
-                  </div>
-
-                  <div
-                    style={{
-                      ...summaryCountText,
-                      color: isPast ? "#94a3b8" : summary ? "#065f46" : "#9ca3af",
-                    }}
-                  >
-                    {summary ? `${summary.count}件` : "-"}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          <div style={bottomRow}>
-            <Link href="/match/new" className="sh-btn sh-btn--primary">
+            <button
+              type="button"
+              className="sh-btn sh-btn--primary"
+              onClick={() => goToCreatePage(selectedYmd)}
+              disabled={loading || myTeams.length === 0}
+            >
               募集する
-            </Link>
-          </div>
-        </section>
-
-        <div ref={listRef} style={listWrap}>
-          <div style={listHead}>
-            <div style={listTitle}>
-              {selectedDate.replaceAll("-", "/")} の募集
-            </div>
-            <div style={listSub}>
-              {loading ? "読み込み中…" : `${selectedDateSlots.length}件`}
-            </div>
-          </div>
-
-          <div style={list}>
-            {loading ? (
-              <div style={empty}>読み込み中…</div>
-            ) : selectedDateSlots.length === 0 ? (
-              <div style={empty}>
-                この条件では募集がありません。
-                <br />
-                条件をゆるめて再度ご確認ください。
-              </div>
-            ) : (
-              selectedDateSlots.map((s) => (
-                <div key={s.id} style={card}>
-                  <div style={cardTop}>
-                    <div style={time}>{hhmm(s.start_time)}–{hhmm(s.end_time)}</div>
-                    <div style={badge}>{s.is_closed ? "締切" : "募集中"}</div>
-                  </div>
-
-                  <div style={meta}>
-                    📍 {s.area_text ?? s.area ?? "エリア未設定"}
-                  </div>
-
-                  <div style={meta}>
-                    🏷 {categoryLabel(s.category) || s.category || "カテゴリ未設定"}
-                  </div>
-
-                  <div style={meta}>💪 {s.strength_rank || "強さ未設定"}</div>
-
-                  <div style={meta}>
-                    🏟 {s.has_ground ? "グラウンドあり" : "グラウンド未設定"}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div ref={filterRef} style={filterCard}>
-          <div style={filterTop}>
-            <div style={filterTitleWrap}>
-              <div style={filterEyebrow}>HOME MATCH SEARCH</div>
-              <div style={filterTitle}>ホームでそのまま探す</div>
-              <div style={filterDesc}>
-                カレンダーと絞り込みをこのページに集約しました。
-              </div>
-            </div>
-
-            <div style={summaryBox}>
-              <div style={summaryBoxLabel}>該当件数</div>
-              <div style={summaryValue}>{loading ? "…" : totalFilteredCount}</div>
-            </div>
-          </div>
-
-          <div style={filterBox}>
-            <label style={field}>
-              <span style={fieldLabel}>エリア</span>
-              <input
-                value={areaKeyword}
-                onChange={(e) => setAreaKeyword(e.target.value)}
-                placeholder="例：世田谷 / 横浜 / 三宿"
-                className="sh-input"
-              />
-            </label>
-
-            <label style={field}>
-              <span style={fieldLabel}>カテゴリ</span>
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="sh-select"
-              >
-                <option value="">すべて</option>
-                <option value="KIDS">キッズ（未就学）</option>
-                <option value="G1">小学1年</option>
-                <option value="G2">小学2年</option>
-                <option value="G3">小学3年</option>
-                <option value="G4">小学4年</option>
-                <option value="G5">小学5年</option>
-                <option value="G6">小学6年</option>
-                <option value="U15">U-15</option>
-                <option value="U18">U-18</option>
-                <option value="U23">U-23</option>
-                <option value="OPEN">一般</option>
-                <option value="O40">シニアO40</option>
-                <option value="O50">シニアO50</option>
-              </select>
-            </label>
-
-            <label style={checkboxField}>
-              <input
-                type="checkbox"
-                checked={openOnly}
-                onChange={(e) => setOpenOnly(e.target.checked)}
-              />
-              <span>募集中のみ</span>
-            </label>
-          </div>
-
-          <div style={strengthWrap}>
-            <div style={fieldLabel}>強さ</div>
-            <div style={chipRow}>
-              {["SS", "S", "A", "B", "C"].map((rank) => {
-                const active = strengthFilter.includes(rank);
-                return (
-                  <button
-                    key={rank}
-                    type="button"
-                    onClick={() => toggleStrength(rank)}
-                    style={{
-                      ...chip,
-                      ...(active ? chipActive : {}),
-                    }}
-                  >
-                    {rank}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div style={advancedToggleRow}>
-            <button
-              type="button"
-              onClick={() => setShowAdvanced((prev) => !prev)}
-              style={ghostButton}
-            >
-              {showAdvanced ? "詳細条件を閉じる" : "もっと条件を指定"}
-            </button>
-          </div>
-
-          {showAdvanced ? (
-            <div style={advancedBox}>
-              <div style={advancedGrid}>
-                <label style={field}>
-                  <span style={fieldLabel}>曜日</span>
-                  <select
-                    value={weekdayFilter}
-                    onChange={(e) => setWeekdayFilter(e.target.value)}
-                    className="sh-select"
-                  >
-                    <option value="">すべて</option>
-                    <option value="sat">土曜</option>
-                    <option value="sun">日曜</option>
-                    <option value="holiday">土日</option>
-                    <option value="weekday">平日</option>
-                  </select>
-                </label>
-
-                <label style={field}>
-                  <span style={fieldLabel}>時間帯</span>
-                  <select
-                    value={timeZoneFilter}
-                    onChange={(e) => setTimeZoneFilter(e.target.value)}
-                    className="sh-select"
-                  >
-                    <option value="">すべて</option>
-                    <option value="morning">午前</option>
-                    <option value="afternoon">午後</option>
-                    <option value="evening">夕方</option>
-                  </select>
-                </label>
-
-                <label style={field}>
-                  <span style={fieldLabel}>グラウンド</span>
-                  <select
-                    value={groundFilter}
-                    onChange={(e) => setGroundFilter(e.target.value)}
-                    className="sh-select"
-                  >
-                    <option value="">すべて</option>
-                    <option value="yes">あり</option>
-                    <option value="no">なし</option>
-                  </select>
-                </label>
-
-                <label style={field}>
-                  <span style={fieldLabel}>キーワード</span>
-                  <input
-                    value={keyword}
-                    onChange={(e) => setKeyword(e.target.value)}
-                    placeholder="例：強度高め / 午前 / 世田谷"
-                    className="sh-input"
-                  />
-                </label>
-              </div>
-            </div>
-          ) : null}
-
-          <div style={actionRow}>
-            <button type="button" style={primaryButton} onClick={handleApplyFilters}>
-              この条件で表示
-            </button>
-
-            <button type="button" style={ghostButton} onClick={handleSaveFilters}>
-              条件を保存
-            </button>
-
-            <button type="button" style={ghostButton} onClick={handleClearFilters}>
-              クリア
             </button>
           </div>
         </div>
+
+        <DaySlotList
+          selectedYmd={selectedYmd}
+          slots={slotsOnSelectedDate as any}
+          venues={venues}
+          allTeams={allTeams as any}
+          myTeams={myTeams as any}
+          meId={meId}
+          requestsForMonth={requestsForMonth}
+          selectedSlotId={selectedSlotId}
+          slotStatusResolver={getSlotStatus}
+          onToggleDetail={(slotId) => {
+            const next = selectedSlotId === slotId ? "" : slotId;
+            setSelectedSlotId(next);
+            setRequestComment("");
+          }}
+          requestTeamId={requestTeamId}
+          onChangeRequestTeamId={setRequestTeamId}
+          requestComment={requestComment}
+          onChangeRequestComment={setRequestComment}
+          onRequestSlot={requestSlot}
+          onCancelMyRequest={cancelMyRequest}
+          selectedSlot={selectedSlot}
+          selectedHostTeam={selectedHostTeam as any}
+          selectedSlotRequests={selectedSlotRequests}
+          isMineSlot={isMineSlot}
+          onAccept={accept}
+          onReject={reject}
+          onOpenChatWithTeam={openDmAndGo}
+          onToggleClosed={toggleClosed}
+          loading={loading}
+        />
       </div>
+
+      <MatchFilterPanel
+        filterRef={filterRef}
+        loading={loading}
+        draftKeyword={draftKeyword}
+        setDraftKeyword={setDraftKeyword}
+        draftCategoryFilter={draftCategoryFilter}
+        setDraftCategoryFilter={setDraftCategoryFilter}
+        draftPrefectureFilter={draftPrefectureFilter}
+        setDraftPrefectureFilter={setDraftPrefectureFilter}
+        draftCityFilter={draftCityFilter}
+        setDraftCityFilter={setDraftCityFilter}
+        draftTownFilter={draftTownFilter}
+        setDraftTownFilter={setDraftTownFilter}
+        draftGroundFilter={draftGroundFilter}
+        setDraftGroundFilter={setDraftGroundFilter}
+        draftStrengthFilter={draftStrengthFilter}
+        setDraftStrengthFilter={setDraftStrengthFilter}
+        draftBikeFilter={draftBikeFilter}
+        setDraftBikeFilter={setDraftBikeFilter}
+        draftBikeCapacityMin={draftBikeCapacityMin}
+        setDraftBikeCapacityMin={setDraftBikeCapacityMin}
+        draftMemberCountMin={draftMemberCountMin}
+        setDraftMemberCountMin={setDraftMemberCountMin}
+        hasDraftChanges={hasDraftChanges}
+        onApply={handleApplyAndJump}
+        onReset={handleResetFilters}
+        onBackToList={scrollToDayList}
+        onOpenStrengthHelp={() => setShowStrengthHelp(true)}
+        strengthGuides={STRENGTH_GUIDES}
+      />
+
+      <MatchHelpModals
+        showStrengthHelp={showStrengthHelp}
+        showCalendarHelp={showCalendarHelp}
+        onCloseStrengthHelp={() => setShowStrengthHelp(false)}
+        onCloseCalendarHelp={() => setShowCalendarHelp(false)}
+        strengthGuides={STRENGTH_GUIDES}
+      />
     </section>
   );
 }
 
 const wrap: React.CSSProperties = {
   marginTop: 16,
-};
-
-const heroCard: React.CSSProperties = {
   display: "grid",
-  gap: 16,
-};
-
-const calendarCard: React.CSSProperties = {
-  padding: 18,
-  border: "1px solid #e5ece7",
-  borderRadius: 18,
-  background: "#fff",
-};
-
-const filterCard: React.CSSProperties = {
-  border: "1px solid #e5ece7",
-  borderRadius: 18,
-  background: "#fafcfb",
-  padding: 18,
-  display: "grid",
-  gap: 16,
-};
-
-const filterTop: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 12,
-  alignItems: "flex-start",
-  flexWrap: "wrap",
-};
-
-const filterTitleWrap: React.CSSProperties = {
-  display: "grid",
-  gap: 8,
-};
-
-const filterEyebrow: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 900,
-  color: "#1f5d30",
-  letterSpacing: "0.06em",
-};
-
-const filterTitle: React.CSSProperties = {
-  fontSize: 34,
-  fontWeight: 900,
-  color: "#16391f",
-  lineHeight: 1.2,
-};
-
-const filterDesc: React.CSSProperties = {
-  fontSize: 14,
-  color: "#5b6470",
-  lineHeight: 1.8,
+  gap: 14,
 };
 
 const summaryBox: React.CSSProperties = {
-  minWidth: 96,
-  border: "1px solid #e5ece7",
-  borderRadius: 14,
-  padding: "12px 14px",
-  background: "#f8fcf9",
-};
-
-const summaryBoxLabel: React.CSSProperties = {
-  fontSize: 11,
-  color: "#6b7280",
-  fontWeight: 700,
-};
-
-const summaryValue: React.CSSProperties = {
   marginTop: 4,
-  fontSize: 28,
-  fontWeight: 900,
-  color: "#145c2a",
-  lineHeight: 1,
-};
-
-const filterBox: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1.4fr 1fr auto",
-  gap: 10,
-  alignItems: "end",
-};
-
-const field: React.CSSProperties = {
-  display: "grid",
-  gap: 6,
-};
-
-const fieldLabel: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 800,
-  color: "#4b5563",
-};
-
-const checkboxField: React.CSSProperties = {
-  minHeight: 44,
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 8,
-  padding: "0 12px",
-  border: "1px solid #dbe5de",
-  borderRadius: 12,
-  background: "#fff",
-  fontSize: 14,
-  fontWeight: 800,
-  color: "#294234",
-};
-
-const strengthWrap: React.CSSProperties = {
-  display: "grid",
-  gap: 8,
-};
-
-const chipRow: React.CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 8,
-};
-
-const chip: React.CSSProperties = {
-  border: "1px solid #d8e5dc",
-  borderRadius: 999,
-  background: "#fff",
-  color: "#294234",
-  padding: "8px 14px",
-  fontSize: 15,
-  fontWeight: 900,
-  cursor: "pointer",
-};
-
-const chipActive: React.CSSProperties = {
-  border: "2px solid #145c2a",
-  background: "#f3fbf5",
-  color: "#145c2a",
-};
-
-const advancedToggleRow: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "flex-start",
-};
-
-const advancedBox: React.CSSProperties = {
-  border: "1px solid #e5ece7",
-  borderRadius: 16,
-  background: "#fff",
-  padding: 12,
-};
-
-const advancedGrid: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-  gap: 10,
-};
-
-const actionRow: React.CSSProperties = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
-};
-
-const primaryButton: React.CSSProperties = {
-  minHeight: 46,
-  borderRadius: 12,
-  border: "none",
-  background: "#145c2a",
-  color: "#fff",
-  padding: "0 16px",
-  fontWeight: 900,
-  fontSize: 15,
-  cursor: "pointer",
-};
-
-const ghostButton: React.CSSProperties = {
-  minHeight: 46,
-  borderRadius: 12,
-  border: "1px solid #d7e3da",
-  background: "#fff",
-  color: "#25342b",
-  padding: "0 16px",
-  fontWeight: 800,
-  fontSize: 15,
-  cursor: "pointer",
-};
-
-const topHead: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 10,
-  flexWrap: "wrap",
-};
-
-const topHeadLeft: React.CSSProperties = {
-  display: "grid",
-  gap: 8,
-};
-
-const topEyebrow: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 900,
-  letterSpacing: "0.08em",
-  color: "#1f5d30",
-};
-
-const topTitle: React.CSSProperties = {
-  fontSize: 34,
-  fontWeight: 900,
-  color: "#16391f",
-  lineHeight: 1.2,
-};
-
-const topHeadActions: React.CSSProperties = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-};
-
-const filterSummaryBox: React.CSSProperties = {
-  marginTop: 12,
   padding: "14px 16px",
-  borderRadius: 14,
-  border: "1px solid #dfeee3",
-  background: "linear-gradient(135deg,#f5fbf6 0%,#eef8f0 100%)",
-  display: "grid",
+  borderRadius: 16,
+  border: "1px solid #dce9df",
+  background: "#f7fbf8",
+};
+
+const summaryDate: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 18,
+  color: "#245233",
+};
+
+const summaryCount: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 14,
+  color: "#3b6a49",
+};
+
+const summaryActions: React.CSSProperties = {
+  marginTop: 12,
+  display: "flex",
   gap: 8,
-};
-
-const filterSummaryCaption: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 900,
-  color: "#5b6d61",
-  letterSpacing: "0.05em",
-};
-
-const filterSummaryTextStyle: React.CSSProperties = {
-  fontSize: 14,
-  fontWeight: 700,
-  color: "#23412c",
-  lineHeight: 1.7,
-};
-
-const openOnlyChip: React.CSSProperties = {
-  marginTop: 2,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  width: "fit-content",
-  minHeight: 32,
-  padding: "0 12px",
-  borderRadius: 999,
-  border: "1px solid #d8e5dc",
-  background: "#fff",
-  color: "#294234",
-  fontSize: 12,
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
-const openOnlyChipActive: React.CSSProperties = {
-  border: "1px solid #145c2a",
-  background: "#145c2a",
-  color: "#fff",
-};
-
-const headerRow: React.CSSProperties = {
-  marginTop: 14,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: 10,
-};
-
-const monthTitle: React.CSSProperties = {
-  fontWeight: 900,
-  fontSize: 22,
-  lineHeight: 1.2,
-  textAlign: "center",
-};
-
-const weekHeaderGrid: React.CSSProperties = {
-  marginTop: 14,
-  display: "grid",
-  gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-  gap: 6,
-};
-
-const weekLabel: React.CSSProperties = {
-  textAlign: "center",
-  fontWeight: 800,
-  fontSize: 12,
-  minWidth: 0,
-};
-
-const calendarGrid: React.CSSProperties = {
-  marginTop: 6,
-  display: "grid",
-  gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-  gap: 6,
-};
-
-const calCell: React.CSSProperties = {
-  minWidth: 0,
-  width: "100%",
-  height: 68,
-  padding: "6px 6px 5px",
-  borderRadius: 12,
-  border: "1px solid #e5e7eb",
-  background: "#ffffff",
-  cursor: "pointer",
-  textAlign: "left",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "flex-start",
-  justifyContent: "flex-start",
-  gap: 2,
-  overflow: "hidden",
-};
-
-const calCellPast: React.CSSProperties = {
-  background: "#f8fafc",
-};
-
-const calCellSelected: React.CSSProperties = {
-  border: "2px solid #86efac",
-  background: "#f0fdf4",
-  boxShadow: "0 0 0 3px rgba(134,239,172,0.18)",
-};
-
-const dayNumText: React.CSSProperties = {
-  fontWeight: 900,
-  fontSize: 14,
-  lineHeight: 1,
-};
-
-const statusText: React.CSSProperties = {
-  width: "100%",
-  marginTop: 2,
-  fontSize: 11,
-  fontWeight: 900,
-  lineHeight: 1.1,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-};
-
-const summaryCountText: React.CSSProperties = {
-  width: "100%",
-  marginTop: 0,
-  fontSize: 11,
-  fontWeight: 900,
-  lineHeight: 1.1,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-};
-
-const bottomRow: React.CSSProperties = {
-  display: "flex",
-  gap: 10,
   flexWrap: "wrap",
-  marginTop: 14,
-};
-
-const listWrap: React.CSSProperties = {
-  border: "1px solid #eee",
-  borderRadius: 18,
-  background: "#fff",
-  padding: 18,
-  display: "grid",
-  gap: 10,
-};
-
-const listHead: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: 12,
-  alignItems: "center",
-  flexWrap: "wrap",
-};
-
-const listTitle: React.CSSProperties = {
-  fontSize: 20,
-  fontWeight: 900,
-  color: "#16391f",
-};
-
-const listSub: React.CSSProperties = {
-  fontSize: 14,
-  color: "#6b7280",
-};
-
-const list: React.CSSProperties = {
-  display: "grid",
-  gap: 8,
-};
-
-const card: React.CSSProperties = {
-  padding: 14,
-  border: "1px solid #edf1ee",
-  borderRadius: 14,
-  background: "#fafcfb",
-};
-
-const cardTop: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 10,
-  flexWrap: "wrap",
-};
-
-const time: React.CSSProperties = {
-  fontWeight: 900,
-  fontSize: 16,
-  color: "#16391f",
-};
-
-const badge: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 24,
-  padding: "0 8px",
-  borderRadius: 999,
-  background: "#dbeafe",
-  color: "#1d4ed8",
-  fontSize: 11,
-  fontWeight: 900,
-};
-
-const meta: React.CSSProperties = {
-  marginTop: 6,
-  fontSize: 13,
-  color: "#5b6470",
-  lineHeight: 1.6,
-};
-
-const empty: React.CSSProperties = {
-  padding: 18,
-  textAlign: "center",
-  color: "#666",
-  border: "1px solid #edf1ee",
-  borderRadius: 12,
-  background: "#fafcfb",
-  lineHeight: 1.8,
 };

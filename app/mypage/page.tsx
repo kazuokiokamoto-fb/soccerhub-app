@@ -656,8 +656,8 @@ export default function MyPage() {
             ...(toast.type === "success"
               ? toastSuccess
               : toast.type === "error"
-              ? toastError
-              : toastInfo),
+                ? toastError
+                : toastInfo),
           }}
         >
           <div style={{ whiteSpace: "pre-wrap" }}>{toast.text}</div>
@@ -763,7 +763,7 @@ export default function MyPage() {
                     {nextMatch.area_text ?? nextMatch.area ?? "エリア未設定"}
                   </div>
                   <div style={nextMatchMeta}>
-                    {nextMatch.category ?? "カテゴリ未設定"}
+                    {categoryLabel(nextMatch.category) || nextMatch.category || "カテゴリ未設定"}
                   </div>
                 </Link>
               </>
@@ -771,8 +771,8 @@ export default function MyPage() {
               <div style={emptyActionBox}>
                 <div style={mutedText}>まだ試合は成立していません</div>
                 <div style={emptyActionRow}>
-                  <Link href="/match" className="sh-btn">
-                    試合を探す
+                  <Link href="/" className="sh-btn">
+                    ホームで探す
                   </Link>
                   <Link href="/match/new" className="sh-btn sh-btn--primary">
                     募集する
