@@ -38,13 +38,8 @@ export function Calendar(props: {
   disableCreate?: boolean;
 
   filterSummaryText?: string;
-  onOpenFilters?: () => void;
-  onShowList?: () => void;
+  selectedDateSummaryText?: string;
 
-  openOnly?: boolean;
-  onToggleOpenOnly?: () => void;
-
-  bandText?: string;
   titleText?: string;
 }) {
   const {
@@ -59,11 +54,7 @@ export function Calendar(props: {
     onCreateForDate,
     disableCreate,
     filterSummaryText,
-    onOpenFilters,
-    onShowList,
-    openOnly = false,
-    onToggleOpenOnly,
-    bandText = "日程検索",
+    selectedDateSummaryText,
     titleText = "試合日で探す",
   } = props;
 
@@ -73,32 +64,7 @@ export function Calendar(props: {
     <section style={{ ...card, marginTop: 14 }}>
       <div style={topHead}>
         <div style={topHeadLeft}>
-          <div style={sectionBand}>{bandText}</div>
           <div style={topTitle}>{titleText}</div>
-        </div>
-
-        <div style={topHeadActions}>
-          {onOpenFilters ? (
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={onOpenFilters}
-              disabled={loading}
-            >
-              条件変更
-            </button>
-          ) : null}
-
-          {onShowList ? (
-            <button
-              type="button"
-              className="sh-btn sh-btn--primary"
-              onClick={onShowList}
-              disabled={loading}
-            >
-              募集表示
-            </button>
-          ) : null}
         </div>
       </div>
 
@@ -109,18 +75,8 @@ export function Calendar(props: {
           {filterSummaryText?.trim() || "すべての条件で表示中"}
         </div>
 
-        {onToggleOpenOnly ? (
-          <button
-            type="button"
-            onClick={onToggleOpenOnly}
-            style={{
-              ...openOnlyChip,
-              ...(openOnly ? openOnlyChipActive : null),
-            }}
-            aria-pressed={openOnly}
-          >
-            {openOnly ? "募集中のみ表示中" : "募集中のみ表示"}
-          </button>
+        {selectedDateSummaryText ? (
+          <div style={selectedDateSummaryStyle}>{selectedDateSummaryText}</div>
         ) : null}
       </div>
 
@@ -241,6 +197,8 @@ const card: React.CSSProperties = {
   border: "1px solid #eee",
   borderRadius: 16,
   background: "#fff",
+  position: "relative",
+  zIndex: 1,
 };
 
 const topHead: React.CSSProperties = {
@@ -249,6 +207,8 @@ const topHead: React.CSSProperties = {
   alignItems: "flex-start",
   gap: 10,
   flexWrap: "wrap",
+  position: "relative",
+  zIndex: 2,
 };
 
 const topHeadLeft: React.CSSProperties = {
@@ -256,33 +216,11 @@ const topHeadLeft: React.CSSProperties = {
   gap: 8,
 };
 
-const sectionBand: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  width: "fit-content",
-  minHeight: 28,
-  padding: "0 10px",
-  borderRadius: 999,
-  background: "#e8f5ec",
-  color: "#145c2a",
-  border: "1px solid #cfe8d7",
-  fontSize: 11,
-  fontWeight: 900,
-  letterSpacing: "0.06em",
-};
-
 const topTitle: React.CSSProperties = {
   fontSize: 22,
   fontWeight: 900,
   color: "#16391f",
   lineHeight: 1.3,
-};
-
-const topHeadActions: React.CSSProperties = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
 };
 
 const filterSummaryBox: React.CSSProperties = {
@@ -309,27 +247,12 @@ const filterSummaryTextStyle: React.CSSProperties = {
   lineHeight: 1.6,
 };
 
-const openOnlyChip: React.CSSProperties = {
+const selectedDateSummaryStyle: React.CSSProperties = {
   marginTop: 2,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  width: "fit-content",
-  minHeight: 30,
-  padding: "0 12px",
-  borderRadius: 999,
-  border: "1px solid #d8e5dc",
-  background: "#fff",
-  color: "#294234",
-  fontSize: 12,
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
-const openOnlyChipActive: React.CSSProperties = {
-  border: "1px solid #145c2a",
-  background: "#145c2a",
-  color: "#fff",
+  fontSize: 15,
+  fontWeight: 900,
+  color: "#14532d",
+  lineHeight: 1.5,
 };
 
 const headerRow: React.CSSProperties = {

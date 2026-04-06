@@ -301,40 +301,6 @@ function teamMatchesFilters(
   return true;
 }
 
-function buildTeamSearchQuery(filters: {
-  keyword: string;
-  categoryFilter: string[];
-  prefectureFilter: string;
-  cityFilter: string;
-  townFilter: string;
-  groundFilter: "all" | "あり" | "なし";
-  strengthFilter: StrengthRank[];
-  bikeFilter: "all" | "あり" | "なし" | "不明";
-  bikeCapacityMin: string;
-  memberCountMin: string;
-}) {
-  const qs = new URLSearchParams();
-
-  if (filters.keyword) qs.set("keyword", filters.keyword);
-  if (filters.prefectureFilter) qs.set("prefecture", filters.prefectureFilter);
-  if (filters.cityFilter) qs.set("city", filters.cityFilter);
-  if (filters.townFilter) qs.set("town", filters.townFilter);
-  if (filters.groundFilter !== "all") qs.set("ground", filters.groundFilter);
-  if (filters.bikeFilter !== "all") qs.set("bike", filters.bikeFilter);
-  if (filters.bikeCapacityMin) qs.set("bikeCapacityMin", filters.bikeCapacityMin);
-  if (filters.memberCountMin) qs.set("memberCountMin", filters.memberCountMin);
-
-  if (filters.categoryFilter.length > 0) {
-    qs.set("categories", filters.categoryFilter.join(","));
-  }
-
-  if (filters.strengthFilter.length > 0) {
-    qs.set("strengths", filters.strengthFilter.join(","));
-  }
-
-  return qs.toString();
-}
-
 export default function HomeCalendar() {
   const { user, loading: authLoading } = useAuth();
   const authUserId = user?.id ?? "";
@@ -353,6 +319,8 @@ export default function HomeCalendar() {
 
   const [panelMode, setPanelMode] = useState<PanelMode>("none");
 
+  const homeTopRef = useRef<HTMLDivElement | null>(null);
+  const calendarRef = useRef<HTMLDivElement | null>(null);
   const dayListRef = useRef<HTMLDivElement | null>(null);
   const filterRef = useRef<HTMLElement | null>(null);
 
@@ -426,13 +394,6 @@ export default function HomeCalendar() {
       matchesSlotFilters(s, teamMap as any, draftFilters)
     );
   }, [slotsInMonth, teamMap, draftFilters]);
-
-  const appliedFilteredTeams = useMemo(() => {
-    return allTeams.filter((team: any) => {
-      if (myTeamIds.includes(team.id)) return false;
-      return teamMatchesFilters(team, appliedFilters);
-    });
-  }, [allTeams, myTeamIds, appliedFilters]);
 
   const draftFilteredTeams = useMemo(() => {
     return allTeams.filter((team: any) => {
@@ -565,6 +526,15 @@ export default function HomeCalendar() {
     }
   }, [filteredSlotsInMonth, slotsOnSelectedDate]);
 
+  const scrollToCalendar = () => {
+    setTimeout(() => {
+      calendarRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
+  };
+
   const scrollToDayList = () => {
     setTimeout(() => {
       dayListRef.current?.scrollIntoView({
@@ -588,34 +558,56 @@ export default function HomeCalendar() {
     scrollToFilter();
   };
 
-  const closeFilterPanel = () => {
+  const closePanel = () => {
     setPanelMode("none");
-    scrollToDayList();
+    setTimeout(() => {
+      homeTopRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
   };
 
-  const handleApplyToCalendar = () => {
+  const handleApplyFiltersToCalendar = () => {
     applyDraftToApplied();
     setSelectedSlotId("");
     setRequestComment("");
     setPanelMode("none");
-    scrollToDayList();
+    scrollToCalendar();
   };
 
-  const handleOpenTeamList = () => {
-    applyDraftToApplied();
-    setSelectedSlotId("");
-    setRequestComment("");
-
-    const query = buildTeamSearchQuery(draftFilters);
-    const url = query ? `/teams/search?${query}` : "/teams/search";
-
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
-
-  const handleResetFilters = () => {
+  const handleResetTeamFilters = () => {
     clearAllFilters();
     setSelectedSlotId("");
     setRequestComment("");
+  };
+
+  const openTeamListWindow = () => {
+    const qs = new URLSearchParams();
+
+    if (draftKeyword) qs.set("keyword", draftKeyword);
+    if (draftPrefectureFilter) qs.set("prefecture", draftPrefectureFilter);
+    if (draftCityFilter) qs.set("city", draftCityFilter);
+    if (draftTownFilter) qs.set("town", draftTownFilter);
+    if (draftGroundFilter !== "all") qs.set("ground", draftGroundFilter);
+    if (draftBikeFilter !== "all") qs.set("bike", draftBikeFilter);
+    if (draftBikeCapacityMin) qs.set("bikeCapacityMin", draftBikeCapacityMin);
+    if (draftMemberCountMin) qs.set("memberCountMin", draftMemberCountMin);
+    if (draftCategoryFilter.length > 0) {
+      qs.set("categories", draftCategoryFilter.join(","));
+    }
+    if (draftStrengthFilter.length > 0) {
+      qs.set("strengths", draftStrengthFilter.join(","));
+    }
+
+    const query = qs.toString();
+    const url = query ? `/teams/search?${query}` : "/teams/search";
+
+    window.open(
+      url,
+      "team_list_window",
+      "popup=yes,width=1200,height=900,left=80,top=60,resizable=yes,scrollbars=yes"
+    );
   };
 
   const goToCreatePage = (ymd: string) => {
@@ -1050,17 +1042,20 @@ export default function HomeCalendar() {
     return `${filterSummaryText} / ${slotsOnSelectedDate.length}件`;
   }, [filterSummaryText, slotsOnSelectedDate.length]);
 
+  const selectedDateSummaryText = useMemo(() => {
+    return `${selectedYmd} / 募集件数 ${slotsOnSelectedDate.length}件`;
+  }, [selectedYmd, slotsOnSelectedDate.length]);
+
   const teamSummaryText = useMemo(() => {
-    return `${filterSummaryText} / ${appliedFilteredTeams.length}チーム`;
-  }, [filterSummaryText, appliedFilteredTeams.length]);
+    return `${filterSummaryText} / ${draftFilteredTeams.length}チーム`;
+  }, [filterSummaryText, draftFilteredTeams.length]);
 
   return (
-    <section style={wrap}>
+    <section style={wrap} ref={homeTopRef}>
       <section style={summaryBox}>
         <div style={summaryHead}>
           <div>
-            <div style={summaryBand}>相手を探す</div>
-            <div style={summaryTitle}>チーム条件</div>
+            <div style={summaryTitle}>チーム条件で探す</div>
           </div>
 
           <div style={summaryButtonRow}>
@@ -1076,7 +1071,7 @@ export default function HomeCalendar() {
             <button
               type="button"
               className="sh-btn sh-btn--primary"
-              onClick={handleOpenTeamList}
+              onClick={openTeamListWindow}
               disabled={loading}
             >
               チーム一覧表示
@@ -1087,49 +1082,44 @@ export default function HomeCalendar() {
         <div style={summaryCount}>表示条件：{teamSummaryText}</div>
       </section>
 
-      <Calendar
-        monthKey={monthKey}
-        loading={loading}
-        cells={calendarCells}
-        selectedYmd={selectedYmd}
-        countByDate={countByDate}
-        dayStatusSummaryByDate={dayStatusSummaryByDate}
-        onSelectDate={(ymd) => {
-          setSelectedYmd(ymd);
-          setSelectedSlotId("");
-          setRequestComment("");
-          scrollToDayList();
-        }}
-        onPrevMonth={() => {
-          const nextMonth = addMonths(monthDate, -1);
-          setMonthDate(nextMonth);
-          setSelectedYmd(firstDayYmdOfMonth(nextMonth));
-          setSelectedSlotId("");
-          setRequestComment("");
-        }}
-        onNextMonth={() => {
-          const nextMonth = addMonths(monthDate, 1);
-          setMonthDate(nextMonth);
-          setSelectedYmd(firstDayYmdOfMonth(nextMonth));
-          setSelectedSlotId("");
-          setRequestComment("");
-        }}
-        onCreateForDate={(ymd) => goToCreatePage(ymd)}
-        disableCreate={myTeams.length === 0}
-        filterSummaryText={matchSummaryText}
-        bandText="日程"
-        titleText="試合日で探す"
-      />
+      <div ref={calendarRef}>
+        <Calendar
+          monthKey={monthKey}
+          loading={loading}
+          cells={calendarCells}
+          selectedYmd={selectedYmd}
+          countByDate={countByDate}
+          dayStatusSummaryByDate={dayStatusSummaryByDate}
+          onSelectDate={(ymd) => {
+            setSelectedYmd(ymd);
+            setSelectedSlotId("");
+            setRequestComment("");
+            scrollToDayList();
+          }}
+          onPrevMonth={() => {
+            const nextMonth = addMonths(monthDate, -1);
+            setMonthDate(nextMonth);
+            setSelectedYmd(firstDayYmdOfMonth(nextMonth));
+            setSelectedSlotId("");
+            setRequestComment("");
+          }}
+          onNextMonth={() => {
+            const nextMonth = addMonths(monthDate, 1);
+            setMonthDate(nextMonth);
+            setSelectedYmd(firstDayYmdOfMonth(nextMonth));
+            setSelectedSlotId("");
+            setRequestComment("");
+          }}
+          onCreateForDate={(ymd) => goToCreatePage(ymd)}
+          disableCreate={myTeams.length === 0}
+          filterSummaryText={matchSummaryText}
+          selectedDateSummaryText={selectedDateSummaryText}
+          titleText="試合日で探す"
+        />
+      </div>
 
       <div ref={dayListRef}>
-        <section style={listSummaryBox}>
-          <div style={listSummaryTop}>
-            <div style={summaryDate}>📅 {selectedYmd}</div>
-            <div style={summaryCount}>
-              募集件数：{slotsOnSelectedDate.length}件
-            </div>
-          </div>
-
+        <section style={calendarActionBox}>
           <div style={summaryActions}>
             <button
               type="button"
@@ -1208,18 +1198,15 @@ export default function HomeCalendar() {
           draftMemberCountMin={draftMemberCountMin}
           setDraftMemberCountMin={setDraftMemberCountMin}
           hasDraftChanges={hasDraftChanges}
-          onApply={handleApplyToCalendar}
-          onReset={handleResetFilters}
-          onBackToList={closeFilterPanel}
+          onApply={handleApplyFiltersToCalendar}
+          onReset={handleResetTeamFilters}
+          onBackToList={closePanel}
           onOpenStrengthHelp={() => setShowStrengthHelp(true)}
           strengthGuides={STRENGTH_GUIDES}
-          bandText="条件検索"
           titleText="相手を探す"
           descriptionText="レベル・エリア・人数感などから相手チームを探せます。"
           liveCountLabel="現在のヒット件数"
           liveCountText={`${draftFilteredTeams.length}チーム / ${draftFilteredSlotsInMonth.length}件`}
-          onApplyToCalendar={handleApplyToCalendar}
-          onOpenTeamList={handleOpenTeamList}
         />
       ) : null}
 
@@ -1256,33 +1243,11 @@ const summaryHead: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
-const summaryBand: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 28,
-  padding: "0 10px",
-  borderRadius: 999,
-  background: "#e8f5ec",
-  color: "#145c2a",
-  border: "1px solid #cfe8d7",
-  fontSize: 11,
-  fontWeight: 900,
-  letterSpacing: "0.06em",
-};
-
 const summaryTitle: React.CSSProperties = {
-  marginTop: 8,
   fontWeight: 900,
   fontSize: 22,
   color: "#16391f",
   lineHeight: 1.3,
-};
-
-const summaryDate: React.CSSProperties = {
-  fontWeight: 900,
-  fontSize: 18,
-  color: "#245233",
 };
 
 const summaryCount: React.CSSProperties = {
@@ -1298,17 +1263,8 @@ const summaryButtonRow: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
-const listSummaryBox: React.CSSProperties = {
+const calendarActionBox: React.CSSProperties = {
   marginTop: 4,
-  padding: "14px 16px",
-  borderRadius: 16,
-  border: "1px solid #dce9df",
-  background: "#f7fbf8",
-};
-
-const listSummaryTop: React.CSSProperties = {
-  display: "grid",
-  gap: 4,
 };
 
 const summaryActions: React.CSSProperties = {
