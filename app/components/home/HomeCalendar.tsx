@@ -603,11 +603,15 @@ export default function HomeCalendar() {
     const query = qs.toString();
     const url = query ? `/teams/search?${query}` : "/teams/search";
 
-    window.open(
+    const win = window.open(
       url,
       "team_list_window",
-      "popup=yes,width=1200,height=900,left=80,top=60,resizable=yes,scrollbars=yes"
+      "width=1200,height=900,left=80,top=60,resizable=yes,scrollbars=yes"
     );
+
+    if (win) {
+      win.focus();
+    }
   };
 
   const goToCreatePage = (ymd: string) => {
@@ -1038,10 +1042,6 @@ export default function HomeCalendar() {
     return text || "すべての条件で表示中";
   }, [appliedFilters]);
 
-  const matchSummaryText = useMemo(() => {
-    return `${filterSummaryText} / ${slotsOnSelectedDate.length}件`;
-  }, [filterSummaryText, slotsOnSelectedDate.length]);
-
   const selectedDateSummaryText = useMemo(() => {
     return `${selectedYmd} / 募集件数 ${slotsOnSelectedDate.length}件`;
   }, [selectedYmd, slotsOnSelectedDate.length]);
@@ -1111,35 +1111,14 @@ export default function HomeCalendar() {
             setRequestComment("");
           }}
           onCreateForDate={(ymd) => goToCreatePage(ymd)}
+          onOpenCalendarHelp={() => setShowCalendarHelp(true)}
           disableCreate={myTeams.length === 0}
-          filterSummaryText={matchSummaryText}
           selectedDateSummaryText={selectedDateSummaryText}
           titleText="試合日で探す"
         />
       </div>
 
       <div ref={dayListRef}>
-        <section style={calendarActionBox}>
-          <div style={summaryActions}>
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={() => setShowCalendarHelp(true)}
-            >
-              決・募・他 の見方
-            </button>
-
-            <button
-              type="button"
-              className="sh-btn sh-btn--primary"
-              onClick={() => goToCreatePage(selectedYmd)}
-              disabled={loading || myTeams.length === 0}
-            >
-              募集する
-            </button>
-          </div>
-        </section>
-
         <DaySlotList
           selectedYmd={selectedYmd}
           slots={slotsOnSelectedDate as any}
@@ -1258,17 +1237,6 @@ const summaryCount: React.CSSProperties = {
 };
 
 const summaryButtonRow: React.CSSProperties = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-};
-
-const calendarActionBox: React.CSSProperties = {
-  marginTop: 4,
-};
-
-const summaryActions: React.CSSProperties = {
-  marginTop: 12,
   display: "flex",
   gap: 8,
   flexWrap: "wrap",

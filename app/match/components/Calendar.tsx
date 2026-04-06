@@ -37,9 +37,10 @@ export function Calendar(props: {
   onCreateForDate: (ymd: string) => void;
   disableCreate?: boolean;
 
-  filterSummaryText?: string;
   selectedDateSummaryText?: string;
+  onOpenCalendarHelp?: () => void;
 
+  bandText?: string;
   titleText?: string;
 }) {
   const {
@@ -53,8 +54,9 @@ export function Calendar(props: {
     onNextMonth,
     onCreateForDate,
     disableCreate,
-    filterSummaryText,
     selectedDateSummaryText,
+    onOpenCalendarHelp,
+    bandText = "日程",
     titleText = "試合日で探す",
   } = props;
 
@@ -68,16 +70,32 @@ export function Calendar(props: {
         </div>
       </div>
 
-      <div style={filterSummaryBox}>
-        <div style={filterSummaryLabel}>表示条件</div>
-
-        <div style={filterSummaryTextStyle}>
-          {filterSummaryText?.trim() || "すべての条件で表示中"}
+      <div style={summaryBar}>
+        <div style={summaryLeft}>
+          {selectedDateSummaryText?.trim() || "日付を選択してください"}
         </div>
 
-        {selectedDateSummaryText ? (
-          <div style={selectedDateSummaryStyle}>{selectedDateSummaryText}</div>
-        ) : null}
+        <div style={summaryRight}>
+          {onOpenCalendarHelp ? (
+            <button
+              type="button"
+              className="sh-btn"
+              onClick={onOpenCalendarHelp}
+              disabled={loading}
+            >
+              決・募・他 の見方
+            </button>
+          ) : null}
+
+          <button
+            type="button"
+            className="sh-btn sh-btn--primary"
+            onClick={() => onCreateForDate(selectedYmd)}
+            disabled={loading || disableCreate}
+          >
+            募集する
+          </button>
+        </div>
       </div>
 
       <div style={headerRow}>
@@ -177,17 +195,6 @@ export function Calendar(props: {
           );
         })}
       </div>
-
-      <div style={bottomRow}>
-        <button
-          type="button"
-          className="sh-btn sh-btn--primary"
-          onClick={() => onCreateForDate(selectedYmd)}
-          disabled={loading || disableCreate}
-        >
-          募集する
-        </button>
-      </div>
     </section>
   );
 }
@@ -197,8 +204,6 @@ const card: React.CSSProperties = {
   border: "1px solid #eee",
   borderRadius: 16,
   background: "#fff",
-  position: "relative",
-  zIndex: 1,
 };
 
 const topHead: React.CSSProperties = {
@@ -207,8 +212,6 @@ const topHead: React.CSSProperties = {
   alignItems: "flex-start",
   gap: 10,
   flexWrap: "wrap",
-  position: "relative",
-  zIndex: 2,
 };
 
 const topHeadLeft: React.CSSProperties = {
@@ -223,36 +226,31 @@ const topTitle: React.CSSProperties = {
   lineHeight: 1.3,
 };
 
-const filterSummaryBox: React.CSSProperties = {
-  marginTop: 12,
-  padding: "12px 14px",
-  borderRadius: 12,
-  border: "1px solid #dfeee3",
-  background: "linear-gradient(135deg,#f5fbf6 0%,#eef8f0 100%)",
-  display: "grid",
-  gap: 6,
+const summaryBar: React.CSSProperties = {
+  marginTop: 14,
+  marginBottom: 12,
+  padding: "14px 16px",
+  borderRadius: 14,
+  background: "#eef6f0",
+  border: "1px solid #dce9df",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
 };
 
-const filterSummaryLabel: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 900,
-  color: "#5b6d61",
-  letterSpacing: "0.05em",
+const summaryLeft: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 800,
+  color: "#2f5d3a",
+  lineHeight: 1.7,
 };
 
-const filterSummaryTextStyle: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 700,
-  color: "#23412c",
-  lineHeight: 1.6,
-};
-
-const selectedDateSummaryStyle: React.CSSProperties = {
-  marginTop: 2,
-  fontSize: 15,
-  fontWeight: 900,
-  color: "#14532d",
-  lineHeight: 1.5,
+const summaryRight: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
 };
 
 const headerRow: React.CSSProperties = {
@@ -294,8 +292,8 @@ const calendarGrid: React.CSSProperties = {
 const calCell: React.CSSProperties = {
   minWidth: 0,
   width: "100%",
-  height: 57,
-  padding: "5px 5px 4px",
+  height: 82,
+  padding: "7px 6px 5px",
   borderRadius: 12,
   border: "1px solid #e5e7eb",
   background: "#ffffff",
@@ -305,7 +303,7 @@ const calCell: React.CSSProperties = {
   flexDirection: "column",
   alignItems: "flex-start",
   justifyContent: "flex-start",
-  gap: 1,
+  gap: 2,
   overflow: "hidden",
 };
 
@@ -327,11 +325,11 @@ const dayNumText: React.CSSProperties = {
 
 const statusText: React.CSSProperties = {
   width: "100%",
-  marginTop: 1,
+  marginTop: 4,
   fontSize: 10,
   fontWeight: 900,
-  lineHeight: 1.05,
-  whiteSpace: "nowrap",
+  lineHeight: 1.15,
+  whiteSpace: "normal",
   overflow: "hidden",
   textOverflow: "ellipsis",
 };
@@ -354,18 +352,11 @@ const statusTextEmpty: React.CSSProperties = {
 
 const summaryCountText: React.CSSProperties = {
   width: "100%",
-  marginTop: 0,
+  marginTop: 1,
   fontSize: 11,
   fontWeight: 900,
-  lineHeight: 1.05,
-  whiteSpace: "nowrap",
+  lineHeight: 1.15,
+  whiteSpace: "normal",
   overflow: "hidden",
   textOverflow: "ellipsis",
-};
-
-const bottomRow: React.CSSProperties = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
-  marginTop: 12,
 };
