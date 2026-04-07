@@ -399,6 +399,13 @@ export default function HomeCalendar() {
     );
   }, [slotsInMonth, teamMap, draftFilters]);
 
+  const appliedFilteredTeams = useMemo(() => {
+    return allTeams.filter((team: any) => {
+      if (myTeamIds.includes(team.id)) return false;
+      return teamMatchesFilters(team, appliedFilters);
+    });
+  }, [allTeams, myTeamIds, appliedFilters]);
+
   const draftFilteredTeams = useMemo(() => {
     return allTeams.filter((team: any) => {
       if (myTeamIds.includes(team.id)) return false;
@@ -1045,16 +1052,22 @@ export default function HomeCalendar() {
     return `${selectedYmd} / 募集件数 ${slotsOnSelectedDate.length}件`;
   }, [selectedYmd, slotsOnSelectedDate.length]);
 
-  const teamSummaryText = useMemo(() => {
-    return `${filterSummaryText} / ${draftFilteredTeams.length}チーム`;
-  }, [filterSummaryText, draftFilteredTeams.length]);
+  const topHitText = useMemo(() => {
+    return `🔥 ${appliedFilteredTeams.length}チーム / ${filteredSlotsInMonth.length}試合ヒット`;
+  }, [appliedFilteredTeams.length, filteredSlotsInMonth.length]);
+
+  const topConditionText = useMemo(() => {
+    return filterSummaryText;
+  }, [filterSummaryText]);
 
   return (
     <section style={wrap} ref={homeTopRef}>
       <section style={summaryBox}>
         <div style={summaryHead}>
-          <div>
+          <div style={summaryTextWrap}>
             <div style={summaryTitle}>チーム条件で探す</div>
+            <div style={hitCountText}>{topHitText}</div>
+            <div style={summaryCount}>表示条件：{topConditionText}</div>
           </div>
 
           <div style={summaryButtonRow}>
@@ -1077,8 +1090,6 @@ export default function HomeCalendar() {
             </button>
           </div>
         </div>
-
-        <div style={summaryCount}>表示条件：{teamSummaryText}</div>
       </section>
 
       <div ref={calendarRef}>
@@ -1223,6 +1234,11 @@ const summaryHead: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
+const summaryTextWrap: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+};
+
 const summaryTitle: React.CSSProperties = {
   fontWeight: 900,
   fontSize: 22,
@@ -1230,8 +1246,14 @@ const summaryTitle: React.CSSProperties = {
   lineHeight: 1.3,
 };
 
+const hitCountText: React.CSSProperties = {
+  fontSize: 24,
+  fontWeight: 900,
+  color: "#14532d",
+  lineHeight: 1.2,
+};
+
 const summaryCount: React.CSSProperties = {
-  marginTop: 6,
   fontSize: 14,
   color: "#3b6a49",
   lineHeight: 1.7,

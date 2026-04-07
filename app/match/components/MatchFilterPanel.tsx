@@ -7,7 +7,6 @@ import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
 import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 
 import {
-  filterWrap,
   filterHeaderRow,
   filterTitle,
   label,
@@ -117,12 +116,15 @@ export function MatchFilterPanel({
   liveCountText = "0件",
 }: Props) {
   return (
-    <section ref={filterRef} style={overlay}>
+    <section ref={filterRef} style={overlay} aria-modal="true" role="dialog">
       <div style={modal}>
         <div style={stickyTopBox}>
           <div style={stickyCountBox}>
             <div style={stickyCountLabel}>{liveCountLabel}</div>
             <div style={stickyCountValue}>{liveCountText}</div>
+            <div style={stickyCountSub}>
+              条件を変えるたびに、この件数がリアルタイムで変わります
+            </div>
           </div>
 
           <div style={stickyTopActions}>
@@ -133,7 +135,7 @@ export function MatchFilterPanel({
                 onClick={onApplyToCalendar}
                 disabled={loading}
               >
-                カレンダーに反映
+                カレンダーで見る
               </button>
             ) : null}
 
@@ -144,14 +146,14 @@ export function MatchFilterPanel({
                 onClick={onOpenTeamList}
                 disabled={loading}
               >
-                チーム一覧表示
+                チーム一覧で見る
               </button>
             ) : null}
           </div>
         </div>
 
         <div style={modalBody}>
-          <div style={{ display: "grid", gap: 12 }}>
+          <div style={panelInner}>
             <div style={sectionLeadWrap}>
               <div style={sectionBand}>{bandText}</div>
               <div style={sectionLeadTitle}>{titleText}</div>
@@ -427,11 +429,11 @@ const stickyTopBox: React.CSSProperties = {
 const stickyCountBox: React.CSSProperties = {
   display: "grid",
   gap: 4,
-  padding: "12px 14px",
-  borderRadius: 14,
-  border: "1px solid #bbf7d0",
-  background: "#f0fdf4",
-  boxShadow: "0 8px 20px rgba(20,92,42,0.08)",
+  padding: "14px 16px",
+  borderRadius: 16,
+  border: "1px solid #86efac",
+  background: "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)",
+  boxShadow: "0 8px 20px rgba(20,92,42,0.10)",
 };
 
 const stickyTopActions: React.CSSProperties = {
@@ -445,6 +447,11 @@ const modalBody: React.CSSProperties = {
   padding: 16,
 };
 
+const panelInner: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+};
+
 const stickyCountLabel: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 900,
@@ -453,10 +460,16 @@ const stickyCountLabel: React.CSSProperties = {
 };
 
 const stickyCountValue: React.CSSProperties = {
-  fontSize: 22,
+  fontSize: 28,
   fontWeight: 900,
   color: "#14532d",
-  lineHeight: 1.2,
+  lineHeight: 1.15,
+};
+
+const stickyCountSub: React.CSSProperties = {
+  fontSize: 12,
+  color: "#3f5f47",
+  lineHeight: 1.6,
 };
 
 const sectionLeadWrap: React.CSSProperties = {

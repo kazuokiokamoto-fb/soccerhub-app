@@ -209,7 +209,6 @@ export function DaySlotList(props: {
   loading?: boolean;
 }) {
   const {
-    selectedYmd,
     slots,
     venues,
     allTeams,
@@ -251,20 +250,23 @@ export function DaySlotList(props: {
     onChangeRequestComment,
   ]);
 
+  const sortedSlots = React.useMemo(() => {
+    return [...slots].sort((a, b) => {
+      const aKey = `${a.date} ${a.start_time}`;
+      const bKey = `${b.date} ${b.start_time}`;
+      return aKey.localeCompare(bKey);
+    });
+  }, [slots]);
+
   return (
     <section style={{ ...card, marginTop: 14 }}>
-      <div style={sectionHead}>
-        <h2 style={h2}>{selectedYmd} の募集一覧</h2>
-        <div style={sectionSub}>{slots.length}件</div>
-      </div>
-
-      {slots.length === 0 ? (
-        <p style={{ margin: "10px 0 0", color: "#777", lineHeight: 1.8 }}>
+      {sortedSlots.length === 0 ? (
+        <p style={{ margin: 0, color: "#777", lineHeight: 1.8 }}>
           この条件に合う募集はありません。
         </p>
       ) : (
-        <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
-          {slots.map((s) => {
+        <div style={{ display: "grid", gap: 12 }}>
+          {sortedSlots.map((s) => {
             const isMine = !!meId && s.owner_id === meId;
 
             const hostTeam =
@@ -450,27 +452,6 @@ const card: React.CSSProperties = {
   border: "1px solid #eee",
   borderRadius: 18,
   background: "#fff",
-};
-
-const sectionHead: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 10,
-  flexWrap: "wrap",
-};
-
-const sectionSub: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 800,
-  color: "#6b7280",
-};
-
-const h2: React.CSSProperties = {
-  margin: 0,
-  fontSize: 16,
-  fontWeight: 900,
-  color: "#16391f",
 };
 
 const slotCard: React.CSSProperties = {

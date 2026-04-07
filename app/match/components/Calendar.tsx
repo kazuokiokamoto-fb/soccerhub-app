@@ -48,6 +48,7 @@ export function Calendar(props: {
     loading,
     cells,
     selectedYmd,
+    countByDate,
     dayStatusSummaryByDate,
     onSelectDate,
     onPrevMonth,
@@ -126,6 +127,9 @@ export function Calendar(props: {
       <div style={calendarGrid}>
         {cells.map((c, index) => {
           const summary = dayStatusSummaryByDate.get(c.ymd);
+          const fallbackCount = countByDate.get(c.ymd) ?? 0;
+          const displayCount = summary?.count ?? fallbackCount;
+
           const isSelected = c.ymd === selectedYmd;
           const isPast = isPastDate(c.ymd);
           const weekday = index % 7;
@@ -136,6 +140,23 @@ export function Calendar(props: {
               : weekday === 6
                 ? "#dc2626"
                 : "#374151";
+
+          const statusColor = isPast
+            ? "#94a3b8"
+            : summary
+              ? summary.tone === "decided"
+                ? "#166534"
+                : summary.tone === "open"
+                  ? "#1d4ed8"
+                  : "#4b5563"
+              : "#9ca3af";
+
+          const countColor =
+            isPast
+              ? "#94a3b8"
+              : displayCount > 0
+                ? "#065f46"
+                : "#9ca3af";
 
           return (
             <button
@@ -148,6 +169,10 @@ export function Calendar(props: {
                 ...(isPast ? calCellPast : null),
                 opacity: c.inMonth ? 1 : 0.42,
               }}
+              aria-pressed={isSelected}
+              aria-label={`${c.ymd} ${summary ? summaryLabel(summary) : "予定なし"} ${
+                displayCount > 0 ? `${displayCount}件` : ""
+              }`}
             >
               <div
                 style={{
@@ -168,15 +193,7 @@ export function Calendar(props: {
                         ? statusTextOpen
                         : statusTextOther
                     : statusTextEmpty),
-                  color: isPast
-                    ? "#94a3b8"
-                    : summary
-                      ? summary.tone === "decided"
-                        ? "#166534"
-                        : summary.tone === "open"
-                          ? "#1d4ed8"
-                          : "#4b5563"
-                      : "#9ca3af",
+                  color: statusColor,
                 }}
               >
                 {summary ? summaryLabel(summary) : "-"}
@@ -185,10 +202,10 @@ export function Calendar(props: {
               <div
                 style={{
                   ...summaryCountText,
-                  color: isPast ? "#94a3b8" : summary ? "#065f46" : "#9ca3af",
+                  color: countColor,
                 }}
               >
-                {summary ? `${summary.count}件` : "-"}
+                {displayCount > 0 ? `${displayCount}件` : "-"}
               </div>
             </button>
           );
