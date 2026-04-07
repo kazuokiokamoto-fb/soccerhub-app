@@ -31,71 +31,84 @@ import {
 type Props = {
   filterRef: React.RefObject<HTMLElement | null>;
   loading: boolean;
-  draftKeyword: string;
-  setDraftKeyword: (v: string) => void;
-  draftCategoryFilter: string[];
-  setDraftCategoryFilter: (v: string[]) => void;
-  draftPrefectureFilter: string;
-  setDraftPrefectureFilter: (v: string) => void;
-  draftCityFilter: string;
-  setDraftCityFilter: (v: string) => void;
-  draftTownFilter: string;
-  setDraftTownFilter: (v: string) => void;
-  draftGroundFilter: "all" | "あり" | "なし";
-  setDraftGroundFilter: (v: "all" | "あり" | "なし") => void;
-  draftStrengthFilter: StrengthRank[];
-  setDraftStrengthFilter: React.Dispatch<React.SetStateAction<StrengthRank[]>>;
-  draftBikeFilter: "all" | "あり" | "なし" | "不明";
-  setDraftBikeFilter: (v: "all" | "あり" | "なし" | "不明") => void;
-  draftBikeCapacityMin: string;
-  setDraftBikeCapacityMin: (v: string) => void;
-  draftMemberCountMin: string;
-  setDraftMemberCountMin: (v: string) => void;
-  hasDraftChanges: boolean;
-  onApply: () => void;
+
+  keyword: string;
+  setKeyword: (v: string) => void;
+
+  categoryFilter: string[];
+  setCategoryFilter: (v: string[]) => void;
+
+  prefectureFilter: string;
+  setPrefectureFilter: (v: string) => void;
+
+  cityFilter: string;
+  setCityFilter: (v: string) => void;
+
+  townFilter: string;
+  setTownFilter: (v: string) => void;
+
+  groundFilter: "all" | "あり" | "なし";
+  setGroundFilter: (v: "all" | "あり" | "なし") => void;
+
+  strengthFilter: StrengthRank[];
+  setStrengthFilter: React.Dispatch<React.SetStateAction<StrengthRank[]>>;
+
+  bikeFilter: "all" | "あり" | "なし" | "不明";
+  setBikeFilter: (v: "all" | "あり" | "なし" | "不明") => void;
+
+  bikeCapacityMin: string;
+  setBikeCapacityMin: (v: string) => void;
+
+  memberCountMin: string;
+  setMemberCountMin: (v: string) => void;
+
   onReset: () => void;
   onBackToResults: () => void;
   onOpenStrengthHelp: () => void;
+
   strengthGuides: StrengthGuide[];
   strengthOptions: { value: string; label: string }[];
+  liveCount?: number;
 };
 
 export function TeamSearchFilterPanel({
   filterRef,
   loading,
-  draftKeyword,
-  setDraftKeyword,
-  draftCategoryFilter,
-  setDraftCategoryFilter,
-  draftPrefectureFilter,
-  setDraftPrefectureFilter,
-  draftCityFilter,
-  setDraftCityFilter,
-  draftTownFilter,
-  setDraftTownFilter,
-  draftGroundFilter,
-  setDraftGroundFilter,
-  draftStrengthFilter,
-  setDraftStrengthFilter,
-  draftBikeFilter,
-  setDraftBikeFilter,
-  draftBikeCapacityMin,
-  setDraftBikeCapacityMin,
-  draftMemberCountMin,
-  setDraftMemberCountMin,
-  hasDraftChanges,
-  onApply,
+  keyword,
+  setKeyword,
+  categoryFilter,
+  setCategoryFilter,
+  prefectureFilter,
+  setPrefectureFilter,
+  cityFilter,
+  setCityFilter,
+  townFilter,
+  setTownFilter,
+  groundFilter,
+  setGroundFilter,
+  strengthFilter,
+  setStrengthFilter,
+  bikeFilter,
+  setBikeFilter,
+  bikeCapacityMin,
+  setBikeCapacityMin,
+  memberCountMin,
+  setMemberCountMin,
   onReset,
   onBackToResults,
   onOpenStrengthHelp,
   strengthGuides,
   strengthOptions,
+  liveCount = 0,
 }: Props) {
   return (
     <section ref={filterRef} style={filterWrap}>
       <div style={{ display: "grid", gap: 12 }}>
         <div style={filterHeaderRow}>
-          <h2 style={filterTitle}>検索条件</h2>
+          <div style={{ display: "grid", gap: 4 }}>
+            <h2 style={filterTitle}>検索条件</h2>
+            <div style={liveCountText}>現在 {liveCount}件ヒット</div>
+          </div>
 
           <button type="button" className="sh-btn" onClick={onBackToResults}>
             検索結果へ
@@ -106,8 +119,8 @@ export function TeamSearchFilterPanel({
           <span style={labelTitle}>キーワード</span>
 
           <input
-            value={draftKeyword}
-            onChange={(e) => setDraftKeyword(e.target.value)}
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
             className="sh-input"
             disabled={loading}
             placeholder="例：三宿 / 青 / 強度高め / U-12 / SS"
@@ -119,12 +132,12 @@ export function TeamSearchFilterPanel({
           allowAll={true}
           allLabel="関東（すべて）"
           disabled={loading}
-          prefecture={draftPrefectureFilter}
-          setPrefecture={setDraftPrefectureFilter}
-          city={draftCityFilter}
-          setCity={setDraftCityFilter}
-          town={draftTownFilter}
-          setTown={setDraftTownFilter}
+          prefecture={prefectureFilter}
+          setPrefecture={setPrefectureFilter}
+          city={cityFilter}
+          setCity={setCityFilter}
+          town={townFilter}
+          setTown={setTownFilter}
           townOptional={true}
           useChipUI={true}
         />
@@ -132,8 +145,8 @@ export function TeamSearchFilterPanel({
         <CheckboxGroup
           title="カテゴリ"
           options={CATEGORY_OPTIONS}
-          values={draftCategoryFilter}
-          onChange={setDraftCategoryFilter}
+          values={categoryFilter}
+          onChange={setCategoryFilter}
           columns={3}
           disabled={loading}
           useChipUI={true}
@@ -163,7 +176,7 @@ export function TeamSearchFilterPanel({
                 type="button"
                 className="sh-btn sh-btn--ghost"
                 onClick={() =>
-                  setDraftStrengthFilter(
+                  setStrengthFilter(
                     strengthOptions.map((o) => o.value as StrengthRank)
                   )
                 }
@@ -175,7 +188,7 @@ export function TeamSearchFilterPanel({
               <button
                 type="button"
                 className="sh-btn"
-                onClick={() => setDraftStrengthFilter([])}
+                onClick={() => setStrengthFilter([])}
                 disabled={loading}
               >
                 クリア
@@ -185,7 +198,7 @@ export function TeamSearchFilterPanel({
 
           <div style={strengthSimpleList}>
             {strengthGuides.map((item) => {
-              const active = draftStrengthFilter.includes(item.rank);
+              const active = strengthFilter.includes(item.rank);
 
               return (
                 <button
@@ -193,7 +206,7 @@ export function TeamSearchFilterPanel({
                   type="button"
                   disabled={loading}
                   onClick={() => {
-                    setDraftStrengthFilter((prev) => {
+                    setStrengthFilter((prev) => {
                       if (prev.includes(item.rank)) {
                         return prev.filter((v) => v !== item.rank);
                       }
@@ -225,8 +238,8 @@ export function TeamSearchFilterPanel({
             <span style={labelTitle}>チーム所属人数（以上）</span>
 
             <select
-              value={draftMemberCountMin}
-              onChange={(e) => setDraftMemberCountMin(e.target.value)}
+              value={memberCountMin}
+              onChange={(e) => setMemberCountMin(e.target.value)}
               className="sh-select"
               disabled={loading}
             >
@@ -244,8 +257,10 @@ export function TeamSearchFilterPanel({
             <span style={labelTitle}>グラウンド</span>
 
             <select
-              value={draftGroundFilter}
-              onChange={(e) => setDraftGroundFilter(e.target.value as "all" | "あり" | "なし")}
+              value={groundFilter}
+              onChange={(e) =>
+                setGroundFilter(e.target.value as "all" | "あり" | "なし")
+              }
               className="sh-select"
               disabled={loading}
             >
@@ -261,9 +276,9 @@ export function TeamSearchFilterPanel({
             <span style={labelTitle}>駐輪場</span>
 
             <select
-              value={draftBikeFilter}
+              value={bikeFilter}
               onChange={(e) =>
-                setDraftBikeFilter(e.target.value as "all" | "あり" | "なし" | "不明")
+                setBikeFilter(e.target.value as "all" | "あり" | "なし" | "不明")
               }
               className="sh-select"
               disabled={loading}
@@ -279,8 +294,8 @@ export function TeamSearchFilterPanel({
             <span style={labelTitle}>駐輪場台数（以上）</span>
 
             <select
-              value={draftBikeCapacityMin}
-              onChange={(e) => setDraftBikeCapacityMin(e.target.value)}
+              value={bikeCapacityMin}
+              onChange={(e) => setBikeCapacityMin(e.target.value)}
               className="sh-select"
               disabled={loading}
             >
@@ -301,10 +316,10 @@ export function TeamSearchFilterPanel({
           <button
             type="button"
             className="sh-btn sh-btn--primary"
-            onClick={onApply}
-            disabled={!hasDraftChanges || loading}
+            onClick={onBackToResults}
+            disabled={loading}
           >
-            この条件で一覧表示
+            この条件で一覧を見る
           </button>
 
           <button
@@ -320,3 +335,10 @@ export function TeamSearchFilterPanel({
     </section>
   );
 }
+
+const liveCountText: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 800,
+  color: "#166534",
+  lineHeight: 1.6,
+};

@@ -74,30 +74,27 @@ export default function TeamsSearchClient() {
   const filterRef = useRef<HTMLElement | null>(null);
 
   const {
-    draftKeyword,
-    setDraftKeyword,
-    draftCategoryFilter,
-    setDraftCategoryFilter,
-    draftPrefectureFilter,
-    setDraftPrefectureFilter,
-    draftCityFilter,
-    setDraftCityFilter,
-    draftTownFilter,
-    setDraftTownFilter,
-    draftGroundFilter,
-    setDraftGroundFilter,
-    draftStrengthFilter,
-    setDraftStrengthFilter,
-    draftBikeFilter,
-    setDraftBikeFilter,
-    draftBikeCapacityMin,
-    setDraftBikeCapacityMin,
-    draftMemberCountMin,
-    setDraftMemberCountMin,
-    appliedFilters,
-    draftFilters,
-    hasDraftChanges,
-    applyDraftToApplied,
+    keyword,
+    setKeyword,
+    categoryFilter,
+    setCategoryFilter,
+    prefectureFilter,
+    setPrefectureFilter,
+    cityFilter,
+    setCityFilter,
+    townFilter,
+    setTownFilter,
+    groundFilter,
+    setGroundFilter,
+    strengthFilter,
+    setStrengthFilter,
+    bikeFilter,
+    setBikeFilter,
+    bikeCapacityMin,
+    setBikeCapacityMin,
+    memberCountMin,
+    setMemberCountMin,
+    filters,
     clearAllFilters,
   } = useMatchFilters();
 
@@ -120,7 +117,10 @@ export default function TeamsSearchClient() {
     if (error) {
       console.error(error);
       setTeams([]);
-      setToast({ type: "error", text: `読み込みに失敗しました: ${error.message}` });
+      setToast({
+        type: "error",
+        text: `読み込みに失敗しました: ${error.message}`,
+      });
       setLoading(false);
       return;
     }
@@ -150,12 +150,8 @@ export default function TeamsSearchClient() {
   }, []);
 
   const filteredTeams = useMemo(() => {
-    return teams.filter((t) => matchesTeamFilters(t, appliedFilters));
-  }, [teams, appliedFilters]);
-
-  const draftFilteredTeams = useMemo(() => {
-    return teams.filter((t) => matchesTeamFilters(t, draftFilters));
-  }, [teams, draftFilters]);
+    return teams.filter((t) => matchesTeamFilters(t, filters));
+  }, [teams, filters]);
 
   const scrollToResults = () => {
     setTimeout(() => {
@@ -173,12 +169,6 @@ export default function TeamsSearchClient() {
         block: "start",
       });
     }, 120);
-  };
-
-  const handleApplyAndJump = () => {
-    applyDraftToApplied();
-    setOpenTeamId("");
-    scrollToResults();
   };
 
   const handleResetFilters = () => {
@@ -312,11 +302,14 @@ export default function TeamsSearchClient() {
         }
 
         const targetUserId =
-          (targetTeamRow as { owner_id?: string | null } | null)?.owner_id ?? "";
+          (targetTeamRow as { owner_id?: string | null } | null)?.owner_id ??
+          "";
 
         if (targetUserId) {
           const notificationTitle = "新しい試合オファー";
-          const notificationBody = `${myTeam?.name ?? "相手チーム"} からオファーが届きました`;
+          const notificationBody = `${
+            myTeam?.name ?? "相手チーム"
+          } からオファーが届きました`;
           const notificationUrl = threadId ? `/chat/${threadId}` : "/chat";
 
           const { error: notificationErr } = await supabase
@@ -436,9 +429,7 @@ export default function TeamsSearchClient() {
           <div style={summaryHeaderRow}>
             <div>
               <div style={stickySummaryDate}>🔎 検索結果</div>
-              <div style={stickySummaryCount}>
-                入力中の候補（{draftFilteredTeams.length}件／{filteredTeams.length}件）
-              </div>
+              <div style={stickySummaryCount}>{filteredTeams.length}件ヒット</div>
             </div>
 
             <button type="button" className="sh-btn" onClick={scrollToFilter}>
@@ -464,33 +455,32 @@ export default function TeamsSearchClient() {
         <TeamSearchFilterPanel
           filterRef={filterRef}
           loading={loading}
-          draftKeyword={draftKeyword}
-          setDraftKeyword={setDraftKeyword}
-          draftCategoryFilter={draftCategoryFilter}
-          setDraftCategoryFilter={setDraftCategoryFilter}
-          draftPrefectureFilter={draftPrefectureFilter}
-          setDraftPrefectureFilter={setDraftPrefectureFilter}
-          draftCityFilter={draftCityFilter}
-          setDraftCityFilter={setDraftCityFilter}
-          draftTownFilter={draftTownFilter}
-          setDraftTownFilter={setDraftTownFilter}
-          draftGroundFilter={draftGroundFilter}
-          setDraftGroundFilter={setDraftGroundFilter}
-          draftStrengthFilter={draftStrengthFilter}
-          setDraftStrengthFilter={setDraftStrengthFilter}
-          draftBikeFilter={draftBikeFilter}
-          setDraftBikeFilter={setDraftBikeFilter}
-          draftBikeCapacityMin={draftBikeCapacityMin}
-          setDraftBikeCapacityMin={setDraftBikeCapacityMin}
-          draftMemberCountMin={draftMemberCountMin}
-          setDraftMemberCountMin={setDraftMemberCountMin}
-          hasDraftChanges={hasDraftChanges}
-          onApply={handleApplyAndJump}
+          keyword={keyword}
+          setKeyword={setKeyword}
+          categoryFilter={categoryFilter}
+          setCategoryFilter={setCategoryFilter}
+          prefectureFilter={prefectureFilter}
+          setPrefectureFilter={setPrefectureFilter}
+          cityFilter={cityFilter}
+          setCityFilter={setCityFilter}
+          townFilter={townFilter}
+          setTownFilter={setTownFilter}
+          groundFilter={groundFilter}
+          setGroundFilter={setGroundFilter}
+          strengthFilter={strengthFilter}
+          setStrengthFilter={setStrengthFilter}
+          bikeFilter={bikeFilter}
+          setBikeFilter={setBikeFilter}
+          bikeCapacityMin={bikeCapacityMin}
+          setBikeCapacityMin={setBikeCapacityMin}
+          memberCountMin={memberCountMin}
+          setMemberCountMin={setMemberCountMin}
           onReset={handleResetFilters}
           onBackToResults={scrollToResults}
           onOpenStrengthHelp={() => setShowStrengthHelp(true)}
           strengthGuides={STRENGTH_GUIDES}
           strengthOptions={STRENGTH_OPTIONS}
+          liveCount={filteredTeams.length}
         />
       </div>
 
@@ -578,7 +568,10 @@ export default function TeamsSearchClient() {
                 <div style={detailValue}>
                   {offerTargetTeam.name ?? "未設定"}
                   {offerTargetTeam.category
-                    ? `（${categoryLabel(offerTargetTeam.category) || offerTargetTeam.category}）`
+                    ? `（${
+                        categoryLabel(offerTargetTeam.category) ||
+                        offerTargetTeam.category
+                      }）`
                     : ""}
                   <br />
                   {buildAreaText(offerTargetTeam)}
