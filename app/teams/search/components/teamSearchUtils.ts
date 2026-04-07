@@ -11,7 +11,7 @@ export type Toast = {
 
 export type DbTeam = {
   id: string;
-  owner_id: string;
+  owner_id?: string | null;
   name: string | null;
   area: string | null;
   prefecture: string | null;
@@ -147,9 +147,7 @@ export function buildAreaText(team: DbTeam) {
   return parts.join(" / ") || "未設定";
 }
 
-export function sumRoster(
-  roster?: Record<string, number> | null
-): number {
+export function sumRoster(roster?: Record<string, number> | null): number {
   if (!roster) return 0;
   return Object.values(roster).reduce((sum, v) => sum + (Number(v) || 0), 0);
 }
@@ -171,7 +169,7 @@ export function teamStrengthLabel(team?: DbTeam | null) {
   return rank || "未設定";
 }
 
-export function teamCategoryText(team?: DbTeam | null) {
+export function formatTeamCategory(team?: DbTeam | null) {
   if (!team) return "未設定";
 
   if (Array.isArray(team.categories) && team.categories.length > 0) {
@@ -183,16 +181,36 @@ export function teamCategoryText(team?: DbTeam | null) {
   return categoryLabel(team.category || "") || team.category || "未設定";
 }
 
-export function matchesTeamFilters(
-  team: DbTeam,
-  filters: MatchFilters
-) {
+export function getStrength(team?: DbTeam | null) {
+  return teamStrengthLabel(team);
+}
+
+export function getMemberCount(team?: DbTeam | null) {
+  if (!team) return 0;
+  if (team.member_count != null) return Number(team.member_count) || 0;
+  return sumRoster(team.roster_by_grade);
+}
+
+export function formatBikeParking(team?: DbTeam | null) {
+  if (!team) return "不明";
+
+  const parking = String(team.bike_parking ?? "不明").trim() || "不明";
+  const capacity = String(team.bike_parking_capacity ?? "").trim();
+
+  if (capacity) {
+    return `${parking} / ${capacity}`;
+  }
+
+  return parking;
+}
+
+export function matchesTeamFilters(team: DbTeam, filters: MatchFilters) {
   const teamCategories =
     Array.isArray(team.categories) && team.categories.length > 0
       ? team.categories
       : team.category
-      ? [team.category]
-      : [];
+        ? [team.category]
+        : [];
 
   if (filters.categoryFilter.length > 0) {
     const ok = teamCategories.some((c) =>
@@ -222,7 +240,8 @@ export function matchesTeamFilters(
   }
 
   if (filters.strengthFilter.length > 0) {
-    const rank = (team.strength_rank?.trim() as StrengthRank | "") || levelToRank(team.level);
+    const rank =
+      (team.strength_rank?.trim() as StrengthRank | "") || levelToRank(team.level);
     if (!rank || !filters.strengthFilter.includes(rank)) return false;
   }
 

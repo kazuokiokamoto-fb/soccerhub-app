@@ -278,7 +278,9 @@ export function TeamSearchFilterPanel({
             <select
               value={bikeFilter}
               onChange={(e) =>
-                setBikeFilter(e.target.value as "all" | "あり" | "なし" | "不明")
+                setBikeFilter(
+                  e.target.value as "all" | "あり" | "なし" | "不明"
+                )
               }
               className="sh-select"
               disabled={loading}

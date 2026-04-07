@@ -302,8 +302,7 @@ export default function TeamsSearchClient() {
         }
 
         const targetUserId =
-          (targetTeamRow as { owner_id?: string | null } | null)?.owner_id ??
-          "";
+          (targetTeamRow as { owner_id?: string | null } | null)?.owner_id ?? "";
 
         if (targetUserId) {
           const notificationTitle = "新しい試合オファー";
@@ -398,8 +397,8 @@ export default function TeamsSearchClient() {
             ...(toast.type === "success"
               ? toastSuccess
               : toast.type === "error"
-              ? toastError
-              : toastInfo),
+                ? toastError
+                : toastInfo),
           }}
           role="status"
           aria-live="polite"
