@@ -1,40 +1,46 @@
-import { categoryLabel } from "@/app/lib/categories";
-import type { StrengthRank } from "@/app/components/StrengthRankPicker";
-import type { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
+"use client";
 
-export type Toast = { type: "success" | "error" | "info"; text: string };
+import type { StrengthRank } from "@/app/components/StrengthRankPicker";
+import type { MatchFilters } from "@/app/match/utils/filters";
+import { categoryLabel } from "@/app/lib/categories";
+
+export type Toast = {
+  type: "success" | "error" | "info";
+  text: string;
+};
 
 export type DbTeam = {
   id: string;
-  owner_id: string | null;
+  owner_id: string;
   name: string | null;
-
   area: string | null;
   prefecture: string | null;
   city: string | null;
   town: string | null;
   address_detail?: string | null;
-
   category: string | null;
-  categories: string[] | null;
-
+  categories?: string[] | null;
   level: number | null;
   strength_rank?: string | null;
-
   has_ground: boolean | null;
-  bike_parking: string | null;
-  bike_parking_capacity?: string | null;
-
-  member_count?: number | null;
+  bike_parking: "あり" | "なし" | "不明" | string | null;
+  bike_parking_capacity: string | null;
+  member_count: number | null;
   roster_by_grade?: Record<string, number> | null;
-
-  uniform_main: string | null;
-  uniform_sub: string | null;
-
+  uniform_main?: string | null;
+  uniform_sub?: string | null;
   desired_dates?: string[] | null;
-  note: string | null;
+  note?: string | null;
+  updated_at?: string | null;
+};
 
-  updated_at: string;
+export type OfferRow = {
+  id: string;
+  from_team_id: string;
+  to_team_id: string;
+  status: "pending" | "accepted" | "rejected" | "cancelled";
+  message: string | null;
+  created_at: string;
 };
 
 export type StrengthGuide = {
@@ -45,21 +51,12 @@ export type StrengthGuide = {
   note: string;
 };
 
-export type OfferRow = {
-  id: string;
-  from_team_id: string;
-  to_team_id: string;
-  status: string;
-  message: string | null;
-  created_at: string;
-};
-
-export const STRENGTH_OPTIONS = [
-  { value: "SS", label: "SS 都・県リーグ1・2部" },
-  { value: "S", label: "S 都・県リーグ3・4部" },
-  { value: "A", label: "A 地域リーグ1・2部" },
-  { value: "B", label: "B 地域リーグ3・4部" },
-  { value: "C", label: "C フレンドリー" },
+export const STRENGTH_OPTIONS: { value: StrengthRank; label: string }[] = [
+  { value: "SS", label: "SS" },
+  { value: "S", label: "S" },
+  { value: "A", label: "A" },
+  { value: "B", label: "B" },
+  { value: "C", label: "C" },
 ];
 
 export const STRENGTH_GUIDES: StrengthGuide[] = [
@@ -73,7 +70,7 @@ export const STRENGTH_GUIDES: StrengthGuide[] = [
       "球際・切り替えが速く、戦術理解度が高い",
       "公式戦同等レベルの緊張感ある試合を希望",
     ],
-    note: "⭐︎ 「強度の高い実戦形式」を求めるチーム向け",
+    note: "「強度の高い実戦形式」を求めるチーム向け",
   },
   {
     rank: "S",
@@ -85,7 +82,7 @@ export const STRENGTH_GUIDES: StrengthGuide[] = [
       "基礎技術が安定し、組織的な守備・攻撃ができる",
       "上位リーグ昇格を目指すレベル",
     ],
-    note: "⭐︎ 「しっかり競り合える相手」を求めるチーム向け",
+    note: "「しっかり競り合える相手」を求めるチーム向け",
   },
   {
     rank: "A",
@@ -97,7 +94,7 @@ export const STRENGTH_GUIDES: StrengthGuide[] = [
       "個人技術向上＋チーム連携を重視",
       "チャレンジマッチにも適したレベル",
     ],
-    note: "⭐︎ 「公式戦を想定しつつ育成も重視」するチーム向け",
+    note: "「公式戦を想定しつつ育成も重視」するチーム向け",
   },
   {
     rank: "B",
@@ -109,7 +106,7 @@ export const STRENGTH_GUIDES: StrengthGuide[] = [
       "試合経験を積みながら基礎力を伸ばす段階",
       "バランスの良いマッチング向き",
     ],
-    note: "⭐︎「経験を積みたい」「自信をつけたい」チーム向け",
+    note: "「経験を積みたい」「自信をつけたい」チーム向け",
   },
   {
     rank: "C",
@@ -121,90 +118,93 @@ export const STRENGTH_GUIDES: StrengthGuide[] = [
       "新チーム編成・初心者中心・交流目的",
       "勝敗よりも経験や交流を重視",
     ],
-    note: "⭐︎「楽しく真剣に」「幅広い交流」を希望するチーム向け",
+    note: "「楽しく真剣に」「幅広い交流」を希望するチーム向け",
   },
 ];
 
-export function norm(v?: string | null) {
-  return (v ?? "").trim();
+function norm(v?: string | null) {
+  return String(v ?? "").trim();
 }
 
-export function levelLabel(level: number): StrengthRank {
-  if (level >= 9) return "SS";
-  if (level >= 7) return "S";
-  if (level >= 5) return "A";
-  if (level >= 3) return "B";
+export function levelToRank(level?: number | null): StrengthRank | "" {
+  const n = Number(level ?? 0);
+  if (!Number.isFinite(n)) return "";
+  if (n >= 9) return "SS";
+  if (n >= 7) return "S";
+  if (n >= 5) return "A";
+  if (n >= 3) return "B";
   return "C";
 }
 
-export function getStrength(team: DbTeam): StrengthRank {
-  return (
-    (team.strength_rank as StrengthRank | null) ||
-    levelLabel(Number(team.level ?? 0))
-  ) as StrengthRank;
+export function buildAreaText(team: DbTeam) {
+  const parts = [
+    norm(team.area),
+    norm(team.prefecture),
+    norm(team.city),
+    norm(team.town),
+  ].filter(Boolean);
+
+  return parts.join(" / ") || "未設定";
 }
 
-export function getMemberCount(team: DbTeam) {
-  if (typeof team.member_count === "number") return team.member_count;
-  const roster = (team.roster_by_grade ?? {}) as Record<string, number>;
+export function sumRoster(
+  roster?: Record<string, number> | null
+): number {
+  if (!roster) return 0;
   return Object.values(roster).reduce((sum, v) => sum + (Number(v) || 0), 0);
 }
 
 export function parseBikeCapacity(value?: string | null) {
   const v = String(value ?? "").trim();
   if (!v || v === "不明") return null;
-  if (v === "50+") return 50;
+  if (v.includes("50")) return 50;
+
   const n = Number(v.replace(/[^\d]/g, ""));
   return Number.isFinite(n) ? n : null;
 }
 
-export function buildAreaText(team: DbTeam) {
-  const direct = norm(team.area);
-  if (direct) return direct;
+export function teamStrengthLabel(team?: DbTeam | null) {
+  if (!team) return "未設定";
+  if (team.strength_rank?.trim()) return team.strength_rank.trim();
 
-  const composed = `${team.prefecture ?? ""} ${team.city ?? ""}${
-    team.town ? "・" + team.town : ""
-  }`.trim();
-
-  return composed || "（エリア未設定）";
+  const rank = levelToRank(team.level);
+  return rank || "未設定";
 }
 
-export function formatBikeParking(team: DbTeam) {
-  if (team.bike_parking === "あり") {
-    if (team.bike_parking_capacity) {
-      if (team.bike_parking_capacity === "50+") return "あり（50台以上）";
-      return `あり（${team.bike_parking_capacity}台）`;
-    }
-    return "あり";
-  }
-  return team.bike_parking ?? "不明";
-}
+export function teamCategoryText(team?: DbTeam | null) {
+  if (!team) return "未設定";
 
-export function formatTeamCategory(team: DbTeam) {
   if (Array.isArray(team.categories) && team.categories.length > 0) {
-    return team.categories.map((v) => categoryLabel(v) || v).join(" / ");
+    return team.categories
+      .map((v) => categoryLabel(v) || v)
+      .join(" / ");
   }
-  return categoryLabel(team.category) || team.category || "未設定";
+
+  return categoryLabel(team.category || "") || team.category || "未設定";
 }
 
 export function matchesTeamFilters(
   team: DbTeam,
-  filters: ReturnType<typeof useMatchFilters>["appliedFilters"]
+  filters: MatchFilters
 ) {
-  const cats =
+  const teamCategories =
     Array.isArray(team.categories) && team.categories.length > 0
       ? team.categories
       : team.category
-        ? [team.category]
-        : [];
+      ? [team.category]
+      : [];
 
   if (filters.categoryFilter.length > 0) {
-    if (!cats.some((c) => c && filters.categoryFilter.includes(String(c).trim()))) {
-      return false;
-    }
+    const ok = teamCategories.some((c) =>
+      filters.categoryFilter.includes(String(c).trim())
+    );
+    if (!ok) return false;
   }
 
-  if (filters.prefectureFilter && norm(team.prefecture) !== filters.prefectureFilter) {
+  if (
+    filters.prefectureFilter &&
+    norm(team.prefecture) !== filters.prefectureFilter
+  ) {
     return false;
   }
 
@@ -217,17 +217,18 @@ export function matchesTeamFilters(
   }
 
   if (filters.groundFilter !== "all") {
-    const val = team.has_ground ? "あり" : "なし";
-    if (val !== filters.groundFilter) return false;
+    const ground = team.has_ground ? "あり" : "なし";
+    if (ground !== filters.groundFilter) return false;
   }
 
   if (filters.strengthFilter.length > 0) {
-    if (!filters.strengthFilter.includes(getStrength(team))) return false;
+    const rank = (team.strength_rank?.trim() as StrengthRank | "") || levelToRank(team.level);
+    if (!rank || !filters.strengthFilter.includes(rank)) return false;
   }
 
   if (filters.bikeFilter !== "all") {
-    const val = (team.bike_parking ?? "不明") as "あり" | "なし" | "不明";
-    if (val !== filters.bikeFilter) return false;
+    const bike = (team.bike_parking ?? "不明") as "あり" | "なし" | "不明";
+    if (bike !== filters.bikeFilter) return false;
   }
 
   if (filters.bikeCapacityMin) {
@@ -236,12 +237,17 @@ export function matchesTeamFilters(
   }
 
   if (filters.memberCountMin) {
-    const count = Number(getMemberCount(team));
+    const count =
+      team.member_count != null
+        ? Number(team.member_count)
+        : sumRoster(team.roster_by_grade);
+
     if (count < Number(filters.memberCountMin)) return false;
   }
 
   if (filters.keyword.trim()) {
     const q = filters.keyword.trim().toLowerCase();
+
     const hay = [
       team.name,
       team.area,
@@ -249,16 +255,16 @@ export function matchesTeamFilters(
       team.city,
       team.town,
       team.category,
-      ...(team.categories ?? []),
-      team.note,
+      ...(teamCategories ?? []),
       team.uniform_main,
       team.uniform_sub,
+      team.note,
       team.bike_parking,
       team.bike_parking_capacity,
-      getStrength(team),
-      String(getMemberCount(team)),
+      String(team.member_count ?? ""),
+      String(team.strength_rank ?? ""),
+      levelToRank(team.level),
     ]
-      .filter(Boolean)
       .join(" ")
       .toLowerCase();
 
