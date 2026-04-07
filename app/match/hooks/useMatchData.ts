@@ -1,125 +1,99 @@
-// app/match/hooks/useMatchData.ts
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
-import { useAuth } from "@/app/lib/auth";
-import type { DbVenue, DbSlot, DbRequest, DbTeam } from "../types";
-import { formatYmd, startOfMonth, endOfMonth } from "../utils/date";
 
 export function useMatchData(monthDate: Date) {
-  const { user, loading: authLoading } = useAuth();
-  const meId = user?.id ?? "";
+  const [loadingBase, setLoadingBase] = useState(true);
+  const [loadingMonth, setLoadingMonth] = useState(true);
 
-  const [loadingBase, setLoadingBase] = useState(false);
-  const [loadingMonth, setLoadingMonth] = useState(false);
+  const [meId, setMeId] = useState<string>("");
 
-  const [allTeams, setAllTeams] = useState<DbTeam[]>([]);
-  const [myTeams, setMyTeams] = useState<DbTeam[]>([]);
-  const [venues, setVenues] = useState<DbVenue[]>([]);
+  const [allTeams, setAllTeams] = useState<any[]>([]);
+  const [myTeams, setMyTeams] = useState<any[]>([]);
+  const [venues, setVenues] = useState<any[]>([]);
 
-  const [slotsInMonth, setSlotsInMonth] = useState<DbSlot[]>([]);
-  const [requestsForMonth, setRequestsForMonth] = useState<DbRequest[]>([]);
+  const [slotsInMonth, setSlotsInMonth] = useState<any[]>([]);
+  const [requestsForMonth, setRequestsForMonth] = useState<any[]>([]);
 
-  const loadBase = useCallback(async () => {
-    if (authLoading) return;
+  // =========================
+  // 初期データ（チームなど）
+  // =========================
+  useEffect(() => {
+    const init = async () => {
+      setLoadingBase(true);
 
-    setLoadingBase(true);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    try {
-      const { data: teamRows, error: teamErr } = await supabase
-        .from("teams")
-        .select(
-          "id,owner_id,name,area,category,categories,prefecture,city,town,level,strength_rank,has_ground,bike_parking,bike_parking_capacity,member_count,uniform_main,uniform_sub,roster_by_grade,desired_dates,note,updated_at"
-        );
+      const uid = user?.id ?? "";
+      setMeId(uid);
 
-      if (teamErr) {
-        console.error("loadBase teams error:", teamErr);
-        setAllTeams([]);
-        setMyTeams([]);
-      } else {
-        const teams = (teamRows ?? []) as DbTeam[];
-        setAllTeams(teams);
-        setMyTeams(teams.filter((t) => t.owner_id === meId));
+      // チーム一覧
+      const { data: teams } = await supabase.from("teams").select("*");
+      setAllTeams(teams ?? []);
+
+      // 自分のチーム
+      if (uid) {
+        const { data: my } = await supabase
+          .from("teams")
+          .select("*")
+          .eq("owner_id", uid);
+
+        setMyTeams(my ?? []);
       }
 
-      const { data: venueRows, error: venueErr } = await supabase
-        .from("venues")
-        .select("id,name,area,address,has_parking,has_bike_parking,note")
-        .order("name", { ascending: true });
+      // 会場
+      const { data: v } = await supabase.from("venues").select("*");
+      setVenues(v ?? []);
 
-      if (venueErr) {
-        console.error("loadBase venues error:", venueErr);
-        setVenues([]);
-      } else {
-        setVenues((venueRows ?? []) as DbVenue[]);
-      }
-    } finally {
       setLoadingBase(false);
-    }
-  }, [authLoading, meId]);
+    };
 
-  const loadMonth = useCallback(async () => {
+    init();
+  }, []);
+
+  // =========================
+  // 月データ
+  // =========================
+  const loadMonth = async () => {
     setLoadingMonth(true);
 
-    try {
-      const start = formatYmd(startOfMonth(monthDate));
-      const end = formatYmd(endOfMonth(monthDate));
+    const y = monthDate.getFullYear();
+    const m = monthDate.getMonth();
 
-      const { data: slotRows, error: slotErr } = await supabase
-        .from("match_slots")
-        .select(
-          "id,owner_id,host_team_id,date,start_time,end_time,venue_id,area,area_text,area_detail,category,level_min,level_max,status,prefecture,city,town,neighborhood,city_group,is_closed,created_at,updated_at"
-        )
-        .gte("date", start)
-        .lte("date", end)
-        .order("date", { ascending: true })
-        .order("start_time", { ascending: true });
+    const start = new Date(y, m, 1);
+    const end = new Date(y, m + 1, 1);
 
-      if (slotErr) {
-        console.error("loadMonth slots error:", slotErr);
-        setSlotsInMonth([]);
-        setRequestsForMonth([]);
-        return;
-      }
+    const startStr = start.toISOString().slice(0, 10);
+    const endStr = end.toISOString().slice(0, 10);
 
-      const slots = (slotRows ?? []) as DbSlot[];
-      setSlotsInMonth(slots);
+    // 試合枠
+    const { data: slots } = await supabase
+      .from("match_slots")
+      .select("*")
+      .gte("date", startStr)
+      .lt("date", endStr)
+      .order("date", { ascending: true });
 
-      const slotIds = slots.map((s) => s.id).filter(Boolean);
+    setSlotsInMonth(slots ?? []);
 
-      if (slotIds.length === 0) {
-        setRequestsForMonth([]);
-        return;
-      }
+    // 申込
+    const { data: reqs } = await supabase
+      .from("match_requests")
+      .select("*")
+      .gte("created_at", startStr)
+      .lt("created_at", endStr);
 
-      const { data: reqRows, error: reqErr } = await supabase
-        .from("match_requests")
-        .select(
-          "id,slot_id,requester_team_id,requester_user_id,status,comment,created_at"
-        )
-        .in("slot_id", slotIds)
-        .order("created_at", { ascending: false });
+    setRequestsForMonth(reqs ?? []);
 
-      if (reqErr) {
-        console.error("loadMonth requests error:", reqErr);
-        setRequestsForMonth([]);
-        return;
-      }
-
-      setRequestsForMonth((reqRows ?? []) as DbRequest[]);
-    } finally {
-      setLoadingMonth(false);
-    }
-  }, [monthDate]);
+    setLoadingMonth(false);
+  };
 
   useEffect(() => {
     loadMonth();
-  }, [loadMonth]);
-
-  useEffect(() => {
-    loadBase();
-  }, [loadBase]);
+  }, [monthDate]);
 
   return {
     loadingBase,

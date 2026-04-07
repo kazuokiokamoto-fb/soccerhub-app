@@ -136,6 +136,7 @@ function parseBikeCapacity(value?: string | null) {
   const v = String(value ?? "").trim();
   if (!v || v === "不明") return null;
   if (v.includes("50")) return 50;
+
   const n = Number(v.replace(/[^\d]/g, ""));
   return Number.isFinite(n) ? n : null;
 }
@@ -236,7 +237,10 @@ function teamMatchesFilters(
     if (!ok) return false;
   }
 
-  if (filters.prefectureFilter && norm(team.prefecture) !== filters.prefectureFilter) {
+  if (
+    filters.prefectureFilter &&
+    norm(team.prefecture) !== filters.prefectureFilter
+  ) {
     return false;
   }
 
@@ -593,9 +597,11 @@ export default function HomeCalendar() {
     if (draftBikeFilter !== "all") qs.set("bike", draftBikeFilter);
     if (draftBikeCapacityMin) qs.set("bikeCapacityMin", draftBikeCapacityMin);
     if (draftMemberCountMin) qs.set("memberCountMin", draftMemberCountMin);
+
     if (draftCategoryFilter.length > 0) {
       qs.set("categories", draftCategoryFilter.join(","));
     }
+
     if (draftStrengthFilter.length > 0) {
       qs.set("strengths", draftStrengthFilter.join(","));
     }
@@ -722,7 +728,6 @@ export default function HomeCalendar() {
       "はじめまして。練習試合を希望しています。条件が合えばぜひお願いします。";
 
     const finalComment = (requestComment.trim() || defaultComment).trim();
-
     const confirmText = `この内容で試合申込しますか？\n\nコメント:\n${finalComment}`;
 
     if (!window.confirm(confirmText)) return;
@@ -849,10 +854,7 @@ export default function HomeCalendar() {
         "━━━━━━━━━━━━",
         "⚽️ 試合申込",
         "━━━━━━━━━━━━",
-        `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(
-          0,
-          5
-        )}`,
+        `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
         `📍 ${slot.area_text ?? slot.area ?? "未設定"}`,
         `🏷 ${categoryLabel(slot.category) || slot.category || "未設定"}`,
         "",
@@ -939,10 +941,7 @@ export default function HomeCalendar() {
               "━━━━━━━━━━━━",
               "✅ 試合成立（承認）",
               "━━━━━━━━━━━━",
-              `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(
-                0,
-                5
-              )}`,
+              `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
               `🏷 ${categoryLabel(slot.category) || slot.category || "未設定"}`,
               "",
               `👥 募集チーム：${hostTeamName}`,
@@ -1178,6 +1177,8 @@ export default function HomeCalendar() {
           setDraftMemberCountMin={setDraftMemberCountMin}
           hasDraftChanges={hasDraftChanges}
           onApply={handleApplyFiltersToCalendar}
+          onApplyToCalendar={handleApplyFiltersToCalendar}
+          onOpenTeamList={openTeamListWindow}
           onReset={handleResetTeamFilters}
           onBackToList={closePanel}
           onOpenStrengthHelp={() => setShowStrengthHelp(true)}

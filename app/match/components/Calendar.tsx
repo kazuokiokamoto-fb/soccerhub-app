@@ -56,7 +56,6 @@ export function Calendar(props: {
     disableCreate,
     selectedDateSummaryText,
     onOpenCalendarHelp,
-    bandText = "日程",
     titleText = "試合日で探す",
   } = props;
 
