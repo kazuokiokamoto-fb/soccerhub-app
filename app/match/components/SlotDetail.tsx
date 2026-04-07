@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import type { DbRequest, DbSlot, DbTeam, DbVenue } from "../types";
 import { categoryLabel } from "@/app/lib/categories";
 
@@ -51,6 +51,72 @@ function slotStatusHeroStyle(
   };
 }
 
+function requestStatusLabel(status: DbRequest["status"]) {
+  switch (status) {
+    case "pending":
+      return "申込中";
+    case "accepted":
+      return "成立";
+    case "rejected":
+      return "見送り";
+    case "cancelled":
+      return "取消";
+    default:
+      return status;
+  }
+}
+
+function requestStatusBadgeStyle(status: DbRequest["status"]): React.CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 28,
+    padding: "0 10px",
+    borderRadius: 999,
+    border: "1px solid #eee",
+    fontSize: 12,
+    fontWeight: 900,
+    background:
+      status === "accepted"
+        ? "#ecfdf3"
+        : status === "rejected"
+          ? "#fef2f2"
+          : status === "cancelled"
+            ? "#f3f4f6"
+            : "#eff6ff",
+    color:
+      status === "accepted"
+        ? "#166534"
+        : status === "rejected"
+          ? "#991b1b"
+          : status === "cancelled"
+            ? "#374151"
+            : "#1e3a8a",
+  };
+}
+
+function teamNameById(allTeams: DbTeam[], teamId: string) {
+  return allTeams.find((t) => t.id === teamId)?.name ?? "チーム未設定";
+}
+
+function buildVenueText(slot: DbSlot, venues: DbVenue[]) {
+  const venue = venues.find((v) => v.id === slot.venue_id) ?? null;
+  if (!venue) return "未設定";
+
+  const parts = [venue.name, venue.address].filter(Boolean);
+  return parts.join(" / ") || "未設定";
+}
+
+function buildWantedLevelText(slot: DbSlot) {
+  const min = levelToRankLabel(slot.level_min);
+  const max = levelToRankLabel(slot.level_max);
+  if (min && max) return `${min}〜${max}`;
+  if (min) return `${min}以上`;
+  if (max) return `${max}以下`;
+  return "指定なし";
+}
+
 export function SlotDetail(props: {
   slot: DbSlot | null;
   hostTeam: DbTeam | null;
@@ -79,14 +145,23 @@ export function SlotDetail(props: {
 }) {
   const {
     slot,
+    hostTeam,
+    allTeams,
+    isMine,
+    venues,
+    requests,
     myTeams,
     requestTeamId,
     onChangeRequestTeamId,
     requestComment,
     onChangeRequestComment,
     onRequestSlot,
+    onCancelMyRequest,
     myRequest,
-    requests,
+    onAccept,
+    onReject,
+    onToggleClosed,
+    onOpenChat,
     slotStatus,
     loading,
   } = props;
@@ -103,17 +178,27 @@ export function SlotDetail(props: {
     ) ??
     null;
 
+  const acceptedRequest = useMemo(() => {
+    return requests.find((r) => r.status === "accepted") ?? null;
+  }, [requests]);
+
   const displayRequestComment =
     requestComment.trim() || DEFAULT_REQUEST_COMMENT;
 
-  const wantedLevelText = (() => {
-    const min = levelToRankLabel(slot.level_min);
-    const max = levelToRankLabel(slot.level_max);
-    if (min && max) return `${min}〜${max}`;
-    if (min) return `${min}以上`;
-    if (max) return `${max}以下`;
-    return "指定なし";
-  })();
+  const wantedLevelText = buildWantedLevelText(slot);
+  const venueText = buildVenueText(slot, venues);
+
+  const chatTargetTeamId = useMemo(() => {
+    if (!acceptedRequest) return "";
+
+    if (isMine) {
+      return acceptedRequest.requester_team_id;
+    }
+
+    return slot.host_team_id;
+  }, [acceptedRequest, isMine, slot.host_team_id]);
+
+  const canOpenChat = !!acceptedRequest && !!chatTargetTeamId;
 
   return (
     <div style={root}>
@@ -127,6 +212,8 @@ export function SlotDetail(props: {
       </div>
 
       <section style={card}>
+        <div style={sectionTitle}>募集情報</div>
+
         <div style={infoRow}>
           <b>日時</b>：{slot.date} {hhmm(slot.start_time)}–{hhmm(slot.end_time)}
         </div>
@@ -143,11 +230,23 @@ export function SlotDetail(props: {
         <div style={infoRow}>
           <b>希望レベル</b>：{wantedLevelText}
         </div>
+
+        <div style={infoRow}>
+          <b>会場</b>：{venueText}
+        </div>
+
+        <div style={infoRow}>
+          <b>募集チーム</b>：{hostTeam?.name ?? "チーム未設定"}
+        </div>
+
+        <div style={infoRow}>
+          <b>募集状態</b>：{slot.is_closed ? "締切" : "受付中"}
+        </div>
       </section>
 
-      {!resolvedMyRequest && slotStatus === "open" ? (
+      {!isMine && !resolvedMyRequest && slotStatus === "open" ? (
         <section style={card}>
-          <div style={title}>試合申込</div>
+          <div style={sectionTitle}>試合申込</div>
 
           <select
             value={requestTeamId}
@@ -180,41 +279,119 @@ export function SlotDetail(props: {
         </section>
       ) : null}
 
-      {slotStatus !== "open" && !resolvedMyRequest ? (
-        <div style={alertBox}>この募集は現在申込できません</div>
-      ) : null}
-
-      {resolvedMyRequest ? (
+      {!isMine && resolvedMyRequest ? (
         <section style={card}>
-          <div style={title}>申込状況</div>
+          <div style={sectionTitle}>申込状況</div>
 
-          <div style={infoRow}>
-            <b>状態</b>：{requestStatusLabel(resolvedMyRequest.status)}
+          <div style={statusRow}>
+            <span style={requestStatusBadgeStyle(resolvedMyRequest.status)}>
+              {requestStatusLabel(resolvedMyRequest.status)}
+            </span>
           </div>
 
           <div style={infoRow}>
             <b>コメント</b>：
             {resolvedMyRequest.comment?.trim() || "なし"}
           </div>
+
+          {resolvedMyRequest.status === "pending" && slotStatus === "open" ? (
+            <button
+              type="button"
+              className="sh-btn"
+              style={secondaryBtn}
+              onClick={() => onCancelMyRequest(resolvedMyRequest.id)}
+              disabled={!!loading}
+            >
+              申込み撤回
+            </button>
+          ) : null}
         </section>
+      ) : null}
+
+      {!isMine && slotStatus !== "open" && !resolvedMyRequest ? (
+        <div style={alertBox}>この募集は現在申込できません</div>
+      ) : null}
+
+      {isMine ? (
+        <section style={card}>
+          <div style={sectionTitle}>募集管理</div>
+
+          <button
+            type="button"
+            className="sh-btn"
+            style={secondaryBtn}
+            onClick={() => onToggleClosed(slot.id, !slot.is_closed)}
+            disabled={!!loading || slotStatus === "decided"}
+          >
+            {slot.is_closed ? "募集を再開する" : "募集を締切にする"}
+          </button>
+        </section>
+      ) : null}
+
+      {isMine ? (
+        <section style={card}>
+          <div style={sectionTitle}>申込み一覧</div>
+
+          {requests.length === 0 ? (
+            <div style={emptyText}>まだ申込みはありません</div>
+          ) : (
+            <div style={requestList}>
+              {requests.map((r) => (
+                <div key={r.id} style={requestCard}>
+                  <div style={requestHeader}>
+                    <div style={requestTeamName}>
+                      {teamNameById(allTeams, r.requester_team_id)}
+                    </div>
+                    <span style={requestStatusBadgeStyle(r.status)}>
+                      {requestStatusLabel(r.status)}
+                    </span>
+                  </div>
+
+                  <div style={requestCommentBox}>
+                    {r.comment?.trim() || "コメントなし"}
+                  </div>
+
+                  {r.status === "pending" && slotStatus === "open" ? (
+                    <div style={requestActionRow}>
+                      <button
+                        type="button"
+                        className="sh-btn sh-btn--primary"
+                        onClick={() => onAccept(r.id)}
+                        disabled={!!loading}
+                      >
+                        承認
+                      </button>
+
+                      <button
+                        type="button"
+                        className="sh-btn"
+                        onClick={() => onReject(r.id)}
+                        disabled={!!loading}
+                      >
+                        却下
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {canOpenChat ? (
+        <button
+          type="button"
+          className="sh-btn"
+          style={chatBtn}
+          onClick={() => onOpenChat(chatTargetTeamId, slot)}
+          disabled={!!loading}
+        >
+          チャットを開く
+        </button>
       ) : null}
     </div>
   );
-}
-
-function requestStatusLabel(status: DbRequest["status"]) {
-  switch (status) {
-    case "pending":
-      return "申込中";
-    case "accepted":
-      return "成立";
-    case "rejected":
-      return "見送り";
-    case "cancelled":
-      return "取消";
-    default:
-      return status;
-  }
 }
 
 const root: React.CSSProperties = {
@@ -238,13 +415,15 @@ const card: React.CSSProperties = {
   gap: 10,
 };
 
+const sectionTitle: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 15,
+  color: "#16391f",
+};
+
 const infoRow: React.CSSProperties = {
   fontSize: 14,
   lineHeight: 1.6,
-};
-
-const title: React.CSSProperties = {
-  fontWeight: 900,
 };
 
 const input: React.CSSProperties = {
@@ -270,10 +449,70 @@ const primaryBtn: React.CSSProperties = {
   marginTop: 6,
 };
 
+const secondaryBtn: React.CSSProperties = {
+  width: "100%",
+};
+
+const chatBtn: React.CSSProperties = {
+  width: "100%",
+};
+
 const alertBox: React.CSSProperties = {
   padding: 12,
   borderRadius: 10,
   background: "#fef2f2",
   color: "#991b1b",
   fontWeight: 800,
+};
+
+const statusRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+};
+
+const requestList: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+};
+
+const requestCard: React.CSSProperties = {
+  padding: 12,
+  borderRadius: 10,
+  border: "1px solid #e5e7eb",
+  background: "#fafafa",
+  display: "grid",
+  gap: 8,
+};
+
+const requestHeader: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 8,
+  alignItems: "center",
+  flexWrap: "wrap",
+};
+
+const requestTeamName: React.CSSProperties = {
+  fontWeight: 900,
+  color: "#16391f",
+};
+
+const requestCommentBox: React.CSSProperties = {
+  fontSize: 14,
+  lineHeight: 1.6,
+  color: "#444",
+  whiteSpace: "pre-wrap",
+};
+
+const requestActionRow: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const emptyText: React.CSSProperties = {
+  fontSize: 14,
+  color: "#666",
+  lineHeight: 1.6,
 };
