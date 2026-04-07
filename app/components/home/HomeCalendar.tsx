@@ -166,10 +166,18 @@ function filterSummaryTextFromFilters(filters: {
 }) {
   const parts: string[] = [];
 
-  if (filters.keyword.trim()) parts.push(`キーワード: ${filters.keyword.trim()}`);
-  if (filters.prefectureFilter) parts.push(`都道府県: ${filters.prefectureFilter}`);
-  if (filters.cityFilter) parts.push(`市区町村: ${filters.cityFilter}`);
-  if (filters.townFilter) parts.push(`町名: ${filters.townFilter}`);
+  if (filters.keyword.trim()) {
+    parts.push(`キーワード: ${filters.keyword.trim()}`);
+  }
+  if (filters.prefectureFilter) {
+    parts.push(`都道府県: ${filters.prefectureFilter}`);
+  }
+  if (filters.cityFilter) {
+    parts.push(`市区町村: ${filters.cityFilter}`);
+  }
+  if (filters.townFilter) {
+    parts.push(`町名: ${filters.townFilter}`);
+  }
 
   if (filters.categoryFilter.length > 0) {
     parts.push(
@@ -844,7 +852,10 @@ export default function HomeCalendar() {
         "━━━━━━━━━━━━",
         "⚽️ 試合申込",
         "━━━━━━━━━━━━",
-        `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
+        `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(
+          0,
+          5
+        )}`,
         `📍 ${slot.area_text ?? slot.area ?? "未設定"}`,
         `🏷 ${categoryLabel(slot.category) || slot.category || "未設定"}`,
         "",
@@ -931,7 +942,10 @@ export default function HomeCalendar() {
               "━━━━━━━━━━━━",
               "✅ 試合成立（承認）",
               "━━━━━━━━━━━━",
-              `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
+              `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(
+                0,
+                5
+              )}`,
               `🏷 ${categoryLabel(slot.category) || slot.category || "未設定"}`,
               "",
               `👥 募集チーム：${hostTeamName}`,
@@ -1149,27 +1163,27 @@ export default function HomeCalendar() {
         <MatchFilterPanel
           filterRef={filterRef}
           loading={loading}
-          keyword={keyword}
-          setKeyword={setKeyword}
-          categoryFilter={categoryFilter}
-          setCategoryFilter={setCategoryFilter}
-          prefectureFilter={prefectureFilter}
-          setPrefectureFilter={setPrefectureFilter}
-          cityFilter={cityFilter}
-          setCityFilter={setCityFilter}
-          townFilter={townFilter}
-          setTownFilter={setTownFilter}
-          groundFilter={groundFilter}
-          setGroundFilter={setGroundFilter}
-          strengthFilter={strengthFilter}
-          setStrengthFilter={setStrengthFilter}
-          bikeFilter={bikeFilter}
-          setBikeFilter={setBikeFilter}
-          bikeCapacityMin={bikeCapacityMin}
-          setBikeCapacityMin={setBikeCapacityMin}
-          memberCountMin={memberCountMin}
-          setMemberCountMin={setMemberCountMin}
-          onBackToCalendar={handleBackToCalendar}
+          draftKeyword={keyword}
+          setDraftKeyword={setKeyword}
+          draftCategoryFilter={categoryFilter}
+          setDraftCategoryFilter={setCategoryFilter}
+          draftPrefectureFilter={prefectureFilter}
+          setDraftPrefectureFilter={setPrefectureFilter}
+          draftCityFilter={cityFilter}
+          setDraftCityFilter={setCityFilter}
+          draftTownFilter={townFilter}
+          setDraftTownFilter={setTownFilter}
+          draftGroundFilter={groundFilter}
+          setDraftGroundFilter={setGroundFilter}
+          draftStrengthFilter={strengthFilter}
+          setDraftStrengthFilter={setStrengthFilter}
+          draftBikeFilter={bikeFilter}
+          setDraftBikeFilter={setBikeFilter}
+          draftBikeCapacityMin={bikeCapacityMin}
+          setDraftBikeCapacityMin={setBikeCapacityMin}
+          draftMemberCountMin={memberCountMin}
+          setDraftMemberCountMin={setMemberCountMin}
+          onApplyToCalendar={handleBackToCalendar}
           onOpenTeamList={openTeamListWindow}
           onReset={handleResetTeamFilters}
           onBackToList={closePanel}
