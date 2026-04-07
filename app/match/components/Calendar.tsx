@@ -40,7 +40,6 @@ export function Calendar(props: {
   selectedDateSummaryText?: string;
   onOpenCalendarHelp?: () => void;
 
-  bandText?: string;
   titleText?: string;
 }) {
   const {
@@ -99,13 +98,13 @@ export function Calendar(props: {
       </div>
 
       <div style={headerRow}>
-        <button className="sh-btn" type="button" onClick={onPrevMonth}>
+        <button className="sh-btn" type="button" onClick={onPrevMonth} disabled={loading}>
           ← 前月
         </button>
 
         <div style={monthTitle}>{monthKey}</div>
 
-        <button className="sh-btn" type="button" onClick={onNextMonth}>
+        <button className="sh-btn" type="button" onClick={onNextMonth} disabled={loading}>
           次月 →
         </button>
       </div>
@@ -158,6 +157,9 @@ export function Calendar(props: {
                 ? "#065f46"
                 : "#9ca3af";
 
+          const ariaStatus = summary ? summaryLabel(summary) : "予定なし";
+          const ariaCount = displayCount > 0 ? `${displayCount}件` : "0件";
+
           return (
             <button
               key={c.ymd}
@@ -170,9 +172,7 @@ export function Calendar(props: {
                 opacity: c.inMonth ? 1 : 0.42,
               }}
               aria-pressed={isSelected}
-              aria-label={`${c.ymd} ${summary ? summaryLabel(summary) : "予定なし"} ${
-                displayCount > 0 ? `${displayCount}件` : ""
-              }`}
+              aria-label={`${c.ymd} ${ariaStatus} ${ariaCount}`}
             >
               <div
                 style={{

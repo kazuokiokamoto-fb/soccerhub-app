@@ -61,7 +61,7 @@ type Props = {
   setDraftMemberCountMin: (value: string) => void;
 
   hasDraftChanges?: boolean;
-  onApply: () => void;
+  onApply?: () => void;
   onReset: () => void;
   onBackToList: () => void;
   onOpenStrengthHelp: () => void;
@@ -102,7 +102,6 @@ export function MatchFilterPanel({
   setDraftBikeCapacityMin,
   draftMemberCountMin,
   setDraftMemberCountMin,
-  onApply,
   onReset,
   onBackToList,
   onOpenStrengthHelp,
@@ -163,14 +162,25 @@ export function MatchFilterPanel({
             <div style={filterHeaderRow}>
               <h2 style={filterTitle}>絞り込み条件</h2>
 
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={onBackToList}
-                disabled={loading}
-              >
-                閉じる
-              </button>
+              <div style={headerActions}>
+                <button
+                  type="button"
+                  className="sh-btn"
+                  onClick={onReset}
+                  disabled={loading}
+                >
+                  条件リセット
+                </button>
+
+                <button
+                  type="button"
+                  className="sh-btn"
+                  onClick={onBackToList}
+                  disabled={loading}
+                >
+                  閉じる
+                </button>
+              </div>
             </div>
 
             <label style={label}>
@@ -370,23 +380,19 @@ export function MatchFilterPanel({
               </label>
             </div>
 
+            <div style={footerNote}>
+              条件を選んだら、上の
+              「カレンダーで見る」または「チーム一覧で見る」を押してください。
+            </div>
+
             <div style={actionRow}>
               <button
                 type="button"
-                className="sh-btn sh-btn--primary"
-                onClick={onApply}
-                disabled={loading}
-              >
-                条件決定
-              </button>
-
-              <button
-                type="button"
                 className="sh-btn"
-                onClick={onReset}
+                onClick={onBackToList}
                 disabled={loading}
               >
-                条件リセット
+                閉じる
               </button>
             </div>
           </div>
@@ -507,6 +513,12 @@ const sectionLeadDesc: React.CSSProperties = {
   lineHeight: 1.7,
 };
 
+const headerActions: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
 const strengthCard: React.CSSProperties = {
   border: "1px solid #e5ece7",
   borderRadius: 16,
@@ -603,4 +615,11 @@ const strengthSimpleCode: React.CSSProperties = {
   display: "inline-block",
   minWidth: 28,
   fontWeight: 900,
+};
+
+const footerNote: React.CSSProperties = {
+  fontSize: 12,
+  color: "#5b6470",
+  lineHeight: 1.7,
+  padding: "4px 2px 0",
 };

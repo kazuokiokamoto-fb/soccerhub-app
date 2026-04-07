@@ -5,27 +5,7 @@ import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 import type { MatchFilters } from "../utils/filters";
 
 export function useMatchFilters() {
-  const [draftKeyword, setDraftKeyword] = useState("");
-
-  const [draftCategoryFilter, setDraftCategoryFilter] = useState<string[]>([]);
-
-  const [draftPrefectureFilter, setDraftPrefectureFilter] = useState("");
-  const [draftCityFilter, setDraftCityFilter] = useState("");
-  const [draftTownFilter, setDraftTownFilter] = useState("");
-
-  const [draftGroundFilter, setDraftGroundFilter] =
-    useState<"all" | "あり" | "なし">("all");
-
-  // ★ 複数選択対応
-  const [draftStrengthFilter, setDraftStrengthFilter] =
-    useState<StrengthRank[]>([]);
-
-  const [draftBikeFilter, setDraftBikeFilter] =
-    useState<"all" | "あり" | "なし" | "不明">("all");
-
-  const [draftBikeCapacityMin, setDraftBikeCapacityMin] = useState("");
-  const [draftMemberCountMin, setDraftMemberCountMin] = useState("");
-
+  // 全部「1系統」に統一
   const [keyword, setKeyword] = useState("");
 
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
@@ -37,7 +17,6 @@ export function useMatchFilters() {
   const [groundFilter, setGroundFilter] =
     useState<"all" | "あり" | "なし">("all");
 
-  // ★ 複数選択対応
   const [strengthFilter, setStrengthFilter] =
     useState<StrengthRank[]>([]);
 
@@ -47,7 +26,8 @@ export function useMatchFilters() {
   const [bikeCapacityMin, setBikeCapacityMin] = useState("");
   const [memberCountMin, setMemberCountMin] = useState("");
 
-  const appliedFilters = useMemo<MatchFilters>(() => {
+  // 常にこれが“正”
+  const filters = useMemo<MatchFilters>(() => {
     return {
       keyword,
       categoryFilter,
@@ -73,93 +53,8 @@ export function useMatchFilters() {
     memberCountMin,
   ]);
 
-  const draftFilters = useMemo<MatchFilters>(() => {
-    return {
-      keyword: draftKeyword,
-      categoryFilter: draftCategoryFilter,
-      prefectureFilter: draftPrefectureFilter,
-      cityFilter: draftCityFilter,
-      townFilter: draftTownFilter,
-      groundFilter: draftGroundFilter,
-      strengthFilter: draftStrengthFilter,
-      bikeFilter: draftBikeFilter,
-      bikeCapacityMin: draftBikeCapacityMin,
-      memberCountMin: draftMemberCountMin,
-    };
-  }, [
-    draftKeyword,
-    draftCategoryFilter,
-    draftPrefectureFilter,
-    draftCityFilter,
-    draftTownFilter,
-    draftGroundFilter,
-    draftStrengthFilter,
-    draftBikeFilter,
-    draftBikeCapacityMin,
-    draftMemberCountMin,
-  ]);
-
-  const hasDraftChanges = useMemo(() => {
-    return (
-      draftKeyword !== keyword ||
-      JSON.stringify(draftCategoryFilter) !== JSON.stringify(categoryFilter) ||
-      draftPrefectureFilter !== prefectureFilter ||
-      draftCityFilter !== cityFilter ||
-      draftTownFilter !== townFilter ||
-      draftGroundFilter !== groundFilter ||
-      JSON.stringify(draftStrengthFilter) !== JSON.stringify(strengthFilter) ||
-      draftBikeFilter !== bikeFilter ||
-      draftBikeCapacityMin !== bikeCapacityMin ||
-      draftMemberCountMin !== memberCountMin
-    );
-  }, [
-    draftKeyword,
-    keyword,
-    draftCategoryFilter,
-    categoryFilter,
-    draftPrefectureFilter,
-    prefectureFilter,
-    draftCityFilter,
-    cityFilter,
-    draftTownFilter,
-    townFilter,
-    draftGroundFilter,
-    groundFilter,
-    draftStrengthFilter,
-    strengthFilter,
-    draftBikeFilter,
-    bikeFilter,
-    draftBikeCapacityMin,
-    bikeCapacityMin,
-    draftMemberCountMin,
-    memberCountMin,
-  ]);
-
-  const applyDraftToApplied = () => {
-    setKeyword(draftKeyword);
-    setCategoryFilter(draftCategoryFilter);
-    setPrefectureFilter(draftPrefectureFilter);
-    setCityFilter(draftCityFilter);
-    setTownFilter(draftTownFilter);
-    setGroundFilter(draftGroundFilter);
-    setStrengthFilter(draftStrengthFilter);
-    setBikeFilter(draftBikeFilter);
-    setBikeCapacityMin(draftBikeCapacityMin);
-    setMemberCountMin(draftMemberCountMin);
-  };
-
+  // リセットのみ残す
   const clearAllFilters = () => {
-    setDraftKeyword("");
-    setDraftCategoryFilter([]);
-    setDraftPrefectureFilter("");
-    setDraftCityFilter("");
-    setDraftTownFilter("");
-    setDraftGroundFilter("all");
-    setDraftStrengthFilter([]);
-    setDraftBikeFilter("all");
-    setDraftBikeCapacityMin("");
-    setDraftMemberCountMin("");
-
     setKeyword("");
     setCategoryFilter([]);
     setPrefectureFilter("");
@@ -173,32 +68,33 @@ export function useMatchFilters() {
   };
 
   return {
-    draftKeyword,
-    setDraftKeyword,
-    draftCategoryFilter,
-    setDraftCategoryFilter,
-    draftPrefectureFilter,
-    setDraftPrefectureFilter,
-    draftCityFilter,
-    setDraftCityFilter,
-    draftTownFilter,
-    setDraftTownFilter,
-    draftGroundFilter,
-    setDraftGroundFilter,
-    draftStrengthFilter,
-    setDraftStrengthFilter,
-    draftBikeFilter,
-    setDraftBikeFilter,
-    draftBikeCapacityMin,
-    setDraftBikeCapacityMin,
-    draftMemberCountMin,
-    setDraftMemberCountMin,
+    // 値
+    keyword,
+    categoryFilter,
+    prefectureFilter,
+    cityFilter,
+    townFilter,
+    groundFilter,
+    strengthFilter,
+    bikeFilter,
+    bikeCapacityMin,
+    memberCountMin,
 
-    appliedFilters,
-    draftFilters,
-    hasDraftChanges,
+    // setter
+    setKeyword,
+    setCategoryFilter,
+    setPrefectureFilter,
+    setCityFilter,
+    setTownFilter,
+    setGroundFilter,
+    setStrengthFilter,
+    setBikeFilter,
+    setBikeCapacityMin,
+    setMemberCountMin,
 
-    applyDraftToApplied,
+    // これだけでOK
+    filters,
+
     clearAllFilters,
   };
 }

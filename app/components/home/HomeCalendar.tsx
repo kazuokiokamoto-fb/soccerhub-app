@@ -152,7 +152,7 @@ function buildMatchCarryQuery(params: {
   return qs.toString();
 }
 
-function appliedFilterSummaryText(filters: {
+function filterSummaryTextFromFilters(filters: {
   keyword: string;
   categoryFilter: string[];
   prefectureFilter: string;
@@ -329,30 +329,27 @@ export default function HomeCalendar() {
   const filterRef = useRef<HTMLElement | null>(null);
 
   const {
-    draftKeyword,
-    setDraftKeyword,
-    draftCategoryFilter,
-    setDraftCategoryFilter,
-    draftPrefectureFilter,
-    setDraftPrefectureFilter,
-    draftCityFilter,
-    setDraftCityFilter,
-    draftTownFilter,
-    setDraftTownFilter,
-    draftGroundFilter,
-    setDraftGroundFilter,
-    draftStrengthFilter,
-    setDraftStrengthFilter,
-    draftBikeFilter,
-    setDraftBikeFilter,
-    draftBikeCapacityMin,
-    setDraftBikeCapacityMin,
-    draftMemberCountMin,
-    setDraftMemberCountMin,
-    appliedFilters,
-    draftFilters,
-    hasDraftChanges,
-    applyDraftToApplied,
+    keyword,
+    setKeyword,
+    categoryFilter,
+    setCategoryFilter,
+    prefectureFilter,
+    setPrefectureFilter,
+    cityFilter,
+    setCityFilter,
+    townFilter,
+    setTownFilter,
+    groundFilter,
+    setGroundFilter,
+    strengthFilter,
+    setStrengthFilter,
+    bikeFilter,
+    setBikeFilter,
+    bikeCapacityMin,
+    setBikeCapacityMin,
+    memberCountMin,
+    setMemberCountMin,
+    filters,
     clearAllFilters,
   } = useMatchFilters();
 
@@ -389,29 +386,16 @@ export default function HomeCalendar() {
 
   const filteredSlotsInMonth = useMemo(() => {
     return slotsInMonth.filter((s: any) =>
-      matchesSlotFilters(s, teamMap as any, appliedFilters)
+      matchesSlotFilters(s, teamMap as any, filters)
     );
-  }, [slotsInMonth, teamMap, appliedFilters]);
+  }, [slotsInMonth, teamMap, filters]);
 
-  const draftFilteredSlotsInMonth = useMemo(() => {
-    return slotsInMonth.filter((s: any) =>
-      matchesSlotFilters(s, teamMap as any, draftFilters)
-    );
-  }, [slotsInMonth, teamMap, draftFilters]);
-
-  const appliedFilteredTeams = useMemo(() => {
+  const filteredTeams = useMemo(() => {
     return allTeams.filter((team: any) => {
       if (myTeamIds.includes(team.id)) return false;
-      return teamMatchesFilters(team, appliedFilters);
+      return teamMatchesFilters(team, filters);
     });
-  }, [allTeams, myTeamIds, appliedFilters]);
-
-  const draftFilteredTeams = useMemo(() => {
-    return allTeams.filter((team: any) => {
-      if (myTeamIds.includes(team.id)) return false;
-      return teamMatchesFilters(team, draftFilters);
-    });
-  }, [allTeams, myTeamIds, draftFilters]);
+  }, [allTeams, myTeamIds, filters]);
 
   const countByDate = useMemo(() => {
     const m = new Map<string, number>();
@@ -579,11 +563,10 @@ export default function HomeCalendar() {
     }, 120);
   };
 
-  const handleApplyFiltersToCalendar = () => {
-    applyDraftToApplied();
+  const handleBackToCalendar = () => {
+    setPanelMode("none");
     setSelectedSlotId("");
     setRequestComment("");
-    setPanelMode("none");
     scrollToCalendar();
   };
 
@@ -596,21 +579,21 @@ export default function HomeCalendar() {
   const openTeamListWindow = () => {
     const qs = new URLSearchParams();
 
-    if (draftKeyword) qs.set("keyword", draftKeyword);
-    if (draftPrefectureFilter) qs.set("prefecture", draftPrefectureFilter);
-    if (draftCityFilter) qs.set("city", draftCityFilter);
-    if (draftTownFilter) qs.set("town", draftTownFilter);
-    if (draftGroundFilter !== "all") qs.set("ground", draftGroundFilter);
-    if (draftBikeFilter !== "all") qs.set("bike", draftBikeFilter);
-    if (draftBikeCapacityMin) qs.set("bikeCapacityMin", draftBikeCapacityMin);
-    if (draftMemberCountMin) qs.set("memberCountMin", draftMemberCountMin);
+    if (keyword) qs.set("keyword", keyword);
+    if (prefectureFilter) qs.set("prefecture", prefectureFilter);
+    if (cityFilter) qs.set("city", cityFilter);
+    if (townFilter) qs.set("town", townFilter);
+    if (groundFilter !== "all") qs.set("ground", groundFilter);
+    if (bikeFilter !== "all") qs.set("bike", bikeFilter);
+    if (bikeCapacityMin) qs.set("bikeCapacityMin", bikeCapacityMin);
+    if (memberCountMin) qs.set("memberCountMin", memberCountMin);
 
-    if (draftCategoryFilter.length > 0) {
-      qs.set("categories", draftCategoryFilter.join(","));
+    if (categoryFilter.length > 0) {
+      qs.set("categories", categoryFilter.join(","));
     }
 
-    if (draftStrengthFilter.length > 0) {
-      qs.set("strengths", draftStrengthFilter.join(","));
+    if (strengthFilter.length > 0) {
+      qs.set("strengths", strengthFilter.join(","));
     }
 
     const query = qs.toString();
@@ -1044,17 +1027,17 @@ export default function HomeCalendar() {
   };
 
   const filterSummaryText = useMemo(() => {
-    const text = appliedFilterSummaryText(appliedFilters);
+    const text = filterSummaryTextFromFilters(filters);
     return text || "すべての条件で表示中";
-  }, [appliedFilters]);
+  }, [filters]);
 
   const selectedDateSummaryText = useMemo(() => {
     return `${selectedYmd} / 募集件数 ${slotsOnSelectedDate.length}件`;
   }, [selectedYmd, slotsOnSelectedDate.length]);
 
   const topHitText = useMemo(() => {
-    return `🔥 ${appliedFilteredTeams.length}チーム / ${filteredSlotsInMonth.length}試合ヒット`;
-  }, [appliedFilteredTeams.length, filteredSlotsInMonth.length]);
+    return `🔥 ${filteredTeams.length}チーム / ${filteredSlotsInMonth.length}試合ヒット`;
+  }, [filteredTeams.length, filteredSlotsInMonth.length]);
 
   const topConditionText = useMemo(() => {
     return filterSummaryText;
@@ -1166,29 +1149,27 @@ export default function HomeCalendar() {
         <MatchFilterPanel
           filterRef={filterRef}
           loading={loading}
-          draftKeyword={draftKeyword}
-          setDraftKeyword={setDraftKeyword}
-          draftCategoryFilter={draftCategoryFilter}
-          setDraftCategoryFilter={setDraftCategoryFilter}
-          draftPrefectureFilter={draftPrefectureFilter}
-          setDraftPrefectureFilter={setDraftPrefectureFilter}
-          draftCityFilter={draftCityFilter}
-          setDraftCityFilter={setDraftCityFilter}
-          draftTownFilter={draftTownFilter}
-          setDraftTownFilter={setDraftTownFilter}
-          draftGroundFilter={draftGroundFilter}
-          setDraftGroundFilter={setDraftGroundFilter}
-          draftStrengthFilter={draftStrengthFilter}
-          setDraftStrengthFilter={setDraftStrengthFilter}
-          draftBikeFilter={draftBikeFilter}
-          setDraftBikeFilter={setDraftBikeFilter}
-          draftBikeCapacityMin={draftBikeCapacityMin}
-          setDraftBikeCapacityMin={setDraftBikeCapacityMin}
-          draftMemberCountMin={draftMemberCountMin}
-          setDraftMemberCountMin={setDraftMemberCountMin}
-          hasDraftChanges={hasDraftChanges}
-          onApply={handleApplyFiltersToCalendar}
-          onApplyToCalendar={handleApplyFiltersToCalendar}
+          keyword={keyword}
+          setKeyword={setKeyword}
+          categoryFilter={categoryFilter}
+          setCategoryFilter={setCategoryFilter}
+          prefectureFilter={prefectureFilter}
+          setPrefectureFilter={setPrefectureFilter}
+          cityFilter={cityFilter}
+          setCityFilter={setCityFilter}
+          townFilter={townFilter}
+          setTownFilter={setTownFilter}
+          groundFilter={groundFilter}
+          setGroundFilter={setGroundFilter}
+          strengthFilter={strengthFilter}
+          setStrengthFilter={setStrengthFilter}
+          bikeFilter={bikeFilter}
+          setBikeFilter={setBikeFilter}
+          bikeCapacityMin={bikeCapacityMin}
+          setBikeCapacityMin={setBikeCapacityMin}
+          memberCountMin={memberCountMin}
+          setMemberCountMin={setMemberCountMin}
+          onBackToCalendar={handleBackToCalendar}
           onOpenTeamList={openTeamListWindow}
           onReset={handleResetTeamFilters}
           onBackToList={closePanel}
@@ -1197,7 +1178,7 @@ export default function HomeCalendar() {
           titleText="相手を探す"
           descriptionText="レベル・エリア・人数感などから相手チームを探せます。"
           liveCountLabel="現在のヒット件数"
-          liveCountText={`${draftFilteredTeams.length}チーム / ${draftFilteredSlotsInMonth.length}件`}
+          liveCountText={`🔥 ${filteredTeams.length}チーム / ${filteredSlotsInMonth.length}試合`}
         />
       ) : null}
 

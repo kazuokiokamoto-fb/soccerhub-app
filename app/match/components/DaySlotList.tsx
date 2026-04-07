@@ -14,96 +14,18 @@ function hhmm(v: string) {
   return v.slice(0, 5);
 }
 
-function levelLabel(level: number) {
-  if (level >= 9) return "SS";
-  if (level >= 7) return "S";
-  if (level >= 5) return "A";
-  if (level >= 3) return "B";
-  return "C";
-}
-
-function levelToRankLabel(level?: number | null) {
-  const n = Number(level ?? 0);
-  if (!level && level !== 0) return "";
-  if (n >= 9) return "SS";
-  if (n >= 7) return "S";
-  if (n >= 5) return "A";
-  if (n >= 3) return "B";
-  return "C";
-}
-
-function renderWantedLevelRange(slot: DbSlot) {
-  const min = levelToRankLabel(slot.level_min);
-  const max = levelToRankLabel(slot.level_max);
-
-  if (min && max) return `${min}〜${max}`;
-  if (min) return `${min}以上`;
-  if (max) return `${max}以下`;
-  return "指定なし";
-}
-
-function statusLabel(status: DbRequest["status"]) {
-  switch (status) {
-    case "pending":
-      return "申込中";
-    case "accepted":
-      return "成立";
-    case "rejected":
-      return "見送り";
-    case "cancelled":
-      return "取消";
-    default:
-      return status;
-  }
-}
-
-function statusBadgeStyle(status: DbRequest["status"]) {
-  return {
-    marginLeft: 0,
-    padding: "2px 8px",
-    borderRadius: 999,
-    border: "1px solid #eee",
-    fontSize: 12,
-    fontWeight: 900,
-    background:
-      status === "accepted"
-        ? "#ecfdf3"
-        : status === "rejected"
-          ? "#fef2f2"
-          : status === "cancelled"
-            ? "#f3f4f6"
-            : "#eff6ff",
-    color:
-      status === "accepted"
-        ? "#166534"
-        : status === "rejected"
-          ? "#991b1b"
-          : status === "cancelled"
-            ? "#374151"
-            : "#1e3a8a",
-  } as React.CSSProperties;
-}
-
-function slotCategoryText(slot: any) {
+function slotCategoryText(slot: DbSlot | any) {
   if (Array.isArray(slot?.categories) && slot.categories.length > 0) {
     const labels = categoryLabels(slot.categories);
     return labels.length > 0 ? labels.join(" / ") : slot.categories.join(" / ");
   }
-
   return categoryLabel(slot?.category) || slot?.category || "カテゴリ未設定";
 }
 
 function slotStatusLabel(status: "decided" | "open" | "other") {
-  switch (status) {
-    case "decided":
-      return "決定済";
-    case "open":
-      return "募集中";
-    case "other":
-      return "他決定";
-    default:
-      return "";
-  }
+  if (status === "decided") return "決定済";
+  if (status === "open") return "募集中";
+  return "他決定";
 }
 
 function slotStatusBadgeStyle(status: "decided" | "open" | "other") {
@@ -130,43 +52,6 @@ function slotStatusBadgeStyle(status: "decided" | "open" | "other") {
   } as React.CSSProperties;
 }
 
-function strengthBadgeStyle(rankText: string) {
-  if (rankText === "SS") {
-    return {
-      background: "#14532d",
-      color: "#fff",
-      border: "1px solid #14532d",
-    } as React.CSSProperties;
-  }
-  if (rankText === "S") {
-    return {
-      background: "#166534",
-      color: "#fff",
-      border: "1px solid #166534",
-    } as React.CSSProperties;
-  }
-  if (rankText === "A") {
-    return {
-      background: "#dcfce7",
-      color: "#166534",
-      border: "1px solid #bbf7d0",
-    } as React.CSSProperties;
-  }
-  if (rankText === "B") {
-    return {
-      background: "#fef3c7",
-      color: "#92400e",
-      border: "1px solid #fde68a",
-    } as React.CSSProperties;
-  }
-
-  return {
-    background: "#f3f4f6",
-    color: "#4b5563",
-    border: "1px solid #e5e7eb",
-  } as React.CSSProperties;
-}
-
 function buildTeamDetailQuery(params: {
   slotId?: string | null;
   date?: string | null;
@@ -176,6 +61,47 @@ function buildTeamDetailQuery(params: {
   if (params.slotId) qs.set("slotId", params.slotId);
   if (params.date) qs.set("date", params.date);
   return qs.toString();
+}
+
+function requestStatusLabel(status: DbRequest["status"]) {
+  switch (status) {
+    case "pending":
+      return "申込中";
+    case "accepted":
+      return "成立";
+    case "rejected":
+      return "見送り";
+    case "cancelled":
+      return "取消";
+    default:
+      return status;
+  }
+}
+
+function requestStatusBadgeStyle(status: DbRequest["status"]) {
+  return {
+    padding: "2px 8px",
+    borderRadius: 999,
+    border: "1px solid #eee",
+    fontSize: 12,
+    fontWeight: 900,
+    background:
+      status === "accepted"
+        ? "#ecfdf3"
+        : status === "rejected"
+          ? "#fef2f2"
+          : status === "cancelled"
+            ? "#f3f4f6"
+            : "#eff6ff",
+    color:
+      status === "accepted"
+        ? "#166534"
+        : status === "rejected"
+          ? "#991b1b"
+          : status === "cancelled"
+            ? "#374151"
+            : "#1e3a8a",
+  } as React.CSSProperties;
 }
 
 export function DaySlotList(props: {
@@ -261,50 +187,44 @@ export function DaySlotList(props: {
   return (
     <section style={{ ...card, marginTop: 14 }}>
       {sortedSlots.length === 0 ? (
-        <p style={{ margin: 0, color: "#777", lineHeight: 1.8 }}>
-          この条件に合う募集はありません。
-        </p>
+        <div style={emptyBox}>
+          <div style={emptyTitle}>該当する募集がありません</div>
+          <div style={emptySub}>
+            条件をゆるめるか、別の日付を選んでみてください
+          </div>
+        </div>
       ) : (
         <div style={{ display: "grid", gap: 12 }}>
           {sortedSlots.map((s) => {
             const isMine = !!meId && s.owner_id === meId;
 
-            const hostTeam =
-              allTeams.find((t) => t.id === s.host_team_id) ?? null;
-            const hostTeamName = hostTeam?.name?.trim() || "チーム未設定";
-            const rankText =
-              hostTeam?.strength_rank?.trim() ||
-              levelLabel(Number(hostTeam?.level ?? 0));
-
             const slotRequests = requestsForMonth.filter((r) => r.slot_id === s.id);
 
-            const myReq = slotRequests.find(
-              (r) =>
-                r.requester_team_id === requestTeamId &&
-                r.status !== "cancelled"
-            );
+            const myReq =
+              slotRequests.find(
+                (r) =>
+                  r.requester_team_id === requestTeamId &&
+                  r.status !== "cancelled"
+              ) ?? null;
 
             const acceptedReq =
-              slotRequests
-                .filter((r) => r.status === "accepted")
-                .sort((a, b) => (a.created_at > b.created_at ? -1 : 1))[0] ??
-              null;
+              slotRequests.find((r) => r.status === "accepted") ?? null;
 
-            const categoryText = slotCategoryText(s);
-            const isExpanded = selectedSlotId === s.id;
-            const slotStatus = slotStatusResolver(s);
+            const hostTeam =
+              allTeams.find((t) => t.id === s.host_team_id) ?? null;
 
-            const displayTeamForLink =
-              slotStatus === "decided" && isMine && acceptedReq
-                ? allTeams.find((t) => t.id === acceptedReq.requester_team_id) ??
-                  hostTeam
-                : hostTeam;
+            const opponentTeam = acceptedReq
+              ? allTeams.find((t) => t.id === acceptedReq.requester_team_id) ?? null
+              : null;
+
+            const displayTeam =
+              acceptedReq && isMine ? opponentTeam ?? hostTeam : hostTeam;
 
             const detailTeam =
-              slotStatus === "decided" && isMine && acceptedReq
-                ? allTeams.find((t) => t.id === acceptedReq.requester_team_id) ??
-                  hostTeam
-                : hostTeam;
+              acceptedReq && isMine ? opponentTeam ?? hostTeam : hostTeam;
+
+            const slotStatus = slotStatusResolver(s);
+            const isExpanded = selectedSlotId === s.id;
 
             const teamDetailQuery = buildTeamDetailQuery({
               slotId: s.id,
@@ -328,7 +248,7 @@ export function DaySlotList(props: {
                         {hhmm(s.start_time)}–{hhmm(s.end_time)}
                       </div>
 
-                      <div style={rightBadgeRow}>
+                      <div style={badgeRow}>
                         <span
                           style={{
                             ...slotStatusBadge,
@@ -338,71 +258,58 @@ export function DaySlotList(props: {
                           {slotStatusLabel(slotStatus)}
                         </span>
 
-                        {s.is_closed && slotStatus === "open" ? (
+                        {!isMine && myReq ? (
                           <span
-                            style={{
-                              ...statusBadgeStyle("cancelled"),
-                            }}
+                            style={requestStatusBadgeStyle(myReq.status)}
                           >
-                            締切
+                            {requestStatusLabel(myReq.status)}
                           </span>
                         ) : null}
 
-                        {!isMine && myReq ? (
+                        {s.is_closed && slotStatus === "open" ? (
                           <span
-                            style={{
-                              ...statusBadgeStyle(myReq.status),
-                            }}
+                            style={requestStatusBadgeStyle("cancelled")}
                           >
-                            {statusLabel(myReq.status)}
+                            締切
                           </span>
                         ) : null}
                       </div>
                     </div>
 
                     <div style={teamNameRow}>
-                      <span style={teamName}>{hostTeamName}</span>
+                      <div style={teamName}>
+                        {displayTeam?.name || "チーム未設定"}
+                      </div>
                       {isMine ? <span style={mineBadge}>あなたの募集</span> : null}
                     </div>
 
+                    {slotStatus === "decided" && opponentTeam ? (
+                      <div style={decidedNote}>
+                        対戦相手：{opponentTeam.name}
+                      </div>
+                    ) : null}
+
                     <div style={slotSubLine}>
-                      📍 {s.area_text ?? s.area ?? "エリア未設定"}
+                      📍 {s.area_text ?? s.area ?? "未設定"}
                     </div>
 
                     <div style={slotSubLine}>
-                      🏷 {categoryText}
-                    </div>
-
-                    <div style={slotInfoRow}>
-                      <div
-                        style={{
-                          ...rankBadge,
-                          ...strengthBadgeStyle(rankText),
-                        }}
-                      >
-                        強さ {rankText}
-                      </div>
-
-                      <div style={wantedBadge}>
-                        希望相手 {renderWantedLevelRange(s)}
-                      </div>
+                      🏷 {slotCategoryText(s)}
                     </div>
 
                     <div style={buttonRow}>
                       <button
-                        className="sh-btn sh-btn--primary"
                         type="button"
+                        className="sh-btn sh-btn--primary"
                         onClick={() => onToggleDetail(s.id)}
-                        style={buttonWide}
                       >
-                        {isExpanded ? "閉じる" : "募集詳細"}
+                        {isExpanded ? "閉じる" : "募集詳細を見る"}
                       </button>
 
-                      {displayTeamForLink?.id ? (
+                      {displayTeam?.id ? (
                         <Link
-                          href={`/teams/${displayTeamForLink.id}?${teamDetailQuery}`}
-                          className="sh-btn"
-                          style={buttonLink}
+                          href={`/teams/${displayTeam.id}?${teamDetailQuery}`}
+                          className="sh-btn sh-btn--ghost"
                         >
                           チーム詳細
                         </Link>
@@ -429,7 +336,6 @@ export function DaySlotList(props: {
                       onChangeRequestComment={onChangeRequestComment}
                       onRequestSlot={onRequestSlot}
                       onCancelMyRequest={onCancelMyRequest}
-                      myRequest={myReq ?? null}
                       onAccept={onAccept}
                       onReject={onReject}
                       onToggleClosed={onToggleClosed}
@@ -447,6 +353,24 @@ export function DaySlotList(props: {
   );
 }
 
+const emptyBox: React.CSSProperties = {
+  padding: 24,
+  textAlign: "center",
+};
+
+const emptyTitle: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 16,
+  color: "#16391f",
+};
+
+const emptySub: React.CSSProperties = {
+  fontSize: 13,
+  color: "#666",
+  marginTop: 6,
+  lineHeight: 1.7,
+};
+
 const card: React.CSSProperties = {
   padding: 14,
   border: "1px solid #eee",
@@ -459,13 +383,11 @@ const slotCard: React.CSSProperties = {
   border: "1px solid #e5e7eb",
   background: "#fff",
   overflow: "hidden",
-  boxShadow: "0 2px 10px rgba(0,0,0,0.03)",
 };
 
 const slotCardExpanded: React.CSSProperties = {
   border: "2px solid #86efac",
   background: "#f0fdf4",
-  boxShadow: "0 8px 24px rgba(20,92,42,0.08)",
 };
 
 const slotBubbleRow: React.CSSProperties = {
@@ -473,7 +395,6 @@ const slotBubbleRow: React.CSSProperties = {
   gridTemplateColumns: "44px 1fr",
   gap: 10,
   padding: 14,
-  alignItems: "start",
 };
 
 const avatarCircle: React.CSSProperties = {
@@ -481,43 +402,38 @@ const avatarCircle: React.CSSProperties = {
   height: 44,
   borderRadius: 999,
   background: "#dcfce7",
-  display: "inline-flex",
+  display: "flex",
   alignItems: "center",
   justifyContent: "center",
   fontSize: 22,
-  flexShrink: 0,
 };
 
 const slotBubbleMain: React.CSSProperties = {
-  minWidth: 0,
   display: "grid",
   gap: 8,
+  minWidth: 0,
 };
 
 const slotTopRow: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  gap: 10,
   alignItems: "flex-start",
+  gap: 8,
   flexWrap: "wrap",
 };
 
 const timeBadge: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 28,
-  padding: "0 10px",
-  borderRadius: 999,
   background: "#145c2a",
   color: "#fff",
-  fontSize: 12,
+  padding: "4px 10px",
+  borderRadius: 999,
   fontWeight: 900,
+  fontSize: 12,
 };
 
-const rightBadgeRow: React.CSSProperties = {
+const badgeRow: React.CSSProperties = {
   display: "flex",
-  gap: 8,
+  gap: 6,
   flexWrap: "wrap",
   alignItems: "center",
 };
@@ -557,63 +473,25 @@ const mineBadge: React.CSSProperties = {
   fontWeight: 900,
 };
 
-const slotSubLine: React.CSSProperties = {
-  fontSize: 14,
-  color: "#4b5563",
+const decidedNote: React.CSSProperties = {
+  fontSize: 13,
+  color: "#166534",
   lineHeight: 1.6,
 };
 
-const slotInfoRow: React.CSSProperties = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-  marginTop: 2,
-};
-
-const rankBadge: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 30,
-  padding: "0 12px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: 900,
-};
-
-const wantedBadge: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 30,
-  padding: "0 12px",
-  borderRadius: 999,
-  background: "#f7faf8",
-  border: "1px solid #e5ece7",
-  color: "#1f5d30",
-  fontSize: 12,
-  fontWeight: 900,
+const slotSubLine: React.CSSProperties = {
+  fontSize: 14,
+  color: "#555",
+  lineHeight: 1.6,
 };
 
 const buttonRow: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gridTemplateColumns: "1fr 1fr",
   gap: 8,
-  marginTop: 4,
-};
-
-const buttonWide: React.CSSProperties = {
-  width: "100%",
-  textAlign: "center",
-};
-
-const buttonLink: React.CSSProperties = {
-  width: "100%",
-  textAlign: "center",
-  boxSizing: "border-box",
 };
 
 const detailWrap: React.CSSProperties = {
-  padding: "0 14px 14px",
-  borderTop: "1px solid #dbe9de",
+  padding: 12,
+  borderTop: "1px solid #eee",
 };

@@ -1,11 +1,8 @@
-// ★変更点だけでなく全部フルで出しています
-
 "use client";
 
-import React, { useMemo } from "react";
-import Link from "next/link";
+import React from "react";
 import type { DbRequest, DbSlot, DbTeam, DbVenue } from "../types";
-import { categoryLabel, categoryLabels } from "@/app/lib/categories";
+import { categoryLabel } from "@/app/lib/categories";
 
 const DEFAULT_REQUEST_COMMENT =
   "はじめまして。練習試合を希望しています。条件が合えばぜひお願いします。";
@@ -70,19 +67,18 @@ export function SlotDetail(props: {
   onChangeRequestComment: (v: string) => void;
   onRequestSlot: (slotId: string) => void;
   onCancelMyRequest: (requestId: string) => void;
-  myRequest: DbRequest | null;
+  myRequest?: DbRequest | null;
 
   onAccept: (requestId: string) => void;
   onReject: (requestId: string) => void;
   onToggleClosed: (slotId: string, nextClosed: boolean) => void;
-  onOpenChat: (otherTeamId: string, slot?: DbSlot | null) => void;
+  onOpenChat: (otherTeamId: string, slot?: DbSlot | null) => void | Promise<void>;
 
   slotStatus: "decided" | "open" | "other";
   loading?: boolean;
 }) {
   const {
     slot,
-    hostTeam,
     myTeams,
     requestTeamId,
     onChangeRequestTeamId,
@@ -90,18 +86,37 @@ export function SlotDetail(props: {
     onChangeRequestComment,
     onRequestSlot,
     myRequest,
+    requests,
     slotStatus,
     loading,
   } = props;
 
   if (!slot) return null;
 
+  const resolvedMyRequest =
+    myRequest ??
+    requests.find(
+      (r) =>
+        r.slot_id === slot.id &&
+        r.requester_team_id === requestTeamId &&
+        r.status !== "cancelled"
+    ) ??
+    null;
+
   const displayRequestComment =
     requestComment.trim() || DEFAULT_REQUEST_COMMENT;
 
+  const wantedLevelText = (() => {
+    const min = levelToRankLabel(slot.level_min);
+    const max = levelToRankLabel(slot.level_max);
+    if (min && max) return `${min}〜${max}`;
+    if (min) return `${min}以上`;
+    if (max) return `${max}以下`;
+    return "指定なし";
+  })();
+
   return (
     <div style={root}>
-      {/* ===== 状態ヘッダー（強化） ===== */}
       <div
         style={{
           ...statusHero,
@@ -111,7 +126,6 @@ export function SlotDetail(props: {
         {slotStatusLabel(slotStatus)}
       </div>
 
-      {/* ===== 基本情報 ===== */}
       <section style={card}>
         <div style={infoRow}>
           <b>日時</b>：{slot.date} {hhmm(slot.start_time)}–{hhmm(slot.end_time)}
@@ -127,20 +141,11 @@ export function SlotDetail(props: {
         </div>
 
         <div style={infoRow}>
-          <b>希望レベル</b>：
-          {(() => {
-            const min = levelToRankLabel(slot.level_min);
-            const max = levelToRankLabel(slot.level_max);
-            if (min && max) return `${min}〜${max}`;
-            if (min) return `${min}以上`;
-            if (max) return `${max}以下`;
-            return "指定なし";
-          })()}
+          <b>希望レベル</b>：{wantedLevelText}
         </div>
       </section>
 
-      {/* ===== 申込 ===== */}
-      {!myRequest && slotStatus === "open" ? (
+      {!resolvedMyRequest && slotStatus === "open" ? (
         <section style={card}>
           <div style={title}>試合申込</div>
 
@@ -148,6 +153,7 @@ export function SlotDetail(props: {
             value={requestTeamId}
             onChange={(e) => onChangeRequestTeamId(e.target.value)}
             style={input}
+            disabled={!!loading || myTeams.length === 0}
           >
             {myTeams.map((t) => (
               <option key={t.id} value={t.id}>
@@ -160,30 +166,56 @@ export function SlotDetail(props: {
             value={displayRequestComment}
             onChange={(e) => onChangeRequestComment(e.target.value)}
             style={textarea}
+            disabled={!!loading}
           />
 
           <button
             className="sh-btn sh-btn--primary"
             style={primaryBtn}
             onClick={() => onRequestSlot(slot.id)}
-            disabled={!!loading}
+            disabled={!!loading || myTeams.length === 0}
           >
             試合申込する
           </button>
         </section>
       ) : null}
 
-      {/* ===== 状態メッセージ ===== */}
-      {slotStatus !== "open" && !myRequest ? (
-        <div style={alertBox}>
-          この募集は現在申込できません
-        </div>
+      {slotStatus !== "open" && !resolvedMyRequest ? (
+        <div style={alertBox}>この募集は現在申込できません</div>
+      ) : null}
+
+      {resolvedMyRequest ? (
+        <section style={card}>
+          <div style={title}>申込状況</div>
+
+          <div style={infoRow}>
+            <b>状態</b>：{requestStatusLabel(resolvedMyRequest.status)}
+          </div>
+
+          <div style={infoRow}>
+            <b>コメント</b>：
+            {resolvedMyRequest.comment?.trim() || "なし"}
+          </div>
+        </section>
       ) : null}
     </div>
   );
 }
 
-/* ===== styles ===== */
+function requestStatusLabel(status: DbRequest["status"]) {
+  switch (status) {
+    case "pending":
+      return "申込中";
+    case "accepted":
+      return "成立";
+    case "rejected":
+      return "見送り";
+    case "cancelled":
+      return "取消";
+    default:
+      return status;
+  }
+}
 
 const root: React.CSSProperties = {
   display: "grid",
@@ -219,6 +251,7 @@ const input: React.CSSProperties = {
   padding: 10,
   borderRadius: 8,
   border: "1px solid #ddd",
+  background: "#fff",
 };
 
 const textarea: React.CSSProperties = {
@@ -226,6 +259,10 @@ const textarea: React.CSSProperties = {
   borderRadius: 8,
   border: "1px solid #ddd",
   minHeight: 80,
+  resize: "vertical",
+  fontFamily: "inherit",
+  fontSize: 14,
+  lineHeight: 1.6,
 };
 
 const primaryBtn: React.CSSProperties = {
