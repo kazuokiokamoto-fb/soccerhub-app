@@ -10,15 +10,24 @@ const TABS = [
   { href: "/mypage", label: "マイページ" },
 ];
 
+function normalizePath(pathname: string) {
+  if (!pathname) return "/";
+  return pathname.replace(/\/+$/, "") || "/";
+}
+
 function isActive(pathname: string, href: string) {
-  if (href === "/") {
-    return pathname === "/" || pathname === "/match" || pathname === "/teams/search";
+  const current = normalizePath(pathname);
+  const target = normalizePath(href);
+
+  if (target === "/") {
+    return current === "/" || current === "/match";
   }
-  return pathname === href || pathname.startsWith(`${href}/`);
+
+  return current === target || current.startsWith(`${target}/`);
 }
 
 export default function AppTabNav() {
-  const pathname = usePathname();
+  const pathname = usePathname() || "/";
 
   return (
     <nav style={wrap} aria-label="メインナビゲーション">

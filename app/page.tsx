@@ -29,7 +29,9 @@ export default function HomePage() {
     let mounted = true;
 
     const loadTeams = async () => {
-      if (authLoading) return;
+      if (authLoading) {
+        return;
+      }
 
       if (!meId) {
         if (!mounted) return;
@@ -76,20 +78,15 @@ export default function HomePage() {
 
   const hasTeam = useMemo(() => myTeams.length > 0, [myTeams.length]);
 
-  if (authLoading) {
-    return (
-      <main style={wrap}>
-        <AppTabNav />
-        <div style={loadingPanel}>ログイン状態を確認中…</div>
-      </main>
-    );
-  }
-
   return (
     <main style={wrap}>
       <AppTabNav />
 
-      {!teamLoading && !!meId && !hasTeam ? (
+      {authLoading ? (
+        <div style={loadingPanel}>ログイン状態を確認中…</div>
+      ) : null}
+
+      {!authLoading && !teamLoading && !!meId && !hasTeam ? (
         <section style={ctaBox}>
           <div style={ctaTitle}>まずはチーム登録から始めましょう</div>
           <div style={ctaText}>

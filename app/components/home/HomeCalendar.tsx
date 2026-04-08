@@ -373,8 +373,9 @@ export default function HomeCalendar() {
     loadMonth,
   } = useMatchData(monthDate);
 
-  const loading = authLoading || loadingBase || loadingMonth;
+  const loading = loadingBase || loadingMonth;
   const currentUserId = authUserId || meId;
+  const authReady = !authLoading;
 
   useEffect(() => {
     if (!requestTeamId && myTeams[0]?.id) {
@@ -571,13 +572,6 @@ export default function HomeCalendar() {
     }, 120);
   };
 
-  const handleBackToCalendar = () => {
-    setPanelMode("none");
-    setSelectedSlotId("");
-    setRequestComment("");
-    scrollToCalendar();
-  };
-
   const handleResetTeamFilters = () => {
     clearAllFilters();
     setSelectedSlotId("");
@@ -585,48 +579,31 @@ export default function HomeCalendar() {
   };
 
   const openTeamListWindow = () => {
-    const qs = new URLSearchParams();
-
-    if (keyword) qs.set("keyword", keyword);
-    if (prefectureFilter) qs.set("prefecture", prefectureFilter);
-    if (cityFilter) qs.set("city", cityFilter);
-    if (townFilter) qs.set("town", townFilter);
-    if (groundFilter !== "all") qs.set("ground", groundFilter);
-    if (bikeFilter !== "all") qs.set("bike", bikeFilter);
-    if (bikeCapacityMin) qs.set("bikeCapacityMin", bikeCapacityMin);
-    if (memberCountMin) qs.set("memberCountMin", memberCountMin);
-
-    if (categoryFilter.length > 0) {
-      qs.set("categories", categoryFilter.join(","));
-    }
-
-    if (strengthFilter.length > 0) {
-      qs.set("strengths", strengthFilter.join(","));
-    }
-
-    const query = qs.toString();
-    const url = query ? `/teams/search?${query}` : "/teams/search";
-
-    const win = window.open(
-      url,
-      "team_list_window",
-      "width=1200,height=900,left=80,top=60,resizable=yes,scrollbars=yes"
-    );
-
-    if (win) {
-      win.focus();
-    }
+    window.location.href = "/teams";
   };
 
   const goToCreatePage = (ymd: string) => {
+    if (!authReady) return;
+
+    if (!currentUserId) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const firstTeam = myTeams[0];
+    if (!firstTeam?.id) {
+      alert("先にチーム登録をしてください");
+      window.location.href = "/teams/new";
+      return;
+    }
+
     const params = new URLSearchParams();
 
     if (ymd) params.set("date", ymd);
+    params.set("hostTeamId", firstTeam.id);
 
-    const firstTeam = myTeams[0];
-    if (firstTeam?.id) params.set("hostTeamId", firstTeam.id);
-    if (firstTeam?.category) params.set("category", firstTeam.category);
-    if (firstTeam?.area) params.set("area", firstTeam.area);
+    if (firstTeam.category) params.set("category", firstTeam.category);
+    if (firstTeam.area) params.set("area", firstTeam.area);
 
     const query = params.toString();
     window.location.href = query ? `/match/new?${query}` : "/match/new";
@@ -662,6 +639,11 @@ export default function HomeCalendar() {
 
   const openDmAndGo = async (otherTeamId: string, slot?: any | null) => {
     try {
+      if (!currentUserId) {
+        window.location.href = "/login";
+        return;
+      }
+
       const myTeamId = requestTeamId || myTeams[0]?.id;
       if (!myTeamId) {
         alert("自分のチームがありません");
@@ -687,6 +669,11 @@ export default function HomeCalendar() {
     const slot = filteredSlotsInMonth.find((s) => s.id === slotId);
     if (!slot) return;
 
+    if (!currentUserId) {
+      window.location.href = "/login";
+      return;
+    }
+
     if (slot.is_closed) {
       alert("この募集は締切です");
       return;
@@ -706,10 +693,6 @@ export default function HomeCalendar() {
     }
 
     const uid = currentUserId;
-    if (!uid) {
-      alert("ログインが必要です");
-      return;
-    }
 
     const already = requestsForMonth.some(
       (r) =>
@@ -852,10 +835,7 @@ export default function HomeCalendar() {
         "━━━━━━━━━━━━",
         "⚽️ 試合申込",
         "━━━━━━━━━━━━",
-        `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(
-          0,
-          5
-        )}`,
+        `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
         `📍 ${slot.area_text ?? slot.area ?? "未設定"}`,
         `🏷 ${categoryLabel(slot.category) || slot.category || "未設定"}`,
         "",
@@ -942,10 +922,7 @@ export default function HomeCalendar() {
               "━━━━━━━━━━━━",
               "✅ 試合成立（承認）",
               "━━━━━━━━━━━━",
-              `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(
-                0,
-                5
-              )}`,
+              `📅 ${slot.date} ${slot.start_time.slice(0, 5)}–${slot.end_time.slice(0, 5)}`,
               `🏷 ${categoryLabel(slot.category) || slot.category || "未設定"}`,
               "",
               `👥 募集チーム：${hostTeamName}`,
@@ -1119,7 +1096,7 @@ export default function HomeCalendar() {
           }}
           onCreateForDate={(ymd) => goToCreatePage(ymd)}
           onOpenCalendarHelp={() => setShowCalendarHelp(true)}
-          disableCreate={myTeams.length === 0}
+          disableCreate={loading || !authReady}
           selectedDateSummaryText={selectedDateSummaryText}
           titleText="試合日で探す"
         />
@@ -1163,27 +1140,27 @@ export default function HomeCalendar() {
         <MatchFilterPanel
           filterRef={filterRef}
           loading={loading}
-          draftKeyword={keyword}
-          setDraftKeyword={setKeyword}
-          draftCategoryFilter={categoryFilter}
-          setDraftCategoryFilter={setCategoryFilter}
-          draftPrefectureFilter={prefectureFilter}
-          setDraftPrefectureFilter={setPrefectureFilter}
-          draftCityFilter={cityFilter}
-          setDraftCityFilter={setCityFilter}
-          draftTownFilter={townFilter}
-          setDraftTownFilter={setTownFilter}
-          draftGroundFilter={groundFilter}
-          setDraftGroundFilter={setGroundFilter}
-          draftStrengthFilter={strengthFilter}
-          setDraftStrengthFilter={setStrengthFilter}
-          draftBikeFilter={bikeFilter}
-          setDraftBikeFilter={setBikeFilter}
-          draftBikeCapacityMin={bikeCapacityMin}
-          setDraftBikeCapacityMin={setBikeCapacityMin}
-          draftMemberCountMin={memberCountMin}
-          setDraftMemberCountMin={setMemberCountMin}
-          onApplyToCalendar={handleBackToCalendar}
+          keyword={keyword}
+          setKeyword={setKeyword}
+          categoryFilter={categoryFilter}
+          setCategoryFilter={setCategoryFilter}
+          prefectureFilter={prefectureFilter}
+          setPrefectureFilter={setPrefectureFilter}
+          cityFilter={cityFilter}
+          setCityFilter={setCityFilter}
+          townFilter={townFilter}
+          setTownFilter={setTownFilter}
+          groundFilter={groundFilter}
+          setGroundFilter={setGroundFilter}
+          strengthFilter={strengthFilter}
+          setStrengthFilter={setStrengthFilter}
+          bikeFilter={bikeFilter}
+          setBikeFilter={setBikeFilter}
+          bikeCapacityMin={bikeCapacityMin}
+          setBikeCapacityMin={setBikeCapacityMin}
+          memberCountMin={memberCountMin}
+          setMemberCountMin={setMemberCountMin}
+          onBackToCalendar={handleResetTeamFilters}
           onOpenTeamList={openTeamListWindow}
           onReset={handleResetTeamFilters}
           onBackToList={closePanel}
