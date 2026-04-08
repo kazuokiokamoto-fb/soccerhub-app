@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 
-export function useMatchData(monthDate: Date) {
+export function useMatchData(params: {
+  monthDate: Date;
+  authReady: boolean;
+  currentUserId: string;
+}) {
+  const { monthDate, authReady, currentUserId } = params;
+
   const [loadingBase, setLoadingBase] = useState(true);
   const [loadingMonth, setLoadingMonth] = useState(true);
 
@@ -16,87 +22,67 @@ export function useMatchData(monthDate: Date) {
   const [slotsInMonth, setSlotsInMonth] = useState<any[]>([]);
   const [requestsForMonth, setRequestsForMonth] = useState<any[]>([]);
 
-  useEffect(() => {
-    let alive = true;
+  const loadBase = useCallback(async () => {
+    if (!authReady) {
+      return;
+    }
 
-    const init = async () => {
-      setLoadingBase(true);
+    setLoadingBase(true);
 
-      try {
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
+    try {
+      const uid = currentUserId ?? "";
+      setMeId(uid);
 
-        if (userError) {
-          console.error("[useMatchData] getUser error:", userError);
-        }
+      const [{ data: teams, error: teamsError }, { data: venuesData, error: venuesError }] =
+        await Promise.all([
+          supabase.from("teams").select("*"),
+          supabase.from("venues").select("*"),
+        ]);
 
-        const uid = user?.id ?? "";
-        if (!alive) return;
-        setMeId(uid);
-
-        const { data: teams, error: teamsError } = await supabase
-          .from("teams")
-          .select("*");
-
-        if (teamsError) {
-          console.error("[useMatchData] teams error:", teamsError);
-        }
-
-        if (!alive) return;
-        setAllTeams(teams ?? []);
-
-        if (uid) {
-          const { data: my, error: myError } = await supabase
-            .from("teams")
-            .select("*")
-            .eq("owner_id", uid);
-
-          if (myError) {
-            console.error("[useMatchData] myTeams error:", myError);
-          }
-
-          if (!alive) return;
-          setMyTeams(my ?? []);
-        } else {
-          if (!alive) return;
-          setMyTeams([]);
-        }
-
-        const { data: venueRows, error: venuesError } = await supabase
-          .from("venues")
-          .select("*");
-
-        if (venuesError) {
-          console.error("[useMatchData] venues error:", venuesError);
-        }
-
-        if (!alive) return;
-        setVenues(venueRows ?? []);
-      } catch (e) {
-        console.error("[useMatchData] init fatal error:", e);
-
-        if (!alive) return;
-        setMeId("");
+      if (teamsError) {
+        console.error("[useMatchData] teams load error:", teamsError);
         setAllTeams([]);
-        setMyTeams([]);
-        setVenues([]);
-      } finally {
-        if (alive) {
-          setLoadingBase(false);
-        }
+      } else {
+        setAllTeams(teams ?? []);
       }
-    };
 
-    void init();
+      if (venuesError) {
+        console.error("[useMatchData] venues load error:", venuesError);
+        setVenues([]);
+      } else {
+        setVenues(venuesData ?? []);
+      }
 
-    return () => {
-      alive = false;
-    };
-  }, []);
+      if (uid) {
+        const { data: my, error: myTeamsError } = await supabase
+          .from("teams")
+          .select("*")
+          .eq("owner_id", uid);
+
+        if (myTeamsError) {
+          console.error("[useMatchData] myTeams load error:", myTeamsError);
+          setMyTeams([]);
+        } else {
+          setMyTeams(my ?? []);
+        }
+      } else {
+        setMyTeams([]);
+      }
+    } catch (e) {
+      console.error("[useMatchData] loadBase unexpected error:", e);
+      setAllTeams([]);
+      setMyTeams([]);
+      setVenues([]);
+    } finally {
+      setLoadingBase(false);
+    }
+  }, [authReady, currentUserId]);
 
   const loadMonth = useCallback(async () => {
+    if (!authReady) {
+      return;
+    }
+
     setLoadingMonth(true);
 
     try {
@@ -106,8 +92,8 @@ export function useMatchData(monthDate: Date) {
       const start = new Date(y, m, 1);
       const end = new Date(y, m + 1, 1);
 
-      const startStr = start.toISOString().slice(0, 10);
-      const endStr = end.toISOString().slice(0, 10);
+      const startStr = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+      const endStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
 
       const { data: slots, error: slotsError } = await supabase
         .from("match_slots")
@@ -117,30 +103,40 @@ export function useMatchData(monthDate: Date) {
         .order("date", { ascending: true });
 
       if (slotsError) {
-        console.error("[useMatchData] match_slots error:", slotsError);
+        console.error("[useMatchData] match_slots load error:", slotsError);
+        setSlotsInMonth([]);
+      } else {
+        setSlotsInMonth(slots ?? []);
       }
 
-      setSlotsInMonth(slots ?? []);
+      if (currentUserId) {
+        const { data: reqs, error: reqsError } = await supabase
+          .from("match_requests")
+          .select("*")
+          .gte("created_at", `${startStr} 00:00:00+00`)
+          .lt("created_at", `${endStr} 00:00:00+00`);
 
-      const { data: reqs, error: requestsError } = await supabase
-        .from("match_requests")
-        .select("*")
-        .gte("created_at", `${startStr}T00:00:00`)
-        .lt("created_at", `${endStr}T00:00:00`);
-
-      if (requestsError) {
-        console.error("[useMatchData] match_requests error:", requestsError);
+        if (reqsError) {
+          console.error("[useMatchData] match_requests load error:", reqsError);
+          setRequestsForMonth([]);
+        } else {
+          setRequestsForMonth(reqs ?? []);
+        }
+      } else {
+        setRequestsForMonth([]);
       }
-
-      setRequestsForMonth(reqs ?? []);
     } catch (e) {
-      console.error("[useMatchData] loadMonth fatal error:", e);
+      console.error("[useMatchData] loadMonth unexpected error:", e);
       setSlotsInMonth([]);
       setRequestsForMonth([]);
     } finally {
       setLoadingMonth(false);
     }
-  }, [monthDate]);
+  }, [authReady, currentUserId, monthDate]);
+
+  useEffect(() => {
+    void loadBase();
+  }, [loadBase]);
 
   useEffect(() => {
     void loadMonth();
@@ -155,6 +151,7 @@ export function useMatchData(monthDate: Date) {
     venues,
     slotsInMonth,
     requestsForMonth,
+    loadBase,
     loadMonth,
   };
 }

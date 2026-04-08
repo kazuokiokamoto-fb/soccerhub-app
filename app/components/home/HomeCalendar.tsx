@@ -371,7 +371,11 @@ export default function HomeCalendar() {
     slotsInMonth,
     requestsForMonth,
     loadMonth,
-  } = useMatchData(monthDate);
+  } = useMatchData({
+    monthDate,
+    authReady: !authLoading,
+    currentUserId: authUserId,
+  });
 
   const loading = loadingBase || loadingMonth;
   const currentUserId = authUserId || meId;
