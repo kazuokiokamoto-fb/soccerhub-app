@@ -59,91 +59,80 @@ export function useMatchData(params: {
     setLoadingBase(true);
     setBaseError("");
 
+    const uid = currentUserId ?? "";
+    setMeId(uid);
+
+    const errors: string[] = [];
+
     try {
-      const uid = currentUserId ?? "";
-      setMeId(uid);
+      const teamsRes = await withTimeout(
+        () => supabase.from("teams").select("*"),
+        12000,
+        "teams"
+      );
 
-      const settled = await Promise.allSettled([
-        withTimeout(
-          () => supabase.from("teams").select("*"),
-          12000,
-          "teams"
-        ),
-        withTimeout(
-          () => supabase.from("venues").select("*"),
-          12000,
-          "venues"
-        ),
-        uid
-          ? withTimeout(
-              () => supabase.from("teams").select("*").eq("owner_id", uid),
-              12000,
-              "myTeams"
-            )
-          : Promise.resolve({
-              data: [],
-              error: null,
-            }),
-      ]);
-
-      const [teamsRes, venuesRes, myTeamsRes] = settled;
-
-      const errors: string[] = [];
-
-      if (teamsRes.status === "fulfilled") {
-        if (teamsRes.value.error) {
-          console.error("[useMatchData] teams load error:", teamsRes.value.error);
-          errors.push(`teams: ${teamsRes.value.error.message}`);
-          setAllTeams([]);
-        } else {
-          setAllTeams(teamsRes.value.data ?? []);
-        }
-      } else {
-        console.error("[useMatchData] teams unexpected error:", teamsRes.reason);
-        errors.push(`teams: ${String(teamsRes.reason)}`);
+      if (teamsRes.error) {
+        console.error("[useMatchData] teams load error:", teamsRes.error);
+        errors.push(`teams: ${teamsRes.error.message}`);
         setAllTeams([]);
-      }
-
-      if (venuesRes.status === "fulfilled") {
-        if (venuesRes.value.error) {
-          console.error("[useMatchData] venues load error:", venuesRes.value.error);
-          errors.push(`venues: ${venuesRes.value.error.message}`);
-          setVenues([]);
-        } else {
-          setVenues(venuesRes.value.data ?? []);
-        }
       } else {
-        console.error("[useMatchData] venues unexpected error:", venuesRes.reason);
-        errors.push(`venues: ${String(venuesRes.reason)}`);
-        setVenues([]);
-      }
-
-      if (myTeamsRes.status === "fulfilled") {
-        if (myTeamsRes.value.error) {
-          console.error("[useMatchData] myTeams load error:", myTeamsRes.value.error);
-          errors.push(`myTeams: ${myTeamsRes.value.error.message}`);
-          setMyTeams([]);
-        } else {
-          setMyTeams(myTeamsRes.value.data ?? []);
-        }
-      } else {
-        console.error("[useMatchData] myTeams unexpected error:", myTeamsRes.reason);
-        errors.push(`myTeams: ${String(myTeamsRes.reason)}`);
-        setMyTeams([]);
-      }
-
-      if (errors.length > 0) {
-        setBaseError(errors.join(" / "));
+        setAllTeams(teamsRes.data ?? []);
       }
     } catch (e: any) {
-      console.error("[useMatchData] loadBase unexpected error:", e);
+      console.error("[useMatchData] teams unexpected error:", e);
+      errors.push(`teams: ${e?.message ?? String(e)}`);
       setAllTeams([]);
-      setMyTeams([]);
-      setVenues([]);
-      setBaseError(e?.message ?? "base load failed");
-    } finally {
-      setLoadingBase(false);
     }
+
+    try {
+      const venuesRes = await withTimeout(
+        () => supabase.from("venues").select("*"),
+        12000,
+        "venues"
+      );
+
+      if (venuesRes.error) {
+        console.error("[useMatchData] venues load error:", venuesRes.error);
+        errors.push(`venues: ${venuesRes.error.message}`);
+        setVenues([]);
+      } else {
+        setVenues(venuesRes.data ?? []);
+      }
+    } catch (e: any) {
+      console.error("[useMatchData] venues unexpected error:", e);
+      errors.push(`venues: ${e?.message ?? String(e)}`);
+      setVenues([]);
+    }
+
+    if (uid) {
+      try {
+        const myTeamsRes = await withTimeout(
+          () => supabase.from("teams").select("*").eq("owner_id", uid),
+          12000,
+          "myTeams"
+        );
+
+        if (myTeamsRes.error) {
+          console.error("[useMatchData] myTeams load error:", myTeamsRes.error);
+          errors.push(`myTeams: ${myTeamsRes.error.message}`);
+          setMyTeams([]);
+        } else {
+          setMyTeams(myTeamsRes.data ?? []);
+        }
+      } catch (e: any) {
+        console.error("[useMatchData] myTeams unexpected error:", e);
+        errors.push(`myTeams: ${e?.message ?? String(e)}`);
+        setMyTeams([]);
+      }
+    } else {
+      setMyTeams([]);
+    }
+
+    if (errors.length > 0) {
+      setBaseError(errors.join(" / "));
+    }
+
+    setLoadingBase(false);
   }, [authReady, currentUserId]);
 
   const loadMonth = useCallback(async () => {
@@ -151,6 +140,8 @@ export function useMatchData(params: {
 
     setLoadingMonth(true);
     setMonthError("");
+
+    const errors: string[] = [];
 
     try {
       const y = monthDate.getFullYear();
@@ -162,8 +153,8 @@ export function useMatchData(params: {
       const startStr = ymd(start);
       const endStr = ymd(end);
 
-      const settled = await Promise.allSettled([
-        withTimeout(
+      try {
+        const slotsRes = await withTimeout(
           () =>
             supabase
               .from("match_slots")
@@ -173,67 +164,61 @@ export function useMatchData(params: {
               .order("date", { ascending: true }),
           12000,
           "match_slots"
-        ),
-        currentUserId
-          ? withTimeout(
-              () =>
-                supabase
-                  .from("match_requests")
-                  .select("*")
-                  .gte("created_at", `${startStr}T00:00:00`)
-                  .lt("created_at", `${endStr}T00:00:00`),
-              12000,
-              "match_requests"
-            )
-          : Promise.resolve({
-              data: [],
-              error: null,
-            }),
-      ]);
+        );
 
-      const [slotsRes, reqsRes] = settled;
-
-      const errors: string[] = [];
-
-      if (slotsRes.status === "fulfilled") {
-        if (slotsRes.value.error) {
-          console.error("[useMatchData] match_slots load error:", slotsRes.value.error);
-          errors.push(`match_slots: ${slotsRes.value.error.message}`);
+        if (slotsRes.error) {
+          console.error("[useMatchData] match_slots load error:", slotsRes.error);
+          errors.push(`match_slots: ${slotsRes.error.message}`);
           setSlotsInMonth([]);
         } else {
-          setSlotsInMonth(slotsRes.value.data ?? []);
+          setSlotsInMonth(slotsRes.data ?? []);
         }
-      } else {
-        console.error("[useMatchData] match_slots unexpected error:", slotsRes.reason);
-        errors.push(`match_slots: ${String(slotsRes.reason)}`);
+      } catch (e: any) {
+        console.error("[useMatchData] match_slots unexpected error:", e);
+        errors.push(`match_slots: ${e?.message ?? String(e)}`);
         setSlotsInMonth([]);
       }
 
-      if (reqsRes.status === "fulfilled") {
-        if (reqsRes.value.error) {
-          console.error("[useMatchData] match_requests load error:", reqsRes.value.error);
-          errors.push(`match_requests: ${reqsRes.value.error.message}`);
+      if (currentUserId) {
+        try {
+          const reqsRes = await withTimeout(
+            () =>
+              supabase
+                .from("match_requests")
+                .select("*")
+                .gte("created_at", `${startStr}T00:00:00`)
+                .lt("created_at", `${endStr}T00:00:00`),
+            12000,
+            "match_requests"
+          );
+
+          if (reqsRes.error) {
+            console.error("[useMatchData] match_requests load error:", reqsRes.error);
+            errors.push(`match_requests: ${reqsRes.error.message}`);
+            setRequestsForMonth([]);
+          } else {
+            setRequestsForMonth(reqsRes.data ?? []);
+          }
+        } catch (e: any) {
+          console.error("[useMatchData] match_requests unexpected error:", e);
+          errors.push(`match_requests: ${e?.message ?? String(e)}`);
           setRequestsForMonth([]);
-        } else {
-          setRequestsForMonth(reqsRes.value.data ?? []);
         }
       } else {
-        console.error("[useMatchData] match_requests unexpected error:", reqsRes.reason);
-        errors.push(`match_requests: ${String(reqsRes.reason)}`);
         setRequestsForMonth([]);
-      }
-
-      if (errors.length > 0) {
-        setMonthError(errors.join(" / "));
       }
     } catch (e: any) {
       console.error("[useMatchData] loadMonth unexpected error:", e);
+      errors.push(e?.message ?? "month load failed");
       setSlotsInMonth([]);
       setRequestsForMonth([]);
-      setMonthError(e?.message ?? "month load failed");
-    } finally {
-      setLoadingMonth(false);
     }
+
+    if (errors.length > 0) {
+      setMonthError(errors.join(" / "));
+    }
+
+    setLoadingMonth(false);
   }, [authReady, currentUserId, monthDate]);
 
   useEffect(() => {
@@ -269,7 +254,9 @@ export function useMatchData(params: {
     const key = currentUserId || "guest";
 
     const channel = supabase
-      .channel(`match-home-${key}-${monthDate.getFullYear()}-${monthDate.getMonth() + 1}`)
+      .channel(
+        `match-home-${key}-${monthDate.getFullYear()}-${monthDate.getMonth() + 1}`
+      )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "teams" },
