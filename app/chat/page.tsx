@@ -1,9 +1,10 @@
 // app/chat/page.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
+import { useAuth } from "@/app/lib/auth";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 
@@ -87,287 +88,293 @@ function buildInitial(name?: string | null) {
 }
 
 export default function ChatListPage() {
-  const [authLoading, setAuthLoading] = useState(true);
+  const { user, loading: authLoading } = useAuth();
+  const meId = user?.id ?? "";
+
   const [loading, setLoading] = useState(true);
   const [threads, setThreads] = useState<ThreadRow[]>([]);
-  const [meId, setMeId] = useState<string>("");
+  const [loadError, setLoadError] = useState<string>("");
 
-  useEffect(() => {
-    let mounted = true;
-
-    const init = async () => {
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession();
-
-      if (error) {
-        console.error("getSession error:", error);
-      }
-
-      if (!mounted) return;
-
-      setMeId(session?.user?.id ?? "");
-      setAuthLoading(false);
-    };
-
-    init();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
-      setMeId(session?.user?.id ?? "");
-      setAuthLoading(false);
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
+  const loadThreads = useCallback(async () => {
     if (authLoading) return;
 
     if (!meId) {
       setThreads([]);
+      setLoadError("");
       setLoading(false);
       return;
     }
 
-    let cancelled = false;
+    setLoading(true);
+    setLoadError("");
 
-    (async () => {
-      setLoading(true);
+    try {
+      const { data: myTeamsRows, error: myTeamsErr } = await supabase
+        .from("teams")
+        .select("id")
+        .eq("owner_id", meId);
 
-      try {
-        const { data: myTeamsRows, error: myTeamsErr } = await supabase
-          .from("teams")
-          .select("id")
-          .eq("owner_id", meId);
+      if (myTeamsErr) {
+        throw myTeamsErr;
+      }
 
-        if (myTeamsErr) {
-          console.error(myTeamsErr);
-          if (!cancelled) setThreads([]);
-          return;
-        }
+      const myTeamIds = new Set<string>(
+        ((myTeamsRows ?? []) as Array<{ id: string }>)
+          .map((r) => r.id)
+          .filter(Boolean)
+      );
 
-        const myTeamIds = new Set<string>(
-          ((myTeamsRows ?? []) as Array<{ id: string }>)
-            .map((r) => r.id)
-            .filter(Boolean)
-        );
+      const { data: myMemberRows, error: cmErr } = await supabase
+        .from("chat_members")
+        .select("thread_id,last_read_at,created_at")
+        .eq("user_id", meId)
+        .order("created_at", { ascending: false })
+        .limit(200);
 
-        const { data: myMemberRows, error: cmErr } = await supabase
-          .from("chat_members")
-          .select("thread_id,last_read_at,created_at")
-          .eq("user_id", meId)
-          .order("created_at", { ascending: false })
-          .limit(100);
+      if (cmErr) {
+        throw cmErr;
+      }
 
-        if (cmErr) {
-          console.error(cmErr);
-          if (!cancelled) setThreads([]);
-          return;
-        }
+      const typedMemberRows = (myMemberRows ?? []) as Array<{
+        thread_id: string;
+        last_read_at?: string | null;
+        created_at?: string | null;
+      }>;
 
-        const threadIds = Array.from(
-          new Set(
-            ((myMemberRows ?? []) as Array<{
-              thread_id: string;
-              last_read_at?: string | null;
-              created_at?: string | null;
-            }>)
-              .map((r) => r.thread_id)
-              .filter(Boolean)
-          )
-        );
+      const threadIds = Array.from(
+        new Set(typedMemberRows.map((r) => r.thread_id).filter(Boolean))
+      );
 
-        const myLastReadMap = new Map<string, string | null>();
-        for (const r of ((myMemberRows ?? []) as Array<{
-          thread_id: string;
-          last_read_at?: string | null;
-        }>)) {
-          if (!r?.thread_id) continue;
-          if (!myLastReadMap.has(r.thread_id)) {
-            myLastReadMap.set(r.thread_id, r.last_read_at ?? null);
-          }
-        }
-
-        if (threadIds.length === 0) {
-          if (!cancelled) setThreads([]);
-          return;
-        }
-
-        const { data: thRows, error: thErr } = await supabase
-          .from("chat_threads")
-          .select("id,created_at,updated_at")
-          .in("id", threadIds);
-
-        if (thErr) {
-          console.error(thErr);
-          if (!cancelled) setThreads([]);
-          return;
-        }
-
-        const { data: membersRows, error: membersErr } = await supabase
-          .from("chat_members")
-          .select("thread_id,team_id")
-          .in("thread_id", threadIds);
-
-        if (membersErr) {
-          console.error(membersErr);
-          if (!cancelled) setThreads([]);
-          return;
-        }
-
-        const memberTeamsByThread = new Map<string, string[]>();
-        const allTeamIds: string[] = [];
-
-        for (const r of ((membersRows ?? []) as Array<{
-          thread_id: string;
-          team_id: string | null;
-        }>)) {
-          const tid = r.thread_id;
-          const teamId = r.team_id ?? "";
-          if (!tid || !teamId) continue;
-
-          if (!memberTeamsByThread.has(tid)) {
-            memberTeamsByThread.set(tid, []);
-          }
-          memberTeamsByThread.get(tid)!.push(teamId);
-          allTeamIds.push(teamId);
-        }
-
-        const uniqTeamIds = Array.from(new Set(allTeamIds));
-        const teamMap = new Map<string, TeamMini>();
-
-        if (uniqTeamIds.length > 0) {
-          const { data: teamRows, error: teamErr } = await supabase
-            .from("teams")
-            .select("id,name,category")
-            .in("id", uniqTeamIds);
-
-          if (teamErr) {
-            console.error(teamErr);
-          } else {
-            for (const t of ((teamRows ?? []) as Array<{
-              id: string;
-              name: string | null;
-              category?: string | null;
-            }>)) {
-              teamMap.set(t.id, {
-                id: t.id,
-                name: t.name ?? null,
-                category: t.category ?? null,
-              });
-            }
-          }
-        }
-
-        const lastMsgByThread = new Map<string, LastMsgMini>();
-        const limit = Math.min(3000, Math.max(500, threadIds.length * 60));
-
-        const { data: msgRows, error: msgErr } = await supabase
-          .from("chat_messages")
-          .select("thread_id,body,created_at")
-          .in("thread_id", threadIds)
-          .order("created_at", { ascending: false })
-          .limit(limit);
-
-        if (msgErr) {
-          console.error(msgErr);
-        } else {
-          for (const m of ((msgRows ?? []) as Array<{
-            thread_id: string;
-            body: string | null;
-            created_at: string;
-          }>)) {
-            const tid = m.thread_id;
-            if (!tid) continue;
-
-            if (!lastMsgByThread.has(tid)) {
-              lastMsgByThread.set(tid, {
-                thread_id: tid,
-                body: m.body ?? null,
-                created_at: m.created_at,
-              });
-            }
-          }
-        }
-
-        const merged: ThreadRow[] = ((thRows ?? []) as Array<{
-          id: string;
-          created_at: string;
-          updated_at: string | null;
-        }>).map((t) => {
-          const tid = t.id;
-          const memberTeamIds = memberTeamsByThread.get(tid) ?? [];
-
-          const otherTeamId =
-            memberTeamIds.find((id) => !myTeamIds.has(id)) ??
-            memberTeamIds[0] ??
-            null;
-
-          const otherTeam = otherTeamId ? teamMap.get(otherTeamId) : undefined;
-          const last = lastMsgByThread.get(tid);
-          const myLastReadAt = myLastReadMap.get(tid) ?? null;
-
-          let isUnread = false;
-          if (last?.created_at) {
-            if (!myLastReadAt) {
-              isUnread = true;
-            } else {
-              isUnread =
-                new Date(last.created_at).getTime() >
-                new Date(myLastReadAt).getTime();
-            }
-          }
-
-          return {
-            id: t.id,
-            created_at: t.created_at,
-            updated_at: t.updated_at ?? null,
-
-            memberTeamIds,
-            myLastReadAt,
-
-            otherTeamId,
-            otherTeamName: otherTeam?.name ?? null,
-            otherTeamCategory: otherTeam?.category ?? null,
-
-            lastMessageBody: last?.body ?? null,
-            lastMessageAt: last?.created_at ?? null,
-
-            isUnread,
-          };
-        });
-
-        merged.sort((a, b) => {
-          const au = a.isUnread ? 1 : 0;
-          const bu = b.isUnread ? 1 : 0;
-          if (au !== bu) return bu - au;
-
-          const at = a.lastMessageAt ?? a.updated_at ?? a.created_at ?? "";
-          const bt = b.lastMessageAt ?? b.updated_at ?? b.created_at ?? "";
-          return at > bt ? -1 : 1;
-        });
-
-        if (!cancelled) {
-          setThreads(merged);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
+      const myLastReadMap = new Map<string, string | null>();
+      for (const r of typedMemberRows) {
+        if (!r.thread_id) continue;
+        if (!myLastReadMap.has(r.thread_id)) {
+          myLastReadMap.set(r.thread_id, r.last_read_at ?? null);
         }
       }
-    })();
+
+      if (threadIds.length === 0) {
+        setThreads([]);
+        setLoading(false);
+        return;
+      }
+
+      const [
+        { data: thRows, error: thErr },
+        { data: membersRows, error: membersErr },
+      ] = await Promise.all([
+        supabase
+          .from("chat_threads")
+          .select("id,created_at,updated_at")
+          .in("id", threadIds),
+        supabase
+          .from("chat_members")
+          .select("thread_id,team_id,user_id,last_read_at")
+          .in("thread_id", threadIds),
+      ]);
+
+      if (thErr) throw thErr;
+      if (membersErr) throw membersErr;
+
+      const typedThreads = (thRows ?? []) as Array<{
+        id: string;
+        created_at: string;
+        updated_at: string | null;
+      }>;
+
+      const typedMembers = (membersRows ?? []) as Array<{
+        thread_id: string;
+        team_id: string | null;
+        user_id?: string | null;
+        last_read_at?: string | null;
+      }>;
+
+      const memberTeamsByThread = new Map<string, string[]>();
+      const allTeamIds: string[] = [];
+
+      for (const r of typedMembers) {
+        const tid = r.thread_id;
+        const teamId = r.team_id ?? "";
+        if (!tid || !teamId) continue;
+
+        if (!memberTeamsByThread.has(tid)) {
+          memberTeamsByThread.set(tid, []);
+        }
+
+        const arr = memberTeamsByThread.get(tid)!;
+        if (!arr.includes(teamId)) {
+          arr.push(teamId);
+          allTeamIds.push(teamId);
+        }
+      }
+
+      const uniqTeamIds = Array.from(new Set(allTeamIds));
+      const teamMap = new Map<string, TeamMini>();
+
+      if (uniqTeamIds.length > 0) {
+        const { data: teamRows, error: teamErr } = await supabase
+          .from("teams")
+          .select("id,name,category")
+          .in("id", uniqTeamIds);
+
+        if (teamErr) {
+          throw teamErr;
+        }
+
+        for (const t of ((teamRows ?? []) as Array<{
+          id: string;
+          name: string | null;
+          category?: string | null;
+        }>)) {
+          teamMap.set(t.id, {
+            id: t.id,
+            name: t.name ?? null,
+            category: t.category ?? null,
+          });
+        }
+      }
+
+      const lastMsgByThread = new Map<string, LastMsgMini>();
+
+      const { data: msgRows, error: msgErr } = await supabase
+        .from("chat_messages")
+        .select("thread_id,body,created_at")
+        .in("thread_id", threadIds)
+        .order("created_at", { ascending: false })
+        .limit(Math.min(5000, Math.max(500, threadIds.length * 50)));
+
+      if (msgErr) {
+        throw msgErr;
+      }
+
+      for (const m of ((msgRows ?? []) as Array<{
+        thread_id: string;
+        body: string | null;
+        created_at: string;
+      }>)) {
+        if (!m.thread_id) continue;
+        if (!lastMsgByThread.has(m.thread_id)) {
+          lastMsgByThread.set(m.thread_id, {
+            thread_id: m.thread_id,
+            body: m.body ?? null,
+            created_at: m.created_at,
+          });
+        }
+      }
+
+      const merged: ThreadRow[] = typedThreads.map((t) => {
+        const tid = t.id;
+        const memberTeamIds = memberTeamsByThread.get(tid) ?? [];
+
+        const otherTeamId =
+          memberTeamIds.find((id) => !myTeamIds.has(id)) ??
+          memberTeamIds[0] ??
+          null;
+
+        const otherTeam = otherTeamId ? teamMap.get(otherTeamId) : undefined;
+        const last = lastMsgByThread.get(tid);
+        const myLastReadAt = myLastReadMap.get(tid) ?? null;
+
+        let isUnread = false;
+        if (last?.created_at) {
+          if (!myLastReadAt) {
+            isUnread = true;
+          } else {
+            isUnread =
+              new Date(last.created_at).getTime() >
+              new Date(myLastReadAt).getTime();
+          }
+        }
+
+        return {
+          id: t.id,
+          created_at: t.created_at,
+          updated_at: t.updated_at ?? null,
+          memberTeamIds,
+          myLastReadAt,
+          otherTeamId,
+          otherTeamName: otherTeam?.name ?? null,
+          otherTeamCategory: otherTeam?.category ?? null,
+          lastMessageBody: last?.body ?? null,
+          lastMessageAt: last?.created_at ?? null,
+          isUnread,
+        };
+      });
+
+      merged.sort((a, b) => {
+        const au = a.isUnread ? 1 : 0;
+        const bu = b.isUnread ? 1 : 0;
+        if (au !== bu) return bu - au;
+
+        const at = a.lastMessageAt ?? a.updated_at ?? a.created_at ?? "";
+        const bt = b.lastMessageAt ?? b.updated_at ?? b.created_at ?? "";
+        return bt.localeCompare(at);
+      });
+
+      setThreads(merged);
+    } catch (e: any) {
+      console.error("[chat list] load error:", e);
+      setThreads([]);
+      setLoadError(e?.message ?? "チャット一覧の取得に失敗しました");
+    } finally {
+      setLoading(false);
+    }
+  }, [authLoading, meId]);
+
+  useEffect(() => {
+    void loadThreads();
+  }, [loadThreads]);
+
+  useEffect(() => {
+    if (!meId) return;
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void loadThreads();
+      }
+    };
+
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
 
     return () => {
-      cancelled = true;
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [authLoading, meId]);
+  }, [meId, loadThreads]);
+
+  useEffect(() => {
+    if (!meId) return;
+
+    const channel = supabase
+      .channel(`chat-list-${meId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "chat_messages" },
+        () => {
+          void loadThreads();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "chat_members" },
+        () => {
+          void loadThreads();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "chat_threads" },
+        () => {
+          void loadThreads();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [meId, loadThreads]);
 
   const unreadTotal = useMemo(() => {
     return threads.reduce((sum, t) => sum + (t.isUnread ? 1 : 0), 0);
@@ -402,6 +409,20 @@ export default function ChatListPage() {
             <Link href="/login?redirect=/chat" className="sh-btn sh-btn--primary">
               ログインする
             </Link>
+          </div>
+        </div>
+      ) : loadError ? (
+        <div style={emptyBox}>
+          {loadError}
+          <br />
+          <div style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              className="sh-btn sh-btn--primary"
+              onClick={() => void loadThreads()}
+            >
+              再読み込み
+            </button>
           </div>
         </div>
       ) : threads.length === 0 ? (

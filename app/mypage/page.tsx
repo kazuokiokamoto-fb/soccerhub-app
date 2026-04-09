@@ -2,9 +2,10 @@
 
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
+import { useAuth } from "@/app/lib/auth";
 import { categoryLabel, categoryLabels } from "@/app/lib/categories";
 import PushPermissionButton from "@/app/components/PushPermissionButton";
 
@@ -163,14 +164,14 @@ function toDateTimeMs(date?: string | null, time?: string | null) {
 }
 
 export default function MyPage() {
-  const [me, setMe] = useState<{ id: string; email?: string | null } | null>(
-    null
-  );
+  const { user, loading: authLoading } = useAuth();
+
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
   const [deletingTeamId, setDeletingTeamId] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   const [openCount, setOpenCount] = useState(0);
   const [receivedOfferCount, setReceivedOfferCount] = useState(0);
@@ -178,39 +179,23 @@ export default function MyPage() {
   const [unreadTotal, setUnreadTotal] = useState(0);
   const [nextMatch, setNextMatch] = useState<NextMatchCard | null>(null);
 
+  const me = useMemo(
+    () =>
+      user
+        ? {
+            id: user.id,
+            email: user.email ?? null,
+          }
+        : null,
+    [user]
+  );
+
   const mainTeam = useMemo(() => teams[0] ?? null, [teams]);
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3200);
-    return () => clearTimeout(t);
-  }, [toast]);
-
-  async function load() {
-    setLoading(true);
-    setToast(null);
-
-    const {
-      data: { user },
-      error: userErr,
-    } = await supabase.auth.getUser();
-
-    if (userErr) {
-      console.error(userErr);
-      setToast({
-        type: "error",
-        text: `ユーザー取得失敗: ${userErr.message}`,
-      });
-      setLoading(false);
-      return;
-    }
+  const load = useCallback(async () => {
+    if (authLoading) return;
 
     if (!user) {
-      setMe(null);
       setProfile(null);
       setTeams([]);
       setOpenCount(0);
@@ -218,300 +203,367 @@ export default function MyPage() {
       setSentOfferCount(0);
       setUnreadTotal(0);
       setNextMatch(null);
+      setLoadError("");
       setLoading(false);
       return;
     }
 
-    setMe({
-      id: user.id,
-      email: user.email ?? null,
-    });
+    setLoading(true);
+    setToast(null);
+    setLoadError("");
 
-    const { data: profileRow, error: profileErr } = await supabase
-      .from("profiles")
-      .select("user_id,name,phone,line_id,notify_email,notify_line")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    try {
+      const userId = user.id;
 
-    if (profileErr) {
-      console.error(profileErr);
-      setToast({
-        type: "error",
-        text: `プロフィール読込失敗: ${profileErr.message}`,
-      });
-    }
+      const { data: profileRow, error: profileErr } = await supabase
+        .from("profiles")
+        .select("user_id,name,phone,line_id,notify_email,notify_line")
+        .eq("user_id", userId)
+        .maybeSingle();
 
-    setProfile((profileRow as ProfileRow | null) ?? null);
+      if (profileErr) {
+        console.error(profileErr);
+      }
+      setProfile((profileRow as ProfileRow | null) ?? null);
 
-    const primaryRes = await supabase
-      .from("teams")
-      .select(
-        "id,owner_id,name,category,categories,level,strength_rank,area,prefecture,city,town,has_ground,category_meta,uniform_main,uniform_sub,uniform_gk,note"
-      )
-      .eq("owner_id", user.id)
-      .order("updated_at", { ascending: false });
-
-    let loadedTeams: TeamRow[] = [];
-
-    if (primaryRes.error && isMissingColumnError(primaryRes.error)) {
-      const fallbackRes = await supabase
+      const primaryRes = await supabase
         .from("teams")
         .select(
-          "id,owner_id,name,category,categories,level,strength_rank,area,prefecture,city,town,has_ground,uniform_main,uniform_sub,note"
+          "id,owner_id,name,category,categories,level,strength_rank,area,prefecture,city,town,has_ground,category_meta,uniform_main,uniform_sub,uniform_gk,note"
         )
-        .eq("owner_id", user.id)
+        .eq("owner_id", userId)
         .order("updated_at", { ascending: false });
 
-      if (fallbackRes.error) {
-        console.error(fallbackRes.error);
-        setToast({
-          type: "error",
-          text: `チーム読込失敗: ${fallbackRes.error.message}`,
-        });
-        setTeams([]);
+      let loadedTeams: TeamRow[] = [];
+
+      if (primaryRes.error && isMissingColumnError(primaryRes.error)) {
+        const fallbackRes = await supabase
+          .from("teams")
+          .select(
+            "id,owner_id,name,category,categories,level,strength_rank,area,prefecture,city,town,has_ground,uniform_main,uniform_sub,note"
+          )
+          .eq("owner_id", userId)
+          .order("updated_at", { ascending: false });
+
+        if (fallbackRes.error) {
+          throw fallbackRes.error;
+        }
+
+        loadedTeams = ((fallbackRes.data ?? []) as TeamRow[]) || [];
+      } else if (primaryRes.error) {
+        throw primaryRes.error;
+      } else {
+        loadedTeams = ((primaryRes.data ?? []) as TeamRow[]) || [];
+      }
+
+      setTeams(loadedTeams);
+
+      const myTeamIds = loadedTeams.map((t) => t.id).filter(Boolean);
+
+      if (myTeamIds.length === 0) {
+        setOpenCount(0);
+        setReceivedOfferCount(0);
+        setSentOfferCount(0);
+        setUnreadTotal(0);
+        setNextMatch(null);
         setLoading(false);
         return;
       }
 
-      loadedTeams = ((fallbackRes.data ?? []) as TeamRow[]) || [];
-    } else if (primaryRes.error) {
-      console.error(primaryRes.error);
-      setToast({
-        type: "error",
-        text: `チーム読込失敗: ${primaryRes.error.message}`,
-      });
-      setTeams([]);
-      setLoading(false);
-      return;
-    } else {
-      loadedTeams = ((primaryRes.data ?? []) as TeamRow[]) || [];
-    }
-
-    setTeams(loadedTeams);
-
-    const myTeamIds = loadedTeams.map((t) => t.id).filter(Boolean);
-
-    if (myTeamIds.length === 0) {
-      setOpenCount(0);
-      setReceivedOfferCount(0);
-      setSentOfferCount(0);
-      setUnreadTotal(0);
-      setNextMatch(null);
-      setLoading(false);
-      return;
-    }
-
-    const { data: mySlots, error: slotErr } = await supabase
-      .from("match_slots")
-      .select(
-        "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
-      )
-      .in("host_team_id", myTeamIds);
-
-    if (slotErr) {
-      console.error(slotErr);
-    }
-
-    const mySlotRows = (mySlots ?? []) as MatchSlotRow[];
-    const mySlotIds = mySlotRows.map((s) => s.id).filter(Boolean);
-
-    setOpenCount(mySlotRows.filter((s) => !s.is_closed).length);
-
-    const { data: outgoingRequests, error: outgoingReqErr } = await supabase
-      .from("match_requests")
-      .select(
-        "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
-      )
-      .in("requester_team_id", myTeamIds);
-
-    if (outgoingReqErr) {
-      console.error(outgoingReqErr);
-    }
-
-    const outgoingRequestRows = (outgoingRequests ?? []) as MatchRequestRow[];
-
-    let incomingRequestRows: MatchRequestRow[] = [];
-    if (mySlotIds.length > 0) {
-      const { data: incomingRequests, error: incomingReqErr } = await supabase
-        .from("match_requests")
-        .select(
-          "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
-        )
-        .in("slot_id", mySlotIds);
-
-      if (incomingReqErr) {
-        console.error(incomingReqErr);
-      } else {
-        incomingRequestRows = (incomingRequests ?? []) as MatchRequestRow[];
-      }
-    }
-
-    const { data: sentOffers, error: sentOffersErr } = await supabase
-      .from("match_offers")
-      .select(
-        "id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at"
-      )
-      .in("from_team_id", myTeamIds);
-
-    if (sentOffersErr) {
-      console.error("sentOffers error:", sentOffersErr);
-    }
-
-    const sentOfferRows = (sentOffers ?? []) as MatchOfferRow[];
-
-    const { data: receivedOffers, error: receivedOffersErr } = await supabase
-      .from("match_offers")
-      .select(
-        "id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at"
-      )
-      .in("to_team_id", myTeamIds);
-
-    if (receivedOffersErr) {
-      console.error("receivedOffers error:", receivedOffersErr);
-    }
-
-    const receivedOfferRows = (receivedOffers ?? []) as MatchOfferRow[];
-
-    const pendingReceivedOffers =
-      receivedOfferRows.filter((o) => o.status === "pending").length +
-      incomingRequestRows.filter(
-        (r) =>
-          r.status === "pending" && !myTeamIds.includes(r.requester_team_id)
-      ).length;
-
-    const pendingSentOffers =
-      sentOfferRows.filter((o) => o.status === "pending").length +
-      outgoingRequestRows.filter((r) => r.status === "pending").length;
-
-    setReceivedOfferCount(pendingReceivedOffers);
-    setSentOfferCount(pendingSentOffers);
-
-    const { data: memberRows, error: memberErr } = await supabase
-      .from("chat_members")
-      .select("thread_id,last_read_at")
-      .eq("user_id", user.id);
-
-    if (memberErr) {
-      console.error(memberErr);
-    }
-
-    const myMemberRows = (memberRows ?? []) as ChatMemberRow[];
-    const threadIds = myMemberRows.map((r) => r.thread_id).filter(Boolean);
-
-    if (threadIds.length > 0) {
-      const { data: msgRows, error: msgErr } = await supabase
-        .from("chat_messages")
-        .select("id,thread_id,body,created_at")
-        .in("thread_id", threadIds)
-        .order("created_at", { ascending: false })
-        .limit(2000);
-
-      if (msgErr) {
-        console.error(msgErr);
-      }
-
-      const messages = (msgRows ?? []) as ChatMessageRow[];
-      const latestByThread = new Map<string, ChatMessageRow>();
-
-      for (const m of messages) {
-        if (!latestByThread.has(m.thread_id)) {
-          latestByThread.set(m.thread_id, m);
-        }
-      }
-
-      let unread = 0;
-      for (const member of myMemberRows) {
-        const last = latestByThread.get(member.thread_id);
-        if (!last?.created_at) continue;
-
-        if (!member.last_read_at) {
-          unread += 1;
-          continue;
-        }
-
-        if (
-          new Date(last.created_at).getTime() >
-          new Date(member.last_read_at).getTime()
-        ) {
-          unread += 1;
-        }
-      }
-
-      setUnreadTotal(unread);
-    } else {
-      setUnreadTotal(0);
-    }
-
-    const acceptedOutgoingRequestSlotIds = outgoingRequestRows
-      .filter((r) => r.status === "accepted")
-      .map((r) => r.slot_id);
-
-    const acceptedIncomingRequestSlotIds = incomingRequestRows
-      .filter((r) => r.status === "accepted")
-      .map((r) => r.slot_id);
-
-    const acceptedReceivedOfferSlotIds = receivedOfferRows
-      .filter((o) => o.status === "accepted" && o.slot_id)
-      .map((o) => o.slot_id as string);
-
-    const acceptedSentOfferSlotIds = sentOfferRows
-      .filter((o) => o.status === "accepted" && o.slot_id)
-      .map((o) => o.slot_id as string);
-
-    const mergedAcceptedSlotIds = Array.from(
-      new Set(
-        [
-          ...acceptedOutgoingRequestSlotIds,
-          ...acceptedIncomingRequestSlotIds,
-          ...acceptedReceivedOfferSlotIds,
-          ...acceptedSentOfferSlotIds,
-        ].filter(Boolean)
-      )
-    );
-
-    if (mergedAcceptedSlotIds.length > 0) {
-      const { data: acceptedSlots, error: acceptedSlotsErr } = await supabase
+      const { data: mySlots, error: slotErr } = await supabase
         .from("match_slots")
         .select(
           "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
         )
-        .in("id", mergedAcceptedSlotIds)
-        .order("date", { ascending: true })
-        .order("start_time", { ascending: true });
+        .in("host_team_id", myTeamIds);
 
-      if (acceptedSlotsErr) {
-        console.error(acceptedSlotsErr);
+      if (slotErr) {
+        console.error(slotErr);
       }
 
-      const now = Date.now();
-      const futureSlots = ((acceptedSlots ?? []) as MatchSlotRow[])
-        .filter((s) => toDateTimeMs(s.date, s.start_time) >= now)
-        .sort((a, b) => {
-          const aMs = toDateTimeMs(a.date, a.start_time);
-          const bMs = toDateTimeMs(b.date, b.start_time);
-          return aMs - bMs;
-        });
+      const mySlotRows = (mySlots ?? []) as MatchSlotRow[];
+      const mySlotIds = mySlotRows.map((s) => s.id).filter(Boolean);
 
-      if (futureSlots.length > 0) {
-        const s = futureSlots[0];
-        setNextMatch({
-          date: s.date,
-          start_time: s.start_time,
-          end_time: s.end_time,
-          area: s.area,
-          area_text: s.area_text,
-          category: s.category,
-          slot_id: s.id,
-        });
+      setOpenCount(mySlotRows.filter((s) => !s.is_closed).length);
+
+      const { data: outgoingRequests, error: outgoingReqErr } = await supabase
+        .from("match_requests")
+        .select(
+          "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
+        )
+        .in("requester_team_id", myTeamIds);
+
+      if (outgoingReqErr) {
+        console.error(outgoingReqErr);
+      }
+
+      const outgoingRequestRows = (outgoingRequests ?? []) as MatchRequestRow[];
+
+      let incomingRequestRows: MatchRequestRow[] = [];
+      if (mySlotIds.length > 0) {
+        const { data: incomingRequests, error: incomingReqErr } = await supabase
+          .from("match_requests")
+          .select(
+            "id, slot_id, requester_team_id, requester_user_id, status, comment, created_at"
+          )
+          .in("slot_id", mySlotIds);
+
+        if (incomingReqErr) {
+          console.error(incomingReqErr);
+        } else {
+          incomingRequestRows = (incomingRequests ?? []) as MatchRequestRow[];
+        }
+      }
+
+      const { data: sentOffers, error: sentOffersErr } = await supabase
+        .from("match_offers")
+        .select(
+          "id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at"
+        )
+        .in("from_team_id", myTeamIds);
+
+      if (sentOffersErr) {
+        console.error("sentOffers error:", sentOffersErr);
+      }
+
+      const sentOfferRows = (sentOffers ?? []) as MatchOfferRow[];
+
+      const { data: receivedOffers, error: receivedOffersErr } = await supabase
+        .from("match_offers")
+        .select(
+          "id, slot_id, from_user_id, from_team_id, to_team_id, status, message, created_at"
+        )
+        .in("to_team_id", myTeamIds);
+
+      if (receivedOffersErr) {
+        console.error("receivedOffers error:", receivedOffersErr);
+      }
+
+      const receivedOfferRows = (receivedOffers ?? []) as MatchOfferRow[];
+
+      const pendingReceivedOffers =
+        receivedOfferRows.filter((o) => o.status === "pending").length +
+        incomingRequestRows.filter(
+          (r) =>
+            r.status === "pending" && !myTeamIds.includes(r.requester_team_id)
+        ).length;
+
+      const pendingSentOffers =
+        sentOfferRows.filter((o) => o.status === "pending").length +
+        outgoingRequestRows.filter((r) => r.status === "pending").length;
+
+      setReceivedOfferCount(pendingReceivedOffers);
+      setSentOfferCount(pendingSentOffers);
+
+      const { data: memberRows, error: memberErr } = await supabase
+        .from("chat_members")
+        .select("thread_id,last_read_at")
+        .eq("user_id", userId);
+
+      if (memberErr) {
+        console.error(memberErr);
+      }
+
+      const myMemberRows = (memberRows ?? []) as ChatMemberRow[];
+      const threadIds = myMemberRows.map((r) => r.thread_id).filter(Boolean);
+
+      if (threadIds.length > 0) {
+        const { data: msgRows, error: msgErr } = await supabase
+          .from("chat_messages")
+          .select("id,thread_id,body,created_at")
+          .in("thread_id", threadIds)
+          .order("created_at", { ascending: false })
+          .limit(2000);
+
+        if (msgErr) {
+          console.error(msgErr);
+        }
+
+        const messages = (msgRows ?? []) as ChatMessageRow[];
+        const latestByThread = new Map<string, ChatMessageRow>();
+
+        for (const m of messages) {
+          if (!latestByThread.has(m.thread_id)) {
+            latestByThread.set(m.thread_id, m);
+          }
+        }
+
+        let unread = 0;
+        for (const member of myMemberRows) {
+          const last = latestByThread.get(member.thread_id);
+          if (!last?.created_at) continue;
+
+          if (!member.last_read_at) {
+            unread += 1;
+            continue;
+          }
+
+          if (
+            new Date(last.created_at).getTime() >
+            new Date(member.last_read_at).getTime()
+          ) {
+            unread += 1;
+          }
+        }
+
+        setUnreadTotal(unread);
+      } else {
+        setUnreadTotal(0);
+      }
+
+      const acceptedOutgoingRequestSlotIds = outgoingRequestRows
+        .filter((r) => r.status === "accepted")
+        .map((r) => r.slot_id);
+
+      const acceptedIncomingRequestSlotIds = incomingRequestRows
+        .filter((r) => r.status === "accepted")
+        .map((r) => r.slot_id);
+
+      const acceptedReceivedOfferSlotIds = receivedOfferRows
+        .filter((o) => o.status === "accepted" && o.slot_id)
+        .map((o) => o.slot_id as string);
+
+      const acceptedSentOfferSlotIds = sentOfferRows
+        .filter((o) => o.status === "accepted" && o.slot_id)
+        .map((o) => o.slot_id as string);
+
+      const mergedAcceptedSlotIds = Array.from(
+        new Set(
+          [
+            ...acceptedOutgoingRequestSlotIds,
+            ...acceptedIncomingRequestSlotIds,
+            ...acceptedReceivedOfferSlotIds,
+            ...acceptedSentOfferSlotIds,
+          ].filter(Boolean)
+        )
+      );
+
+      if (mergedAcceptedSlotIds.length > 0) {
+        const { data: acceptedSlots, error: acceptedSlotsErr } = await supabase
+          .from("match_slots")
+          .select(
+            "id, host_team_id, date, start_time, end_time, area, area_text, category, is_closed, created_at"
+          )
+          .in("id", mergedAcceptedSlotIds)
+          .order("date", { ascending: true })
+          .order("start_time", { ascending: true });
+
+        if (acceptedSlotsErr) {
+          console.error(acceptedSlotsErr);
+        }
+
+        const now = Date.now();
+        const futureSlots = ((acceptedSlots ?? []) as MatchSlotRow[])
+          .filter((s) => toDateTimeMs(s.date, s.start_time) >= now)
+          .sort((a, b) => {
+            const aMs = toDateTimeMs(a.date, a.start_time);
+            const bMs = toDateTimeMs(b.date, b.start_time);
+            return aMs - bMs;
+          });
+
+        if (futureSlots.length > 0) {
+          const s = futureSlots[0];
+          setNextMatch({
+            date: s.date,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            area: s.area,
+            area_text: s.area_text,
+            category: s.category,
+            slot_id: s.id,
+          });
+        } else {
+          setNextMatch(null);
+        }
       } else {
         setNextMatch(null);
       }
-    } else {
-      setNextMatch(null);
+    } catch (e: any) {
+      console.error("[mypage] load error:", e);
+      setLoadError(e?.message ?? "マイページの取得に失敗しました");
+      setToast({
+        type: "error",
+        text: e?.message ?? "マイページの取得に失敗しました",
+      });
+    } finally {
+      setLoading(false);
     }
+  }, [authLoading, user]);
 
-    setLoading(false);
-  }
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3200);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void load();
+      }
+    };
+
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [user?.id, load]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`mypage-${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "teams" },
+        () => void load()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "match_slots" },
+        () => void load()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "match_requests" },
+        () => void load()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "match_offers" },
+        () => void load()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "chat_members" },
+        () => void load()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "chat_messages" },
+        () => void load()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "notifications" },
+        () => void load()
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [user?.id, load]);
 
   async function existsRow(table: string, column: string, teamId: string) {
     const res = await supabase
@@ -632,6 +684,8 @@ export default function MyPage() {
         type: "success",
         text: `✅ 「${team.name}」を削除しました`,
       });
+
+      await load();
     } catch (e: any) {
       console.error(e);
       setToast({
@@ -643,8 +697,18 @@ export default function MyPage() {
     }
   }
 
-  if (loading) {
-    return <main style={{ padding: 20 }}>Loading...</main>;
+  if (authLoading || loading) {
+    return (
+      <main style={{ maxWidth: 980, margin: "0 auto", padding: 16 }}>
+        <AppTabNav />
+        <AppHero
+          icon="⚙️"
+          title="マイページ"
+          desc="アカウント情報、試合状況、チーム情報、グラウンド情報を確認・編集できます。"
+        />
+        <div style={{ padding: 20 }}>Loading...</div>
+      </main>
+    );
   }
 
   return (
@@ -683,6 +747,17 @@ export default function MyPage() {
       {!me ? (
         <div style={{ marginTop: 16, color: "#991b1b" }}>
           ログインが必要です。
+        </div>
+      ) : loadError ? (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ color: "#991b1b", marginBottom: 12 }}>{loadError}</div>
+          <button
+            type="button"
+            className="sh-btn sh-btn--primary"
+            onClick={() => void load()}
+          >
+            再読み込み
+          </button>
         </div>
       ) : null}
 

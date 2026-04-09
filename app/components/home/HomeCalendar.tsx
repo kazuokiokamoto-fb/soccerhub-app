@@ -361,6 +361,8 @@ export default function HomeCalendar() {
     clearAllFilters,
   } = useMatchFilters();
 
+  const authReady = !authLoading;
+
   const {
     loadingBase,
     loadingMonth,
@@ -373,13 +375,12 @@ export default function HomeCalendar() {
     loadMonth,
   } = useMatchData({
     monthDate,
-    authReady: !authLoading,
+    authReady,
     currentUserId: authUserId,
   });
 
   const loading = loadingBase || loadingMonth;
   const currentUserId = authUserId || meId;
-  const authReady = !authLoading;
 
   useEffect(() => {
     if (!requestTeamId && myTeams[0]?.id) {
@@ -574,6 +575,13 @@ export default function HomeCalendar() {
         block: "start",
       });
     }, 120);
+  };
+
+  const handleBackToCalendar = () => {
+    setPanelMode("none");
+    setSelectedSlotId("");
+    setRequestComment("");
+    scrollToCalendar();
   };
 
   const handleResetTeamFilters = () => {
@@ -1053,7 +1061,6 @@ export default function HomeCalendar() {
               type="button"
               className="sh-btn"
               onClick={openTeamFilterPanel}
-              disabled={loading}
             >
               条件変更
             </button>
@@ -1062,7 +1069,6 @@ export default function HomeCalendar() {
               type="button"
               className="sh-btn sh-btn--primary"
               onClick={openTeamListWindow}
-              disabled={loading}
             >
               チーム一覧表示
             </button>
@@ -1100,7 +1106,7 @@ export default function HomeCalendar() {
           }}
           onCreateForDate={(ymd) => goToCreatePage(ymd)}
           onOpenCalendarHelp={() => setShowCalendarHelp(true)}
-          disableCreate={loading || !authReady}
+          disableCreate={!authReady}
           selectedDateSummaryText={selectedDateSummaryText}
           titleText="試合日で探す"
         />
@@ -1164,7 +1170,7 @@ export default function HomeCalendar() {
           setBikeCapacityMin={setBikeCapacityMin}
           memberCountMin={memberCountMin}
           setMemberCountMin={setMemberCountMin}
-          onBackToCalendar={handleResetTeamFilters}
+          onBackToCalendar={handleBackToCalendar}
           onOpenTeamList={openTeamListWindow}
           onReset={handleResetTeamFilters}
           onBackToList={closePanel}
