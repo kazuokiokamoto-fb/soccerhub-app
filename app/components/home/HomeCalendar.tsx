@@ -366,6 +366,8 @@ export default function HomeCalendar() {
   const {
     loadingBase,
     loadingMonth,
+    baseError,
+    monthError,
     meId,
     allTeams,
     myTeams,
@@ -1048,6 +1050,27 @@ export default function HomeCalendar() {
 
   return (
     <section style={wrap} ref={homeTopRef}>
+      {baseError || monthError ? (
+        <div style={errorBox}>
+          <div style={errorTitle}>読み込みエラー</div>
+          {baseError ? <div>基礎データ: {baseError}</div> : null}
+          {monthError ? <div>月データ: {monthError}</div> : null}
+
+          <div style={{ marginTop: 10 }}>
+            <button
+              type="button"
+              className="sh-btn sh-btn--primary"
+              onClick={() => {
+                void loadMonth();
+                window.location.reload();
+              }}
+            >
+              再読み込み
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <section style={summaryBox}>
         <div style={summaryHead}>
           <div style={summaryTextWrap}>
@@ -1198,6 +1221,20 @@ const wrap: React.CSSProperties = {
   marginTop: 16,
   display: "grid",
   gap: 14,
+};
+
+const errorBox: React.CSSProperties = {
+  padding: 12,
+  borderRadius: 12,
+  border: "1px solid #fecaca",
+  background: "#fef2f2",
+  color: "#991b1b",
+  lineHeight: 1.7,
+};
+
+const errorTitle: React.CSSProperties = {
+  fontWeight: 900,
+  marginBottom: 4,
 };
 
 const summaryBox: React.CSSProperties = {

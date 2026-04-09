@@ -2,16 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
+import { withTimeout, getErrorMessage } from "@/app/lib/safeQuery";
 
-export function useMatchData(params: {
+type UseMatchDataParams = {
   monthDate: Date;
   authReady: boolean;
   currentUserId: string;
-}) {
+};
+
+export function useMatchData(params: UseMatchDataParams) {
   const { monthDate, authReady, currentUserId } = params;
 
   const [loadingBase, setLoadingBase] = useState(true);
   const [loadingMonth, setLoadingMonth] = useState(true);
+
+  const [baseError, setBaseError] = useState("");
+  const [monthError, setMonthError] = useState("");
 
   const [meId, setMeId] = useState<string>("");
 
@@ -24,73 +30,73 @@ export function useMatchData(params: {
 
   const mountedRef = useRef(true);
 
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const monthKey = `${monthDate.getFullYear()}-${String(
+    monthDate.getMonth() + 1
+  ).padStart(2, "0")}`;
 
   const loadBase = useCallback(async () => {
     if (!authReady) return;
 
-    if (mountedRef.current) {
-      setLoadingBase(true);
-    }
+    setLoadingBase(true);
+    setBaseError("");
 
     try {
-      const uid = currentUserId || "";
-      if (mountedRef.current) {
-        setMeId(uid);
-      }
+      const uid = currentUserId ?? "";
+      setMeId(uid);
 
-      const [
-        { data: teams, error: teamsError },
-        { data: venuesData, error: venuesError },
-      ] = await Promise.all([
-        supabase.from("teams").select("*").order("updated_at", { ascending: false }),
-        supabase.from("venues").select("*"),
+      const [teamsRes, venuesRes, myTeamsRes] = await Promise.allSettled([
+        withTimeout(supabase.from("teams").select("*"), 8000, "teams"),
+        withTimeout(supabase.from("venues").select("*"), 8000, "venues"),
+        uid
+          ? withTimeout(
+              supabase.from("teams").select("*").eq("owner_id", uid),
+              8000,
+              "myTeams"
+            )
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
       if (!mountedRef.current) return;
 
-      if (teamsError) {
-        console.error("[useMatchData] teams load error:", teamsError);
-        setAllTeams([]);
-      } else {
-        setAllTeams(teams ?? []);
-      }
-
-      if (venuesError) {
-        console.error("[useMatchData] venues load error:", venuesError);
-        setVenues([]);
-      } else {
-        setVenues(venuesData ?? []);
-      }
-
-      if (uid) {
-        const { data: my, error: myTeamsError } = await supabase
-          .from("teams")
-          .select("*")
-          .eq("owner_id", uid)
-          .order("updated_at", { ascending: false });
-
-        if (!mountedRef.current) return;
-
-        if (myTeamsError) {
-          console.error("[useMatchData] myTeams load error:", myTeamsError);
-          setMyTeams([]);
+      if (teamsRes.status === "fulfilled") {
+        if (teamsRes.value.error) {
+          console.error("[useMatchData] teams error:", teamsRes.value.error);
+          setAllTeams([]);
         } else {
-          setMyTeams(my ?? []);
+          setAllTeams(teamsRes.value.data ?? []);
         }
       } else {
+        console.error("[useMatchData] teams failed:", teamsRes.reason);
+        setAllTeams([]);
+      }
+
+      if (venuesRes.status === "fulfilled") {
+        if (venuesRes.value.error) {
+          console.error("[useMatchData] venues error:", venuesRes.value.error);
+          setVenues([]);
+        } else {
+          setVenues(venuesRes.value.data ?? []);
+        }
+      } else {
+        console.error("[useMatchData] venues failed:", venuesRes.reason);
+        setVenues([]);
+      }
+
+      if (myTeamsRes.status === "fulfilled") {
+        if ((myTeamsRes.value as any).error) {
+          console.error("[useMatchData] myTeams error:", (myTeamsRes.value as any).error);
+          setMyTeams([]);
+        } else {
+          setMyTeams(((myTeamsRes.value as any).data ?? []) as any[]);
+        }
+      } else {
+        console.error("[useMatchData] myTeams failed:", myTeamsRes.reason);
         setMyTeams([]);
       }
     } catch (e) {
       console.error("[useMatchData] loadBase unexpected error:", e);
-
       if (!mountedRef.current) return;
-
+      setBaseError(getErrorMessage(e));
       setAllTeams([]);
       setMyTeams([]);
       setVenues([]);
@@ -104,9 +110,8 @@ export function useMatchData(params: {
   const loadMonth = useCallback(async () => {
     if (!authReady) return;
 
-    if (mountedRef.current) {
-      setLoadingMonth(true);
-    }
+    setLoadingMonth(true);
+    setMonthError("");
 
     try {
       const y = monthDate.getFullYear();
@@ -123,51 +128,54 @@ export function useMatchData(params: {
         end.getMonth() + 1
       ).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
 
-      const { data: slots, error: slotsError } = await supabase
-        .from("match_slots")
-        .select("*")
-        .gte("date", startStr)
-        .lt("date", endStr)
-        .order("date", { ascending: true })
-        .order("start_time", { ascending: true });
+      const slotsRes = await withTimeout(
+        supabase
+          .from("match_slots")
+          .select("*")
+          .gte("date", startStr)
+          .lt("date", endStr)
+          .order("date", { ascending: true }),
+        8000,
+        "match_slots"
+      );
+
+      if (slotsRes.error) {
+        throw slotsRes.error;
+      }
 
       if (!mountedRef.current) return;
 
-      if (slotsError) {
-        console.error("[useMatchData] match_slots load error:", slotsError);
-        setSlotsInMonth([]);
-        setRequestsForMonth([]);
-        return;
-      }
+      const slots = slotsRes.data ?? [];
+      setSlotsInMonth(slots);
 
-      const safeSlots = slots ?? [];
-      setSlotsInMonth(safeSlots);
-
-      const slotIds = safeSlots.map((s: any) => s.id).filter(Boolean);
+      const slotIds = slots
+        .map((s: any) => s.id)
+        .filter(Boolean);
 
       if (slotIds.length === 0) {
         setRequestsForMonth([]);
         return;
       }
 
-      const { data: reqs, error: reqsError } = await supabase
-        .from("match_requests")
-        .select("*")
-        .in("slot_id", slotIds);
+      const reqsRes = await withTimeout(
+        supabase
+          .from("match_requests")
+          .select("*")
+          .in("slot_id", slotIds),
+        8000,
+        "match_requests by slot_ids"
+      );
+
+      if (reqsRes.error) {
+        throw reqsRes.error;
+      }
 
       if (!mountedRef.current) return;
-
-      if (reqsError) {
-        console.error("[useMatchData] match_requests load error:", reqsError);
-        setRequestsForMonth([]);
-      } else {
-        setRequestsForMonth(reqs ?? []);
-      }
+      setRequestsForMonth(reqsRes.data ?? []);
     } catch (e) {
       console.error("[useMatchData] loadMonth unexpected error:", e);
-
       if (!mountedRef.current) return;
-
+      setMonthError(getErrorMessage(e));
       setSlotsInMonth([]);
       setRequestsForMonth([]);
     } finally {
@@ -178,82 +186,69 @@ export function useMatchData(params: {
   }, [authReady, monthDate]);
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     void loadBase();
   }, [loadBase]);
 
   useEffect(() => {
     void loadMonth();
-  }, [loadMonth]);
+  }, [loadMonth, monthKey]);
 
   useEffect(() => {
     if (!authReady) return;
 
-    const onFocus = () => {
-      void loadBase();
-      void loadMonth();
-    };
-
-    const onVisible = () => {
+    const onFocusReload = () => {
       if (document.visibilityState === "visible") {
         void loadBase();
         void loadMonth();
       }
     };
 
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVisible);
-
-    return () => {
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [authReady, loadBase, loadMonth]);
-
-  useEffect(() => {
-    if (!authReady) return;
+    window.addEventListener("focus", onFocusReload);
+    document.addEventListener("visibilitychange", onFocusReload);
 
     const channel = supabase
-      .channel(`match-data-${monthDate.getFullYear()}-${monthDate.getMonth() + 1}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "teams" },
-        async () => {
-          await loadBase();
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "venues" },
-        async () => {
-          await loadBase();
-        }
-      )
+      .channel(`match-live-${currentUserId || "guest"}-${monthKey}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "match_slots" },
-        async () => {
-          await loadMonth();
-        }
+        () => void loadMonth()
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "match_requests" },
-        async () => {
-          await loadMonth();
-        }
+        () => void loadMonth()
       )
-      .subscribe((status) => {
-        console.log("[useMatchData] realtime status:", status);
-      });
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "teams" },
+        () => void loadBase()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "venues" },
+        () => void loadBase()
+      )
+      .subscribe();
 
     return () => {
+      window.removeEventListener("focus", onFocusReload);
+      document.removeEventListener("visibilitychange", onFocusReload);
       void supabase.removeChannel(channel);
     };
-  }, [authReady, monthDate, loadBase, loadMonth]);
+  }, [authReady, currentUserId, monthKey, loadBase, loadMonth]);
 
   return {
     loadingBase,
     loadingMonth,
+    baseError,
+    monthError,
     meId,
     allTeams,
     myTeams,
