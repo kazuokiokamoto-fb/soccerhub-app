@@ -3,10 +3,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
-import { useAuth } from "@/app/lib/auth";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
-import { withTimeout, getErrorMessage } from "@/app/lib/safeQuery";
 
 type TeamMini = {
   id: string;
@@ -24,13 +22,17 @@ type ThreadRow = {
   id: string;
   created_at: string;
   updated_at: string | null;
+
   memberTeamIds: string[];
   myLastReadAt?: string | null;
+
   otherTeamId?: string | null;
   otherTeamName?: string | null;
   otherTeamCategory?: string | null;
+
   lastMessageBody?: string | null;
   lastMessageAt?: string | null;
+
   isUnread?: boolean;
 };
 
@@ -42,6 +44,7 @@ function clip(s?: string | null, n = 42) {
 
 function formatLineTime(dt?: string | null) {
   if (!dt) return "";
+
   try {
     const d = new Date(dt);
     const now = new Date();
@@ -82,39 +85,94 @@ function buildInitial(name?: string | null) {
   return v.slice(0, 1);
 }
 
-export default function ChatListPage() {
-  const { user, loading: authLoading } = useAuth();
+async function withTimeout<T>(
+  fn: () => PromiseLike<T>,
+  ms: number,
+  label: string
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
 
+  try {
+    return await Promise.race<T>([
+      Promise.resolve(fn()),
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`${label} timeout (${ms}ms)`));
+        }, ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+export default function ChatListPage() {
+  const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [threads, setThreads] = useState<ThreadRow[]>([]);
-  const [errorText, setErrorText] = useState("");
+  const [meId, setMeId] = useState<string>("");
 
-  const meId = user?.id ?? "";
+  useEffect(() => {
+    let mounted = true;
+
+    const init = async () => {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (error) {
+        console.error("getSession error:", error);
+      }
+
+      if (!mounted) return;
+
+      setMeId(session?.user?.id ?? "");
+      setAuthLoading(false);
+    };
+
+    void init();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setMeId(session?.user?.id ?? "");
+      setAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;
 
     if (!meId) {
       setThreads([]);
-      setErrorText("");
       setLoading(false);
       return;
     }
 
     let cancelled = false;
 
-    const load = async () => {
+    void (async () => {
       setLoading(true);
-      setErrorText("");
 
       try {
         const myTeamsRes = await withTimeout(
-          supabase.from("teams").select("id").eq("owner_id", meId),
+          () => supabase.from("teams").select("id").eq("owner_id", meId),
           8000,
           "chat: my teams"
         );
 
-        if (myTeamsRes.error) throw myTeamsRes.error;
+        if (myTeamsRes.error) {
+          console.error(myTeamsRes.error);
+          if (!cancelled) setThreads([]);
+          return;
+        }
 
         const myTeamIds = new Set<string>(
           ((myTeamsRes.data ?? []) as Array<{ id: string }>)
@@ -122,20 +180,25 @@ export default function ChatListPage() {
             .filter(Boolean)
         );
 
-        const memberRes = await withTimeout(
-          supabase
-            .from("chat_members")
-            .select("thread_id,last_read_at,created_at")
-            .eq("user_id", meId)
-            .order("created_at", { ascending: false })
-            .limit(100),
+        const myMemberRes = await withTimeout(
+          () =>
+            supabase
+              .from("chat_members")
+              .select("thread_id,last_read_at,created_at")
+              .eq("user_id", meId)
+              .order("created_at", { ascending: false })
+              .limit(100),
           8000,
-          "chat: chat_members"
+          "chat: my memberships"
         );
 
-        if (memberRes.error) throw memberRes.error;
+        if (myMemberRes.error) {
+          console.error(myMemberRes.error);
+          if (!cancelled) setThreads([]);
+          return;
+        }
 
-        const myMemberRows = (memberRes.data ?? []) as Array<{
+        const myMemberRows = (myMemberRes.data ?? []) as Array<{
           thread_id: string;
           last_read_at?: string | null;
           created_at?: string | null;
@@ -154,60 +217,49 @@ export default function ChatListPage() {
         }
 
         if (threadIds.length === 0) {
-          if (!cancelled) {
-            setThreads([]);
-            setLoading(false);
-          }
+          if (!cancelled) setThreads([]);
           return;
         }
 
-        const [thRes, membersRes, msgRes] = await Promise.allSettled([
-          withTimeout(
-            supabase.from("chat_threads").select("id,created_at,updated_at").in("id", threadIds),
-            8000,
-            "chat: chat_threads"
-          ),
-          withTimeout(
-            supabase.from("chat_members").select("thread_id,team_id").in("thread_id", threadIds),
-            8000,
-            "chat: thread members"
-          ),
-          withTimeout(
+        const thRes = await withTimeout(
+          () =>
             supabase
-              .from("chat_messages")
-              .select("thread_id,body,created_at")
-              .in("thread_id", threadIds)
-              .order("created_at", { ascending: false })
-              .limit(Math.min(3000, Math.max(500, threadIds.length * 60))),
-            8000,
-            "chat: chat_messages"
-          ),
-        ]);
+              .from("chat_threads")
+              .select("id,created_at,updated_at")
+              .in("id", threadIds),
+          8000,
+          "chat: threads"
+        );
 
-        if (thRes.status !== "fulfilled" || thRes.value.error) {
-          throw thRes.status === "fulfilled" ? thRes.value.error : thRes.reason;
+        if (thRes.error) {
+          console.error(thRes.error);
+          if (!cancelled) setThreads([]);
+          return;
         }
 
-        const thRows = (thRes.value.data ?? []) as Array<{
-          id: string;
-          created_at: string;
-          updated_at: string | null;
-        }>;
+        const membersRes = await withTimeout(
+          () =>
+            supabase
+              .from("chat_members")
+              .select("thread_id,team_id")
+              .in("thread_id", threadIds),
+          8000,
+          "chat: thread members"
+        );
 
-        const membersRows =
-          membersRes.status === "fulfilled" && !membersRes.value.error
-            ? (membersRes.value.data ?? []) as Array<{ thread_id: string; team_id: string | null }>
-            : [];
-
-        const msgRows =
-          msgRes.status === "fulfilled" && !msgRes.value.error
-            ? (msgRes.value.data ?? []) as Array<{ thread_id: string; body: string | null; created_at: string }>
-            : [];
+        if (membersRes.error) {
+          console.error(membersRes.error);
+          if (!cancelled) setThreads([]);
+          return;
+        }
 
         const memberTeamsByThread = new Map<string, string[]>();
         const allTeamIds: string[] = [];
 
-        for (const r of membersRows) {
+        for (const r of ((membersRes.data ?? []) as Array<{
+          thread_id: string;
+          team_id: string | null;
+        }>)) {
           const tid = r.thread_id;
           const teamId = r.team_id ?? "";
           if (!tid || !teamId) continue;
@@ -224,12 +276,18 @@ export default function ChatListPage() {
 
         if (uniqTeamIds.length > 0) {
           const teamRes = await withTimeout(
-            supabase.from("teams").select("id,name,category").in("id", uniqTeamIds),
+            () =>
+              supabase
+                .from("teams")
+                .select("id,name,category")
+                .in("id", uniqTeamIds),
             8000,
-            "chat: team names"
+            "chat: team map"
           );
 
-          if (!teamRes.error) {
+          if (teamRes.error) {
+            console.error(teamRes.error);
+          } else {
             for (const t of ((teamRes.data ?? []) as Array<{
               id: string;
               name: string | null;
@@ -245,19 +303,46 @@ export default function ChatListPage() {
         }
 
         const lastMsgByThread = new Map<string, LastMsgMini>();
-        for (const m of msgRows) {
-          const tid = m.thread_id;
-          if (!tid) continue;
-          if (!lastMsgByThread.has(tid)) {
-            lastMsgByThread.set(tid, {
-              thread_id: tid,
-              body: m.body ?? null,
-              created_at: m.created_at,
-            });
+        const limit = Math.min(3000, Math.max(500, threadIds.length * 60));
+
+        const msgRes = await withTimeout(
+          () =>
+            supabase
+              .from("chat_messages")
+              .select("thread_id,body,created_at")
+              .in("thread_id", threadIds)
+              .order("created_at", { ascending: false })
+              .limit(limit),
+          8000,
+          "chat: last messages"
+        );
+
+        if (msgRes.error) {
+          console.error(msgRes.error);
+        } else {
+          for (const m of ((msgRes.data ?? []) as Array<{
+            thread_id: string;
+            body: string | null;
+            created_at: string;
+          }>)) {
+            const tid = m.thread_id;
+            if (!tid) continue;
+
+            if (!lastMsgByThread.has(tid)) {
+              lastMsgByThread.set(tid, {
+                thread_id: tid,
+                body: m.body ?? null,
+                created_at: m.created_at,
+              });
+            }
           }
         }
 
-        const merged: ThreadRow[] = thRows.map((t) => {
+        const merged: ThreadRow[] = ((thRes.data ?? []) as Array<{
+          id: string;
+          created_at: string;
+          updated_at: string | null;
+        }>).map((t) => {
           const tid = t.id;
           const memberTeamIds = memberTeamsByThread.get(tid) ?? [];
 
@@ -310,48 +395,17 @@ export default function ChatListPage() {
           setThreads(merged);
         }
       } catch (e) {
-        console.error("[chat page] load failed:", e);
-        if (!cancelled) {
-          setThreads([]);
-          setErrorText(getErrorMessage(e));
-        }
+        console.error("chat page load error:", e);
+        if (!cancelled) setThreads([]);
       } finally {
         if (!cancelled) {
           setLoading(false);
         }
       }
-    };
-
-    void load();
-
-    const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        void load();
-      }
-    };
-
-    window.addEventListener("focus", onVisible);
-    document.addEventListener("visibilitychange", onVisible);
-
-    const channel = supabase
-      .channel(`chat-list-${meId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "chat_members" },
-        () => void load()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "chat_messages" },
-        () => void load()
-      )
-      .subscribe();
+    })();
 
     return () => {
       cancelled = true;
-      window.removeEventListener("focus", onVisible);
-      document.removeEventListener("visibilitychange", onVisible);
-      void supabase.removeChannel(channel);
     };
   }, [authLoading, meId]);
 
@@ -378,23 +432,7 @@ export default function ChatListPage() {
         </div>
       </div>
 
-      {errorText ? (
-        <div style={emptyBox}>
-          読み込みに失敗しました。
-          <br />
-          {errorText}
-          <br />
-          <div style={{ marginTop: 12 }}>
-            <button
-              type="button"
-              className="sh-btn sh-btn--primary"
-              onClick={() => window.location.reload()}
-            >
-              再読み込み
-            </button>
-          </div>
-        </div>
-      ) : authLoading || loading ? (
+      {authLoading || loading ? (
         <div style={emptyBox}>読み込み中…</div>
       ) : !meId ? (
         <div style={emptyBox}>
