@@ -1,23 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
-import { withTimeout, getErrorMessage } from "@/app/lib/safeQuery";
 
-type UseMatchDataParams = {
+async function withTimeout<T>(
+  fn: () => PromiseLike<T>,
+  ms: number,
+  label: string
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race<T>([
+      Promise.resolve(fn()),
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`${label} timeout (${ms}ms)`));
+        }, ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+export function useMatchData(params: {
   monthDate: Date;
   authReady: boolean;
   currentUserId: string;
-};
-
-export function useMatchData(params: UseMatchDataParams) {
+}) {
   const { monthDate, authReady, currentUserId } = params;
 
   const [loadingBase, setLoadingBase] = useState(true);
   const [loadingMonth, setLoadingMonth] = useState(true);
-
-  const [baseError, setBaseError] = useState("");
-  const [monthError, setMonthError] = useState("");
 
   const [meId, setMeId] = useState<string>("");
 
@@ -28,82 +43,69 @@ export function useMatchData(params: UseMatchDataParams) {
   const [slotsInMonth, setSlotsInMonth] = useState<any[]>([]);
   const [requestsForMonth, setRequestsForMonth] = useState<any[]>([]);
 
-  const mountedRef = useRef(true);
-
-  const monthKey = `${monthDate.getFullYear()}-${String(
-    monthDate.getMonth() + 1
-  ).padStart(2, "0")}`;
-
   const loadBase = useCallback(async () => {
     if (!authReady) return;
 
     setLoadingBase(true);
-    setBaseError("");
 
     try {
       const uid = currentUserId ?? "";
       setMeId(uid);
 
       const [teamsRes, venuesRes, myTeamsRes] = await Promise.allSettled([
-        withTimeout(supabase.from("teams").select("*"), 8000, "teams"),
-        withTimeout(supabase.from("venues").select("*"), 8000, "venues"),
+        withTimeout(() => supabase.from("teams").select("*"), 8000, "teams"),
+        withTimeout(() => supabase.from("venues").select("*"), 8000, "venues"),
         uid
           ? withTimeout(
-              supabase.from("teams").select("*").eq("owner_id", uid),
+              () => supabase.from("teams").select("*").eq("owner_id", uid),
               8000,
               "myTeams"
             )
           : Promise.resolve({ data: [], error: null }),
       ]);
 
-      if (!mountedRef.current) return;
-
       if (teamsRes.status === "fulfilled") {
         if (teamsRes.value.error) {
-          console.error("[useMatchData] teams error:", teamsRes.value.error);
+          console.error("[useMatchData] teams load error:", teamsRes.value.error);
           setAllTeams([]);
         } else {
           setAllTeams(teamsRes.value.data ?? []);
         }
       } else {
-        console.error("[useMatchData] teams failed:", teamsRes.reason);
+        console.error("[useMatchData] teams timeout/unexpected:", teamsRes.reason);
         setAllTeams([]);
       }
 
       if (venuesRes.status === "fulfilled") {
         if (venuesRes.value.error) {
-          console.error("[useMatchData] venues error:", venuesRes.value.error);
+          console.error("[useMatchData] venues load error:", venuesRes.value.error);
           setVenues([]);
         } else {
           setVenues(venuesRes.value.data ?? []);
         }
       } else {
-        console.error("[useMatchData] venues failed:", venuesRes.reason);
+        console.error("[useMatchData] venues timeout/unexpected:", venuesRes.reason);
         setVenues([]);
       }
 
       if (myTeamsRes.status === "fulfilled") {
-        if ((myTeamsRes.value as any).error) {
-          console.error("[useMatchData] myTeams error:", (myTeamsRes.value as any).error);
+        if (myTeamsRes.value.error) {
+          console.error("[useMatchData] myTeams load error:", myTeamsRes.value.error);
           setMyTeams([]);
         } else {
-          setMyTeams(((myTeamsRes.value as any).data ?? []) as any[]);
+          setMyTeams(myTeamsRes.value.data ?? []);
         }
       } else {
-        console.error("[useMatchData] myTeams failed:", myTeamsRes.reason);
+        console.error("[useMatchData] myTeams timeout/unexpected:", myTeamsRes.reason);
         setMyTeams([]);
       }
     } catch (e) {
       console.error("[useMatchData] loadBase unexpected error:", e);
-      if (!mountedRef.current) return;
-      setBaseError(getErrorMessage(e));
       setAllTeams([]);
       setMyTeams([]);
       setVenues([]);
     } finally {
-      if (mountedRef.current) {
-        setLoadingBase(false);
-      }
+      setLoadingBase(false);
     }
   }, [authReady, currentUserId]);
 
@@ -111,7 +113,6 @@ export function useMatchData(params: UseMatchDataParams) {
     if (!authReady) return;
 
     setLoadingMonth(true);
-    setMonthError("");
 
     try {
       const y = monthDate.getFullYear();
@@ -128,69 +129,67 @@ export function useMatchData(params: UseMatchDataParams) {
         end.getMonth() + 1
       ).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`;
 
-      const slotsRes = await withTimeout(
-        supabase
-          .from("match_slots")
-          .select("*")
-          .gte("date", startStr)
-          .lt("date", endStr)
-          .order("date", { ascending: true }),
+      const slotPromise = withTimeout(
+        () =>
+          supabase
+            .from("match_slots")
+            .select("*")
+            .gte("date", startStr)
+            .lt("date", endStr)
+            .order("date", { ascending: true }),
         8000,
         "match_slots"
       );
 
-      if (slotsRes.error) {
-        throw slotsRes.error;
+      const reqPromise = currentUserId
+        ? withTimeout(
+            () =>
+              supabase
+                .from("match_requests")
+                .select("*")
+                .gte("created_at", `${startStr} 00:00:00+00`)
+                .lt("created_at", `${endStr} 00:00:00+00`),
+            8000,
+            "match_requests"
+          )
+        : Promise.resolve({ data: [], error: null });
+
+      const [slotsRes, reqsRes] = await Promise.allSettled([
+        slotPromise,
+        reqPromise,
+      ]);
+
+      if (slotsRes.status === "fulfilled") {
+        if (slotsRes.value.error) {
+          console.error("[useMatchData] match_slots load error:", slotsRes.value.error);
+          setSlotsInMonth([]);
+        } else {
+          setSlotsInMonth(slotsRes.value.data ?? []);
+        }
+      } else {
+        console.error("[useMatchData] match_slots timeout/unexpected:", slotsRes.reason);
+        setSlotsInMonth([]);
       }
 
-      if (!mountedRef.current) return;
-
-      const slots = slotsRes.data ?? [];
-      setSlotsInMonth(slots);
-
-      const slotIds = slots
-        .map((s: any) => s.id)
-        .filter(Boolean);
-
-      if (slotIds.length === 0) {
+      if (reqsRes.status === "fulfilled") {
+        if (reqsRes.value.error) {
+          console.error("[useMatchData] match_requests load error:", reqsRes.value.error);
+          setRequestsForMonth([]);
+        } else {
+          setRequestsForMonth(reqsRes.value.data ?? []);
+        }
+      } else {
+        console.error("[useMatchData] match_requests timeout/unexpected:", reqsRes.reason);
         setRequestsForMonth([]);
-        return;
       }
-
-      const reqsRes = await withTimeout(
-        supabase
-          .from("match_requests")
-          .select("*")
-          .in("slot_id", slotIds),
-        8000,
-        "match_requests by slot_ids"
-      );
-
-      if (reqsRes.error) {
-        throw reqsRes.error;
-      }
-
-      if (!mountedRef.current) return;
-      setRequestsForMonth(reqsRes.data ?? []);
     } catch (e) {
       console.error("[useMatchData] loadMonth unexpected error:", e);
-      if (!mountedRef.current) return;
-      setMonthError(getErrorMessage(e));
       setSlotsInMonth([]);
       setRequestsForMonth([]);
     } finally {
-      if (mountedRef.current) {
-        setLoadingMonth(false);
-      }
+      setLoadingMonth(false);
     }
-  }, [authReady, monthDate]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  }, [authReady, currentUserId, monthDate]);
 
   useEffect(() => {
     void loadBase();
@@ -198,57 +197,11 @@ export function useMatchData(params: UseMatchDataParams) {
 
   useEffect(() => {
     void loadMonth();
-  }, [loadMonth, monthKey]);
-
-  useEffect(() => {
-    if (!authReady) return;
-
-    const onFocusReload = () => {
-      if (document.visibilityState === "visible") {
-        void loadBase();
-        void loadMonth();
-      }
-    };
-
-    window.addEventListener("focus", onFocusReload);
-    document.addEventListener("visibilitychange", onFocusReload);
-
-    const channel = supabase
-      .channel(`match-live-${currentUserId || "guest"}-${monthKey}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "match_slots" },
-        () => void loadMonth()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "match_requests" },
-        () => void loadMonth()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "teams" },
-        () => void loadBase()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "venues" },
-        () => void loadBase()
-      )
-      .subscribe();
-
-    return () => {
-      window.removeEventListener("focus", onFocusReload);
-      document.removeEventListener("visibilitychange", onFocusReload);
-      void supabase.removeChannel(channel);
-    };
-  }, [authReady, currentUserId, monthKey, loadBase, loadMonth]);
+  }, [loadMonth]);
 
   return {
     loadingBase,
     loadingMonth,
-    baseError,
-    monthError,
     meId,
     allTeams,
     myTeams,
