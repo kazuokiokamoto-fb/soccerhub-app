@@ -400,18 +400,41 @@ export default function HomeCalendar() {
     return new Map(allTeams.map((t) => [t.id, t.name || "チーム未設定"]));
   }, [allTeams]);
 
+  const hasAnyActiveFilter = useMemo(() => {
+    return (
+      !!filters.keyword.trim() ||
+      filters.categoryFilter.length > 0 ||
+      !!filters.prefectureFilter ||
+      !!filters.cityFilter ||
+      !!filters.townFilter ||
+      filters.groundFilter !== "all" ||
+      filters.strengthFilter.length > 0 ||
+      filters.bikeFilter !== "all" ||
+      !!filters.bikeCapacityMin ||
+      !!filters.memberCountMin
+    );
+  }, [filters]);
+
   const filteredSlotsInMonth = useMemo(() => {
+    if (!hasAnyActiveFilter) {
+      return slotsInMonth;
+    }
+
     return slotsInMonth.filter((s: any) =>
       matchesSlotFilters(s, teamMap as any, filters)
     );
-  }, [slotsInMonth, teamMap, filters]);
+  }, [slotsInMonth, teamMap, filters, hasAnyActiveFilter]);
 
   const filteredTeams = useMemo(() => {
+    if (!hasAnyActiveFilter) {
+      return allTeams.filter((team: any) => !myTeamIds.includes(team.id));
+    }
+
     return allTeams.filter((team: any) => {
       if (myTeamIds.includes(team.id)) return false;
       return teamMatchesFilters(team, filters);
     });
-  }, [allTeams, myTeamIds, filters]);
+  }, [allTeams, myTeamIds, filters, hasAnyActiveFilter]);
 
   const countByDate = useMemo(() => {
     const m = new Map<string, number>();
@@ -1077,6 +1100,13 @@ export default function HomeCalendar() {
             <div style={summaryTitle}>チーム条件で探す</div>
             <div style={hitCountText}>{topHitText}</div>
             <div style={summaryCount}>表示条件：{topConditionText}</div>
+            <div style={debugText}>
+              raw teams: {allTeams.length} / myTeams: {myTeams.length} / raw
+              slots: {slotsInMonth.length} / raw reqs: {requestsForMonth.length}
+              <br />
+              filtered teams: {filteredTeams.length} / filtered slots:{" "}
+              {filteredSlotsInMonth.length}
+            </div>
           </div>
 
           <div style={summaryButtonRow}>
@@ -1276,6 +1306,12 @@ const summaryCount: React.CSSProperties = {
   fontSize: 14,
   color: "#3b6a49",
   lineHeight: 1.7,
+};
+
+const debugText: React.CSSProperties = {
+  fontSize: 12,
+  color: "#66756d",
+  lineHeight: 1.6,
 };
 
 const summaryButtonRow: React.CSSProperties = {
