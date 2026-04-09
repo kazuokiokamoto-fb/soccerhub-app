@@ -34,6 +34,9 @@ export function useMatchData(params: {
   const [loadingBase, setLoadingBase] = useState(true);
   const [loadingMonth, setLoadingMonth] = useState(true);
 
+  const [baseError, setBaseError] = useState<string>("");
+  const [monthError, setMonthError] = useState<string>("");
+
   const [meId, setMeId] = useState<string>("");
 
   const [allTeams, setAllTeams] = useState<any[]>([]);
@@ -47,6 +50,7 @@ export function useMatchData(params: {
     if (!authReady) return;
 
     setLoadingBase(true);
+    setBaseError("");
 
     try {
       const uid = currentUserId ?? "";
@@ -65,45 +69,79 @@ export function useMatchData(params: {
       ]);
 
       if (teamsRes.status === "fulfilled") {
-        if (teamsRes.value.error) {
-          console.error("[useMatchData] teams load error:", teamsRes.value.error);
+        const result = teamsRes.value;
+        const error = result.error;
+
+        if (error) {
+          console.error("[useMatchData] teams load error:", error);
           setAllTeams([]);
+          setBaseError((prev) =>
+            prev ? `${prev}\nteams: ${error.message}` : `teams: ${error.message}`
+          );
         } else {
-          setAllTeams(teamsRes.value.data ?? []);
+          setAllTeams(result.data ?? []);
         }
       } else {
         console.error("[useMatchData] teams timeout/unexpected:", teamsRes.reason);
         setAllTeams([]);
+        setBaseError((prev) =>
+          prev
+            ? `${prev}\nteams: ${String(teamsRes.reason)}`
+            : `teams: ${String(teamsRes.reason)}`
+        );
       }
 
       if (venuesRes.status === "fulfilled") {
-        if (venuesRes.value.error) {
-          console.error("[useMatchData] venues load error:", venuesRes.value.error);
+        const result = venuesRes.value;
+        const error = result.error;
+
+        if (error) {
+          console.error("[useMatchData] venues load error:", error);
           setVenues([]);
+          setBaseError((prev) =>
+            prev ? `${prev}\nvenues: ${error.message}` : `venues: ${error.message}`
+          );
         } else {
-          setVenues(venuesRes.value.data ?? []);
+          setVenues(result.data ?? []);
         }
       } else {
         console.error("[useMatchData] venues timeout/unexpected:", venuesRes.reason);
         setVenues([]);
+        setBaseError((prev) =>
+          prev
+            ? `${prev}\nvenues: ${String(venuesRes.reason)}`
+            : `venues: ${String(venuesRes.reason)}`
+        );
       }
 
       if (myTeamsRes.status === "fulfilled") {
-        if (myTeamsRes.value.error) {
-          console.error("[useMatchData] myTeams load error:", myTeamsRes.value.error);
+        const result = myTeamsRes.value;
+        const error = result.error;
+
+        if (error) {
+          console.error("[useMatchData] myTeams load error:", error);
           setMyTeams([]);
+          setBaseError((prev) =>
+            prev ? `${prev}\nmyTeams: ${error.message}` : `myTeams: ${error.message}`
+          );
         } else {
-          setMyTeams(myTeamsRes.value.data ?? []);
+          setMyTeams(result.data ?? []);
         }
       } else {
         console.error("[useMatchData] myTeams timeout/unexpected:", myTeamsRes.reason);
         setMyTeams([]);
+        setBaseError((prev) =>
+          prev
+            ? `${prev}\nmyTeams: ${String(myTeamsRes.reason)}`
+            : `myTeams: ${String(myTeamsRes.reason)}`
+        );
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("[useMatchData] loadBase unexpected error:", e);
       setAllTeams([]);
       setMyTeams([]);
       setVenues([]);
+      setBaseError(e?.message ?? "loadBase unexpected error");
     } finally {
       setLoadingBase(false);
     }
@@ -113,6 +151,7 @@ export function useMatchData(params: {
     if (!authReady) return;
 
     setLoadingMonth(true);
+    setMonthError("");
 
     try {
       const y = monthDate.getFullYear();
@@ -160,32 +199,59 @@ export function useMatchData(params: {
       ]);
 
       if (slotsRes.status === "fulfilled") {
-        if (slotsRes.value.error) {
-          console.error("[useMatchData] match_slots load error:", slotsRes.value.error);
+        const result = slotsRes.value;
+        const error = result.error;
+
+        if (error) {
+          console.error("[useMatchData] match_slots load error:", error);
           setSlotsInMonth([]);
+          setMonthError((prev) =>
+            prev
+              ? `${prev}\nmatch_slots: ${error.message}`
+              : `match_slots: ${error.message}`
+          );
         } else {
-          setSlotsInMonth(slotsRes.value.data ?? []);
+          setSlotsInMonth(result.data ?? []);
         }
       } else {
         console.error("[useMatchData] match_slots timeout/unexpected:", slotsRes.reason);
         setSlotsInMonth([]);
+        setMonthError((prev) =>
+          prev
+            ? `${prev}\nmatch_slots: ${String(slotsRes.reason)}`
+            : `match_slots: ${String(slotsRes.reason)}`
+        );
       }
 
       if (reqsRes.status === "fulfilled") {
-        if (reqsRes.value.error) {
-          console.error("[useMatchData] match_requests load error:", reqsRes.value.error);
+        const result = reqsRes.value;
+        const error = result.error;
+
+        if (error) {
+          console.error("[useMatchData] match_requests load error:", error);
           setRequestsForMonth([]);
+          setMonthError((prev) =>
+            prev
+              ? `${prev}\nmatch_requests: ${error.message}`
+              : `match_requests: ${error.message}`
+          );
         } else {
-          setRequestsForMonth(reqsRes.value.data ?? []);
+          setRequestsForMonth(result.data ?? []);
         }
       } else {
         console.error("[useMatchData] match_requests timeout/unexpected:", reqsRes.reason);
         setRequestsForMonth([]);
+        setMonthError((prev) =>
+          prev
+            ? `${prev}\nmatch_requests: ${String(reqsRes.reason)}`
+            : `match_requests: ${String(reqsRes.reason)}`
+        );
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("[useMatchData] loadMonth unexpected error:", e);
       setSlotsInMonth([]);
       setRequestsForMonth([]);
+      setMonthError(e?.message ?? "loadMonth unexpected error");
     } finally {
       setLoadingMonth(false);
     }
@@ -202,6 +268,8 @@ export function useMatchData(params: {
   return {
     loadingBase,
     loadingMonth,
+    baseError,
+    monthError,
     meId,
     allTeams,
     myTeams,
