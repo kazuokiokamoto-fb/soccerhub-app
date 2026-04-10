@@ -1060,22 +1060,22 @@ export default function HomeCalendar() {
     await loadMonth();
   };
 
-  const filterSummaryText = useMemo(() => {
+  const teamListConditionText = useMemo(() => {
     const text = filterSummaryTextFromFilters(filters);
-    return text || "すべての条件で表示中";
+    return text || "すべて";
   }, [filters]);
 
   const selectedDateSummaryText = useMemo(() => {
     return `${selectedYmd} / 募集件数 ${slotsOnSelectedDate.length}件`;
   }, [selectedYmd, slotsOnSelectedDate.length]);
 
-  const topHitText = useMemo(() => {
-    return `🔥 ${filteredTeams.length}チーム / ${filteredSlotsInMonth.length}試合ヒット`;
-  }, [filteredTeams.length, filteredSlotsInMonth.length]);
+  const totalTeamCountText = useMemo(() => {
+    return `登録チーム総数：${allTeams.length}件`;
+  }, [allTeams.length]);
 
-  const topConditionText = useMemo(() => {
-    return filterSummaryText;
-  }, [filterSummaryText]);
+  const totalSlotCountText = useMemo(() => {
+    return `練習試合募集総数：${slotsInMonth.length}件`;
+  }, [slotsInMonth.length]);
 
   const showCriticalError =
     (baseError && baseError.includes("teams:")) ||
@@ -1111,11 +1111,17 @@ export default function HomeCalendar() {
       ) : null}
 
       <section style={summaryBox}>
+        <div style={summaryTotalWrap}>
+          <div style={summaryTotalText}>{totalTeamCountText}</div>
+          <div style={summaryTotalText}>{totalSlotCountText}</div>
+        </div>
+
         <div style={summaryHead}>
           <div style={summaryTextWrap}>
             <div style={summaryTitle}>チーム条件で探す</div>
-            <div style={hitCountText}>{topHitText}</div>
-            <div style={summaryCount}>表示条件：{topConditionText}</div>
+            <div style={summaryCount}>
+              チーム一覧の表示条件：{teamListConditionText}
+            </div>
           </div>
 
           <div style={summaryButtonRow}>
@@ -1132,7 +1138,7 @@ export default function HomeCalendar() {
               className="sh-btn sh-btn--primary"
               onClick={openTeamListWindow}
             >
-              チーム一覧表示
+              チーム一覧
             </button>
           </div>
         </div>
@@ -1293,12 +1299,25 @@ const summaryBox: React.CSSProperties = {
   background: "#f7fbf8",
 };
 
+const summaryTotalWrap: React.CSSProperties = {
+  display: "grid",
+  gap: 4,
+};
+
+const summaryTotalText: React.CSSProperties = {
+  fontSize: 16,
+  fontWeight: 800,
+  color: "#14532d",
+  lineHeight: 1.5,
+};
+
 const summaryHead: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-end",
   gap: 12,
   flexWrap: "wrap",
+  marginTop: 10,
 };
 
 const summaryTextWrap: React.CSSProperties = {
@@ -1314,17 +1333,11 @@ const summaryTitle: React.CSSProperties = {
   lineHeight: 1.3,
 };
 
-const hitCountText: React.CSSProperties = {
-  fontSize: 24,
-  fontWeight: 900,
-  color: "#14532d",
-  lineHeight: 1.2,
-};
-
 const summaryCount: React.CSSProperties = {
   fontSize: 14,
   color: "#3b6a49",
   lineHeight: 1.7,
+  fontWeight: 700,
 };
 
 const summaryButtonRow: React.CSSProperties = {
@@ -1333,7 +1346,6 @@ const summaryButtonRow: React.CSSProperties = {
   flexWrap: "wrap",
   marginLeft: "auto",
   justifyContent: "flex-end",
-  width: "100%",
 };
 
 const emptyRecruitBox: React.CSSProperties = {
