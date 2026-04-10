@@ -24,6 +24,14 @@ function isPastDate(ymd: string) {
   return target < today;
 }
 
+function todayYmd() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export function Calendar(props: {
   monthKey: string;
   loading?: boolean;
@@ -36,10 +44,8 @@ export function Calendar(props: {
   onNextMonth: () => void;
   onCreateForDate: (ymd: string) => void;
   disableCreate?: boolean;
-
   selectedDateSummaryText?: string;
   onOpenCalendarHelp?: () => void;
-
   titleText?: string;
 }) {
   const {
@@ -60,14 +66,11 @@ export function Calendar(props: {
   } = props;
 
   const weekLabels = ["月", "火", "水", "木", "金", "土", "日"];
+  const today = todayYmd();
 
   return (
     <section style={{ ...card, marginTop: 14 }}>
-      <div style={topHead}>
-        <div style={topHeadLeft}>
-          <div style={topTitle}>{titleText}</div>
-        </div>
-      </div>
+      <div style={topTitle}>{titleText}</div>
 
       <div style={summaryBar}>
         <div style={summaryLeft}>
@@ -97,30 +100,52 @@ export function Calendar(props: {
         </div>
       </div>
 
+      <div style={legendRow}>
+        <div style={legendItem}>
+          <span style={{ ...legendChip, ...legendTodayChip }} />
+          <span>今日</span>
+        </div>
+        <div style={legendItem}>
+          <span style={{ ...legendChip, ...legendSelectedChip }} />
+          <span>選択中</span>
+        </div>
+      </div>
+
       <div style={headerRow}>
-        <button className="sh-btn" type="button" onClick={onPrevMonth} disabled={loading}>
+        <button
+          className="sh-btn"
+          type="button"
+          onClick={onPrevMonth}
+          disabled={loading}
+        >
           ← 前月
         </button>
 
         <div style={monthTitle}>{monthKey}</div>
 
-        <button className="sh-btn" type="button" onClick={onNextMonth} disabled={loading}>
+        <button
+          className="sh-btn"
+          type="button"
+          onClick={onNextMonth}
+          disabled={loading}
+        >
           次月 →
         </button>
       </div>
 
       <div style={weekHeaderGrid}>
-        {weekLabels.map((w, i) => (
-          <div
-            key={w}
-            style={{
-              ...weekLabel,
-              color: i === 5 ? "#2563eb" : i === 6 ? "#dc2626" : "#666666",
-            }}
-          >
-            {w}
-          </div>
-        ))}
+        {weekLabels.map((w, i) => {
+          const weekendStyle: React.CSSProperties = {
+            ...weekLabel,
+            color: i === 5 ? "#2563eb" : i === 6 ? "#dc2626" : "#666666",
+          };
+
+          return (
+            <div key={w} style={weekendStyle}>
+              {w}
+            </div>
+          );
+        })}
       </div>
 
       <div style={calendarGrid}>
@@ -130,6 +155,7 @@ export function Calendar(props: {
           const displayCount = summary?.count ?? fallbackCount;
 
           const isSelected = c.ymd === selectedYmd;
+          const isToday = c.ymd === today;
           const isPast = isPastDate(c.ymd);
           const weekday = index % 7;
 
@@ -150,37 +176,43 @@ export function Calendar(props: {
                   : "#4b5563"
               : "#9ca3af";
 
-          const countColor =
-            isPast
-              ? "#94a3b8"
-              : displayCount > 0
-                ? "#065f46"
-                : "#9ca3af";
+          const countColor = isPast
+            ? "#94a3b8"
+            : displayCount > 0
+              ? "#065f46"
+              : "#9ca3af";
 
           const ariaStatus = summary ? summaryLabel(summary) : "予定なし";
           const ariaCount = displayCount > 0 ? `${displayCount}件` : "0件";
+
+          const cellStyle: React.CSSProperties = {
+            ...calCell,
+            ...(isPast ? calCellPast : {}),
+            ...(isToday ? calCellToday : {}),
+            ...(isSelected ? calCellSelected : {}),
+            opacity: c.inMonth ? 1 : 0.42,
+          };
 
           return (
             <button
               key={c.ymd}
               type="button"
               onClick={() => onSelectDate(c.ymd)}
-              style={{
-                ...calCell,
-                ...(isSelected ? calCellSelected : null),
-                ...(isPast ? calCellPast : null),
-                opacity: c.inMonth ? 1 : 0.42,
-              }}
+              style={cellStyle}
               aria-pressed={isSelected}
-              aria-label={`${c.ymd} ${ariaStatus} ${ariaCount}`}
+              aria-label={`${c.ymd} ${isToday ? "今日 " : ""}${ariaStatus} ${ariaCount}`}
             >
-              <div
-                style={{
-                  ...dayNumText,
-                  color: c.inMonth ? (isPast ? "#9ca3af" : dayColor) : "#c5cbd3",
-                }}
-              >
-                {c.dayNum}
+              <div style={cellTopRow}>
+                <div
+                  style={{
+                    ...dayNumText,
+                    color: c.inMonth ? (isPast ? "#9ca3af" : dayColor) : "#c5cbd3",
+                  }}
+                >
+                  {c.dayNum}
+                </div>
+
+                {isToday ? <div style={todayBadge}>今日</div> : null}
               </div>
 
               <div
@@ -222,22 +254,10 @@ const card: React.CSSProperties = {
   background: "#fff",
 };
 
-const topHead: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 10,
-  flexWrap: "wrap",
-};
-
-const topHeadLeft: React.CSSProperties = {
-  display: "grid",
-  gap: 8,
-};
-
 const topTitle: React.CSSProperties = {
   fontSize: 22,
   fontWeight: 900,
+  marginBottom: 8,
   color: "#16391f",
   lineHeight: 1.3,
 };
@@ -267,6 +287,40 @@ const summaryRight: React.CSSProperties = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
+};
+
+const legendRow: React.CSSProperties = {
+  display: "flex",
+  gap: 14,
+  alignItems: "center",
+  flexWrap: "wrap",
+  marginTop: 4,
+  marginBottom: 8,
+  fontSize: 12,
+  color: "#66756d",
+};
+
+const legendItem: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+};
+
+const legendChip: React.CSSProperties = {
+  width: 14,
+  height: 14,
+  borderRadius: 999,
+  display: "inline-block",
+};
+
+const legendTodayChip: React.CSSProperties = {
+  border: "2px solid #93c5fd",
+  background: "#eff6ff",
+};
+
+const legendSelectedChip: React.CSSProperties = {
+  border: "2px solid #86efac",
+  background: "#f0fdf4",
 };
 
 const headerRow: React.CSSProperties = {
@@ -327,16 +381,41 @@ const calCellPast: React.CSSProperties = {
   background: "#f8fafc",
 };
 
+const calCellToday: React.CSSProperties = {
+  border: "2px solid #93c5fd",
+  boxShadow: "0 0 0 2px rgba(147,197,253,0.18)",
+};
+
 const calCellSelected: React.CSSProperties = {
   border: "2px solid #86efac",
   background: "#f0fdf4",
   boxShadow: "0 0 0 3px rgba(134,239,172,0.18)",
 };
 
+const cellTopRow: React.CSSProperties = {
+  width: "100%",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 4,
+};
+
 const dayNumText: React.CSSProperties = {
   fontWeight: 900,
   fontSize: 13,
   lineHeight: 1,
+};
+
+const todayBadge: React.CSSProperties = {
+  fontSize: 9,
+  fontWeight: 900,
+  lineHeight: 1,
+  color: "#2563eb",
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  borderRadius: 999,
+  padding: "3px 5px",
+  flexShrink: 0,
 };
 
 const statusText: React.CSSProperties = {

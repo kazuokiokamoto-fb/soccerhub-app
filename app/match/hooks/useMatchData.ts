@@ -77,6 +77,7 @@ export function useMatchData(params: {
           .select(
             [
               "id",
+              "owner_id",
               "name",
               "area",
               "area_text",
@@ -105,6 +106,7 @@ export function useMatchData(params: {
 
       if (venuesRes.error) {
         console.error("[useMatchData] venues load error:", venuesRes.error);
+        errors.push(`venues: ${venuesRes.error.message}`);
         setVenues([]);
       } else {
         setVenues(venuesRes.data ?? []);
@@ -143,68 +145,74 @@ export function useMatchData(params: {
       const startStr = ymd(start);
       const endStr = ymd(end);
 
-      const [slotsRes, reqsRes] = await Promise.all([
-        supabase
-          .from("match_slots")
-          .select(
-            [
-              "id",
-              "owner_id",
-              "host_team_id",
-              "venue_id",
-              "date",
-              "start_time",
-              "end_time",
-              "area",
-              "area_text",
-              "category",
-              "is_closed",
-              "note",
-              "created_at",
-            ].join(",")
-          )
-          .gte("date", startStr)
-          .lt("date", endStr)
-          .order("date", { ascending: true })
-          .order("start_time", { ascending: true }),
-
-        currentUserId
-          ? supabase
-              .from("match_requests")
-              .select(
-                [
-                  "id",
-                  "slot_id",
-                  "requester_team_id",
-                  "requester_user_id",
-                  "status",
-                  "comment",
-                  "created_at",
-                ].join(",")
-              )
-              .gte("created_at", `${startStr}T00:00:00`)
-              .lt("created_at", `${endStr}T00:00:00`)
-          : Promise.resolve({ data: [], error: null }),
-      ]);
-
       const errors: string[] = [];
+
+      const slotsRes = await supabase
+        .from("match_slots")
+        .select(
+          [
+            "id",
+            "owner_id",
+            "host_team_id",
+            "venue_id",
+            "date",
+            "start_time",
+            "end_time",
+            "area",
+            "area_text",
+            "category",
+            "is_closed",
+            "note",
+            "created_at",
+          ].join(",")
+        )
+        .gte("date", startStr)
+        .lt("date", endStr)
+        .order("date", { ascending: true })
+        .order("start_time", { ascending: true });
+
+      let monthSlots: any[] = [];
 
       if (slotsRes.error) {
         console.error("[useMatchData] match_slots load error:", slotsRes.error);
         errors.push(`match_slots: ${slotsRes.error.message}`);
         setSlotsInMonth([]);
-      } else {
-        setSlotsInMonth(slotsRes.data ?? []);
-      }
-
-      if (reqsRes.error) {
-        console.error(
-          "[useMatchData] match_requests load error:",
-          reqsRes.error
-        );
         setRequestsForMonth([]);
       } else {
-        setRequestsForMonth(reqsRes.data ?? []);
+        monthSlots = slotsRes.data ?? [];
+        setSlotsInMonth(monthSlots);
+      }
+
+      if (monthSlots.length > 0 && currentUserId) {
+        const slotIds = monthSlots.map((s: any) => s.id).filter(Boolean);
+
+        const reqsRes = await supabase
+          .from("match_requests")
+          .select(
+            [
+              "id",
+              "slot_id",
+              "requester_team_id",
+              "requester_user_id",
+              "status",
+              "comment",
+              "created_at",
+            ].join(",")
+          )
+          .in("slot_id", slotIds);
+
+        if (reqsRes.error) {
+          console.error(
+            "[useMatchData] match_requests load error:",
+            reqsRes.error
+          );
+          errors.push(`match_requests: ${reqsRes.error.message}`);
+          setRequestsForMonth([]);
+        } else {
+          setRequestsForMonth(reqsRes.data ?? []);
+        }
+      } else {
+        setRequestsForMonth([]);
       }
 
       if (errors.length > 0) {
