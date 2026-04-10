@@ -141,7 +141,7 @@ export function MatchFilterPanel({
                 onClick={onOpenTeamList}
                 disabled={loading}
               >
-                チーム一覧で見る
+                チーム一覧
               </button>
             ) : null}
           </div>
@@ -376,7 +376,7 @@ export function MatchFilterPanel({
 
             <div style={footerNote}>
               条件を選んだら、上の
-              「カレンダーへ戻る」または「チーム一覧で見る」を押してください。
+              「カレンダーへ戻る」または「チーム一覧」を押してください。
             </div>
 
             <div style={actionRow}>
@@ -440,6 +440,7 @@ const stickyTopActions: React.CSSProperties = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
+  width: "100%",
   justifyContent: "flex-end",
 };
 

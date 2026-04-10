@@ -328,7 +328,6 @@ export default function HomeCalendar() {
 
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
   const [showCalendarHelp, setShowCalendarHelp] = useState(false);
-
   const [panelMode, setPanelMode] = useState<PanelMode>("none");
 
   const homeTopRef = useRef<HTMLDivElement | null>(null);
@@ -416,9 +415,7 @@ export default function HomeCalendar() {
   }, [filters]);
 
   const filteredSlotsInMonth = useMemo(() => {
-    if (!hasAnyActiveFilter) {
-      return slotsInMonth;
-    }
+    if (!hasAnyActiveFilter) return slotsInMonth;
 
     return slotsInMonth.filter((s: any) =>
       matchesSlotFilters(s, teamMap as any, filters)
@@ -497,23 +494,11 @@ export default function HomeCalendar() {
       }
 
       if (decidedCount > 0) {
-        result.set(day, {
-          label: "決",
-          count: decidedCount,
-          tone: "decided",
-        });
+        result.set(day, { label: "決", count: decidedCount, tone: "decided" });
       } else if (openCount > 0) {
-        result.set(day, {
-          label: "募",
-          count: openCount,
-          tone: "open",
-        });
+        result.set(day, { label: "募", count: openCount, tone: "open" });
       } else if (otherCount > 0) {
-        result.set(day, {
-          label: "他",
-          count: otherCount,
-          tone: "other",
-        });
+        result.set(day, { label: "他", count: otherCount, tone: "other" });
       }
     }
 
@@ -543,10 +528,7 @@ export default function HomeCalendar() {
     return !!currentUserId && selectedSlot.owner_id === currentUserId;
   }, [selectedSlot, currentUserId]);
 
-  const calendarCells = useMemo(() => {
-    return buildCalendarCells(monthDate);
-  }, [monthDate]);
-
+  const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
   const monthKey = useMemo(() => toMonthKey(monthDate), [monthDate]);
 
   useEffect(() => {
@@ -554,9 +536,7 @@ export default function HomeCalendar() {
     const today = ymdToday();
     const todayMonthKey = today.slice(0, 7);
 
-    if (selectedYmd.startsWith(selectedMonthKey)) {
-      return;
-    }
+    if (selectedYmd.startsWith(selectedMonthKey)) return;
 
     if (selectedMonthKey === todayMonthKey) {
       setSelectedYmd(today);
@@ -568,28 +548,19 @@ export default function HomeCalendar() {
 
   const scrollToCalendar = () => {
     setTimeout(() => {
-      calendarRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      calendarRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 120);
   };
 
   const scrollToDayList = () => {
     setTimeout(() => {
-      dayListRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      dayListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 120);
   };
 
   const scrollToFilter = () => {
     setTimeout(() => {
-      filterRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      filterRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 120);
   };
 
@@ -601,10 +572,7 @@ export default function HomeCalendar() {
   const closePanel = () => {
     setPanelMode("none");
     setTimeout(() => {
-      homeTopRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      homeTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 120);
   };
 
@@ -641,7 +609,6 @@ export default function HomeCalendar() {
     }
 
     const params = new URLSearchParams();
-
     if (ymd) params.set("date", ymd);
     params.set("hostTeamId", firstTeam.id);
 
@@ -753,7 +720,6 @@ export default function HomeCalendar() {
 
     const finalComment = (requestComment.trim() || defaultComment).trim();
     const confirmText = `この内容で試合申込しますか？\n\nコメント:\n${finalComment}`;
-
     if (!window.confirm(confirmText)) return;
 
     const payload = {
@@ -821,6 +787,7 @@ export default function HomeCalendar() {
           slotId: slot.id,
           date: slot.date,
         });
+
         const notificationUrl = threadId
           ? `/chat/${threadId}?${carryQuery}`
           : "/chat";
@@ -845,9 +812,7 @@ export default function HomeCalendar() {
           try {
             const pushRes = await fetch("/api/push/send", {
               method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
+              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 userId: hostUserId,
                 title: notificationTitle,
@@ -937,10 +902,7 @@ export default function HomeCalendar() {
     }
 
     if (status === "accepted") {
-      await supabase
-        .from("match_slots")
-        .update({ is_closed: true })
-        .eq("id", target.slot_id);
+      await supabase.from("match_slots").update({ is_closed: true }).eq("id", target.slot_id);
 
       try {
         const uid = currentUserId;
@@ -1018,6 +980,7 @@ export default function HomeCalendar() {
     try {
       const slot = filteredSlotsInMonth.find((s) => s.id === req.slot_id);
       const uid = currentUserId;
+
       if (slot && uid) {
         const threadId = await getOrCreateDmThread(
           req.requester_team_id,
@@ -1073,9 +1036,7 @@ export default function HomeCalendar() {
     return `🔥 ${filteredTeams.length}チーム / ${filteredSlotsInMonth.length}試合ヒット`;
   }, [filteredTeams.length, filteredSlotsInMonth.length]);
 
-  const topConditionText = useMemo(() => {
-    return filterSummaryText;
-  }, [filterSummaryText]);
+  const topConditionText = useMemo(() => filterSummaryText, [filterSummaryText]);
 
   const showCriticalError =
     (baseError && baseError.includes("teams:")) ||
@@ -1294,11 +1255,8 @@ const summaryBox: React.CSSProperties = {
 };
 
 const summaryHead: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-end",
+  display: "grid",
   gap: 12,
-  flexWrap: "wrap",
 };
 
 const summaryTextWrap: React.CSSProperties = {
@@ -1330,8 +1288,9 @@ const summaryButtonRow: React.CSSProperties = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
-  marginLeft: "auto",
+  width: "100%",
   justifyContent: "flex-end",
+  marginLeft: "auto",
 };
 
 const emptyRecruitBox: React.CSSProperties = {
@@ -1353,7 +1312,10 @@ const emptyRecruitTitle: React.CSSProperties = {
 const emptyRecruitText: React.CSSProperties = {
   marginTop: 8,
   color: "#666",
-  lineHeight: 1.6,
+  lineHeight: 1.35,
   whiteSpace: "nowrap",
-  fontSize: "clamp(11px, 3vw, 16px)",
+  overflow: "hidden",
+  textOverflow: "clip",
+  letterSpacing: "-0.02em",
+  fontSize: "clamp(9px, 2.7vw, 16px)",
 };

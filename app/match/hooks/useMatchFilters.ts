@@ -5,7 +5,6 @@ import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 import type { MatchFilters } from "../utils/filters";
 
 export function useMatchFilters() {
-  // 全部「1系統」に統一
   const [keyword, setKeyword] = useState("");
 
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
@@ -17,8 +16,7 @@ export function useMatchFilters() {
   const [groundFilter, setGroundFilter] =
     useState<"all" | "あり" | "なし">("all");
 
-  const [strengthFilter, setStrengthFilter] =
-    useState<StrengthRank[]>([]);
+  const [strengthFilter, setStrengthFilter] = useState<StrengthRank[]>([]);
 
   const [bikeFilter, setBikeFilter] =
     useState<"all" | "あり" | "なし" | "不明">("all");
@@ -26,7 +24,6 @@ export function useMatchFilters() {
   const [bikeCapacityMin, setBikeCapacityMin] = useState("");
   const [memberCountMin, setMemberCountMin] = useState("");
 
-  // 常にこれが“正”
   const filters = useMemo<MatchFilters>(() => {
     return {
       keyword,
@@ -53,7 +50,6 @@ export function useMatchFilters() {
     memberCountMin,
   ]);
 
-  // リセットのみ残す
   const clearAllFilters = () => {
     setKeyword("");
     setCategoryFilter([]);
@@ -68,7 +64,6 @@ export function useMatchFilters() {
   };
 
   return {
-    // 値
     keyword,
     categoryFilter,
     prefectureFilter,
@@ -80,7 +75,6 @@ export function useMatchFilters() {
     bikeCapacityMin,
     memberCountMin,
 
-    // setter
     setKeyword,
     setCategoryFilter,
     setPrefectureFilter,
@@ -92,9 +86,7 @@ export function useMatchFilters() {
     setBikeCapacityMin,
     setMemberCountMin,
 
-    // これだけでOK
     filters,
-
     clearAllFilters,
   };
 }
