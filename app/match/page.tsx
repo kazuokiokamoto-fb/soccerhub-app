@@ -1173,7 +1173,7 @@ export default function HomeCalendar() {
         <div style={emptyRecruitBox}>
           <div style={emptyRecruitTitle}>該当する募集がありません</div>
           <div style={emptyRecruitText}>
-            条件をゆるめるか、別の日付を選んでみてください
+            条件を緩めるか、別の日付を選んでください
           </div>
         </div>
       ) : null}

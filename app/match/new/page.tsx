@@ -90,7 +90,6 @@ function MatchCreatePageInner() {
 
   const [wantedLevelMin, setWantedLevelMin] = useState("");
   const [wantedLevelMax, setWantedLevelMax] = useState("");
-  const [showWantedLevelHelp, setShowWantedLevelHelp] = useState(false);
 
   useEffect(() => {
     void load();
@@ -103,10 +102,7 @@ function MatchCreatePageInner() {
     const categoryParam = searchParams.get("category") ?? "";
     const categoriesParam = searchParams.get("categories") ?? "";
 
-    if (date) {
-      setSlotDate(date);
-    }
-
+    if (date) setSlotDate(date);
     if (hostTeamIdParam) setHostTeamId(hostTeamIdParam);
     if (areaParam) setSlotArea(areaParam);
 
@@ -168,9 +164,7 @@ function MatchCreatePageInner() {
       const [{ data: teamRows }, { data: venueRows }] = await Promise.all([
         supabase
           .from("teams")
-          .select(
-            "id,owner_id,name,area,category,categories,prefecture,city,town"
-          )
+          .select("id,owner_id,name,area,category,categories,prefecture,city,town")
           .eq("owner_id", uid)
           .order("updated_at", { ascending: false }),
         supabase
@@ -246,9 +240,7 @@ function MatchCreatePageInner() {
       buildAreaText(selectedHostTeam, slotArea) ||
       "";
 
-    if (!name) {
-      return null;
-    }
+    if (!name) return null;
 
     const { data, error } = await supabase
       .from("venues")
@@ -259,10 +251,7 @@ function MatchCreatePageInner() {
       .select("id")
       .single();
 
-    if (error) {
-      throw error;
-    }
-
+    if (error) throw error;
     return (data as any)?.id ?? null;
   }
 
@@ -292,6 +281,21 @@ function MatchCreatePageInner() {
     saving,
     loading,
   ]);
+
+  function openStrengthHelp() {
+    alert(
+      [
+        "希望相手の強さについて",
+        "",
+        "下限：この強さ以上の相手を募集",
+        "上限：この強さ以下の相手を募集",
+        "",
+        "例）",
+        "下限 B / 上限 S",
+        "→ B・A・S の相手を募集",
+      ].join("\n")
+    );
+  }
 
   async function createSlot() {
     if (!slotDate) {
@@ -398,308 +402,283 @@ function MatchCreatePageInner() {
   }
 
   return (
-    <>
-      <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
-        <AppTabNav />
-        <PageBackNav current="募集枠を作る" />
+    <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
+      <AppTabNav />
+      <PageBackNav current="募集枠を作る" />
 
-        <AppHero
-          icon="🗓️"
-          title="募集枠を作る"
-          desc="日付・時間・カテゴリ・希望相手の強さを設定して募集を作成します。"
-        />
+      <AppHero
+        icon="🗓️"
+        title="募集枠を作る"
+        desc="日付・時間・カテゴリ・希望相手の強さを設定して募集を作成します。"
+      />
 
-        <section style={card}>
-          <div style={{ display: "grid", gap: 14 }}>
+      <section style={card}>
+        <div style={{ display: "grid", gap: 14 }}>
+          <label style={label}>
+            <span style={labelTitle}>日付</span>
+            <input
+              type="date"
+              value={slotDate}
+              onChange={(e) => setSlotDate(e.target.value)}
+              style={input}
+              disabled={saving}
+            />
+          </label>
+
+          <label style={label}>
+            <span style={labelTitle}>ホストチーム</span>
+            <select
+              value={hostTeamId}
+              onChange={(e) => setHostTeamId(e.target.value)}
+              style={input}
+              disabled={saving}
+            >
+              {myTeams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name ?? "チーム未設定"}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div style={responsiveTwoCols}>
             <label style={label}>
-              <span style={labelTitle}>日付</span>
+              <span style={labelTitle}>開始</span>
               <input
-                type="date"
-                value={slotDate}
-                onChange={(e) => setSlotDate(e.target.value)}
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
                 style={input}
                 disabled={saving}
               />
             </label>
 
             <label style={label}>
-              <span style={labelTitle}>ホストチーム</span>
+              <span style={labelTitle}>終了</span>
+              <input
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                style={input}
+                disabled={saving}
+              />
+            </label>
+          </div>
+
+          <label style={label}>
+            <span style={labelTitle}>エリア</span>
+            <input
+              value={slotArea}
+              onChange={(e) => setSlotArea(e.target.value)}
+              style={input}
+              placeholder="例：世田谷区 三宿"
+              disabled={saving}
+            />
+          </label>
+
+          <div style={sectionBox}>
+            <div style={sectionTitle}>カテゴリ（複数選択可）</div>
+            <div style={sectionSubText}>
+              複数選択した場合は OR 条件で募集されます。
+            </div>
+
+            <div style={chipWrap}>
+              {CATEGORY_OPTIONS.map((opt) => {
+                const active = slotCategories.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => toggleCategory(opt.value)}
+                    disabled={saving}
+                    aria-pressed={active}
+                    style={{
+                      ...chip,
+                      ...(active ? chipActive : null),
+                      ...(saving ? chipDisabled : null),
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {slotCategories.length > 0 ? (
+              <div style={helperText}>
+                選択中: {slotCategories.map((v) => categoryLabel(v)).join(" / ")}
+              </div>
+            ) : (
+              <div style={helperText}>
+                カテゴリを1つ以上選択してください。
+              </div>
+            )}
+          </div>
+
+          <div style={responsiveTwoCols}>
+            <label style={label}>
+              <span style={labelTitleRow}>
+                <button
+                  type="button"
+                  onClick={openStrengthHelp}
+                  style={helpButton}
+                  aria-label="希望相手の強さの説明"
+                  title="希望相手の強さの説明"
+                >
+                  ?
+                </button>
+                <span style={labelTitleText}>希望相手の強さ（下限）</span>
+              </span>
+
               <select
-                value={hostTeamId}
-                onChange={(e) => setHostTeamId(e.target.value)}
+                value={wantedLevelMin}
+                onChange={(e) => setWantedLevelMin(e.target.value)}
                 style={input}
                 disabled={saving}
               >
-                {myTeams.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name ?? "チーム未設定"}
-                  </option>
-                ))}
+                <option value="">指定なし</option>
+                <option value="9">SS</option>
+                <option value="7">S</option>
+                <option value="5">A</option>
+                <option value="3">B</option>
+                <option value="1">C</option>
               </select>
             </label>
 
-            <div style={twoCols}>
-              <label style={label}>
-                <span style={labelTitle}>開始</span>
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  style={input}
-                  disabled={saving}
-                />
-              </label>
-
-              <label style={label}>
-                <span style={labelTitle}>終了</span>
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  style={input}
-                  disabled={saving}
-                />
-              </label>
-            </div>
-
             <label style={label}>
-              <span style={labelTitle}>エリア</span>
-              <input
-                value={slotArea}
-                onChange={(e) => setSlotArea(e.target.value)}
+              <span style={labelTitleRow}>
+                <span style={labelTitleText}>希望相手の強さ（上限）</span>
+              </span>
+
+              <select
+                value={wantedLevelMax}
+                onChange={(e) => setWantedLevelMax(e.target.value)}
                 style={input}
-                placeholder="例：世田谷区 三宿"
                 disabled={saving}
-              />
+              >
+                <option value="">指定なし</option>
+                <option value="9">SS</option>
+                <option value="7">S</option>
+                <option value="5">A</option>
+                <option value="3">B</option>
+                <option value="1">C</option>
+              </select>
             </label>
+          </div>
 
-            <div style={sectionBox}>
-              <div style={sectionTitle}>カテゴリ（複数選択可）</div>
-              <div style={sectionSubText}>
-                複数選択した場合は OR 条件で募集されます。
-              </div>
+          <div style={hintBox}>
+            希望相手の強さ：下限 <b>{levelLabelFromValue(wantedLevelMin)}</b> /
+            上限 <b>{levelLabelFromValue(wantedLevelMax)}</b>
+          </div>
 
-              <div style={chipWrap}>
-                {CATEGORY_OPTIONS.map((opt) => {
-                  const active = slotCategories.includes(opt.value);
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => toggleCategory(opt.value)}
-                      disabled={saving}
-                      aria-pressed={active}
-                      style={{
-                        ...chip,
-                        ...(active ? chipActive : null),
-                        ...(saving ? chipDisabled : null),
-                      }}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
-              </div>
+          <div style={sectionBox}>
+            <div style={sectionTitle}>グラウンド</div>
 
-              {slotCategories.length > 0 ? (
-                <div style={helperText}>
-                  選択中:{" "}
-                  {slotCategories.map((v) => categoryLabel(v)).join(" / ")}
-                </div>
-              ) : (
-                <div style={helperText}>
-                  カテゴリを1つ以上選択してください。
-                </div>
-              )}
+            <div style={toggleRow}>
+              <button
+                type="button"
+                onClick={() => setVenueMode("existing")}
+                disabled={saving}
+                style={{
+                  ...modeButton,
+                  ...(venueMode === "existing" ? modeButtonActive : null),
+                }}
+              >
+                既存から選ぶ
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setVenueMode("new")}
+                disabled={saving}
+                style={{
+                  ...modeButton,
+                  ...(venueMode === "new" ? modeButtonActive : null),
+                }}
+              >
+                新しく登録する
+              </button>
             </div>
 
-            <div style={twoCols}>
+            {venueMode === "existing" ? (
               <label style={label}>
-                <span style={wantedLabelRow}>
-                  <span style={wantedLabelText}>希望相手の強さ（下限）</span>
-                  <button
-                    type="button"
-                    style={helpButton}
-                    onClick={() => setShowWantedLevelHelp(true)}
-                    disabled={saving}
-                    aria-label="希望相手の強さの説明"
-                    title="希望相手の強さの説明"
-                  >
-                    ?
-                  </button>
-                </span>
+                <span style={labelTitle}>既存グラウンド</span>
                 <select
-                  value={wantedLevelMin}
-                  onChange={(e) => setWantedLevelMin(e.target.value)}
+                  value={venueId}
+                  onChange={(e) => setVenueId(e.target.value)}
                   style={input}
                   disabled={saving}
                 >
-                  <option value="">指定なし</option>
-                  <option value="9">SS</option>
-                  <option value="7">S</option>
-                  <option value="5">A</option>
-                  <option value="3">B</option>
-                  <option value="1">C</option>
+                  <option value="">（未設定）</option>
+                  {venues.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                      {v.area ? ` / ${v.area}` : ""}
+                    </option>
+                  ))}
                 </select>
               </label>
-
-              <label style={label}>
-                <span style={wantedLabelText}>希望相手の強さ（上限）</span>
-                <select
-                  value={wantedLevelMax}
-                  onChange={(e) => setWantedLevelMax(e.target.value)}
-                  style={input}
-                  disabled={saving}
-                >
-                  <option value="">指定なし</option>
-                  <option value="9">SS</option>
-                  <option value="7">S</option>
-                  <option value="5">A</option>
-                  <option value="3">B</option>
-                  <option value="1">C</option>
-                </select>
-              </label>
-            </div>
-
-            <div style={hintBox}>
-              希望相手の強さ：下限 <b>{levelLabelFromValue(wantedLevelMin)}</b> /
-              上限 <b>{levelLabelFromValue(wantedLevelMax)}</b>
-            </div>
-
-            <div style={sectionBox}>
-              <div style={sectionTitle}>グラウンド</div>
-
-              <div style={toggleRow}>
-                <button
-                  type="button"
-                  className="sh-btn"
-                  onClick={() => setVenueMode("existing")}
-                  disabled={saving}
-                  style={venueMode === "existing" ? activeModeBtn : undefined}
-                >
-                  既存から選ぶ
-                </button>
-
-                <button
-                  type="button"
-                  className="sh-btn"
-                  onClick={() => setVenueMode("new")}
-                  disabled={saving}
-                  style={venueMode === "new" ? activeModeBtn : undefined}
-                >
-                  新しく登録する
-                </button>
-              </div>
-
-              {venueMode === "existing" ? (
+            ) : (
+              <div style={{ display: "grid", gap: 12 }}>
                 <label style={label}>
-                  <span style={labelTitle}>既存グラウンド</span>
-                  <select
-                    value={venueId}
-                    onChange={(e) => setVenueId(e.target.value)}
+                  <span style={labelTitle}>新規グラウンド名</span>
+                  <input
+                    value={newVenueName}
+                    onChange={(e) => setNewVenueName(e.target.value)}
                     style={input}
+                    placeholder="例：世田谷公園 サッカー場"
                     disabled={saving}
-                  >
-                    <option value="">（未設定）</option>
-                    {venues.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.name}
-                        {v.area ? ` / ${v.area}` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </label>
-              ) : (
-                <div style={{ display: "grid", gap: 12 }}>
-                  <label style={label}>
-                    <span style={labelTitle}>新規グラウンド名</span>
-                    <input
-                      value={newVenueName}
-                      onChange={(e) => setNewVenueName(e.target.value)}
-                      style={input}
-                      placeholder="例：世田谷公園 サッカー場"
-                      disabled={saving}
-                    />
-                  </label>
 
-                  <label style={label}>
-                    <span style={labelTitle}>新規グラウンドのエリア</span>
-                    <input
-                      value={newVenueArea}
-                      onChange={(e) => setNewVenueArea(e.target.value)}
-                      style={input}
-                      placeholder="例：世田谷区 池尻"
-                      disabled={saving}
-                    />
-                  </label>
+                <label style={label}>
+                  <span style={labelTitle}>新規グラウンドのエリア</span>
+                  <input
+                    value={newVenueArea}
+                    onChange={(e) => setNewVenueArea(e.target.value)}
+                    style={input}
+                    placeholder="例：世田谷区 池尻"
+                    disabled={saving}
+                  />
+                </label>
 
-                  <div style={helperText}>
-                    作成時に `venues`
-                    に保存されるので、次回以降も候補に表示されます。
-                  </div>
+                <div style={helperText}>
+                  作成時に venues に保存されるので、次回以降も候補に表示されます。
                 </div>
-              )}
-            </div>
-
-            <div style={actionRow}>
-              <Link href="/match" className="sh-btn">
-                キャンセル
-              </Link>
-
-              <button
-                type="button"
-                className="sh-btn sh-btn--primary"
-                onClick={createSlot}
-                disabled={!canSave}
-              >
-                {saving ? "作成中…" : "募集枠を作成"}
-              </button>
-            </div>
-
-            {selectedHostTeam ? (
-              <div style={helperText}>
-                ホストチーム: {selectedHostTeam.name ?? "未設定"}
-                <br />
-                エリア初期値: {selectedHostTeam.area ?? "未設定"}
-                <br />
-                カテゴリ初期値:{" "}
-                {getDefaultCategories(selectedHostTeam)
-                  .map((v) => categoryLabel(v))
-                  .join(" / ") || "未設定"}
               </div>
-            ) : null}
+            )}
           </div>
-        </section>
-      </main>
 
-      {showWantedLevelHelp ? (
-        <div
-          style={helpOverlay}
-          onClick={() => setShowWantedLevelHelp(false)}
-        >
-          <div style={helpModal} onClick={(e) => e.stopPropagation()}>
-            <div style={helpModalTitle}>希望相手の強さとは？</div>
-            <div style={helpModalText}>
-              下限は「この強さ以上の相手を希望」、
-              上限は「この強さ以下の相手を希望」という意味です。
+          <div style={actionRow}>
+            <Link href="/match" className="sh-btn">
+              キャンセル
+            </Link>
+
+            <button
+              type="button"
+              className="sh-btn sh-btn--primary"
+              onClick={createSlot}
+              disabled={!canSave}
+            >
+              {saving ? "作成中…" : "募集枠を作成"}
+            </button>
+          </div>
+
+          {selectedHostTeam ? (
+            <div style={helperText}>
+              ホストチーム: {selectedHostTeam.name ?? "未設定"}
               <br />
-              たとえば、下限 B・上限 A にすると、
-              B〜A の相手を募集しやすくなります。
+              エリア初期値: {selectedHostTeam.area ?? "未設定"}
+              <br />
+              カテゴリ初期値:{" "}
+              {getDefaultCategories(selectedHostTeam)
+                .map((v) => categoryLabel(v))
+                .join(" / ") || "未設定"}
             </div>
-
-            <div style={{ marginTop: 14 }}>
-              <button
-                type="button"
-                className="sh-btn sh-btn--primary"
-                onClick={() => setShowWantedLevelHelp(false)}
-              >
-                閉じる
-              </button>
-            </div>
-          </div>
+          ) : null}
         </div>
-      ) : null}
-    </>
+      </section>
+    </main>
   );
 }
 
@@ -728,12 +707,44 @@ const card: React.CSSProperties = {
 const label: React.CSSProperties = {
   display: "grid",
   gap: 6,
-  minWidth: 0,
 };
 
 const labelTitle: React.CSSProperties = {
   fontWeight: 800,
   color: "#2d3b31",
+  fontSize: 16,
+  lineHeight: 1.4,
+};
+
+const labelTitleRow: React.CSSProperties = {
+  minHeight: 34,
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+};
+
+const labelTitleText: React.CSSProperties = {
+  fontWeight: 800,
+  color: "#2d3b31",
+  fontSize: 16,
+  lineHeight: 1.4,
+  whiteSpace: "nowrap",
+};
+
+const helpButton: React.CSSProperties = {
+  width: 34,
+  height: 34,
+  borderRadius: 999,
+  border: "1px solid #b7dec0",
+  background: "#eef9f1",
+  color: "#1f7a37",
+  fontWeight: 900,
+  fontSize: 20,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  cursor: "pointer",
+  flexShrink: 0,
 };
 
 const input: React.CSSProperties = {
@@ -741,14 +752,16 @@ const input: React.CSSProperties = {
   borderRadius: 10,
   border: "1px solid #ddd",
   background: "white",
-  width: "100%",
+  minHeight: 52,
+  fontSize: 16,
   boxSizing: "border-box",
+  width: "100%",
 };
 
-const twoCols: React.CSSProperties = {
+const responsiveTwoCols: React.CSSProperties = {
   display: "grid",
   gap: 12,
-  gridTemplateColumns: "1fr 1fr",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
 };
 
 const actionRow: React.CSSProperties = {
@@ -800,11 +813,11 @@ const chipWrap: React.CSSProperties = {
 };
 
 const chip: React.CSSProperties = {
-  padding: "8px 12px",
+  padding: "10px 16px",
   borderRadius: 999,
   border: "1px solid #d6eadb",
   background: "#fff",
-  color: "#23412c",
+  color: "#145c2a",
   fontWeight: 800,
   fontSize: 13,
   cursor: "pointer",
@@ -827,77 +840,20 @@ const toggleRow: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
-const activeModeBtn: React.CSSProperties = {
-  borderColor: "#145c2a",
-  background: "#ecfdf3",
-  color: "#166534",
-};
-
-const wantedLabelRow: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  minWidth: 0,
-  flexWrap: "nowrap",
-};
-
-const wantedLabelText: React.CSSProperties = {
-  fontWeight: 800,
-  color: "#2d3b31",
-  whiteSpace: "nowrap",
-  fontSize: "clamp(12px, 2.2vw, 16px)",
-  lineHeight: 1.3,
-};
-
-const helpButton: React.CSSProperties = {
-  width: 22,
-  height: 22,
-  minWidth: 22,
+const modeButton: React.CSSProperties = {
+  minHeight: 52,
+  padding: "0 18px",
   borderRadius: 999,
-  border: "1px solid #cfe8d7",
+  border: "1px solid #d6eadb",
   background: "#fff",
   color: "#145c2a",
-  fontWeight: 900,
-  fontSize: 12,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  cursor: "pointer",
-  flexShrink: 0,
-  padding: 0,
-};
-
-const helpOverlay: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  zIndex: 1500,
-  background: "rgba(15, 23, 42, 0.28)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: 16,
-};
-
-const helpModal: React.CSSProperties = {
-  width: "100%",
-  maxWidth: 420,
-  borderRadius: 18,
-  background: "#fff",
-  border: "1px solid #dce9df",
-  boxShadow: "0 20px 60px rgba(0,0,0,0.16)",
-  padding: 18,
-};
-
-const helpModalTitle: React.CSSProperties = {
-  fontSize: 18,
-  fontWeight: 900,
-  color: "#16391f",
-  lineHeight: 1.4,
-};
-
-const helpModalText: React.CSSProperties = {
-  marginTop: 10,
+  fontWeight: 800,
   fontSize: 14,
-  color: "#4b5563",
-  lineHeight: 1.8,
+  cursor: "pointer",
+};
+
+const modeButtonActive: React.CSSProperties = {
+  background: "#145c2a",
+  color: "#fff",
+  border: "1px solid #145c2a",
 };

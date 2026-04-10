@@ -85,40 +85,32 @@ function toTeamRows(value: unknown): TeamRow[] {
   return value.map((row) => row as TeamRow);
 }
 
+function getDefaultFilters(): SavedFilters {
+  return {
+    keyword: "",
+    categoryFilter: [],
+    prefectureFilter: "",
+    cityFilter: "",
+    townFilter: "",
+    groundFilter: "all",
+    strengthFilter: [],
+    bikeFilter: "all",
+    bikeCapacityMin: "",
+    memberCountMin: "",
+  };
+}
+
 function readSavedFilters(): SavedFilters {
   if (typeof window === "undefined") {
-    return {
-      keyword: "",
-      categoryFilter: [],
-      prefectureFilter: "",
-      cityFilter: "",
-      townFilter: "",
-      groundFilter: "all",
-      strengthFilter: [],
-      bikeFilter: "all",
-      bikeCapacityMin: "",
-      memberCountMin: "",
-    };
+    return getDefaultFilters();
   }
 
   try {
     const raw = window.localStorage.getItem(FILTER_STORAGE_KEY);
-    if (!raw) {
-      return {
-        keyword: "",
-        categoryFilter: [],
-        prefectureFilter: "",
-        cityFilter: "",
-        townFilter: "",
-        groundFilter: "all",
-        strengthFilter: [],
-        bikeFilter: "all",
-        bikeCapacityMin: "",
-        memberCountMin: "",
-      };
-    }
+    if (!raw) return getDefaultFilters();
 
     const parsed = JSON.parse(raw);
+
     return {
       keyword: String(parsed?.keyword ?? ""),
       categoryFilter: Array.isArray(parsed?.categoryFilter)
@@ -144,69 +136,42 @@ function readSavedFilters(): SavedFilters {
       memberCountMin: String(parsed?.memberCountMin ?? ""),
     };
   } catch {
-    return {
-      keyword: "",
-      categoryFilter: [],
-      prefectureFilter: "",
-      cityFilter: "",
-      townFilter: "",
-      groundFilter: "all",
-      strengthFilter: [],
-      bikeFilter: "all",
-      bikeCapacityMin: "",
-      memberCountMin: "",
-    };
+    return getDefaultFilters();
   }
 }
 
+function hasAnyFilter(filters: SavedFilters) {
+  return (
+    !!filters.keyword.trim() ||
+    filters.categoryFilter.length > 0 ||
+    !!filters.prefectureFilter ||
+    !!filters.cityFilter ||
+    !!filters.townFilter ||
+    filters.groundFilter !== "all" ||
+    filters.strengthFilter.length > 0 ||
+    filters.bikeFilter !== "all" ||
+    !!filters.bikeCapacityMin ||
+    !!filters.memberCountMin
+  );
+}
+
 function buildFilterSummary(filters: SavedFilters) {
+  if (!hasAnyFilter(filters)) return "すべて";
+
   const parts: string[] = [];
 
-  if (filters.keyword.trim()) {
-    parts.push(`キーワード: ${filters.keyword.trim()}`);
-  }
+  if (filters.keyword.trim()) parts.push("キーワード");
+  if (filters.categoryFilter.length > 0) parts.push("カテゴリ");
+  if (filters.prefectureFilter) parts.push("都道府県");
+  if (filters.cityFilter) parts.push("市区町村");
+  if (filters.townFilter) parts.push("町名");
+  if (filters.groundFilter !== "all") parts.push("グラウンド");
+  if (filters.strengthFilter.length > 0) parts.push("強さ");
+  if (filters.bikeFilter !== "all") parts.push("駐輪場");
+  if (filters.memberCountMin) parts.push("所属人数");
+  if (filters.bikeCapacityMin) parts.push("駐輪台数");
 
-  if (filters.categoryFilter.length > 0) {
-    parts.push(
-      `カテゴリ: ${filters.categoryFilter
-        .map((v) => categoryLabel(v) || v)
-        .join(" / ")}`
-    );
-  }
-
-  if (filters.prefectureFilter) {
-    parts.push(`都道府県: ${filters.prefectureFilter}`);
-  }
-
-  if (filters.cityFilter) {
-    parts.push(`市区町村: ${filters.cityFilter}`);
-  }
-
-  if (filters.townFilter) {
-    parts.push(`町名: ${filters.townFilter}`);
-  }
-
-  if (filters.groundFilter !== "all") {
-    parts.push(`グラウンド: ${filters.groundFilter}`);
-  }
-
-  if (filters.strengthFilter.length > 0) {
-    parts.push(`強さ: ${filters.strengthFilter.join(" / ")}`);
-  }
-
-  if (filters.bikeFilter !== "all") {
-    parts.push(`駐輪場: ${filters.bikeFilter}`);
-  }
-
-  if (filters.memberCountMin) {
-    parts.push(`所属人数: ${filters.memberCountMin}人以上`);
-  }
-
-  if (filters.bikeCapacityMin) {
-    parts.push(`駐輪台数: ${filters.bikeCapacityMin}台以上`);
-  }
-
-  return parts.join(" / ") || "すべて";
+  return parts.join(" / ");
 }
 
 export default function TeamsPage() {
@@ -227,9 +192,18 @@ export default function TeamsPage() {
       setSavedFilters(readSavedFilters());
     };
 
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === FILTER_STORAGE_KEY) {
+        setSavedFilters(readSavedFilters());
+      }
+    };
+
     window.addEventListener("focus", onFocus);
+    window.addEventListener("storage", onStorage);
+
     return () => {
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("storage", onStorage);
     };
   }, []);
 
@@ -267,15 +241,14 @@ export default function TeamsPage() {
           )
           .order("updated_at", { ascending: false });
 
-        if (error) {
-          throw error;
-        }
-
+        if (error) throw error;
         if (!active) return;
+
         setTeams(toTeamRows(data));
       } catch (e: any) {
         console.error("[teams page] load error:", e);
         if (!active) return;
+
         setTeams([]);
         setLoadError(e?.message ?? "チーム一覧の取得に失敗しました");
       } finally {
@@ -310,11 +283,17 @@ export default function TeamsPage() {
         return false;
       }
 
-      if (savedFilters.cityFilter && norm(team.city) !== savedFilters.cityFilter) {
+      if (
+        savedFilters.cityFilter &&
+        norm(team.city) !== savedFilters.cityFilter
+      ) {
         return false;
       }
 
-      if (savedFilters.townFilter && norm(team.town) !== savedFilters.townFilter) {
+      if (
+        savedFilters.townFilter &&
+        norm(team.town) !== savedFilters.townFilter
+      ) {
         return false;
       }
 
@@ -358,7 +337,7 @@ export default function TeamsPage() {
           team.city,
           team.town,
           team.category,
-          ...(categories ?? []),
+          ...categories,
           team.uniform_main,
           team.uniform_sub,
           team.note,
@@ -412,7 +391,7 @@ export default function TeamsPage() {
         <div style={summaryHead}>
           <div style={summaryTextWrap}>
             <div style={summaryTitle}>表示条件</div>
-            <div style={summaryText}>チーム一覧の表示条件：{filterSummaryText}</div>
+            <div style={summaryText}>条件：{filterSummaryText}</div>
             <div style={resultText}>
               {loading || authLoading
                 ? "読み込み中…"
@@ -421,10 +400,7 @@ export default function TeamsPage() {
           </div>
 
           <div style={summaryButtonRow}>
-            <Link href="/match" className="sh-btn">
-              ホームへ戻る
-            </Link>
-            <Link href="/match?panel=team" className="sh-btn sh-btn--primary">
+            <Link href="/teams/search" className="sh-btn sh-btn--primary">
               条件変更
             </Link>
           </div>

@@ -190,7 +190,7 @@ export function DaySlotList(props: {
         <div style={emptyBox}>
           <div style={emptyTitle}>該当する募集がありません</div>
           <div style={emptySub}>
-            条件をゆるめるか、別の日付を選んでみてください
+            条件を緩めるか、別の日付を選んでください
           </div>
         </div>
       ) : (
