@@ -83,7 +83,6 @@ export function Calendar(props: {
               type="button"
               className="sh-btn"
               onClick={onOpenCalendarHelp}
-              disabled={loading}
             >
               決・募・他 の見方
             </button>
@@ -93,7 +92,7 @@ export function Calendar(props: {
             type="button"
             className="sh-btn sh-btn--primary"
             onClick={() => onCreateForDate(selectedYmd)}
-            disabled={loading || disableCreate}
+            disabled={disableCreate}
           >
             募集する
           </button>
