@@ -12,6 +12,7 @@ import { MatchHelpModals } from "@/app/match/components/MatchHelpModals";
 
 import { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
 import { useMatchData } from "@/app/match/hooks/useMatchData";
+import { STRENGTH_GUIDES } from "@/app/match/constants/strengthGuides";
 
 import {
   buildCalendarCells,
@@ -24,14 +25,6 @@ import { matchesSlotFilters } from "@/app/match/utils/filters";
 
 import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 
-type StrengthGuide = {
-  rank: StrengthRank;
-  short: string;
-  title: string;
-  bullets: string[];
-  note: string;
-};
-
 type CalendarShortStatus = "decided" | "open" | "other";
 
 type DayCalendarSummary = {
@@ -41,69 +34,6 @@ type DayCalendarSummary = {
 };
 
 type PanelMode = "none" | "team";
-
-const STRENGTH_GUIDES: StrengthGuide[] = [
-  {
-    rank: "SS",
-    short: "都・県リーグ1・2部",
-    title: "公式戦上位レベルの強度を想定したカテゴリー",
-    bullets: [
-      "都・県リーグ上位所属",
-      "試合強度：★★★★★（非常に高い）",
-      "球際・切り替えが速く、戦術理解度が高い",
-      "公式戦同等レベルの緊張感ある試合を希望",
-    ],
-    note: "「強度の高い実戦形式」を求めるチーム向け",
-  },
-  {
-    rank: "S",
-    short: "都・県リーグ3・4部",
-    title: "公式戦基準の競争力を持つカテゴリー",
-    bullets: [
-      "都・県リーグ所属",
-      "試合強度：★★★★☆（高い）",
-      "基礎技術が安定し、組織的な守備・攻撃ができる",
-      "上位リーグ昇格を目指すレベル",
-    ],
-    note: "「しっかり競り合える相手」を求めるチーム向け",
-  },
-  {
-    rank: "A",
-    short: "地域リーグ1・2部",
-    title: "育成と競争のバランス型カテゴリー",
-    bullets: [
-      "地域リーグ上位所属",
-      "試合強度：★★★☆☆（中〜やや高）",
-      "個人技術向上＋チーム連携を重視",
-      "チャレンジマッチにも適したレベル",
-    ],
-    note: "「公式戦を想定しつつ育成も重視」するチーム向け",
-  },
-  {
-    rank: "B",
-    short: "地域リーグ3・4部",
-    title: "成長重視の実戦経験カテゴリー",
-    bullets: [
-      "地域リーグ所属",
-      "試合強度：★★☆☆☆（やや穏やか）",
-      "試合経験を積みながら基礎力を伸ばす段階",
-      "バランスの良いマッチング向き",
-    ],
-    note: "「経験を積みたい」「自信をつけたい」チーム向け",
-  },
-  {
-    rank: "C",
-    short: "フレンドリー",
-    title: "交流・経験重視カテゴリー",
-    bullets: [
-      "リーグ所属問わず",
-      "試合強度：★☆☆☆☆（交流中心）",
-      "新チーム編成・初心者中心・交流目的",
-      "勝敗よりも経験や交流を重視",
-    ],
-    note: "「楽しく真剣に」「幅広い交流」を希望するチーム向け",
-  },
-];
 
 function norm(v?: string | null) {
   return String(v ?? "").trim();
@@ -313,7 +243,11 @@ function teamMatchesFilters(
   return true;
 }
 
-export default function HomeCalendar() {
+export default function HomeCalendar(props: {
+  initialPanelMode?: PanelMode;
+}) {
+  const { initialPanelMode = "none" } = props;
+
   const { user, loading: authLoading } = useAuth();
   const authUserId = user?.id ?? "";
 
@@ -328,7 +262,7 @@ export default function HomeCalendar() {
 
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
   const [showCalendarHelp, setShowCalendarHelp] = useState(false);
-  const [panelMode, setPanelMode] = useState<PanelMode>("none");
+  const [panelMode, setPanelMode] = useState<PanelMode>(initialPanelMode);
 
   const homeTopRef = useRef<HTMLDivElement | null>(null);
   const calendarRef = useRef<HTMLDivElement | null>(null);
@@ -388,6 +322,21 @@ export default function HomeCalendar() {
       setRequestTeamId(myTeams[0].id);
     }
   }, [myTeams, requestTeamId]);
+
+  useEffect(() => {
+    if (initialPanelMode !== "team") return;
+
+    setPanelMode("team");
+
+    const timer = setTimeout(() => {
+      filterRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 220);
+
+    return () => clearTimeout(timer);
+  }, [initialPanelMode]);
 
   const myTeamIds = useMemo(() => myTeams.map((t: any) => t.id), [myTeams]);
 
@@ -902,7 +851,10 @@ export default function HomeCalendar() {
     }
 
     if (status === "accepted") {
-      await supabase.from("match_slots").update({ is_closed: true }).eq("id", target.slot_id);
+      await supabase
+        .from("match_slots")
+        .update({ is_closed: true })
+        .eq("id", target.slot_id);
 
       try {
         const uid = currentUserId;
