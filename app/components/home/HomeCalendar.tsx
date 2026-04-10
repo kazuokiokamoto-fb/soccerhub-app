@@ -166,18 +166,10 @@ function filterSummaryTextFromFilters(filters: {
 }) {
   const parts: string[] = [];
 
-  if (filters.keyword.trim()) {
-    parts.push(`キーワード: ${filters.keyword.trim()}`);
-  }
-  if (filters.prefectureFilter) {
-    parts.push(`都道府県: ${filters.prefectureFilter}`);
-  }
-  if (filters.cityFilter) {
-    parts.push(`市区町村: ${filters.cityFilter}`);
-  }
-  if (filters.townFilter) {
-    parts.push(`町名: ${filters.townFilter}`);
-  }
+  if (filters.keyword.trim()) parts.push(`キーワード: ${filters.keyword.trim()}`);
+  if (filters.prefectureFilter) parts.push(`都道府県: ${filters.prefectureFilter}`);
+  if (filters.cityFilter) parts.push(`市区町村: ${filters.cityFilter}`);
+  if (filters.townFilter) parts.push(`町名: ${filters.townFilter}`);
 
   if (filters.categoryFilter.length > 0) {
     parts.push(
@@ -187,25 +179,11 @@ function filterSummaryTextFromFilters(filters: {
     );
   }
 
-  if (filters.groundFilter !== "all") {
-    parts.push(`グラウンド: ${filters.groundFilter}`);
-  }
-
-  if (filters.strengthFilter.length > 0) {
-    parts.push(`強さ: ${filters.strengthFilter.join(" / ")}`);
-  }
-
-  if (filters.bikeFilter !== "all") {
-    parts.push(`駐輪場: ${filters.bikeFilter}`);
-  }
-
-  if (filters.bikeCapacityMin) {
-    parts.push(`駐輪場台数: ${filters.bikeCapacityMin}台以上`);
-  }
-
-  if (filters.memberCountMin) {
-    parts.push(`所属人数: ${filters.memberCountMin}人以上`);
-  }
+  if (filters.groundFilter !== "all") parts.push(`グラウンド: ${filters.groundFilter}`);
+  if (filters.strengthFilter.length > 0) parts.push(`強さ: ${filters.strengthFilter.join(" / ")}`);
+  if (filters.bikeFilter !== "all") parts.push(`駐輪場: ${filters.bikeFilter}`);
+  if (filters.bikeCapacityMin) parts.push(`駐輪場台数: ${filters.bikeCapacityMin}台以上`);
+  if (filters.memberCountMin) parts.push(`所属人数: ${filters.memberCountMin}人以上`);
 
   return parts.join(" / ");
 }
@@ -245,17 +223,12 @@ function teamMatchesFilters(
     if (!ok) return false;
   }
 
-  if (
-    filters.prefectureFilter &&
-    norm(team.prefecture) !== filters.prefectureFilter
-  ) {
+  if (filters.prefectureFilter && norm(team.prefecture) !== filters.prefectureFilter) {
     return false;
   }
-
   if (filters.cityFilter && norm(team.city) !== filters.cityFilter) {
     return false;
   }
-
   if (filters.townFilter && norm(team.town) !== filters.townFilter) {
     return false;
   }
@@ -317,9 +290,7 @@ export default function HomeCalendar() {
   const { user, loading: authLoading } = useAuth();
   const authUserId = user?.id ?? "";
 
-  const [monthDate, setMonthDate] = useState<Date>(() =>
-    startOfMonth(new Date())
-  );
+  const [monthDate, setMonthDate] = useState<Date>(() => startOfMonth(new Date()));
   const [selectedYmd, setSelectedYmd] = useState<string>(ymdToday());
   const [selectedSlotId, setSelectedSlotId] = useState<string>("");
 
@@ -416,10 +387,7 @@ export default function HomeCalendar() {
   }, [filters]);
 
   const filteredSlotsInMonth = useMemo(() => {
-    if (!hasAnyActiveFilter) {
-      return slotsInMonth;
-    }
-
+    if (!hasAnyActiveFilter) return slotsInMonth;
     return slotsInMonth.filter((s: any) =>
       matchesSlotFilters(s, teamMap as any, filters)
     );
@@ -429,7 +397,6 @@ export default function HomeCalendar() {
     if (!hasAnyActiveFilter) {
       return allTeams.filter((team: any) => !myTeamIds.includes(team.id));
     }
-
     return allTeams.filter((team: any) => {
       if (myTeamIds.includes(team.id)) return false;
       return teamMatchesFilters(team, filters);
@@ -467,7 +434,6 @@ export default function HomeCalendar() {
         }
         return "other";
       }
-
       return "open";
     },
     [requestsBySlotId, myTeamIds]
@@ -497,23 +463,11 @@ export default function HomeCalendar() {
       }
 
       if (decidedCount > 0) {
-        result.set(day, {
-          label: "決",
-          count: decidedCount,
-          tone: "decided",
-        });
+        result.set(day, { label: "決", count: decidedCount, tone: "decided" });
       } else if (openCount > 0) {
-        result.set(day, {
-          label: "募",
-          count: openCount,
-          tone: "open",
-        });
+        result.set(day, { label: "募", count: openCount, tone: "open" });
       } else if (otherCount > 0) {
-        result.set(day, {
-          label: "他",
-          count: otherCount,
-          tone: "other",
-        });
+        result.set(day, { label: "他", count: otherCount, tone: "other" });
       }
     }
 
@@ -543,10 +497,7 @@ export default function HomeCalendar() {
     return !!currentUserId && selectedSlot.owner_id === currentUserId;
   }, [selectedSlot, currentUserId]);
 
-  const calendarCells = useMemo(() => {
-    return buildCalendarCells(monthDate);
-  }, [monthDate]);
-
+  const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
   const monthKey = useMemo(() => toMonthKey(monthDate), [monthDate]);
 
   useEffect(() => {
@@ -554,9 +505,7 @@ export default function HomeCalendar() {
     const today = ymdToday();
     const todayMonthKey = today.slice(0, 7);
 
-    if (selectedYmd.startsWith(selectedMonthKey)) {
-      return;
-    }
+    if (selectedYmd.startsWith(selectedMonthKey)) return;
 
     if (selectedMonthKey === todayMonthKey) {
       setSelectedYmd(today);
@@ -568,28 +517,19 @@ export default function HomeCalendar() {
 
   const scrollToCalendar = () => {
     setTimeout(() => {
-      calendarRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      calendarRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 120);
   };
 
   const scrollToDayList = () => {
     setTimeout(() => {
-      dayListRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      dayListRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 120);
   };
 
   const scrollToFilter = () => {
     setTimeout(() => {
-      filterRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      filterRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 120);
   };
 
@@ -601,10 +541,7 @@ export default function HomeCalendar() {
   const closePanel = () => {
     setPanelMode("none");
     setTimeout(() => {
-      homeTopRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      homeTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 120);
   };
 
@@ -641,7 +578,6 @@ export default function HomeCalendar() {
     }
 
     const params = new URLSearchParams();
-
     if (ymd) params.set("date", ymd);
     params.set("hostTeamId", firstTeam.id);
 
@@ -657,7 +593,6 @@ export default function HomeCalendar() {
       my_team_id: myTeamId,
       other_team_id: otherTeamId,
     });
-
     if (error) throw error;
     return data as string;
   };
@@ -669,14 +604,12 @@ export default function HomeCalendar() {
     body: string;
   }) => {
     const { threadId, senderId, senderTeamId, body } = params;
-
     const { error } = await supabase.from("chat_messages").insert({
       thread_id: threadId,
       sender_id: senderId,
       sender_team_id: senderTeamId,
       body,
     });
-
     if (error) throw error;
   };
 
@@ -695,7 +628,6 @@ export default function HomeCalendar() {
       if (!otherTeamId || myTeamId === otherTeamId) return;
 
       const threadId = await getOrCreateDmThread(myTeamId, otherTeamId);
-
       const carryQuery = buildMatchCarryQuery({
         slotId: slot?.id ?? selectedSlotId ?? "",
         date: slot?.date ?? selectedYmd,
@@ -750,7 +682,6 @@ export default function HomeCalendar() {
 
     const defaultComment =
       "はじめまして。練習試合を希望しています。条件が合えばぜひお願いします。";
-
     const finalComment = (requestComment.trim() || defaultComment).trim();
     const confirmText = `この内容で試合申込しますか？\n\nコメント:\n${finalComment}`;
 
@@ -845,9 +776,7 @@ export default function HomeCalendar() {
           try {
             const pushRes = await fetch("/api/push/send", {
               method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
+              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 userId: hostUserId,
                 title: notificationTitle,
@@ -1065,17 +994,17 @@ export default function HomeCalendar() {
     return text || "すべて";
   }, [filters]);
 
-  const totalTeamCountText = useMemo(() => {
-    return `${allTeams.length}件`;
-  }, [allTeams.length]);
-
-  const totalSlotCountText = useMemo(() => {
-    return `${slotsInMonth.length}件`;
-  }, [slotsInMonth.length]);
-
   const selectedDateSummaryText = useMemo(() => {
     return `${selectedYmd} / 募集件数 ${slotsOnSelectedDate.length}件`;
   }, [selectedYmd, slotsOnSelectedDate.length]);
+
+  const totalTeamCountText = useMemo(() => {
+    return `登録チーム数：${allTeams.length}件`;
+  }, [allTeams.length]);
+
+  const totalSlotCountText = useMemo(() => {
+    return `試合募集数：${slotsInMonth.length}件`;
+  }, [slotsInMonth.length]);
 
   const showCriticalError =
     (baseError && baseError.includes("teams:")) ||
@@ -1110,25 +1039,20 @@ export default function HomeCalendar() {
         </div>
       ) : null}
 
-      <section style={summaryStatsRow}>
-        <div style={summaryStatCard}>
-          <div style={summaryStatLabel}>登録チーム数</div>
-          <div style={summaryStatValue}>{totalTeamCountText}</div>
-        </div>
-
-        <div style={summaryStatCard}>
-          <div style={summaryStatLabel}>試合募集数</div>
-          <div style={summaryStatValue}>{totalSlotCountText}</div>
+      <section style={summaryStatsBox}>
+        <div style={summaryStatsRow}>
+          <span style={summaryStatsItem}>{totalTeamCountText}</span>
+          <span style={summaryStatsDivider}>／</span>
+          <span style={summaryStatsItem}>{totalSlotCountText}</span>
         </div>
       </section>
 
       <section style={summaryBox}>
-        <div style={summaryHead}>
-          <div style={summaryTextWrap}>
-            <div style={summaryTitle}>チーム条件で探す</div>
-            <div style={summaryCount}>
-              チーム一覧の表示条件：{teamListConditionText}
-            </div>
+        <div style={summaryTitle}>チーム条件で探す</div>
+
+        <div style={summaryInnerBar}>
+          <div style={summaryCount}>
+            チーム一覧の表示条件：{teamListConditionText}
           </div>
 
           <div style={summaryButtonRow}>
@@ -1221,6 +1145,15 @@ export default function HomeCalendar() {
         />
       </div>
 
+      {!loading && slotsOnSelectedDate.length === 0 ? (
+        <div style={emptyRecruitBox}>
+          <div style={emptyRecruitTitle}>該当する募集がありません</div>
+          <div style={emptyRecruitText}>
+            条件をゆるめるか、別の日付を選んでみてください
+          </div>
+        </div>
+      ) : null}
+
       {panelMode !== "none" ? (
         <MatchFilterPanel
           filterRef={filterRef}
@@ -1289,54 +1222,42 @@ const errorTitle: React.CSSProperties = {
   marginBottom: 4,
 };
 
-const summaryStatsRow: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 10,
-};
-
-const summaryStatCard: React.CSSProperties = {
+const summaryStatsBox: React.CSSProperties = {
+  marginTop: 2,
   padding: "14px 16px",
-  borderRadius: 16,
+  borderRadius: 14,
+  background: "#eef6f0",
   border: "1px solid #dce9df",
-  background: "#fff",
-  display: "grid",
-  gap: 4,
 };
 
-const summaryStatLabel: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 800,
-  color: "#5c6f62",
-  lineHeight: 1.4,
-};
-
-const summaryStatValue: React.CSSProperties = {
-  fontSize: 24,
-  fontWeight: 900,
-  color: "#14532d",
-  lineHeight: 1.2,
-};
-
-const summaryBox: React.CSSProperties = {
-  padding: "14px 16px",
-  borderRadius: 16,
-  border: "1px solid #eee",
-  background: "#fff",
-};
-
-const summaryHead: React.CSSProperties = {
+const summaryStatsRow: React.CSSProperties = {
   display: "flex",
-  justifyContent: "space-between",
   alignItems: "center",
-  gap: 12,
+  justifyContent: "center",
+  gap: 10,
   flexWrap: "wrap",
 };
 
-const summaryTextWrap: React.CSSProperties = {
-  display: "grid",
-  gap: 6,
-  minWidth: 0,
+const summaryStatsItem: React.CSSProperties = {
+  fontSize: 16,
+  fontWeight: 800,
+  color: "#2f5d3a",
+  lineHeight: 1.6,
+};
+
+const summaryStatsDivider: React.CSSProperties = {
+  fontSize: 16,
+  fontWeight: 800,
+  color: "#7aa086",
+  lineHeight: 1.6,
+};
+
+const summaryBox: React.CSSProperties = {
+  marginTop: 0,
+  padding: "14px 16px",
+  borderRadius: 16,
+  border: "1px solid #e5ece7",
+  background: "#fff",
 };
 
 const summaryTitle: React.CSSProperties = {
@@ -1346,11 +1267,24 @@ const summaryTitle: React.CSSProperties = {
   lineHeight: 1.3,
 };
 
+const summaryInnerBar: React.CSSProperties = {
+  marginTop: 14,
+  padding: "14px 16px",
+  borderRadius: 14,
+  background: "#eef6f0",
+  border: "1px solid #dce9df",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
 const summaryCount: React.CSSProperties = {
   fontSize: 14,
-  color: "#3b6a49",
+  color: "#2f5d3a",
   lineHeight: 1.7,
-  fontWeight: 700,
+  fontWeight: 800,
 };
 
 const summaryButtonRow: React.CSSProperties = {
@@ -1359,4 +1293,30 @@ const summaryButtonRow: React.CSSProperties = {
   flexWrap: "wrap",
   marginLeft: "auto",
   justifyContent: "flex-end",
+};
+
+const emptyRecruitBox: React.CSSProperties = {
+  marginTop: 8,
+  padding: 20,
+  borderRadius: 16,
+  border: "1px solid #e5ece7",
+  background: "#fff",
+  textAlign: "center",
+};
+
+const emptyRecruitTitle: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#16391f",
+  lineHeight: 1.5,
+};
+
+const emptyRecruitText: React.CSSProperties = {
+  marginTop: 8,
+  color: "#666",
+  lineHeight: 1.4,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "clip",
+  fontSize: "clamp(8px, 2.2vw, 16px)",
 };
