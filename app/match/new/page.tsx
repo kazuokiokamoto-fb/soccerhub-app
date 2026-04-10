@@ -35,15 +35,6 @@ function getTodayYmd() {
   return `${y}-${m}-${d}`;
 }
 
-function levelLabelFromValue(v: string) {
-  if (v === "9") return "SS";
-  if (v === "7") return "S";
-  if (v === "5") return "A";
-  if (v === "3") return "B";
-  if (v === "1") return "C";
-  return "指定なし";
-}
-
 function getDefaultCategories(team?: DbTeam | null) {
   if (!team) return [] as string[];
   if (Array.isArray(team.categories) && team.categories.length > 0) {
@@ -171,10 +162,7 @@ function MatchCreatePageInner() {
           .select("id,owner_id,name,area,category,categories,prefecture,city,town")
           .eq("owner_id", uid)
           .order("updated_at", { ascending: false }),
-        supabase
-          .from("venues")
-          .select("id,name,area")
-          .order("name", { ascending: true }),
+        supabase.from("venues").select("id,name,area").order("name", { ascending: true }),
       ]);
 
       const teams = (teamRows ?? []) as DbTeam[];
@@ -266,8 +254,7 @@ function MatchCreatePageInner() {
 
   const canSave = useMemo(() => {
     const categoryOk = slotCategories.length > 0;
-    const venueOk =
-      venueMode === "existing" ? true : newVenueName.trim().length > 0;
+    const venueOk = venueMode === "existing" ? true : newVenueName.trim().length > 0;
 
     return (
       !!slotDate &&
@@ -389,14 +376,14 @@ function MatchCreatePageInner() {
 
   if (loading) {
     return (
-      <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
+      <main style={pageWrap}>
         読み込み中…
       </main>
     );
   }
 
   return (
-    <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
+    <main style={pageWrap}>
       <AppTabNav />
       <PageBackNav current="募集枠を作る" />
 
@@ -407,14 +394,14 @@ function MatchCreatePageInner() {
       />
 
       <section style={card}>
-        <div style={{ display: "grid", gap: 14 }}>
+        <div style={formGrid}>
           <label style={label}>
             <span style={labelTitle}>日付</span>
             <input
               type="date"
               value={slotDate}
               onChange={(e) => setSlotDate(e.target.value)}
-              style={input}
+              style={nativeInput}
               disabled={saving}
             />
           </label>
@@ -424,7 +411,7 @@ function MatchCreatePageInner() {
             <select
               value={hostTeamId}
               onChange={(e) => setHostTeamId(e.target.value)}
-              style={input}
+              style={selectInput}
               disabled={saving}
             >
               {myTeams.map((t) => (
@@ -442,7 +429,7 @@ function MatchCreatePageInner() {
                 type="time"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                style={input}
+                style={nativeInput}
                 disabled={saving}
               />
             </label>
@@ -453,7 +440,7 @@ function MatchCreatePageInner() {
                 type="time"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
-                style={input}
+                style={nativeInput}
                 disabled={saving}
               />
             </label>
@@ -464,7 +451,7 @@ function MatchCreatePageInner() {
             <input
               value={slotArea}
               onChange={(e) => setSlotArea(e.target.value)}
-              style={input}
+              style={textInput}
               placeholder="例：世田谷区 三宿"
               disabled={saving}
             />
@@ -503,25 +490,21 @@ function MatchCreatePageInner() {
                 選択中: {slotCategories.map((v) => categoryLabel(v)).join(" / ")}
               </div>
             ) : (
-              <div style={helperText}>
-                カテゴリを1つ以上選択してください。
-              </div>
+              <div style={helperText}>カテゴリを1つ以上選択してください。</div>
             )}
           </div>
 
           <div style={sectionBox}>
-            <div style={strengthHeader}>
-              <div style={strengthHeaderLeft}>
-                <div style={sectionTitle}>希望相手の強さ</div>
-                <button
-                  type="button"
-                  onClick={() => setShowLevelHelp((v) => !v)}
-                  style={helpButton}
-                  aria-label="希望相手の強さの説明"
-                >
-                  ?
-                </button>
-              </div>
+            <div style={strengthTitleRow}>
+              <div style={sectionTitle}>希望相手の強さ</div>
+              <button
+                type="button"
+                onClick={() => setShowLevelHelp((v) => !v)}
+                style={helpButton}
+                aria-label="希望相手の強さの説明"
+              >
+                ?
+              </button>
             </div>
 
             {showLevelHelp ? (
@@ -538,7 +521,7 @@ function MatchCreatePageInner() {
                 <select
                   value={wantedLevelMin}
                   onChange={(e) => setWantedLevelMin(e.target.value)}
-                  style={input}
+                  style={selectInput}
                   disabled={saving}
                 >
                   <option value="">指定なし</option>
@@ -555,7 +538,7 @@ function MatchCreatePageInner() {
                 <select
                   value={wantedLevelMax}
                   onChange={(e) => setWantedLevelMax(e.target.value)}
-                  style={input}
+                  style={selectInput}
                   disabled={saving}
                 >
                   <option value="">指定なし</option>
@@ -567,11 +550,6 @@ function MatchCreatePageInner() {
                 </select>
               </label>
             </div>
-          </div>
-
-          <div style={hintBox}>
-            希望相手の強さ：下限 <b>{levelLabelFromValue(wantedLevelMin)}</b> /
-            上限 <b>{levelLabelFromValue(wantedLevelMax)}</b>
           </div>
 
           <div style={sectionBox}>
@@ -605,7 +583,7 @@ function MatchCreatePageInner() {
                 <select
                   value={venueId}
                   onChange={(e) => setVenueId(e.target.value)}
-                  style={input}
+                  style={selectInput}
                   disabled={saving}
                 >
                   <option value="">（未設定）</option>
@@ -618,13 +596,13 @@ function MatchCreatePageInner() {
                 </select>
               </label>
             ) : (
-              <div style={{ display: "grid", gap: 12 }}>
+              <div style={subGrid}>
                 <label style={label}>
                   <span style={labelTitle}>新規グラウンド名</span>
                   <input
                     value={newVenueName}
                     onChange={(e) => setNewVenueName(e.target.value)}
-                    style={input}
+                    style={textInput}
                     placeholder="例：世田谷公園 サッカー場"
                     disabled={saving}
                   />
@@ -635,7 +613,7 @@ function MatchCreatePageInner() {
                   <input
                     value={newVenueArea}
                     onChange={(e) => setNewVenueArea(e.target.value)}
-                    style={input}
+                    style={textInput}
                     placeholder="例：世田谷区 池尻"
                     disabled={saving}
                   />
@@ -683,17 +661,24 @@ function MatchCreatePageInner() {
 
 export default function MatchCreatePage() {
   return (
-    <Suspense
-      fallback={
-        <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
-          読み込み中…
-        </main>
-      }
-    >
+    <Suspense fallback={<main style={pageWrap}>読み込み中…</main>}>
       <MatchCreatePageInner />
     </Suspense>
   );
 }
+
+const pageWrap: React.CSSProperties = {
+  padding: 16,
+  maxWidth: 980,
+  margin: "0 auto",
+};
+
+const formGrid: React.CSSProperties = {
+  display: "grid",
+  gap: 14,
+  width: "100%",
+  minWidth: 0,
+};
 
 const card: React.CSSProperties = {
   marginTop: 14,
@@ -703,12 +688,15 @@ const card: React.CSSProperties = {
   padding: 18,
   boxSizing: "border-box",
   overflow: "hidden",
+  width: "100%",
+  minWidth: 0,
 };
 
 const label: React.CSSProperties = {
   display: "grid",
   gap: 6,
   minWidth: 0,
+  width: "100%",
 };
 
 const labelTitle: React.CSSProperties = {
@@ -722,22 +710,47 @@ const subLabelTitle: React.CSSProperties = {
   fontSize: 14,
 };
 
-const input: React.CSSProperties = {
+const baseControl: React.CSSProperties = {
   width: "100%",
-  minWidth: 0,
   maxWidth: "100%",
-  padding: "10px 12px",
+  minWidth: 0,
+  display: "block",
+  boxSizing: "border-box",
   borderRadius: 10,
   border: "1px solid #ddd",
-  background: "white",
-  boxSizing: "border-box",
+  background: "#fff",
   fontSize: 16,
+  lineHeight: 1.2,
+  overflow: "hidden",
+};
+
+const textInput: React.CSSProperties = {
+  ...baseControl,
+  padding: "10px 12px",
+};
+
+const nativeInput: React.CSSProperties = {
+  ...baseControl,
+  padding: "10px 44px 10px 12px",
+  appearance: "none",
+  WebkitAppearance: "none",
+  MozAppearance: "textfield",
+};
+
+const selectInput: React.CSSProperties = {
+  ...baseControl,
+  padding: "10px 44px 10px 12px",
+  appearance: "auto",
+  WebkitAppearance: "menulist",
+  MozAppearance: "menulist",
 };
 
 const stackCols: React.CSSProperties = {
   display: "grid",
   gap: 12,
   gridTemplateColumns: "minmax(0, 1fr)",
+  width: "100%",
+  minWidth: 0,
 };
 
 const strengthGrid: React.CSSProperties = {
@@ -745,6 +758,13 @@ const strengthGrid: React.CSSProperties = {
   gap: 12,
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   alignItems: "start",
+  width: "100%",
+  minWidth: 0,
+};
+
+const subGrid: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
 };
 
 const actionRow: React.CSSProperties = {
@@ -759,16 +779,6 @@ const helperText: React.CSSProperties = {
   lineHeight: 1.7,
 };
 
-const hintBox: React.CSSProperties = {
-  padding: 12,
-  borderRadius: 12,
-  border: "1px solid #e5e7eb",
-  background: "#fafafa",
-  color: "#374151",
-  fontSize: 14,
-  lineHeight: 1.7,
-};
-
 const sectionBox: React.CSSProperties = {
   padding: 14,
   borderRadius: 16,
@@ -777,6 +787,8 @@ const sectionBox: React.CSSProperties = {
   display: "grid",
   gap: 10,
   boxSizing: "border-box",
+  width: "100%",
+  minWidth: 0,
 };
 
 const sectionTitle: React.CSSProperties = {
@@ -831,18 +843,10 @@ const activeModeBtn: React.CSSProperties = {
   color: "#166534",
 };
 
-const strengthHeader: React.CSSProperties = {
+const strengthTitleRow: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
-  justifyContent: "space-between",
   gap: 10,
-  flexWrap: "wrap",
-};
-
-const strengthHeaderLeft: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
   flexWrap: "wrap",
 };
 
