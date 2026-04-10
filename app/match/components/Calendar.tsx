@@ -106,10 +106,6 @@ export function Calendar(props: {
 
       <div style={legendRow}>
         <div style={legendItem}>
-          <span style={{ ...legendChip, ...legendTodayChip }} />
-          <span>今日</span>
-        </div>
-        <div style={legendItem}>
           <span style={{ ...legendChip, ...legendSelectedChip }} />
           <span>選択中</span>
         </div>
@@ -324,11 +320,6 @@ const legendChip: React.CSSProperties = {
   height: 14,
   borderRadius: 999,
   display: "inline-block",
-};
-
-const legendTodayChip: React.CSSProperties = {
-  border: "2px solid #93c5fd",
-  background: "#eff6ff",
 };
 
 const legendSelectedChip: React.CSSProperties = {

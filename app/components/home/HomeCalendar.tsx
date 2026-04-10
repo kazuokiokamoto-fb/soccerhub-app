@@ -1208,6 +1208,15 @@ export default function HomeCalendar() {
         />
       </div>
 
+      {!loading && slotsOnSelectedDate.length === 0 ? (
+        <div style={emptyRecruitBox}>
+          <div style={emptyRecruitTitle}>該当する募集がありません</div>
+          <div style={emptyRecruitText}>
+            条件をゆるめるか、別の日付を選んでみてください
+          </div>
+        </div>
+      ) : null}
+
       {panelMode !== "none" ? (
         <MatchFilterPanel
           filterRef={filterRef}
@@ -1287,7 +1296,7 @@ const summaryBox: React.CSSProperties = {
 const summaryHead: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-start",
+  alignItems: "flex-end",
   gap: 12,
   flexWrap: "wrap",
 };
@@ -1295,6 +1304,7 @@ const summaryHead: React.CSSProperties = {
 const summaryTextWrap: React.CSSProperties = {
   display: "grid",
   gap: 6,
+  minWidth: 0,
 };
 
 const summaryTitle: React.CSSProperties = {
@@ -1321,4 +1331,31 @@ const summaryButtonRow: React.CSSProperties = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
+  marginLeft: "auto",
+  justifyContent: "flex-end",
+  width: "100%",
+};
+
+const emptyRecruitBox: React.CSSProperties = {
+  marginTop: 8,
+  padding: 20,
+  borderRadius: 16,
+  border: "1px solid #e5ece7",
+  background: "#fff",
+  textAlign: "center",
+};
+
+const emptyRecruitTitle: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#16391f",
+  lineHeight: 1.5,
+};
+
+const emptyRecruitText: React.CSSProperties = {
+  marginTop: 8,
+  color: "#666",
+  lineHeight: 1.4,
+  whiteSpace: "nowrap",
+  fontSize: "clamp(10px, 2.8vw, 16px)",
 };
