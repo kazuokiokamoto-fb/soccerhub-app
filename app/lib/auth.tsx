@@ -35,7 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const user = session?.user ?? null;
 
   const refreshAdmin = useCallback(async (targetUser?: User | null) => {
-    const currentUser = targetUser ?? user ?? null;
+    const currentUser = targetUser ?? null;
 
     if (!currentUser?.id) {
       setIsAdmin(false);
@@ -65,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setAdminLoading(false);
     }
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -74,16 +74,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const {
           data: { session: initialSession },
+          error,
         } = await supabase.auth.getSession();
+
+        if (error) {
+          console.error("[auth] getSession error:", error);
+        }
 
         if (!mounted) return;
 
         setSession(initialSession ?? null);
         setLoading(false);
 
-        await refreshAdmin(initialSession?.user ?? null);
+        void refreshAdmin(initialSession?.user ?? null);
       } catch (e) {
-        console.error("[auth] getSession error:", e);
+        console.error("[auth] getSession unexpected error:", e);
 
         if (!mounted) return;
 
@@ -94,17 +99,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    init();
+    void init();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
       if (!mounted) return;
 
       setSession(newSession ?? null);
       setLoading(false);
 
-      await refreshAdmin(newSession?.user ?? null);
+      void refreshAdmin(newSession?.user ?? null);
     });
 
     return () => {
@@ -121,13 +126,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAdmin,
       adminLoading,
       refreshAdmin: async () => {
-        await refreshAdmin(user);
+        await refreshAdmin(session?.user ?? null);
       },
       signOut: async () => {
-        await supabase.auth.signOut();
-        setSession(null);
-        setIsAdmin(false);
-        setAdminLoading(false);
+        try {
+          await supabase.auth.signOut();
+        } catch (e) {
+          console.error("[auth] signOut error:", e);
+        } finally {
+          setSession(null);
+          setIsAdmin(false);
+          setAdminLoading(false);
+        }
       },
     }),
     [session, user, loading, isAdmin, adminLoading, refreshAdmin]
