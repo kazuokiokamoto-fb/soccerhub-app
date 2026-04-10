@@ -303,7 +303,7 @@ export function DaySlotList(props: {
                         className="sh-btn sh-btn--primary"
                         onClick={() => onToggleDetail(s.id)}
                       >
-                        {isExpanded ? "閉じる" : "募集詳細を見る"}
+                        {isExpanded ? "閉じる" : "募集詳細"}
                       </button>
 
                       {displayTeam?.id ? (

@@ -400,7 +400,7 @@ export default function TeamsPage() {
           </div>
 
           <div style={summaryButtonRow}>
-            <Link href="/teams/search" className="sh-btn sh-btn--primary">
+            <Link href="/match?panel=team" className="sh-btn sh-btn--primary">
               条件変更
             </Link>
           </div>

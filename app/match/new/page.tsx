@@ -90,6 +90,7 @@ function MatchCreatePageInner() {
 
   const [wantedLevelMin, setWantedLevelMin] = useState("");
   const [wantedLevelMax, setWantedLevelMax] = useState("");
+  const [showLevelHelp, setShowLevelHelp] = useState(false);
 
   useEffect(() => {
     void load();
@@ -102,7 +103,10 @@ function MatchCreatePageInner() {
     const categoryParam = searchParams.get("category") ?? "";
     const categoriesParam = searchParams.get("categories") ?? "";
 
-    if (date) setSlotDate(date);
+    if (date) {
+      setSlotDate(date);
+    }
+
     if (hostTeamIdParam) setHostTeamId(hostTeamIdParam);
     if (areaParam) setSlotArea(areaParam);
 
@@ -240,7 +244,9 @@ function MatchCreatePageInner() {
       buildAreaText(selectedHostTeam, slotArea) ||
       "";
 
-    if (!name) return null;
+    if (!name) {
+      return null;
+    }
 
     const { data, error } = await supabase
       .from("venues")
@@ -251,7 +257,10 @@ function MatchCreatePageInner() {
       .select("id")
       .single();
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
+
     return (data as any)?.id ?? null;
   }
 
@@ -281,21 +290,6 @@ function MatchCreatePageInner() {
     saving,
     loading,
   ]);
-
-  function openStrengthHelp() {
-    alert(
-      [
-        "希望相手の強さについて",
-        "",
-        "下限：この強さ以上の相手を募集",
-        "上限：この強さ以下の相手を募集",
-        "",
-        "例）",
-        "下限 B / 上限 S",
-        "→ B・A・S の相手を募集",
-      ].join("\n")
-    );
-  }
 
   async function createSlot() {
     if (!slotDate) {
@@ -441,7 +435,7 @@ function MatchCreatePageInner() {
             </select>
           </label>
 
-          <div style={responsiveTwoCols}>
+          <div style={stackCols}>
             <label style={label}>
               <span style={labelTitle}>開始</span>
               <input
@@ -515,55 +509,64 @@ function MatchCreatePageInner() {
             )}
           </div>
 
-          <div style={responsiveTwoCols}>
-            <label style={label}>
-              <span style={labelTitleRow}>
+          <div style={sectionBox}>
+            <div style={strengthHeader}>
+              <div style={strengthHeaderLeft}>
+                <div style={sectionTitle}>希望相手の強さ</div>
                 <button
                   type="button"
-                  onClick={openStrengthHelp}
+                  onClick={() => setShowLevelHelp((v) => !v)}
                   style={helpButton}
                   aria-label="希望相手の強さの説明"
-                  title="希望相手の強さの説明"
                 >
                   ?
                 </button>
-                <span style={labelTitleText}>希望相手の強さ（下限）</span>
-              </span>
+              </div>
+            </div>
 
-              <select
-                value={wantedLevelMin}
-                onChange={(e) => setWantedLevelMin(e.target.value)}
-                style={input}
-                disabled={saving}
-              >
-                <option value="">指定なし</option>
-                <option value="9">SS</option>
-                <option value="7">S</option>
-                <option value="5">A</option>
-                <option value="3">B</option>
-                <option value="1">C</option>
-              </select>
-            </label>
+            {showLevelHelp ? (
+              <div style={helpBox}>
+                下限と上限を設定すると、募集したい相手の強さ範囲を指定できます。
+                <br />
+                例）下限 B / 上限 S → B〜S の相手を募集
+              </div>
+            ) : null}
 
-            <label style={label}>
-              <span style={labelTitleRow}>
-                <span style={labelTitleText}>希望相手の強さ（上限）</span>
-              </span>
+            <div style={strengthGrid}>
+              <label style={label}>
+                <span style={subLabelTitle}>下限</span>
+                <select
+                  value={wantedLevelMin}
+                  onChange={(e) => setWantedLevelMin(e.target.value)}
+                  style={input}
+                  disabled={saving}
+                >
+                  <option value="">指定なし</option>
+                  <option value="9">SS</option>
+                  <option value="7">S</option>
+                  <option value="5">A</option>
+                  <option value="3">B</option>
+                  <option value="1">C</option>
+                </select>
+              </label>
 
-              <select
-                value={wantedLevelMax}
-                onChange={(e) => setWantedLevelMax(e.target.value)}
-                style={input}
-                disabled={saving}
-              >
-                <option value="">指定なし</option>
-                <option value="9">SS</option>
-                <option value="7">S</option>
-                <option value="5">A</option>
-                <option value="3">B</option>
-                <option value="1">C</option>
-              </select>
-            </label>
+              <label style={label}>
+                <span style={subLabelTitle}>上限</span>
+                <select
+                  value={wantedLevelMax}
+                  onChange={(e) => setWantedLevelMax(e.target.value)}
+                  style={input}
+                  disabled={saving}
+                >
+                  <option value="">指定なし</option>
+                  <option value="9">SS</option>
+                  <option value="7">S</option>
+                  <option value="5">A</option>
+                  <option value="3">B</option>
+                  <option value="1">C</option>
+                </select>
+              </label>
+            </div>
           </div>
 
           <div style={hintBox}>
@@ -577,24 +580,20 @@ function MatchCreatePageInner() {
             <div style={toggleRow}>
               <button
                 type="button"
+                className="sh-btn"
                 onClick={() => setVenueMode("existing")}
                 disabled={saving}
-                style={{
-                  ...modeButton,
-                  ...(venueMode === "existing" ? modeButtonActive : null),
-                }}
+                style={venueMode === "existing" ? activeModeBtn : undefined}
               >
                 既存から選ぶ
               </button>
 
               <button
                 type="button"
+                className="sh-btn"
                 onClick={() => setVenueMode("new")}
                 disabled={saving}
-                style={{
-                  ...modeButton,
-                  ...(venueMode === "new" ? modeButtonActive : null),
-                }}
+                style={venueMode === "new" ? activeModeBtn : undefined}
               >
                 新しく登録する
               </button>
@@ -702,66 +701,50 @@ const card: React.CSSProperties = {
   borderRadius: 20,
   background: "#fff",
   padding: 18,
+  boxSizing: "border-box",
+  overflow: "hidden",
 };
 
 const label: React.CSSProperties = {
   display: "grid",
   gap: 6,
+  minWidth: 0,
 };
 
 const labelTitle: React.CSSProperties = {
   fontWeight: 800,
   color: "#2d3b31",
-  fontSize: 16,
-  lineHeight: 1.4,
 };
 
-const labelTitleRow: React.CSSProperties = {
-  minHeight: 34,
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-};
-
-const labelTitleText: React.CSSProperties = {
+const subLabelTitle: React.CSSProperties = {
   fontWeight: 800,
   color: "#2d3b31",
-  fontSize: 16,
-  lineHeight: 1.4,
-  whiteSpace: "nowrap",
-};
-
-const helpButton: React.CSSProperties = {
-  width: 34,
-  height: 34,
-  borderRadius: 999,
-  border: "1px solid #b7dec0",
-  background: "#eef9f1",
-  color: "#1f7a37",
-  fontWeight: 900,
-  fontSize: 20,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  cursor: "pointer",
-  flexShrink: 0,
+  fontSize: 14,
 };
 
 const input: React.CSSProperties = {
+  width: "100%",
+  minWidth: 0,
+  maxWidth: "100%",
   padding: "10px 12px",
   borderRadius: 10,
   border: "1px solid #ddd",
   background: "white",
-  minHeight: 52,
-  fontSize: 16,
   boxSizing: "border-box",
-  width: "100%",
+  fontSize: 16,
 };
 
-const responsiveTwoCols: React.CSSProperties = {
+const stackCols: React.CSSProperties = {
   display: "grid",
   gap: 12,
-  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gridTemplateColumns: "minmax(0, 1fr)",
+};
+
+const strengthGrid: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  alignItems: "start",
 };
 
 const actionRow: React.CSSProperties = {
@@ -783,6 +766,7 @@ const hintBox: React.CSSProperties = {
   background: "#fafafa",
   color: "#374151",
   fontSize: 14,
+  lineHeight: 1.7,
 };
 
 const sectionBox: React.CSSProperties = {
@@ -792,6 +776,7 @@ const sectionBox: React.CSSProperties = {
   background: "#fafcfb",
   display: "grid",
   gap: 10,
+  boxSizing: "border-box",
 };
 
 const sectionTitle: React.CSSProperties = {
@@ -813,11 +798,11 @@ const chipWrap: React.CSSProperties = {
 };
 
 const chip: React.CSSProperties = {
-  padding: "10px 16px",
+  padding: "8px 12px",
   borderRadius: 999,
   border: "1px solid #d6eadb",
   background: "#fff",
-  color: "#145c2a",
+  color: "#23412c",
   fontWeight: 800,
   fontSize: 13,
   cursor: "pointer",
@@ -840,20 +825,49 @@ const toggleRow: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
-const modeButton: React.CSSProperties = {
-  minHeight: 52,
-  padding: "0 18px",
-  borderRadius: 999,
-  border: "1px solid #d6eadb",
-  background: "#fff",
-  color: "#145c2a",
-  fontWeight: 800,
-  fontSize: 14,
-  cursor: "pointer",
+const activeModeBtn: React.CSSProperties = {
+  borderColor: "#145c2a",
+  background: "#ecfdf3",
+  color: "#166534",
 };
 
-const modeButtonActive: React.CSSProperties = {
-  background: "#145c2a",
-  color: "#fff",
-  border: "1px solid #145c2a",
+const strengthHeader: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const strengthHeaderLeft: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const helpButton: React.CSSProperties = {
+  width: 36,
+  height: 36,
+  borderRadius: 999,
+  border: "1px solid #b7dcbf",
+  background: "#f3fbf5",
+  color: "#1f5d30",
+  fontSize: 20,
+  fontWeight: 900,
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 0,
+};
+
+const helpBox: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid #dce9df",
+  background: "#f7fbf8",
+  color: "#3b6a49",
+  fontSize: 13,
+  lineHeight: 1.7,
 };
