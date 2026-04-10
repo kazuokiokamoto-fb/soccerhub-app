@@ -70,7 +70,11 @@ export function Calendar(props: {
 
   return (
     <section style={{ ...card, marginTop: 14 }}>
-      <div style={topTitle}>{titleText}</div>
+      <div style={topHead}>
+        <div style={topHeadLeft}>
+          <div style={topTitle}>{titleText}</div>
+        </div>
+      </div>
 
       <div style={summaryBar}>
         <div style={summaryLeft}>
@@ -83,8 +87,9 @@ export function Calendar(props: {
               type="button"
               className="sh-btn"
               onClick={onOpenCalendarHelp}
+              disabled={loading}
             >
-              決・募・他 の見方
+              決・募・他とは
             </button>
           ) : null}
 
@@ -92,7 +97,7 @@ export function Calendar(props: {
             type="button"
             className="sh-btn sh-btn--primary"
             onClick={() => onCreateForDate(selectedYmd)}
-            disabled={disableCreate}
+            disabled={loading || disableCreate}
           >
             募集する
           </button>
@@ -133,18 +138,17 @@ export function Calendar(props: {
       </div>
 
       <div style={weekHeaderGrid}>
-        {weekLabels.map((w, i) => {
-          const weekendStyle: React.CSSProperties = {
-            ...weekLabel,
-            color: i === 5 ? "#2563eb" : i === 6 ? "#dc2626" : "#666666",
-          };
-
-          return (
-            <div key={w} style={weekendStyle}>
-              {w}
-            </div>
-          );
-        })}
+        {weekLabels.map((w, i) => (
+          <div
+            key={w}
+            style={{
+              ...weekLabel,
+              color: i === 5 ? "#2563eb" : i === 6 ? "#dc2626" : "#666666",
+            }}
+          >
+            {w}
+          </div>
+        ))}
       </div>
 
       <div style={calendarGrid}>
@@ -184,20 +188,18 @@ export function Calendar(props: {
           const ariaStatus = summary ? summaryLabel(summary) : "予定なし";
           const ariaCount = displayCount > 0 ? `${displayCount}件` : "0件";
 
-          const cellStyle: React.CSSProperties = {
-            ...calCell,
-            ...(isPast ? calCellPast : {}),
-            ...(isToday ? calCellToday : {}),
-            ...(isSelected ? calCellSelected : {}),
-            opacity: c.inMonth ? 1 : 0.42,
-          };
-
           return (
             <button
               key={c.ymd}
               type="button"
               onClick={() => onSelectDate(c.ymd)}
-              style={cellStyle}
+              style={{
+                ...calCell,
+                ...(isPast ? calCellPast : null),
+                ...(isToday ? calCellToday : null),
+                ...(isSelected ? calCellSelected : null),
+                opacity: c.inMonth ? 1 : 0.42,
+              }}
               aria-pressed={isSelected}
               aria-label={`${c.ymd} ${isToday ? "今日 " : ""}${ariaStatus} ${ariaCount}`}
             >
@@ -210,8 +212,6 @@ export function Calendar(props: {
                 >
                   {c.dayNum}
                 </div>
-
-                {isToday ? <div style={todayBadge}>今日</div> : null}
               </div>
 
               <div
@@ -253,10 +253,22 @@ const card: React.CSSProperties = {
   background: "#fff",
 };
 
+const topHead: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const topHeadLeft: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+};
+
 const topTitle: React.CSSProperties = {
   fontSize: 22,
   fontWeight: 900,
-  marginBottom: 8,
   color: "#16391f",
   lineHeight: 1.3,
 };
@@ -286,6 +298,8 @@ const summaryRight: React.CSSProperties = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
+  marginLeft: "auto",
+  justifyContent: "flex-end",
 };
 
 const legendRow: React.CSSProperties = {
@@ -403,18 +417,6 @@ const dayNumText: React.CSSProperties = {
   fontWeight: 900,
   fontSize: 13,
   lineHeight: 1,
-};
-
-const todayBadge: React.CSSProperties = {
-  fontSize: 9,
-  fontWeight: 900,
-  lineHeight: 1,
-  color: "#2563eb",
-  background: "#eff6ff",
-  border: "1px solid #bfdbfe",
-  borderRadius: 999,
-  padding: "3px 5px",
-  flexShrink: 0,
 };
 
 const statusText: React.CSSProperties = {
