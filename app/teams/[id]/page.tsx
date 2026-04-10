@@ -2,19 +2,37 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { categoryLabel, categoryLabels } from "@/app/lib/categories";
+import { useAuth } from "@/app/lib/auth";
+import AppHero from "@/app/components/AppHero";
+import AppTabNav from "@/app/components/AppTabNav";
+import { categoryLabel } from "@/app/lib/categories";
 
-type TeamOption = {
+type TeamRow = {
   id: string;
+  owner_id: string | null;
   name: string | null;
   category: string | null;
+  categories?: string[] | null;
+  level: number | null;
+  strength_rank?: string | null;
+  area: string | null;
+  prefecture?: string | null;
+  city?: string | null;
+  town?: string | null;
+  has_ground?: boolean | null;
+  bike_parking?: string | null;
+  bike_parking_capacity?: string | null;
+  member_count?: number | null;
+  uniform_main?: string | null;
+  uniform_sub?: string | null;
+  note?: string | null;
 };
 
-function levelToRankLabel(level?: number | null) {
+function levelToRank(level?: number | null) {
   const n = Number(level ?? 0);
-  if (!level && level !== 0) return "";
+  if (!Number.isFinite(n)) return "";
   if (n >= 9) return "SS";
   if (n >= 7) return "S";
   if (n >= 5) return "A";
@@ -22,658 +40,379 @@ function levelToRankLabel(level?: number | null) {
   return "C";
 }
 
-function buildCarryQuery(params: {
-  from?: string | null;
-  threadId?: string | null;
-  slotId?: string | null;
-  date?: string | null;
-}) {
-  const qs = new URLSearchParams();
-
-  if (params.from) qs.set("from", params.from);
-  if (params.threadId) qs.set("threadId", params.threadId);
-  if (params.slotId) qs.set("slotId", params.slotId);
-  if (params.date) qs.set("date", params.date);
-
-  return qs.toString();
+function teamStrengthLabel(team: TeamRow) {
+  if (team.strength_rank) return team.strength_rank;
+  return levelToRank(team.level);
 }
 
-function getBackLink(params: {
-  from?: string | null;
-  threadId?: string | null;
-  slotId?: string | null;
-  date?: string | null;
-}) {
-  const { from, threadId, slotId, date } = params;
-
-  switch (from) {
-    case "match-calendar": {
-      const qs = new URLSearchParams();
-      if (date) qs.set("date", date);
-      if (slotId) qs.set("slotId", slotId);
-
-      return {
-        href: qs.toString() ? `/match?${qs.toString()}` : "/match",
-        label: "← 試合を探すに戻る",
-      };
-    }
-
-    case "sent-offers":
-      return {
-        href: "/match/status/offers",
-        label: "← 送ったオファーへ",
-      };
-
-    case "received-offers":
-      return {
-        href: "/match/status/offers-received",
-        label: "← 届いたオファーへ",
-      };
-
-    case "chat-list":
-      return {
-        href: "/chat",
-        label: "← 一覧へ",
-      };
-
-    default:
-      if (threadId) {
-        const qs = new URLSearchParams();
-        if (from) qs.set("from", from);
-        if (slotId) qs.set("slotId", slotId);
-        if (date) qs.set("date", date);
-
-        return {
-          href: qs.toString() ? `/chat/${threadId}?${qs.toString()}` : `/chat/${threadId}`,
-          label: "← チャットへ戻る",
-        };
-      }
-
-      return {
-        href: "/teams/search",
-        label: "← チーム検索へ",
-      };
+function teamCategories(team: TeamRow) {
+  if (Array.isArray(team.categories) && team.categories.length > 0) {
+    return team.categories;
   }
+  if (team.category) {
+    return [team.category];
+  }
+  return [];
 }
 
-export default function TeamDetail() {
-  const params = useParams<{ id: string }>();
-  const id = params?.id;
-  const router = useRouter();
-  const searchParams = useSearchParams();
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
-  const threadId = searchParams.get("threadId") ?? "";
-  const from = searchParams.get("from");
-  const slotId = searchParams.get("slotId");
-  const date = searchParams.get("date");
+function toNullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
 
-  const carriedQueryString = useMemo(
-    () =>
-      buildCarryQuery({
-        from,
-        threadId,
-        slotId,
-        date,
-      }),
-    [from, threadId, slotId, date]
-  );
+function toNullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
 
-  const backLink = useMemo(
-    () =>
-      getBackLink({
-        from,
-        threadId,
-        slotId,
-        date,
-      }),
-    [from, threadId, slotId, date]
-  );
+function toNullableBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
 
-  const [team, setTeam] = useState<any>(null);
-  const [comment, setComment] = useState("");
+function toStringArrayOrNull(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((v): v is string => typeof v === "string");
+}
+
+function toTeamRow(value: unknown): TeamRow | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.id !== "string") return null;
+
+  return {
+    id: value.id,
+    owner_id: toNullableString(value.owner_id),
+    name: toNullableString(value.name),
+    category: toNullableString(value.category),
+    categories: toStringArrayOrNull(value.categories),
+    level: toNullableNumber(value.level),
+    strength_rank: toNullableString(value.strength_rank),
+    area: toNullableString(value.area),
+    prefecture: toNullableString(value.prefecture),
+    city: toNullableString(value.city),
+    town: toNullableString(value.town),
+    has_ground: toNullableBoolean(value.has_ground),
+    bike_parking: toNullableString(value.bike_parking),
+    bike_parking_capacity: toNullableString(value.bike_parking_capacity),
+    member_count: toNullableNumber(value.member_count),
+    uniform_main: toNullableString(value.uniform_main),
+    uniform_sub: toNullableString(value.uniform_sub),
+    note: toNullableString(value.note),
+  };
+}
+
+export default function TeamDetailPage() {
+  const params = useParams();
+  const { user, loading: authLoading } = useAuth();
+
+  const teamId = useMemo(() => {
+    const raw = params?.id;
+    if (typeof raw === "string") return raw;
+    if (Array.isArray(raw)) return raw[0] ?? "";
+    return "";
+  }, [params]);
+
+  const myUserId = user?.id ?? "";
+
   const [loading, setLoading] = useState(true);
-  const [requesting, setRequesting] = useState(false);
-  const [openingChat, setOpeningChat] = useState(false);
-
-  const [meId, setMeId] = useState("");
-  const [myTeams, setMyTeams] = useState<TeamOption[]>([]);
-  const [selectedMyTeamId, setSelectedMyTeamId] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [team, setTeam] = useState<TeamRow | null>(null);
 
   useEffect(() => {
-    load();
-  }, [id]);
+    let active = true;
 
-  async function load() {
-    if (!id) return;
-
-    setLoading(true);
-
-    try {
-      const { data: auth } = await supabase.auth.getUser();
-      const userId = auth?.user?.id ?? "";
-      setMeId(userId);
-
-      const { data, error } = await supabase
-        .from("teams")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (error) {
-        console.error(error);
+    const load = async () => {
+      if (!teamId) {
+        if (!active) return;
         setTeam(null);
-      } else {
-        setTeam(data);
+        setLoadError("チームIDが不正です");
+        setLoading(false);
+        return;
       }
 
-      if (userId) {
-        const { data: ownTeams, error: ownTeamsErr } = await supabase
+      setLoading(true);
+      setLoadError("");
+
+      try {
+        const { data, error } = await supabase
           .from("teams")
-          .select("id,name,category")
-          .eq("owner_id", userId)
-          .order("updated_at", { ascending: false });
+          .select(
+            [
+              "id",
+              "owner_id",
+              "name",
+              "category",
+              "categories",
+              "level",
+              "strength_rank",
+              "area",
+              "prefecture",
+              "city",
+              "town",
+              "has_ground",
+              "bike_parking",
+              "bike_parking_capacity",
+              "member_count",
+              "uniform_main",
+              "uniform_sub",
+              "note",
+            ].join(",")
+          )
+          .eq("id", teamId)
+          .maybeSingle();
 
-        if (ownTeamsErr) {
-          console.error(ownTeamsErr);
-          setMyTeams([]);
-          setSelectedMyTeamId("");
-        } else {
-          const rows = (ownTeams ?? []) as TeamOption[];
-          setMyTeams(rows);
-
-          const firstAvailable =
-            rows.find((t) => t.id !== id)?.id ?? rows[0]?.id ?? "";
-
-          setSelectedMyTeamId(firstAvailable);
-        }
-      } else {
-        setMyTeams([]);
-        setSelectedMyTeamId("");
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const categoryText = useMemo(() => {
-    if (!team) return "未設定";
-
-    if (Array.isArray(team.categories) && team.categories.length > 0) {
-      const labels = categoryLabels(team.categories);
-      return labels.length > 0 ? labels.join(" / ") : team.categories.join(" / ");
-    }
-
-    return categoryLabel(team.category) || team.category || "未設定";
-  }, [team]);
-
-  const strengthText = useMemo(() => {
-    if (!team) return "未設定";
-    if (team.strength_rank) return team.strength_rank;
-    const rank = levelToRankLabel(team.level);
-    return rank || team.level || "未設定";
-  }, [team]);
-
-  const memberCountText = useMemo(() => {
-    if (!team) return "不明";
-    if (team.roster_by_grade?.TOTAL != null) return team.roster_by_grade.TOTAL;
-    if (team.member_count != null) return team.member_count;
-    return "不明";
-  }, [team]);
-
-  const selectedMyTeam = useMemo(() => {
-    return myTeams.find((t) => t.id === selectedMyTeamId) ?? null;
-  }, [myTeams, selectedMyTeamId]);
-
-  async function openDirectChat() {
-    if (!id || !team || openingChat) return;
-
-    const { data: auth } = await supabase.auth.getUser();
-    const user = auth?.user;
-
-    if (!user) {
-      alert("ログインしてください");
-      return;
-    }
-
-    setOpeningChat(true);
-
-    try {
-      let myTeamId = selectedMyTeamId;
-
-      if (!myTeamId) {
-        const fallbackTeamId =
-          myTeams.find((t) => t.id !== id)?.id ?? myTeams[0]?.id ?? "";
-
-        myTeamId = fallbackTeamId;
-      }
-
-      if (!myTeamId) {
-        alert("先にチーム登録してください");
-        return;
-      }
-
-      if (myTeamId === id) {
-        alert("自分のチームとのチャットは開けません");
-        return;
-      }
-
-      const { data: createdThreadId, error: threadErr } = await supabase.rpc(
-        "rpc_get_or_create_dm_thread",
-        {
-          my_team_id: myTeamId,
-          other_team_id: id,
-        }
-      );
-
-      if (threadErr || !createdThreadId) {
-        console.error(threadErr);
-        alert(threadErr?.message ?? "チャットを開けませんでした");
-        return;
-      }
-
-      const nextQs = buildCarryQuery({
-        from: from ?? "chat-list",
-        threadId: null,
-        slotId,
-        date,
-      });
-
-      router.push(
-        nextQs ? `/chat/${createdThreadId}?${nextQs}` : `/chat/${createdThreadId}`
-      );
-    } catch (e: any) {
-      console.error(e);
-      alert(e?.message ?? "チャットを開けませんでした");
-    } finally {
-      setOpeningChat(false);
-    }
-  }
-
-  async function requestMatch() {
-    if (!id || !team) return;
-    if (requesting) return;
-
-    const { data: auth } = await supabase.auth.getUser();
-    const user = auth?.user;
-
-    if (!user) {
-      alert("ログインしてください");
-      return;
-    }
-
-    setRequesting(true);
-
-    try {
-      let myTeamId = selectedMyTeamId;
-
-      if (!myTeamId) {
-        const fallbackTeamId =
-          myTeams.find((t) => t.id !== id)?.id ?? myTeams[0]?.id ?? "";
-
-        myTeamId = fallbackTeamId;
-      }
-
-      if (!myTeamId) {
-        alert("先にチーム登録してください");
-        return;
-      }
-
-      const myTeam = myTeams.find((t) => t.id === myTeamId) ?? null;
-
-      if (!myTeam) {
-        alert("申込チームを選択してください");
-        return;
-      }
-
-      if (myTeam.id === id) {
-        alert("自分のチームには申込できません");
-        return;
-      }
-
-      const { data: slot, error: slotErr } = await supabase
-        .from("match_slots")
-        .select("id,date,start_time,end_time,category,area,area_text")
-        .eq("host_team_id", id)
-        .eq("is_closed", false)
-        .order("date", { ascending: true })
-        .order("start_time", { ascending: true })
-        .limit(1)
-        .single();
-
-      if (slotErr || !slot) {
-        alert("現在募集している試合がありません");
-        return;
-      }
-
-      const { data: existingReq } = await supabase
-        .from("match_requests")
-        .select("id,status")
-        .eq("slot_id", slot.id)
-        .eq("requester_team_id", myTeam.id)
-        .neq("status", "cancelled")
-        .maybeSingle();
-
-      if (existingReq) {
-        alert("この募集にはすでに申込済みです");
-        return;
-      }
-
-      const { data: request, error } = await supabase
-        .from("match_requests")
-        .insert({
-          slot_id: slot.id,
-          requester_team_id: myTeam.id,
-          requester_user_id: user.id,
-          status: "pending",
-          comment: comment.trim() || null,
-        })
-        .select()
-        .single();
-
-      if (error || !request) {
-        alert(error?.message ?? "試合申込に失敗しました");
-        return;
-      }
-
-      const { data: createdThreadId, error: threadErr } = await supabase.rpc(
-        "rpc_get_or_create_dm_thread",
-        {
-          my_team_id: myTeam.id,
-          other_team_id: id,
-        }
-      );
-
-      if (!threadErr && createdThreadId) {
-        const bodyLines = [
-          "【試合申込】",
-          `${slot.date} ${slot.start_time?.slice(0, 5)}-${slot.end_time?.slice(0, 5)}`,
-          `カテゴリ: ${categoryLabel(slot.category) || slot.category || "未設定"}`,
-          `エリア: ${slot.area_text ?? slot.area ?? "未設定"}`,
-          `申込チーム: ${myTeam.name ?? "未設定"}`,
-          `募集チーム: ${team.name ?? "未設定"}`,
-          comment.trim() ? `コメント: ${comment.trim()}` : "",
-        ].filter(Boolean);
-
-        const { error: msgErr } = await supabase.from("chat_messages").insert({
-          thread_id: createdThreadId,
-          sender_id: user.id,
-          sender_team_id: myTeam.id,
-          body: bodyLines.join("\n"),
-        });
-
-        if (msgErr) {
-          console.error(msgErr);
+        if (error) {
+          throw error;
         }
 
-        alert("試合申込しました");
+        if (!active) return;
 
-        const nextQs = buildCarryQuery({
-          from: from ?? "match-calendar",
-          threadId: null,
-          slotId: slot.id,
-          date: slot.date,
-        });
+        if (!data) {
+          setTeam(null);
+          setLoadError("チームが見つかりません");
+          return;
+        }
 
-        router.push(
-          nextQs ? `/chat/${createdThreadId}?${nextQs}` : `/chat/${createdThreadId}`
-        );
-        return;
+        const nextTeam = toTeamRow(data);
+        if (!nextTeam) {
+          setTeam(null);
+          setLoadError("チームデータの形式が不正です");
+          return;
+        }
+
+        setTeam(nextTeam);
+      } catch (e: any) {
+        console.error("[team detail] load error:", e);
+        if (!active) return;
+        setTeam(null);
+        setLoadError(e?.message ?? "チーム詳細の取得に失敗しました");
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
+    };
 
-      alert("試合申込しました");
-      router.push("/chat");
-    } catch (e: any) {
-      console.error(e);
-      alert(e?.message ?? "試合申込に失敗しました");
-    } finally {
-      setRequesting(false);
-    }
-  }
+    void load();
 
-  if (loading) {
-    return (
-      <main style={pageWrap}>
-        <div style={emptyBox}>読み込み中…</div>
-      </main>
-    );
-  }
+    return () => {
+      active = false;
+    };
+  }, [teamId]);
 
-  if (!team) {
-    return (
-      <main style={pageWrap}>
-        <div style={emptyBox}>チームが見つかりません</div>
-      </main>
-    );
-  }
-
-  const chatBackHref =
-    threadId
-      ? `/chat/${threadId}${carriedQueryString ? `?${carriedQueryString}` : ""}`
-      : "";
+  const mine = !!myUserId && !!team && team.owner_id === myUserId;
+  const categories = team ? teamCategories(team) : [];
 
   return (
-    <main style={pageWrap}>
+    <main style={{ maxWidth: 980, margin: "0 auto", padding: 16 }}>
+      <AppTabNav />
+
+      <AppHero
+        icon="👥"
+        title="チーム詳細"
+        desc="登録チームのプロフィールを確認できます。"
+      />
+
       <div style={topRow}>
-        <Link href={backLink.href} className="sh-btn sh-btn--primary">
-          {backLink.label}
+        <Link href="/teams" className="sh-btn">
+          ← チーム一覧へ戻る
         </Link>
 
-        {threadId ? (
-          <Link href={chatBackHref} className="sh-btn">
-            ← チャットへ戻る
+        {mine && team ? (
+          <Link href={`/teams/${team.id}/edit`} className="sh-btn sh-btn--primary">
+            チーム編集
           </Link>
         ) : null}
-
-        <Link href="/teams/search" className="sh-btn">
-          ← チーム検索へ
-        </Link>
-
-        <button
-          type="button"
-          onClick={openDirectChat}
-          className="sh-btn"
-          disabled={openingChat}
-        >
-          {openingChat ? "チャットを開いています…" : "チャットする"}
-        </button>
       </div>
 
-      <section style={heroBox}>
-        <div style={heroTitle}>{team.name}</div>
-        <div style={heroSub}>
-          {categoryText} / {strengthText}
-        </div>
-      </section>
-
-      <section style={card}>
-        <div style={rowItem}>📍 エリア：{team.area || "未設定"}</div>
-        <div style={rowItem}>🏷 カテゴリ：{categoryText}</div>
-        <div style={rowItem}>💪 強さ：{strengthText}</div>
-        <div style={rowItem}>
-          🚲 駐輪場：
-          {team.bike_parking || "不明"}
-          {team.bike_parking_capacity ? `（${team.bike_parking_capacity}）` : ""}
-        </div>
-        <div style={rowItem}>
-          👕 ユニフォーム：
-          {team.uniform_main || "-"} / {team.uniform_sub || "-"} / GK:{" "}
-          {team.uniform_gk || "-"}
-        </div>
-        <div style={rowItem}>👥 人数：{memberCountText}</div>
-        {team.note ? <div style={noteBox}>📝 {team.note}</div> : null}
-      </section>
-
-      <section style={requestCard}>
-        <div style={requestTitle}>このチームに試合申込</div>
-
-        <label style={fieldLabel}>
-          <span style={fieldTitle}>申込元チーム</span>
-          <select
-            value={selectedMyTeamId}
-            onChange={(e) => setSelectedMyTeamId(e.target.value)}
-            className="sh-select"
-            style={selectStyle}
-            disabled={requesting || myTeams.length === 0}
-          >
-            {myTeams.length === 0 ? (
-              <option value="">チーム未登録</option>
-            ) : (
-              myTeams
-                .filter((t) => t.id !== id)
-                .map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name ?? "チーム未設定"}
-                    {t.category
-                      ? `（${categoryLabel(t.category) || t.category}）`
-                      : ""}
-                  </option>
-                ))
-            )}
-          </select>
-        </label>
-
-        <textarea
-          placeholder="コメント（任意）"
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          className="sh-textarea"
-          style={commentStyle}
-          disabled={requesting}
-        />
-
-        <button
-          onClick={requestMatch}
-          className="sh-btn sh-btn--primary"
-          style={{ marginTop: 10 }}
-          disabled={requesting}
-        >
-          {requesting ? "申込中…" : "試合申込"}
-        </button>
-
-        {myTeams.length === 0 ? (
-          <div style={hintText}>
-            試合申込には、先に自分のチーム登録が必要です。
+      {loading || authLoading ? (
+        <div style={loadingBox}>読み込み中…</div>
+      ) : loadError ? (
+        <div style={errorBox}>
+          <div style={errorTitle}>読み込みエラー</div>
+          <div>{loadError}</div>
+          <div style={{ marginTop: 10 }}>
+            <button
+              type="button"
+              className="sh-btn sh-btn--primary"
+              onClick={() => window.location.reload()}
+            >
+              再読み込み
+            </button>
           </div>
-        ) : null}
+        </div>
+      ) : !team ? (
+        <div style={emptyBox}>
+          チームが見つかりませんでした。
+        </div>
+      ) : (
+        <section style={card}>
+          <div style={headRow}>
+            <div style={titleWrap}>
+              <div style={teamName}>{team.name || "チーム名未設定"}</div>
+              {mine ? <span style={mineBadge}>自分のチーム</span> : null}
+            </div>
 
-        {myTeams.length > 0 && !selectedMyTeam ? (
-          <div style={hintText}>
-            申込元に使う自分のチームを選択してください。
+            <div style={rankBadge}>
+              強さ {teamStrengthLabel(team) || "未設定"}
+            </div>
           </div>
-        ) : null}
-      </section>
+
+          <div style={metaGrid}>
+            <div style={metaRow}>
+              <strong>カテゴリ：</strong>
+              {categories.length > 0
+                ? categories.map((v) => categoryLabel(v) || v).join(" / ")
+                : "未設定"}
+            </div>
+
+            <div style={metaRow}>
+              <strong>エリア：</strong>
+              {[team.prefecture, team.city, team.town].filter(Boolean).join("・") ||
+                team.area ||
+                "未設定"}
+            </div>
+
+            <div style={metaRow}>
+              <strong>グラウンド：</strong>
+              {team.has_ground ? "あり" : "なし"}
+            </div>
+
+            <div style={metaRow}>
+              <strong>駐輪場：</strong>
+              {team.bike_parking || "不明"}
+              {team.bike_parking_capacity ? ` / ${team.bike_parking_capacity}` : ""}
+            </div>
+
+            <div style={metaRow}>
+              <strong>所属人数：</strong>
+              {team.member_count ?? "未設定"}
+            </div>
+
+            <div style={metaRow}>
+              <strong>ユニフォーム：</strong>
+              {[team.uniform_main, team.uniform_sub].filter(Boolean).join(" / ") ||
+                "未設定"}
+            </div>
+
+            <div style={metaRow}>
+              <strong>メモ：</strong>
+              {team.note || "未設定"}
+            </div>
+          </div>
+        </section>
+      )}
     </main>
   );
 }
 
-const pageWrap: React.CSSProperties = {
-  maxWidth: 760,
-  margin: "0 auto",
-  padding: 20,
-};
-
 const topRow: React.CSSProperties = {
+  marginTop: 12,
   display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
   gap: 10,
   flexWrap: "wrap",
-  marginBottom: 12,
 };
 
-const heroBox: React.CSSProperties = {
-  borderRadius: 18,
-  background: "linear-gradient(135deg, #1e7f3c 0%, #145c2a 100%)",
-  color: "#fff",
+const loadingBox: React.CSSProperties = {
+  marginTop: 14,
   padding: 20,
-  boxShadow: "0 10px 28px rgba(20,92,42,0.20)",
-};
-
-const heroTitle: React.CSSProperties = {
-  fontSize: 28,
-  fontWeight: 900,
-  lineHeight: 1.3,
-};
-
-const heroSub: React.CSSProperties = {
-  marginTop: 8,
-  color: "rgba(255,255,255,0.92)",
-  lineHeight: 1.7,
-  fontSize: 14,
-};
-
-const card: React.CSSProperties = {
-  marginTop: 16,
-  padding: 16,
   borderRadius: 16,
   border: "1px solid #e5ece7",
   background: "#fff",
-  display: "grid",
-  gap: 8,
+  color: "#666",
+  lineHeight: 1.8,
+  textAlign: "center",
 };
 
-const rowItem: React.CSSProperties = {
-  fontSize: 15,
+const errorBox: React.CSSProperties = {
+  marginTop: 14,
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: "1px solid #fecaca",
+  background: "#fef2f2",
+  color: "#991b1b",
   lineHeight: 1.7,
-  color: "#21342a",
 };
 
-const noteBox: React.CSSProperties = {
-  marginTop: 4,
-  padding: 12,
-  borderRadius: 12,
-  background: "#fafcfb",
-  border: "1px solid #edf1ee",
-  lineHeight: 1.7,
-  color: "#374151",
-};
-
-const requestCard: React.CSSProperties = {
-  marginTop: 16,
-  padding: 16,
-  borderRadius: 16,
-  border: "1px solid #e5ece7",
-  background: "#fff",
-};
-
-const requestTitle: React.CSSProperties = {
-  fontSize: 18,
+const errorTitle: React.CSSProperties = {
   fontWeight: 900,
-  color: "#16391f",
-  marginBottom: 10,
-};
-
-const fieldLabel: React.CSSProperties = {
-  display: "grid",
-  gap: 6,
-  marginBottom: 12,
-};
-
-const fieldTitle: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 800,
-  color: "#374151",
-};
-
-const selectStyle: React.CSSProperties = {
-  width: "100%",
-};
-
-const commentStyle: React.CSSProperties = {
-  minHeight: 110,
-};
-
-const hintText: React.CSSProperties = {
-  marginTop: 10,
-  fontSize: 13,
-  color: "#6b7280",
-  lineHeight: 1.7,
+  marginBottom: 4,
 };
 
 const emptyBox: React.CSSProperties = {
-  marginTop: 20,
-  textAlign: "center",
-  color: "#666",
-  padding: 24,
-  background: "#fff",
-  border: "1px solid #eee",
+  marginTop: 14,
+  padding: 20,
   borderRadius: 16,
+  border: "1px solid #e5ece7",
+  background: "#fff",
+  color: "#666",
+  lineHeight: 1.8,
+  textAlign: "center",
+};
+
+const card: React.CSSProperties = {
+  marginTop: 14,
+  padding: 18,
+  borderRadius: 18,
+  border: "1px solid #e5ece7",
+  background: "#fff",
+};
+
+const headRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const titleWrap: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const teamName: React.CSSProperties = {
+  fontSize: 24,
+  fontWeight: 900,
+  color: "#16391f",
+  lineHeight: 1.3,
+};
+
+const mineBadge: React.CSSProperties = {
+  display: "inline-block",
+  padding: "4px 8px",
+  borderRadius: 999,
+  background: "#ecfdf3",
+  color: "#166534",
+  fontSize: 12,
+  fontWeight: 900,
+  border: "1px solid #bbf7d0",
+};
+
+const rankBadge: React.CSSProperties = {
+  display: "inline-block",
+  padding: "6px 10px",
+  borderRadius: 999,
+  background: "#eef6f0",
+  color: "#14532d",
+  fontSize: 13,
+  fontWeight: 900,
+  border: "1px solid #dce9df",
+};
+
+const metaGrid: React.CSSProperties = {
+  marginTop: 16,
+  display: "grid",
+  gap: 10,
+};
+
+const metaRow: React.CSSProperties = {
+  color: "#374151",
+  lineHeight: 1.8,
+  fontSize: 15,
 };
