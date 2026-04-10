@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
@@ -36,27 +36,6 @@ type ThreadRow = {
 
   isUnread?: boolean;
 };
-
-async function withTimeout<T>(
-  fn: () => PromiseLike<T>,
-  ms: number,
-  label: string
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-
-  try {
-    return await Promise.race<T>([
-      Promise.resolve(fn()),
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => {
-          reject(new Error(`${label} timeout (${ms}ms)`));
-        }, ms);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
 
 function clip(s?: string | null, n = 42) {
   const v = (s ?? "").trim();
@@ -115,9 +94,11 @@ export default function ChatListPage() {
   const [loadError, setLoadError] = useState("");
 
   const meId = user?.id ?? "";
+  const loadingRef = useRef(false);
 
   const loadThreads = useCallback(async () => {
     if (authLoading) return;
+    if (loadingRef.current) return;
 
     if (!meId) {
       setThreads([]);
@@ -126,15 +107,15 @@ export default function ChatListPage() {
       return;
     }
 
+    loadingRef.current = true;
     setLoading(true);
     setLoadError("");
 
     try {
-      const myTeamsRes = await withTimeout(
-        () => supabase.from("teams").select("id").eq("owner_id", meId),
-        12000,
-        "chat: my teams"
-      );
+      const myTeamsRes = await supabase
+        .from("teams")
+        .select("id")
+        .eq("owner_id", meId);
 
       if (myTeamsRes.error) {
         throw myTeamsRes.error;
@@ -146,17 +127,12 @@ export default function ChatListPage() {
           .filter(Boolean)
       );
 
-      const myMemberRes = await withTimeout(
-        () =>
-          supabase
-            .from("chat_members")
-            .select("thread_id,last_read_at,created_at")
-            .eq("user_id", meId)
-            .order("created_at", { ascending: false })
-            .limit(200),
-        12000,
-        "chat: my memberships"
-      );
+      const myMemberRes = await supabase
+        .from("chat_members")
+        .select("thread_id,last_read_at,created_at")
+        .eq("user_id", meId)
+        .order("created_at", { ascending: false })
+        .limit(200);
 
       if (myMemberRes.error) {
         throw myMemberRes.error;
@@ -183,32 +159,23 @@ export default function ChatListPage() {
       if (threadIds.length === 0) {
         setThreads([]);
         setLoading(false);
+        loadingRef.current = false;
         return;
       }
 
-      const thRes = await withTimeout(
-        () =>
-          supabase
-            .from("chat_threads")
-            .select("id,created_at,updated_at")
-            .in("id", threadIds),
-        12000,
-        "chat: threads"
-      );
+      const thRes = await supabase
+        .from("chat_threads")
+        .select("id,created_at,updated_at")
+        .in("id", threadIds);
 
       if (thRes.error) {
         throw thRes.error;
       }
 
-      const membersRes = await withTimeout(
-        () =>
-          supabase
-            .from("chat_members")
-            .select("thread_id,team_id")
-            .in("thread_id", threadIds),
-        12000,
-        "chat: thread members"
-      );
+      const membersRes = await supabase
+        .from("chat_members")
+        .select("thread_id,team_id")
+        .in("thread_id", threadIds);
 
       if (membersRes.error) {
         throw membersRes.error;
@@ -236,15 +203,10 @@ export default function ChatListPage() {
       const teamMap = new Map<string, TeamMini>();
 
       if (uniqTeamIds.length > 0) {
-        const teamRes = await withTimeout(
-          () =>
-            supabase
-              .from("teams")
-              .select("id,name,category")
-              .in("id", uniqTeamIds),
-          12000,
-          "chat: team map"
-        );
+        const teamRes = await supabase
+          .from("teams")
+          .select("id,name,category")
+          .in("id", uniqTeamIds);
 
         if (teamRes.error) {
           throw teamRes.error;
@@ -266,17 +228,12 @@ export default function ChatListPage() {
       const lastMsgByThread = new Map<string, LastMsgMini>();
       const limit = Math.min(3000, Math.max(500, threadIds.length * 60));
 
-      const msgRes = await withTimeout(
-        () =>
-          supabase
-            .from("chat_messages")
-            .select("thread_id,body,created_at")
-            .in("thread_id", threadIds)
-            .order("created_at", { ascending: false })
-            .limit(limit),
-        12000,
-        "chat: last messages"
-      );
+      const msgRes = await supabase
+        .from("chat_messages")
+        .select("thread_id,body,created_at")
+        .in("thread_id", threadIds)
+        .order("created_at", { ascending: false })
+        .limit(limit);
 
       if (msgRes.error) {
         throw msgRes.error;
@@ -349,16 +306,19 @@ export default function ChatListPage() {
 
         const at = a.lastMessageAt ?? a.updated_at ?? a.created_at ?? "";
         const bt = b.lastMessageAt ?? b.updated_at ?? b.created_at ?? "";
+        if (at === bt) return 0;
         return at > bt ? -1 : 1;
       });
 
       setThreads(merged);
+      setLoadError("");
     } catch (e: any) {
       console.error("chat page load error:", e);
       setThreads([]);
       setLoadError(e?.message ?? "チャット一覧の取得に失敗しました");
     } finally {
       setLoading(false);
+      loadingRef.current = false;
     }
   }, [authLoading, meId]);
 
@@ -392,22 +352,23 @@ export default function ChatListPage() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "chat_members" },
-        () => void loadThreads()
+        () => {
+          void loadThreads();
+        }
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "chat_messages" },
-        () => void loadThreads()
+        () => {
+          void loadThreads();
+        }
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "chat_threads" },
-        () => void loadThreads()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "teams" },
-        () => void loadThreads()
+        () => {
+          void loadThreads();
+        }
       )
       .subscribe();
 
