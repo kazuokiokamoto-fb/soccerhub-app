@@ -1070,11 +1070,11 @@ export default function HomeCalendar() {
   }, [selectedYmd, slotsOnSelectedDate.length]);
 
   const totalTeamCountText = useMemo(() => {
-    return `登録チーム総数：${allTeams.length}件`;
+    return `登録チーム数：${allTeams.length}件`;
   }, [allTeams.length]);
 
   const totalSlotCountText = useMemo(() => {
-    return `練習試合募集総数：${slotsInMonth.length}件`;
+    return `試合募集数：${slotsInMonth.length}件`;
   }, [slotsInMonth.length]);
 
   const showCriticalError =
@@ -1110,12 +1110,12 @@ export default function HomeCalendar() {
         </div>
       ) : null}
 
-      <section style={summaryBox}>
-        <div style={summaryTotalWrap}>
-          <div style={summaryTotalText}>{totalTeamCountText}</div>
-          <div style={summaryTotalText}>{totalSlotCountText}</div>
-        </div>
+      <section style={summaryStatsBox}>
+        <div style={summaryStatsText}>{totalTeamCountText}</div>
+        <div style={summaryStatsText}>{totalSlotCountText}</div>
+      </section>
 
+      <section style={summaryBox}>
         <div style={summaryHead}>
           <div style={summaryTextWrap}>
             <div style={summaryTitle}>チーム条件で探す</div>
@@ -1291,24 +1291,25 @@ const errorTitle: React.CSSProperties = {
   marginBottom: 4,
 };
 
-const summaryBox: React.CSSProperties = {
+const summaryStatsBox: React.CSSProperties = {
   marginTop: 2,
-  padding: "14px 16px",
-  borderRadius: 16,
-  border: "1px solid #dce9df",
-  background: "#f7fbf8",
-};
-
-const summaryTotalWrap: React.CSSProperties = {
   display: "grid",
   gap: 4,
 };
 
-const summaryTotalText: React.CSSProperties = {
+const summaryStatsText: React.CSSProperties = {
   fontSize: 16,
   fontWeight: 800,
   color: "#14532d",
   lineHeight: 1.5,
+};
+
+const summaryBox: React.CSSProperties = {
+  marginTop: 0,
+  padding: "14px 16px",
+  borderRadius: 16,
+  border: "1px solid #dce9df",
+  background: "#f7fbf8",
 };
 
 const summaryHead: React.CSSProperties = {
@@ -1317,7 +1318,6 @@ const summaryHead: React.CSSProperties = {
   alignItems: "flex-end",
   gap: 12,
   flexWrap: "wrap",
-  marginTop: 10,
 };
 
 const summaryTextWrap: React.CSSProperties = {
