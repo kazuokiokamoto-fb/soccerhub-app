@@ -383,7 +383,7 @@ export default function MyPage() {
   const [nextMatch, setNextMatch] = useState<NextMatchCard | null>(null);
 
   const loadRunningRef = useRef(false);
-  const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
 
   const me = useMemo(
     () =>
@@ -405,6 +405,7 @@ export default function MyPage() {
     loadRunningRef.current = true;
 
     if (!user) {
+      if (!mountedRef.current) return;
       setProfile(null);
       setTeams([]);
       setOpenCount(0);
@@ -418,8 +419,10 @@ export default function MyPage() {
       return;
     }
 
-    setLoading(true);
-    setLoadError("");
+    if (mountedRef.current) {
+      setLoading(true);
+      setLoadError("");
+    }
 
     try {
       const userId = user.id;
@@ -444,7 +447,9 @@ export default function MyPage() {
       if (profileErr) {
         console.error("[mypage] profile error:", profileErr);
       }
-      setProfile(toProfileRow(profileRaw));
+      if (mountedRef.current) {
+        setProfile(toProfileRow(profileRaw));
+      }
 
       let loadedTeams: TeamRow[] = [];
 
@@ -468,17 +473,21 @@ export default function MyPage() {
         loadedTeams = toArray(primaryTeamsRes.data, toTeamRow);
       }
 
-      setTeams(loadedTeams);
+      if (mountedRef.current) {
+        setTeams(loadedTeams);
+      }
 
       const myTeamIds = loadedTeams.map((t) => t.id).filter(Boolean);
 
       if (myTeamIds.length === 0) {
-        setOpenCount(0);
-        setReceivedOfferCount(0);
-        setSentOfferCount(0);
-        setUnreadTotal(0);
-        setNextMatch(null);
-        setLoading(false);
+        if (mountedRef.current) {
+          setOpenCount(0);
+          setReceivedOfferCount(0);
+          setSentOfferCount(0);
+          setUnreadTotal(0);
+          setNextMatch(null);
+          setLoading(false);
+        }
         loadRunningRef.current = false;
         return;
       }
@@ -497,7 +506,9 @@ export default function MyPage() {
       const mySlotRows = toArray(mySlotsRaw, toMatchSlotRow);
       const mySlotIds = mySlotRows.map((s) => s.id).filter(Boolean);
 
-      setOpenCount(mySlotRows.filter((s) => !s.is_closed).length);
+      if (mountedRef.current) {
+        setOpenCount(mySlotRows.filter((s) => !s.is_closed).length);
+      }
 
       const outgoingReqPromise = supabase
         .from("match_requests")
@@ -552,9 +563,7 @@ export default function MyPage() {
       if (outgoingReqErr) console.error("[mypage] outgoingReq error:", outgoingReqErr);
       if (incomingReqErr) console.error("[mypage] incomingReq error:", incomingReqErr);
       if (sentOffersErr) console.error("[mypage] sentOffers error:", sentOffersErr);
-      if (receivedOffersErr) {
-        console.error("[mypage] receivedOffers error:", receivedOffersErr);
-      }
+      if (receivedOffersErr) console.error("[mypage] receivedOffers error:", receivedOffersErr);
       if (memberErr) console.error("[mypage] chat_members error:", memberErr);
 
       const outgoingRequestRows = toArray(outgoingRequestsRaw, toMatchRequestRow);
@@ -573,8 +582,10 @@ export default function MyPage() {
         sentOfferRows.filter((o) => o.status === "pending").length +
         outgoingRequestRows.filter((r) => r.status === "pending").length;
 
-      setReceivedOfferCount(pendingReceivedOffers);
-      setSentOfferCount(pendingSentOffers);
+      if (mountedRef.current) {
+        setReceivedOfferCount(pendingReceivedOffers);
+        setSentOfferCount(pendingSentOffers);
+      }
 
       const myMemberRows = toArray(memberRowsRaw, toChatMemberRow);
       const threadIds = myMemberRows.map((r) => r.thread_id).filter(Boolean);
@@ -589,7 +600,7 @@ export default function MyPage() {
 
         if (msgErr) {
           console.error("[mypage] chat_messages error:", msgErr);
-          setUnreadTotal(0);
+          if (mountedRef.current) setUnreadTotal(0);
         } else {
           const messages = toArray(msgRowsRaw, toChatMessageRow);
           const latestByThread = new Map<string, ChatMessageRow>();
@@ -618,10 +629,14 @@ export default function MyPage() {
             }
           }
 
-          setUnreadTotal(unread);
+          if (mountedRef.current) {
+            setUnreadTotal(unread);
+          }
         }
       } else {
-        setUnreadTotal(0);
+        if (mountedRef.current) {
+          setUnreadTotal(0);
+        }
       }
 
       const acceptedOutgoingRequestSlotIds = outgoingRequestRows
@@ -663,7 +678,7 @@ export default function MyPage() {
 
         if (acceptedSlotsErr) {
           console.error("[mypage] acceptedSlots error:", acceptedSlotsErr);
-          setNextMatch(null);
+          if (mountedRef.current) setNextMatch(null);
         } else {
           const acceptedSlots = toArray(acceptedSlotsRaw, toMatchSlotRow);
           const now = Date.now();
@@ -678,37 +693,48 @@ export default function MyPage() {
 
           if (futureSlots.length > 0) {
             const s = futureSlots[0];
-            setNextMatch({
-              date: s.date,
-              start_time: s.start_time,
-              end_time: s.end_time,
-              area: s.area,
-              area_text: s.area_text,
-              category: s.category,
-              slot_id: s.id,
-            });
+            if (mountedRef.current) {
+              setNextMatch({
+                date: s.date,
+                start_time: s.start_time,
+                end_time: s.end_time,
+                area: s.area,
+                area_text: s.area_text,
+                category: s.category,
+                slot_id: s.id,
+              });
+            }
           } else {
-            setNextMatch(null);
+            if (mountedRef.current) setNextMatch(null);
           }
         }
       } else {
-        setNextMatch(null);
+        if (mountedRef.current) setNextMatch(null);
       }
     } catch (e: any) {
       console.error("[mypage] load error:", e);
-      setLoadError(e?.message ?? "マイページの取得に失敗しました");
-      setToast({
-        type: "error",
-        text: e?.message ?? "マイページの取得に失敗しました",
-      });
+      if (mountedRef.current) {
+        setLoadError(e?.message ?? "マイページの取得に失敗しました");
+        setToast({
+          type: "error",
+          text: e?.message ?? "マイページの取得に失敗しました",
+        });
+      }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
       loadRunningRef.current = false;
     }
   }, [authLoading, user]);
 
   useEffect(() => {
+    mountedRef.current = true;
     void load();
+
+    return () => {
+      mountedRef.current = false;
+    };
   }, [load]);
 
   useEffect(() => {
@@ -716,78 +742,6 @@ export default function MyPage() {
     const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        void load();
-      }
-    };
-
-    window.addEventListener("focus", onVisible);
-    document.addEventListener("visibilitychange", onVisible);
-
-    return () => {
-      window.removeEventListener("focus", onVisible);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [user?.id, load]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const triggerReload = () => {
-      if (reloadTimerRef.current) {
-        clearTimeout(reloadTimerRef.current);
-      }
-      reloadTimerRef.current = setTimeout(() => {
-        void load();
-      }, 500);
-    };
-
-    const channel = supabase
-      .channel(`mypage-${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "teams" },
-        triggerReload
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "match_slots" },
-        triggerReload
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "match_requests" },
-        triggerReload
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "match_offers" },
-        triggerReload
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "chat_members" },
-        triggerReload
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "chat_messages" },
-        triggerReload
-      )
-      .subscribe();
-
-    return () => {
-      if (reloadTimerRef.current) {
-        clearTimeout(reloadTimerRef.current);
-      }
-      void supabase.removeChannel(channel);
-    };
-  }, [user?.id, load]);
 
   async function existsRow(table: string, column: string, teamId: string) {
     const res = await supabase

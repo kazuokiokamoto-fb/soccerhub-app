@@ -13,7 +13,20 @@ type TeamMini = {
   category?: string | null;
 };
 
-type LastMsgMini = {
+type ThreadSummary = {
+  id: string;
+  created_at: string;
+  updated_at: string | null;
+};
+
+type ChatMemberRow = {
+  thread_id: string;
+  team_id: string | null;
+  last_read_at?: string | null;
+  created_at?: string | null;
+};
+
+type ChatMessageRow = {
   thread_id: string;
   body: string | null;
   created_at: string;
@@ -23,19 +36,84 @@ type ThreadRow = {
   id: string;
   created_at: string;
   updated_at: string | null;
-
   memberTeamIds: string[];
   myLastReadAt?: string | null;
-
   otherTeamId?: string | null;
   otherTeamName?: string | null;
   otherTeamCategory?: string | null;
-
   lastMessageBody?: string | null;
   lastMessageAt?: string | null;
-
   isUnread?: boolean;
 };
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function asNullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function toArray<T>(value: unknown, mapper: (v: unknown) => T | null): T[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(mapper).filter((v): v is T => v !== null);
+}
+
+function toTeamMini(value: unknown): TeamMini | null {
+  const r = asRecord(value);
+  if (!r) return null;
+  const id = asString(r.id);
+  if (!id) return null;
+  return {
+    id,
+    name: asNullableString(r.name),
+    category: asNullableString(r.category),
+  };
+}
+
+function toThreadSummary(value: unknown): ThreadSummary | null {
+  const r = asRecord(value);
+  if (!r) return null;
+  const id = asString(r.id);
+  const created_at = asString(r.created_at);
+  if (!id || !created_at) return null;
+  return {
+    id,
+    created_at,
+    updated_at: asNullableString(r.updated_at),
+  };
+}
+
+function toChatMemberRow(value: unknown): ChatMemberRow | null {
+  const r = asRecord(value);
+  if (!r) return null;
+  const thread_id = asString(r.thread_id);
+  if (!thread_id) return null;
+  return {
+    thread_id,
+    team_id: asNullableString(r.team_id),
+    last_read_at: asNullableString(r.last_read_at),
+    created_at: asNullableString(r.created_at),
+  };
+}
+
+function toChatMessageRow(value: unknown): ChatMessageRow | null {
+  const r = asRecord(value);
+  if (!r) return null;
+  const thread_id = asString(r.thread_id);
+  const created_at = asString(r.created_at);
+  if (!thread_id || !created_at) return null;
+  return {
+    thread_id,
+    body: asNullableString(r.body),
+    created_at,
+  };
+}
 
 function clip(s?: string | null, n = 42) {
   const v = (s ?? "").trim();
@@ -93,14 +171,17 @@ export default function ChatListPage() {
   const [threads, setThreads] = useState<ThreadRow[]>([]);
   const [loadError, setLoadError] = useState("");
 
-  const meId = user?.id ?? "";
+  const mountedRef = useRef(true);
   const loadingRef = useRef(false);
+
+  const meId = user?.id ?? "";
 
   const loadThreads = useCallback(async () => {
     if (authLoading) return;
     if (loadingRef.current) return;
 
     if (!meId) {
+      if (!mountedRef.current) return;
       setThreads([]);
       setLoadError("");
       setLoading(false);
@@ -108,8 +189,11 @@ export default function ChatListPage() {
     }
 
     loadingRef.current = true;
-    setLoading(true);
-    setLoadError("");
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setLoadError("");
+    }
 
     try {
       const myTeamsRes = await supabase
@@ -117,14 +201,14 @@ export default function ChatListPage() {
         .select("id")
         .eq("owner_id", meId);
 
-      if (myTeamsRes.error) {
-        throw myTeamsRes.error;
-      }
+      if (myTeamsRes.error) throw myTeamsRes.error;
 
       const myTeamIds = new Set<string>(
-        ((myTeamsRes.data ?? []) as Array<{ id: string }>)
-          .map((r) => r.id)
-          .filter(Boolean)
+        toArray(myTeamsRes.data, (v) => {
+          const r = asRecord(v);
+          const id = r ? asString(r.id) : "";
+          return id || null;
+        })
       );
 
       const myMemberRes = await supabase
@@ -134,15 +218,9 @@ export default function ChatListPage() {
         .order("created_at", { ascending: false })
         .limit(200);
 
-      if (myMemberRes.error) {
-        throw myMemberRes.error;
-      }
+      if (myMemberRes.error) throw myMemberRes.error;
 
-      const myMemberRows = (myMemberRes.data ?? []) as Array<{
-        thread_id: string;
-        last_read_at?: string | null;
-        created_at?: string | null;
-      }>;
+      const myMemberRows = toArray(myMemberRes.data, toChatMemberRow);
 
       const threadIds = Array.from(
         new Set(myMemberRows.map((r) => r.thread_id).filter(Boolean))
@@ -150,13 +228,13 @@ export default function ChatListPage() {
 
       const myLastReadMap = new Map<string, string | null>();
       for (const r of myMemberRows) {
-        if (!r?.thread_id) continue;
         if (!myLastReadMap.has(r.thread_id)) {
           myLastReadMap.set(r.thread_id, r.last_read_at ?? null);
         }
       }
 
       if (threadIds.length === 0) {
+        if (!mountedRef.current) return;
         setThreads([]);
         setLoading(false);
         loadingRef.current = false;
@@ -168,26 +246,21 @@ export default function ChatListPage() {
         .select("id,created_at,updated_at")
         .in("id", threadIds);
 
-      if (thRes.error) {
-        throw thRes.error;
-      }
+      if (thRes.error) throw thRes.error;
 
       const membersRes = await supabase
         .from("chat_members")
         .select("thread_id,team_id")
         .in("thread_id", threadIds);
 
-      if (membersRes.error) {
-        throw membersRes.error;
-      }
+      if (membersRes.error) throw membersRes.error;
+
+      const memberRows = toArray(membersRes.data, toChatMemberRow);
 
       const memberTeamsByThread = new Map<string, string[]>();
       const allTeamIds: string[] = [];
 
-      for (const r of ((membersRes.data ?? []) as Array<{
-        thread_id: string;
-        team_id: string | null;
-      }>)) {
+      for (const r of memberRows) {
         const tid = r.thread_id;
         const teamId = r.team_id ?? "";
         if (!tid || !teamId) continue;
@@ -208,59 +281,34 @@ export default function ChatListPage() {
           .select("id,name,category")
           .in("id", uniqTeamIds);
 
-        if (teamRes.error) {
-          throw teamRes.error;
-        }
+        if (teamRes.error) throw teamRes.error;
 
-        for (const t of ((teamRes.data ?? []) as Array<{
-          id: string;
-          name: string | null;
-          category?: string | null;
-        }>)) {
-          teamMap.set(t.id, {
-            id: t.id,
-            name: t.name ?? null,
-            category: t.category ?? null,
-          });
+        for (const t of toArray(teamRes.data, toTeamMini)) {
+          teamMap.set(t.id, t);
         }
       }
-
-      const lastMsgByThread = new Map<string, LastMsgMini>();
-      const limit = Math.min(3000, Math.max(500, threadIds.length * 60));
 
       const msgRes = await supabase
         .from("chat_messages")
         .select("thread_id,body,created_at")
         .in("thread_id", threadIds)
         .order("created_at", { ascending: false })
-        .limit(limit);
+        .limit(1000);
 
-      if (msgRes.error) {
-        throw msgRes.error;
-      }
+      if (msgRes.error) throw msgRes.error;
 
-      for (const m of ((msgRes.data ?? []) as Array<{
-        thread_id: string;
-        body: string | null;
-        created_at: string;
-      }>)) {
-        const tid = m.thread_id;
-        if (!tid) continue;
+      const messageRows = toArray(msgRes.data, toChatMessageRow);
+      const lastMsgByThread = new Map<string, ChatMessageRow>();
 
-        if (!lastMsgByThread.has(tid)) {
-          lastMsgByThread.set(tid, {
-            thread_id: tid,
-            body: m.body ?? null,
-            created_at: m.created_at,
-          });
+      for (const m of messageRows) {
+        if (!lastMsgByThread.has(m.thread_id)) {
+          lastMsgByThread.set(m.thread_id, m);
         }
       }
 
-      const merged: ThreadRow[] = ((thRes.data ?? []) as Array<{
-        id: string;
-        created_at: string;
-        updated_at: string | null;
-      }>).map((t) => {
+      const threadRows = toArray(thRes.data, toThreadSummary);
+
+      const merged: ThreadRow[] = threadRows.map((t) => {
         const tid = t.id;
         const memberTeamIds = memberTeamsByThread.get(tid) ?? [];
 
@@ -306,76 +354,32 @@ export default function ChatListPage() {
 
         const at = a.lastMessageAt ?? a.updated_at ?? a.created_at ?? "";
         const bt = b.lastMessageAt ?? b.updated_at ?? b.created_at ?? "";
-        if (at === bt) return 0;
         return at > bt ? -1 : 1;
       });
 
+      if (!mountedRef.current) return;
       setThreads(merged);
-      setLoadError("");
     } catch (e: any) {
       console.error("chat page load error:", e);
-      setThreads([]);
+      if (!mountedRef.current) return;
+
       setLoadError(e?.message ?? "チャット一覧の取得に失敗しました");
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
       loadingRef.current = false;
     }
   }, [authLoading, meId]);
 
   useEffect(() => {
+    mountedRef.current = true;
     void loadThreads();
+
+    return () => {
+      mountedRef.current = false;
+    };
   }, [loadThreads]);
-
-  useEffect(() => {
-    if (!meId) return;
-
-    const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        void loadThreads();
-      }
-    };
-
-    window.addEventListener("focus", onVisible);
-    document.addEventListener("visibilitychange", onVisible);
-
-    return () => {
-      window.removeEventListener("focus", onVisible);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [meId, loadThreads]);
-
-  useEffect(() => {
-    if (!meId) return;
-
-    const channel = supabase
-      .channel(`chat-list-${meId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "chat_members" },
-        () => {
-          void loadThreads();
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "chat_messages" },
-        () => {
-          void loadThreads();
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "chat_threads" },
-        () => {
-          void loadThreads();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [meId, loadThreads]);
 
   const unreadTotal = useMemo(() => {
     return threads.reduce((sum, t) => sum + (t.isUnread ? 1 : 0), 0);
