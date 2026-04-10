@@ -477,14 +477,14 @@ export default function HomeCalendar() {
     const grouped = new Map<string, any[]>();
 
     for (const slot of filteredSlotsInMonth) {
-      const ymd = slot.date;
-      if (!grouped.has(ymd)) grouped.set(ymd, []);
-      grouped.get(ymd)!.push(slot);
+      const day = slot.date;
+      if (!grouped.has(day)) grouped.set(day, []);
+      grouped.get(day)!.push(slot);
     }
 
     const result = new Map<string, DayCalendarSummary>();
 
-    for (const [ymd, daySlots] of grouped.entries()) {
+    for (const [day, daySlots] of grouped.entries()) {
       let decidedCount = 0;
       let openCount = 0;
       let otherCount = 0;
@@ -497,19 +497,19 @@ export default function HomeCalendar() {
       }
 
       if (decidedCount > 0) {
-        result.set(ymd, {
+        result.set(day, {
           label: "決",
           count: decidedCount,
           tone: "decided",
         });
       } else if (openCount > 0) {
-        result.set(ymd, {
+        result.set(day, {
           label: "募",
           count: openCount,
           tone: "open",
         });
       } else if (otherCount > 0) {
-        result.set(ymd, {
+        result.set(day, {
           label: "他",
           count: otherCount,
           tone: "other",
@@ -550,15 +550,21 @@ export default function HomeCalendar() {
   const monthKey = useMemo(() => toMonthKey(monthDate), [monthDate]);
 
   useEffect(() => {
-    const currentCount = slotsOnSelectedDate.length;
-    if (currentCount > 0) return;
+    const selectedMonthKey = toMonthKey(monthDate);
+    const today = ymdToday();
+    const todayMonthKey = today.slice(0, 7);
 
-    const firstAvailable = filteredSlotsInMonth[0]?.date;
-    if (firstAvailable) {
-      setSelectedYmd(firstAvailable);
-      setMonthDate(startOfMonth(new Date(firstAvailable)));
+    if (selectedYmd.startsWith(selectedMonthKey)) {
+      return;
     }
-  }, [filteredSlotsInMonth, slotsOnSelectedDate]);
+
+    if (selectedMonthKey === todayMonthKey) {
+      setSelectedYmd(today);
+      return;
+    }
+
+    setSelectedYmd(firstDayYmdOfMonth(monthDate));
+  }, [monthDate, selectedYmd]);
 
   const scrollToCalendar = () => {
     setTimeout(() => {
@@ -1071,13 +1077,23 @@ export default function HomeCalendar() {
     return filterSummaryText;
   }, [filterSummaryText]);
 
+  const showCriticalError =
+    (baseError && baseError.includes("teams:")) ||
+    (monthError && monthError.includes("match_slots:"));
+
   return (
     <section style={wrap} ref={homeTopRef}>
-      {baseError || monthError ? (
+      {showCriticalError ? (
         <div style={errorBox}>
           <div style={errorTitle}>読み込みエラー</div>
-          {baseError ? <div>基礎データ: {baseError}</div> : null}
-          {monthError ? <div>月データ: {monthError}</div> : null}
+
+          {baseError && baseError.includes("teams:") ? (
+            <div>基礎データ: {baseError}</div>
+          ) : null}
+
+          {monthError && monthError.includes("match_slots:") ? (
+            <div>月データ: {monthError}</div>
+          ) : null}
 
           <div style={{ marginTop: 10 }}>
             <button
@@ -1100,13 +1116,6 @@ export default function HomeCalendar() {
             <div style={summaryTitle}>チーム条件で探す</div>
             <div style={hitCountText}>{topHitText}</div>
             <div style={summaryCount}>表示条件：{topConditionText}</div>
-            <div style={debugText}>
-              raw teams: {allTeams.length} / myTeams: {myTeams.length} / raw
-              slots: {slotsInMonth.length} / raw reqs: {requestsForMonth.length}
-              <br />
-              filtered teams: {filteredTeams.length} / filtered slots:{" "}
-              {filteredSlotsInMonth.length}
-            </div>
           </div>
 
           <div style={summaryButtonRow}>
@@ -1306,12 +1315,6 @@ const summaryCount: React.CSSProperties = {
   fontSize: 14,
   color: "#3b6a49",
   lineHeight: 1.7,
-};
-
-const debugText: React.CSSProperties = {
-  fontSize: 12,
-  color: "#66756d",
-  lineHeight: 1.6,
 };
 
 const summaryButtonRow: React.CSSProperties = {
