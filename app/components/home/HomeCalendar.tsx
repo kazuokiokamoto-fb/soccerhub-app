@@ -1065,17 +1065,17 @@ export default function HomeCalendar() {
     return text || "すべて";
   }, [filters]);
 
-  const selectedDateSummaryText = useMemo(() => {
-    return `${selectedYmd} / 募集件数 ${slotsOnSelectedDate.length}件`;
-  }, [selectedYmd, slotsOnSelectedDate.length]);
-
   const totalTeamCountText = useMemo(() => {
-    return `登録チーム数：${allTeams.length}件`;
+    return `${allTeams.length}件`;
   }, [allTeams.length]);
 
   const totalSlotCountText = useMemo(() => {
-    return `試合募集数：${slotsInMonth.length}件`;
+    return `${slotsInMonth.length}件`;
   }, [slotsInMonth.length]);
+
+  const selectedDateSummaryText = useMemo(() => {
+    return `${selectedYmd} / 募集件数 ${slotsOnSelectedDate.length}件`;
+  }, [selectedYmd, slotsOnSelectedDate.length]);
 
   const showCriticalError =
     (baseError && baseError.includes("teams:")) ||
@@ -1110,9 +1110,16 @@ export default function HomeCalendar() {
         </div>
       ) : null}
 
-      <section style={summaryStatsBox}>
-        <div style={summaryStatsText}>{totalTeamCountText}</div>
-        <div style={summaryStatsText}>{totalSlotCountText}</div>
+      <section style={summaryStatsRow}>
+        <div style={summaryStatCard}>
+          <div style={summaryStatLabel}>登録チーム数</div>
+          <div style={summaryStatValue}>{totalTeamCountText}</div>
+        </div>
+
+        <div style={summaryStatCard}>
+          <div style={summaryStatLabel}>試合募集数</div>
+          <div style={summaryStatValue}>{totalSlotCountText}</div>
+        </div>
       </section>
 
       <section style={summaryBox}>
@@ -1214,15 +1221,6 @@ export default function HomeCalendar() {
         />
       </div>
 
-      {!loading && slotsOnSelectedDate.length === 0 ? (
-        <div style={emptyRecruitBox}>
-          <div style={emptyRecruitTitle}>該当する募集がありません</div>
-          <div style={emptyRecruitText}>
-            条件をゆるめるか、別の日付を選んでみてください
-          </div>
-        </div>
-      ) : null}
-
       {panelMode !== "none" ? (
         <MatchFilterPanel
           filterRef={filterRef}
@@ -1291,31 +1289,46 @@ const errorTitle: React.CSSProperties = {
   marginBottom: 4,
 };
 
-const summaryStatsBox: React.CSSProperties = {
-  marginTop: 2,
+const summaryStatsRow: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 10,
+};
+
+const summaryStatCard: React.CSSProperties = {
+  padding: "14px 16px",
+  borderRadius: 16,
+  border: "1px solid #dce9df",
+  background: "#fff",
   display: "grid",
   gap: 4,
 };
 
-const summaryStatsText: React.CSSProperties = {
-  fontSize: 16,
+const summaryStatLabel: React.CSSProperties = {
+  fontSize: 13,
   fontWeight: 800,
+  color: "#5c6f62",
+  lineHeight: 1.4,
+};
+
+const summaryStatValue: React.CSSProperties = {
+  fontSize: 24,
+  fontWeight: 900,
   color: "#14532d",
-  lineHeight: 1.5,
+  lineHeight: 1.2,
 };
 
 const summaryBox: React.CSSProperties = {
-  marginTop: 0,
   padding: "14px 16px",
   borderRadius: 16,
-  border: "1px solid #dce9df",
-  background: "#f7fbf8",
+  border: "1px solid #eee",
+  background: "#fff",
 };
 
 const summaryHead: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-end",
+  alignItems: "center",
   gap: 12,
   flexWrap: "wrap",
 };
@@ -1346,28 +1359,4 @@ const summaryButtonRow: React.CSSProperties = {
   flexWrap: "wrap",
   marginLeft: "auto",
   justifyContent: "flex-end",
-};
-
-const emptyRecruitBox: React.CSSProperties = {
-  marginTop: 8,
-  padding: 20,
-  borderRadius: 16,
-  border: "1px solid #e5ece7",
-  background: "#fff",
-  textAlign: "center",
-};
-
-const emptyRecruitTitle: React.CSSProperties = {
-  fontSize: 18,
-  fontWeight: 900,
-  color: "#16391f",
-  lineHeight: 1.5,
-};
-
-const emptyRecruitText: React.CSSProperties = {
-  marginTop: 8,
-  color: "#666",
-  lineHeight: 1.4,
-  whiteSpace: "nowrap",
-  fontSize: "clamp(10px, 2.8vw, 16px)",
 };
