@@ -106,9 +106,9 @@ export function MatchFilterPanel({
   strengthGuides,
   bandText = "条件検索",
   titleText = "相手を探す",
-  descriptionText = "レベル・エリア・人数感などから対戦相手を探せます。",
+  descriptionText = "レベル・エリア・人数感などから相手チームを探せます。",
   liveCountLabel = "現在のヒット件数",
-  liveCountText = "0件",
+  liveCountText = "0チーム / 0試合",
 }: Props) {
   return (
     <section ref={filterRef} style={overlay} aria-modal="true" role="dialog">
@@ -181,7 +181,6 @@ export function MatchFilterPanel({
 
             <label style={label}>
               <span style={labelTitle}>キーワード</span>
-
               <input
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
@@ -300,7 +299,6 @@ export function MatchFilterPanel({
             <div style={twoCols}>
               <label style={label}>
                 <span style={labelTitle}>チーム所属人数（以上）</span>
-
                 <select
                   value={memberCountMin}
                   onChange={(e) => setMemberCountMin(e.target.value)}
@@ -319,7 +317,6 @@ export function MatchFilterPanel({
 
               <label style={label}>
                 <span style={labelTitle}>グラウンド</span>
-
                 <select
                   value={groundFilter}
                   onChange={(e) =>
@@ -338,7 +335,6 @@ export function MatchFilterPanel({
             <div style={twoCols}>
               <label style={label}>
                 <span style={labelTitle}>駐輪場</span>
-
                 <select
                   value={bikeFilter}
                   onChange={(e) => setBikeFilter(e.target.value as BikeFilter)}
@@ -354,7 +350,6 @@ export function MatchFilterPanel({
 
               <label style={label}>
                 <span style={labelTitle}>駐輪場台数（以上）</span>
-
                 <select
                   value={bikeCapacityMin}
                   onChange={(e) => setBikeCapacityMin(e.target.value)}
@@ -375,8 +370,7 @@ export function MatchFilterPanel({
             </div>
 
             <div style={footerNote}>
-              条件を選んだら、上の
-              「カレンダーへ戻る」または「チーム一覧」を押してください。
+              条件を選んだら、上の「カレンダーへ戻る」または「チーム一覧」を押してください。
             </div>
 
             <div style={actionRow}>
@@ -402,17 +396,19 @@ const overlay: React.CSSProperties = {
   zIndex: 1200,
   background: "rgba(15, 23, 42, 0.28)",
   padding: 16,
-  overflowY: "auto",
 };
 
 const modal: React.CSSProperties = {
   maxWidth: 980,
+  height: "calc(100dvh - 32px)",
   margin: "0 auto",
   background: "#fff",
   borderRadius: 24,
   border: "1px solid #dce9df",
   boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
   overflow: "hidden",
+  display: "grid",
+  gridTemplateRows: "auto 1fr",
 };
 
 const stickyTopBox: React.CSSProperties = {
@@ -440,11 +436,11 @@ const stickyTopActions: React.CSSProperties = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
-  width: "100%",
   justifyContent: "flex-end",
 };
 
 const modalBody: React.CSSProperties = {
+  overflowY: "auto",
   padding: 16,
 };
 
@@ -470,7 +466,10 @@ const stickyCountValue: React.CSSProperties = {
 const stickyCountSub: React.CSSProperties = {
   fontSize: 12,
   color: "#3f5f47",
-  lineHeight: 1.6,
+  lineHeight: 1.5,
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
 };
 
 const sectionLeadWrap: React.CSSProperties = {
@@ -569,11 +568,9 @@ const helpButton: React.CSSProperties = {
   cursor: "pointer",
   fontWeight: 800,
   fontSize: 18,
-  transition: "all 0.15s ease",
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  boxShadow: "none",
   WebkitAppearance: "none",
   appearance: "none",
 };
@@ -591,12 +588,10 @@ const strengthSimpleButton: React.CSSProperties = {
   border: "1px solid #d6eadb",
   background: "#fff",
   cursor: "pointer",
-  transition: "all 0.15s ease",
   fontSize: 14,
   fontWeight: 800,
   color: "#23412c",
   lineHeight: 1.5,
-  boxShadow: "none",
   WebkitAppearance: "none",
   appearance: "none",
 };

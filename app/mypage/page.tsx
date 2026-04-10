@@ -941,10 +941,7 @@ export default function MyPage() {
 
       <section style={box}>
         <div style={sectionHead}>
-          <h2 style={sectionTitle}>現在の状況</h2>
-          <Link href="/chat" className="sh-btn">
-            チャットを見る
-          </Link>
+          <div style={sectionTitle}>現在の状況</div>
         </div>
 
         <div style={dashboardGrid}>

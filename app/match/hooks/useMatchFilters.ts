@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 import type { MatchFilters } from "../utils/filters";
 
-const STORAGE_KEY = "sakamatch:home-filters:v1";
+const STORAGE_KEY = "sakamatch:team-filters:v1";
 
-type PersistedFilters = {
+type StoredFilters = {
   keyword: string;
   categoryFilter: string[];
   prefectureFilter: string;
@@ -19,73 +19,68 @@ type PersistedFilters = {
   memberCountMin: string;
 };
 
-function loadSavedFilters(): PersistedFilters | null {
-  if (typeof window === "undefined") return null;
+const DEFAULT_FILTERS: StoredFilters = {
+  keyword: "",
+  categoryFilter: [],
+  prefectureFilter: "",
+  cityFilter: "",
+  townFilter: "",
+  groundFilter: "all",
+  strengthFilter: [],
+  bikeFilter: "all",
+  bikeCapacityMin: "",
+  memberCountMin: "",
+};
+
+function loadStoredFilters(): StoredFilters {
+  if (typeof window === "undefined") return DEFAULT_FILTERS;
 
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
+    if (!raw) return DEFAULT_FILTERS;
 
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as Partial<StoredFilters>;
 
     return {
-      keyword: String(parsed.keyword ?? ""),
+      ...DEFAULT_FILTERS,
+      ...parsed,
       categoryFilter: Array.isArray(parsed.categoryFilter)
-        ? parsed.categoryFilter.map(String)
+        ? parsed.categoryFilter
         : [],
-      prefectureFilter: String(parsed.prefectureFilter ?? ""),
-      cityFilter: String(parsed.cityFilter ?? ""),
-      townFilter: String(parsed.townFilter ?? ""),
-      groundFilter:
-        parsed.groundFilter === "あり" || parsed.groundFilter === "なし"
-          ? parsed.groundFilter
-          : "all",
       strengthFilter: Array.isArray(parsed.strengthFilter)
-        ? parsed.strengthFilter.filter((v: unknown) =>
-            ["SS", "S", "A", "B", "C"].includes(String(v))
-          )
+        ? (parsed.strengthFilter as StrengthRank[])
         : [],
-      bikeFilter:
-        parsed.bikeFilter === "あり" ||
-        parsed.bikeFilter === "なし" ||
-        parsed.bikeFilter === "不明"
-          ? parsed.bikeFilter
-          : "all",
-      bikeCapacityMin: String(parsed.bikeCapacityMin ?? ""),
-      memberCountMin: String(parsed.memberCountMin ?? ""),
     };
   } catch {
-    return null;
+    return DEFAULT_FILTERS;
   }
 }
 
 export function useMatchFilters() {
-  const saved = typeof window !== "undefined" ? loadSavedFilters() : null;
+  const initial = loadStoredFilters();
 
-  const [keyword, setKeyword] = useState(saved?.keyword ?? "");
+  const [keyword, setKeyword] = useState(initial.keyword);
   const [categoryFilter, setCategoryFilter] = useState<string[]>(
-    saved?.categoryFilter ?? []
+    initial.categoryFilter
   );
   const [prefectureFilter, setPrefectureFilter] = useState(
-    saved?.prefectureFilter ?? ""
+    initial.prefectureFilter
   );
-  const [cityFilter, setCityFilter] = useState(saved?.cityFilter ?? "");
-  const [townFilter, setTownFilter] = useState(saved?.townFilter ?? "");
+  const [cityFilter, setCityFilter] = useState(initial.cityFilter);
+  const [townFilter, setTownFilter] = useState(initial.townFilter);
   const [groundFilter, setGroundFilter] = useState<"all" | "あり" | "なし">(
-    saved?.groundFilter ?? "all"
+    initial.groundFilter
   );
   const [strengthFilter, setStrengthFilter] = useState<StrengthRank[]>(
-    saved?.strengthFilter ?? []
+    initial.strengthFilter
   );
   const [bikeFilter, setBikeFilter] = useState<
     "all" | "あり" | "なし" | "不明"
-  >(saved?.bikeFilter ?? "all");
+  >(initial.bikeFilter);
   const [bikeCapacityMin, setBikeCapacityMin] = useState(
-    saved?.bikeCapacityMin ?? ""
+    initial.bikeCapacityMin
   );
-  const [memberCountMin, setMemberCountMin] = useState(
-    saved?.memberCountMin ?? ""
-  );
+  const [memberCountMin, setMemberCountMin] = useState(initial.memberCountMin);
 
   const filters = useMemo<MatchFilters>(() => {
     return {
@@ -116,7 +111,7 @@ export function useMatchFilters() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const payload: PersistedFilters = {
+    const payload: StoredFilters = {
       keyword,
       categoryFilter,
       prefectureFilter,
@@ -129,11 +124,7 @@ export function useMatchFilters() {
       memberCountMin,
     };
 
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    } catch {
-      // no-op
-    }
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   }, [
     keyword,
     categoryFilter,
@@ -160,11 +151,7 @@ export function useMatchFilters() {
     setMemberCountMin("");
 
     if (typeof window !== "undefined") {
-      try {
-        window.localStorage.removeItem(STORAGE_KEY);
-      } catch {
-        // no-op
-      }
+      window.localStorage.removeItem(STORAGE_KEY);
     }
   };
 
