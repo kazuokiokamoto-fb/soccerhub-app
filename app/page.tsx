@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import AppTabNav from "@/app/components/AppTabNav";
 import HomeCalendar from "@/app/components/home/HomeCalendar";
@@ -103,7 +103,9 @@ export default function HomePage() {
         </section>
       ) : null}
 
-      <HomeCalendar />
+      <Suspense fallback={<div style={loadingPanel}>読み込み中…</div>}>
+        <HomeCalendar />
+      </Suspense>
 
       <section style={foldSection}>
         <button
