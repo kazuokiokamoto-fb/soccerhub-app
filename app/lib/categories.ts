@@ -1,7 +1,7 @@
 // app/lib/categories.ts
 
 export type CategoryValue =
-  | "KIDS" // 👈 追加（未就学・キッズ）
+  | "KIDS"
   | "G1"
   | "G2"
   | "G3"
@@ -20,12 +20,8 @@ export type CategoryOption = {
   label: string;
 };
 
-/**
- * カテゴリ一覧
- * 👉 表示順もここで管理
- */
 export const CATEGORY_OPTIONS: CategoryOption[] = [
-  { value: "KIDS", label: "キッズ（未就学）" }, // 👈 追加
+  { value: "KIDS", label: "キッズ（未就学）" },
   { value: "G1", label: "小学1年" },
   { value: "G2", label: "小学2年" },
   { value: "G3", label: "小学3年" },
@@ -40,16 +36,13 @@ export const CATEGORY_OPTIONS: CategoryOption[] = [
   { value: "O50", label: "シニアO50" },
 ];
 
-/**
- * UI用グルーピング
- */
 export const CATEGORY_GROUPS: {
   title: string;
   values: CategoryValue[];
 }[] = [
   {
     title: "キッズ",
-    values: ["KIDS"], // 👈 追加
+    values: ["KIDS"],
   },
   {
     title: "小学生",
@@ -65,18 +58,51 @@ export const CATEGORY_GROUPS: {
   },
 ];
 
-/**
- * 単体ラベル取得
- */
 export function categoryLabel(v: string | null | undefined) {
   if (!v) return "";
-  const hit = CATEGORY_OPTIONS.find((o) => o.value === v);
+
+  const normalized = String(v).trim().toUpperCase();
+
+  const aliasMap: Record<string, CategoryValue> = {
+    KIDS: "KIDS",
+
+    G1: "G1",
+    G2: "G2",
+    G3: "G3",
+    G4: "G4",
+    G5: "G5",
+    G6: "G6",
+
+    U15: "U15",
+    "U-15": "U15",
+    U18: "U18",
+    "U-18": "U18",
+    U23: "U23",
+    "U-23": "U23",
+
+    OPEN: "OPEN",
+    一般: "OPEN",
+
+    O40: "O40",
+    "O-40": "O40",
+    O50: "O50",
+    "O-50": "O50",
+
+    KIDS_OLD: "KIDS",
+    ELEMENTARY_1: "G1",
+    ELEMENTARY_2: "G2",
+    ELEMENTARY_3: "G3",
+    ELEMENTARY_4: "G4",
+    ELEMENTARY_5: "G5",
+    ELEMENTARY_6: "G6",
+  };
+
+  const resolved = aliasMap[normalized] ?? (normalized as CategoryValue);
+  const hit = CATEGORY_OPTIONS.find((o) => o.value === resolved);
+
   return hit?.label ?? v;
 }
 
-/**
- * 複数ラベル取得
- */
 export function categoryLabels(values: string[] | null | undefined) {
   const arr = Array.isArray(values) ? values : [];
   return arr.map(categoryLabel).filter(Boolean);

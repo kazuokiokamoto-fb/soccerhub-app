@@ -929,6 +929,7 @@ export default function HomeCalendar() {
       </section>
 
       <TeamSearchSection
+        mode="home"
         loading={loading}
         initialPanelMode={initialTeamPanelMode}
         keyword={keyword}
@@ -954,6 +955,16 @@ export default function HomeCalendar() {
         filters={filters}
         clearAllFilters={clearAllFilters}
         onOpenTeamList={openTeamListWindow}
+        onBackToCalendar={() => {
+          if (calendarRef.current) {
+            calendarRef.current.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
+            });
+            return;
+          }
+          window.location.href = "/match";
+        }}
         filteredTeamsCount={filteredTeams.length}
         filteredSlotsCount={filteredSlotsInMonth.length}
         onClosePanelAfterReset={() => {

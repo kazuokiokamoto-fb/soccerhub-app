@@ -338,7 +338,9 @@ export default function TeamsPage() {
                 <div style={teamCard}>
                   <div style={teamCardHead}>
                     <div style={teamNameWrap}>
-                      <div style={teamName}>{team.name || "チーム名未設定"}</div>
+                      <div style={teamName}>
+                        {team.name || "チーム名未設定"}
+                      </div>
                       {mine ? <span style={mineBadge}>自分のチーム</span> : null}
                     </div>
 
@@ -351,7 +353,9 @@ export default function TeamsPage() {
                     <div>
                       <strong>カテゴリ：</strong>
                       {categories.length > 0
-                        ? categories.map((v) => categoryLabel(v) || v).join(" / ")
+                        ? categories
+                            .map((v) => categoryLabel(v) || v)
+                            .join(" / ")
                         : "未設定"}
                     </div>
 

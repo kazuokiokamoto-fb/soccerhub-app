@@ -223,13 +223,11 @@ export default function TeamSearchSection({
   }, [filters]);
 
   const isTeamsMode = mode === "teams";
-  const liveCountText = isTeamsMode
-    ? `${filteredTeamsCount}チーム`
-    : `${filteredTeamsCount}チーム / ${filteredSlotsCount}試合`;
+  const isPanelOpen = panelMode === "team";
 
   return (
     <>
-      {!(isTeamsMode && panelMode === "team") ? (
+      {!isPanelOpen ? (
         <section style={summaryBox}>
           <div style={summaryTitle}>チーム条件で探す</div>
 
@@ -259,7 +257,7 @@ export default function TeamSearchSection({
         </section>
       ) : null}
 
-      {panelMode !== "none" ? (
+      {isPanelOpen ? (
         <MatchFilterPanel
           filterRef={filterRef}
           loading={loading}
@@ -304,13 +302,13 @@ export default function TeamSearchSection({
           titleText="相手を探す"
           descriptionText="レベル・エリア・人数感などから相手チームを探せます。"
           liveCountLabel="現在のヒット件数"
-          liveCountText={liveCountText}
-          hideFilterBadge={isTeamsMode}
+          liveCountText={`${filteredTeamsCount}チーム`}
+          hideFilterBadge={true}
           inlineHeaderActions={false}
-          showTopActions={!isTeamsMode}
+          showTopActions={false}
           showTopHitBox={true}
-          stickyHitBox={isTeamsMode}
-          renderHeaderActionsInHitBox={isTeamsMode}
+          stickyHitBox={true}
+          renderHeaderActionsInHitBox={true}
         />
       ) : null}
 

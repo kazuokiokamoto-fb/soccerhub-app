@@ -412,6 +412,8 @@ export default function OfferReceivedPage() {
   }
 
   async function getUserIdByTeamId(teamId: string) {
+    if (!teamId) return "";
+
     const { data: teamRow, error } = await supabase
       .from("teams")
       .select("owner_id")
@@ -502,6 +504,11 @@ export default function OfferReceivedPage() {
     setChatOpeningId(rowId);
 
     try {
+      if (!item.to_team_id || !item.from_team_id) {
+        alert("チャットを開くためのチーム情報が不足しています");
+        return;
+      }
+
       const threadId = await getOrCreateDmThread(
         item.to_team_id,
         item.from_team_id
@@ -515,6 +522,23 @@ export default function OfferReceivedPage() {
     }
   }
 
+  async function safeCloseSlot(slotId: string | null | undefined) {
+    if (!slotId) return;
+
+    try {
+      const { error } = await supabase
+        .from("match_slots")
+        .update({ is_closed: true })
+        .eq("id", slotId);
+
+      if (error) {
+        console.error("slot close error:", error);
+      }
+    } catch (e) {
+      console.error("slot close catch:", e);
+    }
+  }
+
   async function handleAcceptedFlow(params: {
     item: ReceivedItem;
     uid: string;
@@ -524,6 +548,13 @@ export default function OfferReceivedPage() {
     otherUserId: string;
   }) {
     const { item, uid, slot, fromTeam, toTeam, otherUserId } = params;
+
+    if (!item.to_team_id || !item.from_team_id) {
+      return {
+        ok: false,
+        reason: "team_missing",
+      };
+    }
 
     try {
       const threadId = await getOrCreateDmThread(
@@ -626,22 +657,55 @@ export default function OfferReceivedPage() {
       }
 
       window.dispatchEvent(new Event("notifications-updated"));
-      router.push(`/chat/${threadId}?from=received-offers`);
-      return true;
+
+      return {
+        ok: true,
+        threadId,
+      };
     } catch (e: any) {
       console.error("accepted flow error:", e);
-      return false;
+      return {
+        ok: false,
+        reason: e?.message ?? "unknown_error",
+      };
     }
+  }
+
+  async function updateOfferStatus(
+    offerId: string,
+    nextStatus: "accepted" | "rejected"
+  ) {
+    const { error } = await supabase
+      .from("match_offers")
+      .update({ status: nextStatus })
+      .eq("id", offerId);
+
+    if (error) throw error;
+  }
+
+  async function updateRequestStatus(
+    requestId: string,
+    nextStatus: "accepted" | "rejected"
+  ) {
+    const { error } = await supabase
+      .from("match_requests")
+      .update({ status: nextStatus })
+      .eq("id", requestId);
+
+    if (error) throw error;
   }
 
   const updateStatus = async (
     item: ReceivedItem,
     nextStatus: "accepted" | "rejected"
   ) => {
+    const subject =
+      item.kind === "offer" ? "このオファー" : "この申込み";
+
     const confirmText =
       nextStatus === "accepted"
-        ? "このオファーを承認しますか？"
-        : "このオファーを見送りますか？";
+        ? `${subject}を承認しますか？`
+        : `${subject}を見送りますか？`;
 
     if (!window.confirm(confirmText)) return;
 
@@ -660,51 +724,29 @@ export default function OfferReceivedPage() {
       const slot = item.slot_id ? slotMap.get(item.slot_id) ?? null : null;
       const fromTeam = teamMap.get(item.from_team_id);
       const toTeam = teamMap.get(item.to_team_id);
-      const otherUserId = await getUserIdByTeamId(item.from_team_id);
 
-      if (item.kind === "offer") {
-        const { error } = await supabase
-          .from("match_offers")
-          .update({ status: nextStatus })
-          .eq("id", item.id);
-
-        if (error) {
-          console.error(error);
-          alert(
-            nextStatus === "accepted"
-              ? `承認に失敗しました: ${error.message}`
-              : `見送りに失敗しました: ${error.message}`
-          );
-          setUpdatingId("");
-          return;
-        }
-      } else {
-        const { error } = await supabase
-          .from("match_requests")
-          .update({ status: nextStatus })
-          .eq("id", item.id);
-
-        if (error) {
-          console.error(error);
-          alert(
-            nextStatus === "accepted"
-              ? `承認に失敗しました: ${error.message}`
-              : `見送りに失敗しました: ${error.message}`
-          );
-          setUpdatingId("");
-          return;
-        }
+      let otherUserId = "";
+      try {
+        otherUserId = await getUserIdByTeamId(item.from_team_id);
+      } catch (e) {
+        console.error("getUserIdByTeamId error:", e);
       }
 
-      if (nextStatus === "accepted" && item.slot_id) {
-        const { error: slotCloseErr } = await supabase
-          .from("match_slots")
-          .update({ is_closed: true })
-          .eq("id", item.slot_id);
-
-        if (slotCloseErr) {
-          console.error("slot close error:", slotCloseErr);
+      try {
+        if (item.kind === "offer") {
+          await updateOfferStatus(item.id, nextStatus);
+        } else {
+          await updateRequestStatus(item.id, nextStatus);
         }
+      } catch (e: any) {
+        console.error(e);
+        alert(
+          nextStatus === "accepted"
+            ? `承認に失敗しました: ${e?.message ?? "unknown error"}`
+            : `見送りに失敗しました: ${e?.message ?? "unknown error"}`
+        );
+        setUpdatingId("");
+        return;
       }
 
       setItems((prev) =>
@@ -716,7 +758,9 @@ export default function OfferReceivedPage() {
       );
 
       if (nextStatus === "accepted") {
-        const ok = await handleAcceptedFlow({
+        await safeCloseSlot(item.slot_id);
+
+        const acceptedFlow = await handleAcceptedFlow({
           item,
           uid,
           slot,
@@ -728,12 +772,14 @@ export default function OfferReceivedPage() {
         await loadPage();
         setUpdatingId("");
 
-        if (!ok) {
-          alert(
-            "承認自体は完了しましたが、チャットの自動作成に失敗しました。後で「チャット」ボタンから開けるかお試しください。"
-          );
+        if (acceptedFlow.ok && acceptedFlow.threadId) {
+          router.push(`/chat/${acceptedFlow.threadId}?from=received-offers`);
+          return;
         }
 
+        alert(
+          "承認は完了しました。チャットの自動作成または通知で一部失敗したため、必要に応じて一覧から「チャット」ボタンを押してください。"
+        );
         return;
       }
 
@@ -920,7 +966,7 @@ export default function OfferReceivedPage() {
                   <div style={slotSub}>
                     {slot.area_text ?? slot.area ?? "エリア未設定"}
                     {" / "}
-                    {slot.category ?? "カテゴリ未設定"}
+                    {categoryLabel(slot.category) || slot.category || "カテゴリ未設定"}
                   </div>
                 </div>
               ) : null}
@@ -1028,7 +1074,7 @@ export default function OfferReceivedPage() {
                         <br />
                         {slot.area_text ?? slot.area ?? "エリア未設定"}
                         {" / "}
-                        {slot.category ?? "カテゴリ未設定"}
+                        {categoryLabel(slot.category) || slot.category || "カテゴリ未設定"}
                       </div>
                     </div>
                   ) : item.slot_id ? (

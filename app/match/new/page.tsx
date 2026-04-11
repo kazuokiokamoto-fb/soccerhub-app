@@ -161,7 +161,9 @@ function MatchCreatePageInner() {
       const [{ data: teamRows }, { data: venueRows }] = await Promise.all([
         supabase
           .from("teams")
-          .select("id,owner_id,name,area,category,categories,prefecture,city,town")
+          .select(
+            "id,owner_id,name,area,category,categories,prefecture,city,town"
+          )
           .eq("owner_id", uid)
           .order("updated_at", { ascending: false }),
         supabase
@@ -363,7 +365,7 @@ function MatchCreatePageInner() {
 
       if (error) {
         console.error(error);
-        alert(`募集枠の作成に失敗しました: ${error.message}`);
+        alert(`募集の作成に失敗しました: ${error.message}`);
         setSaving(false);
         return;
       }
@@ -372,7 +374,7 @@ function MatchCreatePageInner() {
       router.refresh();
     } catch (e: any) {
       console.error(e);
-      alert(e?.message ?? "募集枠の作成に失敗しました");
+      alert(e?.message ?? "募集の作成に失敗しました");
       setSaving(false);
       return;
     }
@@ -388,11 +390,11 @@ function MatchCreatePageInner() {
     <>
       <main style={pageWrap}>
         <AppTabNav />
-        <PageBackNav current="募集枠を作る" />
+        <PageBackNav current="募集する" />
 
         <AppHero
           icon="🗓️"
-          title="募集枠を作る"
+          title="募集する"
           desc="日付・時間・カテゴリ・希望相手の強さを設定して募集を作成します。"
         />
 
@@ -625,18 +627,18 @@ function MatchCreatePageInner() {
             </div>
 
             <div style={actionRow}>
-              <Link href="/match" className="sh-btn">
-                キャンセル
-              </Link>
-
               <button
                 type="button"
                 className="sh-btn sh-btn--primary"
                 onClick={createSlot}
                 disabled={!canSave}
               >
-                {saving ? "作成中…" : "募集枠を作成"}
+                {saving ? "作成中…" : "募集する"}
               </button>
+
+              <Link href="/match" className="sh-btn">
+                キャンセル
+              </Link>
             </div>
 
             {selectedHostTeam ? (
