@@ -9,6 +9,7 @@ import { STRENGTH_GUIDES } from "@/app/match/constants/strengthGuides";
 import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 
 type PanelMode = "none" | "team";
+type SectionMode = "home" | "teams";
 
 type TeamSearchSectionProps = {
   loading: boolean;
@@ -63,17 +64,16 @@ type TeamSearchSectionProps = {
   clearAllFilters: () => void;
 
   filteredTeamsCount: number;
-  filteredSlotsCount?: number;
+  filteredSlotsCount: number;
 
   onOpenTeamList?: () => void;
+  onBackToCalendar?: () => void;
 
   initialPanelMode?: PanelMode;
   onPanelModeChange?: (mode: PanelMode) => void;
   onClosePanelAfterReset?: () => void;
 
-  showTeamListButton?: boolean;
-
-  backMode?: "calendar" | "teams";
+  mode?: SectionMode;
 };
 
 function filterSummaryTextFromFilters(filters: {
@@ -164,11 +164,11 @@ export default function TeamSearchSection({
   filteredTeamsCount,
   filteredSlotsCount,
   onOpenTeamList,
+  onBackToCalendar,
   initialPanelMode = "none",
   onPanelModeChange,
   onClosePanelAfterReset,
-  showTeamListButton = true,
-  backMode = "calendar",
+  mode = "home",
 }: TeamSearchSectionProps) {
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
   const [panelMode, setPanelMode] = useState<PanelMode>(initialPanelMode);
@@ -217,55 +217,47 @@ export default function TeamSearchSection({
     onClosePanelAfterReset?.();
   };
 
-  const handleBack = () => {
-    if (backMode === "teams") {
-      window.location.href = "/teams";
-      return;
-    }
-    window.location.href = "/";
-  };
-
   const conditionText = useMemo(() => {
     const text = filterSummaryTextFromFilters(filters);
     return text || "すべて";
   }, [filters]);
 
-  const liveCountText = useMemo(() => {
-    if (typeof filteredSlotsCount === "number") {
-      return `${filteredTeamsCount}チーム / ${filteredSlotsCount}試合`;
-    }
-    return `${filteredTeamsCount}チーム`;
-  }, [filteredTeamsCount, filteredSlotsCount]);
+  const isTeamsMode = mode === "teams";
+  const liveCountText = isTeamsMode
+    ? `${filteredTeamsCount}チーム`
+    : `${filteredTeamsCount}チーム / ${filteredSlotsCount}試合`;
 
   return (
     <>
-      <section style={summaryBox}>
-        <div style={summaryTitle}>チーム条件で探す</div>
+      {!(isTeamsMode && panelMode === "team") ? (
+        <section style={summaryBox}>
+          <div style={summaryTitle}>チーム条件で探す</div>
 
-        <div style={summaryBar}>
-          <div style={summaryLeft}>条件：{conditionText}</div>
+          <div style={summaryBar}>
+            <div style={summaryLeft}>条件：{conditionText}</div>
 
-          <div style={summaryButtonRow}>
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={openTeamFilterPanel}
-            >
-              条件変更
-            </button>
-
-            {showTeamListButton && onOpenTeamList ? (
+            <div style={summaryButtonRow}>
               <button
                 type="button"
-                className="sh-btn sh-btn--primary"
-                onClick={onOpenTeamList}
+                className="sh-btn"
+                onClick={openTeamFilterPanel}
               >
-                チーム一覧
+                条件変更
               </button>
-            ) : null}
+
+              {!isTeamsMode ? (
+                <button
+                  type="button"
+                  className="sh-btn sh-btn--primary"
+                  onClick={onOpenTeamList ?? (() => {})}
+                >
+                  チーム一覧
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       {panelMode !== "none" ? (
         <MatchFilterPanel
@@ -284,15 +276,27 @@ export default function TeamSearchSection({
           groundFilter={groundFilter}
           setGroundFilter={setGroundFilter}
           strengthFilter={strengthFilter}
-          setStrengthFilter={setStrengthFilter}
+          setStrengthFilter={(value) =>
+            setStrengthFilter(value as StrengthRank[])
+          }
           bikeFilter={bikeFilter}
           setBikeFilter={setBikeFilter}
           bikeCapacityMin={bikeCapacityMin}
           setBikeCapacityMin={setBikeCapacityMin}
           memberCountMin={memberCountMin}
           setMemberCountMin={setMemberCountMin}
-          onBackToCalendar={handleBack}
-          onOpenTeamList={onOpenTeamList ?? (() => {})}
+          onBackToCalendar={
+            onBackToCalendar ??
+            (() => {
+              window.location.href = "/match";
+            })
+          }
+          onOpenTeamList={
+            onOpenTeamList ??
+            (() => {
+              window.location.href = "/teams";
+            })
+          }
           onReset={handleResetTeamFilters}
           onBackToList={closePanel}
           onOpenStrengthHelp={() => setShowStrengthHelp(true)}
@@ -301,8 +305,12 @@ export default function TeamSearchSection({
           descriptionText="レベル・エリア・人数感などから相手チームを探せます。"
           liveCountLabel="現在のヒット件数"
           liveCountText={liveCountText}
-          hideFilterBadge
-          inlineHeaderActions
+          hideFilterBadge={isTeamsMode}
+          inlineHeaderActions={false}
+          showTopActions={!isTeamsMode}
+          showTopHitBox={true}
+          stickyHitBox={isTeamsMode}
+          renderHeaderActionsInHitBox={isTeamsMode}
         />
       ) : null}
 

@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 
 type StrengthGuide = {
   rank: string;
@@ -16,38 +15,34 @@ type MatchFilterPanelProps = {
   loading?: boolean;
 
   keyword: string;
-  setKeyword: React.Dispatch<React.SetStateAction<string>>;
+  setKeyword: (value: string) => void;
 
   categoryFilter: string[];
-  setCategoryFilter: React.Dispatch<React.SetStateAction<string[]>>;
+  setCategoryFilter: (value: string[]) => void;
 
   prefectureFilter: string;
-  setPrefectureFilter: React.Dispatch<React.SetStateAction<string>>;
+  setPrefectureFilter: (value: string) => void;
 
   cityFilter: string;
-  setCityFilter: React.Dispatch<React.SetStateAction<string>>;
+  setCityFilter: (value: string) => void;
 
   townFilter: string;
-  setTownFilter: React.Dispatch<React.SetStateAction<string>>;
+  setTownFilter: (value: string) => void;
 
   groundFilter: "all" | "あり" | "なし";
-  setGroundFilter: React.Dispatch<
-    React.SetStateAction<"all" | "あり" | "なし">
-  >;
+  setGroundFilter: (value: "all" | "あり" | "なし") => void;
 
-  strengthFilter: StrengthRank[];
-  setStrengthFilter: React.Dispatch<React.SetStateAction<StrengthRank[]>>;
+  strengthFilter: string[];
+  setStrengthFilter: (value: string[]) => void;
 
   bikeFilter: "all" | "あり" | "なし" | "不明";
-  setBikeFilter: React.Dispatch<
-    React.SetStateAction<"all" | "あり" | "なし" | "不明">
-  >;
+  setBikeFilter: (value: "all" | "あり" | "なし" | "不明") => void;
 
   bikeCapacityMin: string;
-  setBikeCapacityMin: React.Dispatch<React.SetStateAction<string>>;
+  setBikeCapacityMin: (value: string) => void;
 
   memberCountMin: string;
-  setMemberCountMin: React.Dispatch<React.SetStateAction<string>>;
+  setMemberCountMin: (value: string) => void;
 
   onBackToCalendar: () => void;
   onOpenTeamList: () => void;
@@ -64,6 +59,11 @@ type MatchFilterPanelProps = {
 
   hideFilterBadge?: boolean;
   inlineHeaderActions?: boolean;
+
+  showTopActions?: boolean;
+  showTopHitBox?: boolean;
+  stickyHitBox?: boolean;
+  renderHeaderActionsInHitBox?: boolean;
 };
 
 const PREF_OPTIONS = [
@@ -75,7 +75,7 @@ const PREF_OPTIONS = [
   "茨城県",
   "栃木県",
   "群馬県",
-] as const;
+];
 
 const CATEGORY_OPTIONS = [
   "kids",
@@ -88,9 +88,7 @@ const CATEGORY_OPTIONS = [
   "women",
   "mixed",
   "futsal",
-] as const;
-
-const STRENGTH_OPTIONS: StrengthRank[] = ["SS", "S", "A", "B", "C"];
+];
 
 export function MatchFilterPanel({
   filterRef,
@@ -126,51 +124,70 @@ export function MatchFilterPanel({
   liveCountText = "",
   hideFilterBadge = false,
   inlineHeaderActions = false,
+  showTopActions = true,
+  showTopHitBox = true,
+  stickyHitBox = false,
+  renderHeaderActionsInHitBox = false,
 }: MatchFilterPanelProps) {
-  const toggleStrength = (rank: StrengthRank) => {
+  const toggleStrength = (rank: string) => {
     if (strengthFilter.includes(rank)) {
-      setStrengthFilter((prev) => prev.filter((v) => v !== rank));
+      setStrengthFilter(strengthFilter.filter((v) => v !== rank));
     } else {
-      setStrengthFilter((prev) => [...prev, rank]);
+      setStrengthFilter([...strengthFilter, rank]);
     }
   };
 
   const toggleCategory = (value: string) => {
     if (categoryFilter.includes(value)) {
-      setCategoryFilter((prev) => prev.filter((v) => v !== value));
+      setCategoryFilter(categoryFilter.filter((v) => v !== value));
     } else {
-      setCategoryFilter((prev) => [...prev, value]);
+      setCategoryFilter([...categoryFilter, value]);
     }
   };
 
   return (
-    <section ref={filterRef} style={wrap}>
-      <section style={hitBox}>
-        <div style={hitLabel}>{liveCountLabel}</div>
-        <div style={hitValue}>{liveCountText}</div>
-        <div style={hitSub}>
-          条件を変えるたびに、この件数がリアルタイムで変わります。
-        </div>
+    <section style={wrap}>
+      {showTopHitBox ? (
+        <section style={{ ...hitBox, ...(stickyHitBox ? stickyHitBoxStyle : {}) }}>
+          <div style={hitLabel}>{liveCountLabel}</div>
+          <div style={hitValue}>{liveCountText}</div>
+          <div style={hitSub}>
+            条件を変えるたびに、この件数がリアルタイムで変わります。
+          </div>
 
-        <div style={topActions}>
-          <button
-            type="button"
-            className="sh-btn"
-            onClick={onBackToCalendar}
-          >
-            カレンダーへ戻る
-          </button>
-          <button
-            type="button"
-            className="sh-btn sh-btn--primary"
-            onClick={onOpenTeamList}
-          >
-            チーム一覧
-          </button>
-        </div>
-      </section>
+          {showTopActions ? (
+            <div style={topActions}>
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={onBackToCalendar}
+              >
+                カレンダーへ戻る
+              </button>
+              <button
+                type="button"
+                className="sh-btn sh-btn--primary"
+                onClick={onOpenTeamList}
+              >
+                チーム一覧
+              </button>
+            </div>
+          ) : null}
 
-      <section style={panelBox}>
+          {renderHeaderActionsInHitBox ? (
+            <div style={hitBottomActions}>
+              <button type="button" className="sh-btn" onClick={onReset}>
+                条件リセット
+              </button>
+              <button type="button" className="sh-btn" onClick={onBackToList}>
+                閉じる
+              </button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      <section ref={filterRef} style={panelBox}>
         <div style={headerRow}>
           <div style={headerLeft}>
             {!hideFilterBadge ? <div style={tinyBadge}>条件検索</div> : null}
@@ -178,7 +195,7 @@ export function MatchFilterPanel({
             <div style={desc}>{descriptionText}</div>
           </div>
 
-          {inlineHeaderActions ? (
+          {!renderHeaderActionsInHitBox && inlineHeaderActions ? (
             <div style={headerActions}>
               <button type="button" className="sh-btn" onClick={onReset}>
                 条件リセット
@@ -190,7 +207,7 @@ export function MatchFilterPanel({
           ) : null}
         </div>
 
-        {!inlineHeaderActions ? (
+        {!renderHeaderActionsInHitBox && !inlineHeaderActions ? (
           <div style={actionRow}>
             <button type="button" className="sh-btn" onClick={onReset}>
               条件リセット
@@ -261,7 +278,7 @@ export function MatchFilterPanel({
               <button
                 type="button"
                 className="sh-btn"
-                onClick={() => setCategoryFilter([...CATEGORY_OPTIONS])}
+                onClick={() => setCategoryFilter(CATEGORY_OPTIONS)}
               >
                 全選択
               </button>
@@ -309,7 +326,7 @@ export function MatchFilterPanel({
           </div>
 
           <div style={chipWrap}>
-            {STRENGTH_OPTIONS.map((rank) => {
+            {["SS", "S", "A", "B", "C"].map((rank) => {
               const selected = strengthFilter.includes(rank);
               return (
                 <button
@@ -328,13 +345,15 @@ export function MatchFilterPanel({
         <div style={card}>
           <div style={cardTitle}>グラウンド</div>
           <div style={chipWrap}>
-            {(["all", "あり", "なし"] as const).map((value) => {
+            {["all", "あり", "なし"].map((value) => {
               const selected = groundFilter === value;
               return (
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setGroundFilter(value)}
+                  onClick={() =>
+                    setGroundFilter(value as "all" | "あり" | "なし")
+                  }
                   style={selected ? chipActive : chip}
                 >
                   {value === "all" ? "すべて" : value}
@@ -347,13 +366,15 @@ export function MatchFilterPanel({
         <div style={card}>
           <div style={cardTitle}>駐輪場</div>
           <div style={chipWrap}>
-            {(["all", "あり", "なし", "不明"] as const).map((value) => {
+            {["all", "あり", "なし", "不明"].map((value) => {
               const selected = bikeFilter === value;
               return (
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setBikeFilter(value)}
+                  onClick={() =>
+                    setBikeFilter(value as "all" | "あり" | "なし" | "不明")
+                  }
                   style={selected ? chipActive : chip}
                 >
                   {value === "all" ? "すべて" : value}
@@ -404,6 +425,12 @@ const hitBox: React.CSSProperties = {
   padding: 16,
 };
 
+const stickyHitBoxStyle: React.CSSProperties = {
+  position: "sticky",
+  top: 10,
+  zIndex: 40,
+};
+
 const hitLabel: React.CSSProperties = {
   fontSize: 16,
   fontWeight: 800,
@@ -425,6 +452,14 @@ const hitSub: React.CSSProperties = {
 };
 
 const topActions: React.CSSProperties = {
+  marginTop: 16,
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+};
+
+const hitBottomActions: React.CSSProperties = {
   marginTop: 16,
   display: "flex",
   gap: 12,
