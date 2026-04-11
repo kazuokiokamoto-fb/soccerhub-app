@@ -960,7 +960,6 @@ export default function HomeCalendar() {
           setSelectedSlotId("");
           setRequestComment("");
         }}
-        backMode="calendar"
       />
 
       <div ref={calendarRef}>
