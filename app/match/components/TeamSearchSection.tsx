@@ -223,18 +223,21 @@ export default function TeamSearchSection({
   }, [filters]);
 
   const isTeamsMode = mode === "teams";
-  const isPanelOpen = panelMode === "team";
-
-  const liveCountText = `チーム数：${filteredTeamsCount}件`;
+  const liveCountText = isTeamsMode
+    ? `チーム数：${filteredTeamsCount}件`
+    : `チーム数：${filteredTeamsCount}件`;
 
   return (
     <>
-      {!isPanelOpen ? (
+      {!(isTeamsMode && panelMode === "team") ? (
         <section style={summaryBox}>
           <div style={summaryTitle}>チーム条件で探す</div>
 
           <div style={summaryBar}>
-            <div style={summaryLeft}>条件：{conditionText}</div>
+            <div style={summaryInfoWrap}>
+              <div style={summaryMainText}>対象チーム数：{filteredTeamsCount}件</div>
+              <div style={summarySubText}>表示条件：{conditionText}</div>
+            </div>
 
             <div style={summaryButtonRow}>
               <button
@@ -249,12 +252,7 @@ export default function TeamSearchSection({
                 <button
                   type="button"
                   className="sh-btn sh-btn--primary"
-                  onClick={
-                    onOpenTeamList ??
-                    (() => {
-                      window.location.href = "/teams";
-                    })
-                  }
+                  onClick={onOpenTeamList ?? (() => {})}
                 >
                   チーム一覧
                 </button>
@@ -264,7 +262,7 @@ export default function TeamSearchSection({
         </section>
       ) : null}
 
-      {isPanelOpen ? (
+      {panelMode !== "none" ? (
         <MatchFilterPanel
           filterRef={filterRef}
           loading={loading}
@@ -316,7 +314,9 @@ export default function TeamSearchSection({
           showTopHitBox={true}
           stickyHitBox={true}
           renderHeaderActionsInHitBox={true}
+          hidePanelHeader={true}
           hidePanelTitleBlock={true}
+          compactTopHitBox={true}
         />
       ) : null}
 
@@ -333,8 +333,8 @@ export default function TeamSearchSection({
 
 const summaryBox: React.CSSProperties = {
   marginTop: 0,
-  padding: 14,
-  borderRadius: 16,
+  padding: 16,
+  borderRadius: 20,
   border: "1px solid #e5ece7",
   background: "#fff",
 };
@@ -348,21 +348,33 @@ const summaryTitle: React.CSSProperties = {
 
 const summaryBar: React.CSSProperties = {
   marginTop: 14,
-  padding: "14px 16px",
-  borderRadius: 14,
+  padding: "16px 18px",
+  borderRadius: 18,
   background: "#eef6f0",
   border: "1px solid #dce9df",
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  gap: 10,
+  gap: 14,
   flexWrap: "wrap",
 };
 
-const summaryLeft: React.CSSProperties = {
+const summaryInfoWrap: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+  minWidth: 0,
+};
+
+const summaryMainText: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#14532d",
+  lineHeight: 1.4,
+};
+
+const summarySubText: React.CSSProperties = {
   fontSize: 14,
-  fontWeight: 800,
-  color: "#2f5d3a",
+  color: "#3b6a49",
   lineHeight: 1.7,
 };
 

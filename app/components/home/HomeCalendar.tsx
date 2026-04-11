@@ -999,6 +999,15 @@ export default function HomeCalendar(props: {
     return `チーム数：${filteredTeams.length}件`;
   }, [filteredTeams.length]);
 
+  const totalTeamCountText = useMemo(() => {
+    return `チーム総数：${allTeams.length}件`;
+  }, [allTeams.length]);
+
+  const totalOpenSlotCountText = useMemo(() => {
+    const count = slotsInMonth.filter((slot: any) => !slot.is_closed).length;
+    return `試合募集中：${count}件`;
+  }, [slotsInMonth]);
+
   const showCriticalError =
     (baseError && baseError.includes("teams:")) ||
     (monthError && monthError.includes("match_slots:"));
@@ -1036,15 +1045,19 @@ export default function HomeCalendar(props: {
 
       {!isPanelOpen ? (
         <>
-          <section style={summaryBox}>
-            <div style={summaryHead}>
-              <div style={summaryTextWrap}>
-                <div style={summaryTitle}>チーム条件で探す</div>
-                <div style={summaryCount}>{teamCountText}</div>
-                <div style={summarySub}>表示条件：{topConditionText}</div>
-              </div>
+          <section style={summaryStatsBox}>
+            <div style={summaryStatsInner}>
+              {totalTeamCountText}
+              <span style={summaryStatsDivider}> / </span>
+              {totalOpenSlotCountText}
+            </div>
+          </section>
 
-              <div style={summaryButtonRow}>
+          <section style={summaryBox}>
+            <div style={summaryCardTop}>
+              <div style={summaryDateText}>チーム条件で探す</div>
+
+              <div style={summaryActionRow}>
                 <button
                   type="button"
                   className="sh-btn"
@@ -1062,6 +1075,9 @@ export default function HomeCalendar(props: {
                 </button>
               </div>
             </div>
+
+            <div style={summaryCountLine}>対象チーム数：{filteredTeams.length}件</div>
+            <div style={summarySub}>表示条件：{topConditionText}</div>
           </section>
 
           <div ref={calendarRef}>
@@ -1187,6 +1203,9 @@ export default function HomeCalendar(props: {
           showTopHitBox={true}
           stickyHitBox={true}
           renderHeaderActionsInHitBox={true}
+          hidePanelHeader={true}
+          hidePanelTitleBlock={true}
+          compactTopHitBox={true}
         />
       ) : null}
 
@@ -1221,6 +1240,26 @@ const errorTitle: React.CSSProperties = {
   marginBottom: 4,
 };
 
+const summaryStatsBox: React.CSSProperties = {
+  marginTop: 2,
+  padding: "14px 16px",
+  borderRadius: 16,
+  border: "1px solid #dce9df",
+  background: "#eef6f0",
+};
+
+const summaryStatsInner: React.CSSProperties = {
+  fontSize: 16,
+  fontWeight: 800,
+  color: "#2f5d3a",
+  lineHeight: 1.7,
+  textAlign: "center",
+};
+
+const summaryStatsDivider: React.CSSProperties = {
+  opacity: 0.7,
+};
+
 const summaryBox: React.CSSProperties = {
   marginTop: 2,
   padding: "14px 16px",
@@ -1229,24 +1268,31 @@ const summaryBox: React.CSSProperties = {
   background: "#f7fbf8",
 };
 
-const summaryHead: React.CSSProperties = {
-  display: "grid",
+const summaryCardTop: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
   gap: 12,
+  flexWrap: "wrap",
 };
 
-const summaryTextWrap: React.CSSProperties = {
-  display: "grid",
-  gap: 6,
-};
-
-const summaryTitle: React.CSSProperties = {
+const summaryDateText: React.CSSProperties = {
   fontWeight: 900,
   fontSize: 22,
   color: "#16391f",
   lineHeight: 1.3,
 };
 
-const summaryCount: React.CSSProperties = {
+const summaryActionRow: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginLeft: "auto",
+  justifyContent: "flex-end",
+};
+
+const summaryCountLine: React.CSSProperties = {
+  marginTop: 12,
   fontSize: 16,
   fontWeight: 800,
   color: "#14532d",
@@ -1254,18 +1300,10 @@ const summaryCount: React.CSSProperties = {
 };
 
 const summarySub: React.CSSProperties = {
+  marginTop: 4,
   fontSize: 14,
   color: "#3b6a49",
   lineHeight: 1.7,
-};
-
-const summaryButtonRow: React.CSSProperties = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-  width: "100%",
-  justifyContent: "flex-end",
-  marginLeft: "auto",
 };
 
 const emptyRecruitBox: React.CSSProperties = {

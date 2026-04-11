@@ -2,7 +2,7 @@
 
 import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
 import AppHero from "@/app/components/AppHero";
@@ -75,6 +75,7 @@ function toTeamRows(value: unknown): TeamRow[] {
 
 function TeamsPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
   const myUserId = user?.id ?? "";
 
@@ -107,6 +108,15 @@ function TeamsPageInner() {
     filters,
     clearAllFilters,
   } = useMatchFilters();
+
+  useEffect(() => {
+    const panel = searchParams.get("panel");
+    if (panel === "team") {
+      setPanelMode("team");
+    } else {
+      setPanelMode("none");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     let active = true;
@@ -311,7 +321,7 @@ function TeamsPageInner() {
         filteredSlotsCount={0}
         onOpenTeamList={() => router.push("/teams")}
         onBackToCalendar={() => router.push("/match")}
-        initialPanelMode="none"
+        initialPanelMode={searchParams.get("panel") === "team" ? "team" : "none"}
         onPanelModeChange={setPanelMode}
       />
 
