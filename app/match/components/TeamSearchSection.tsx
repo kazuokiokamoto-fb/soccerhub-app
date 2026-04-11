@@ -225,6 +225,8 @@ export default function TeamSearchSection({
   const isTeamsMode = mode === "teams";
   const isPanelOpen = panelMode === "team";
 
+  const liveCountText = `チーム数：${filteredTeamsCount}件`;
+
   return (
     <>
       {!isPanelOpen ? (
@@ -247,7 +249,12 @@ export default function TeamSearchSection({
                 <button
                   type="button"
                   className="sh-btn sh-btn--primary"
-                  onClick={onOpenTeamList ?? (() => {})}
+                  onClick={
+                    onOpenTeamList ??
+                    (() => {
+                      window.location.href = "/teams";
+                    })
+                  }
                 >
                   チーム一覧
                 </button>
@@ -302,13 +309,14 @@ export default function TeamSearchSection({
           titleText="相手を探す"
           descriptionText="レベル・エリア・人数感などから相手チームを探せます。"
           liveCountLabel="現在のヒット件数"
-          liveCountText={`${filteredTeamsCount}チーム`}
+          liveCountText={liveCountText}
           hideFilterBadge={true}
           inlineHeaderActions={false}
           showTopActions={false}
           showTopHitBox={true}
           stickyHitBox={true}
           renderHeaderActionsInHitBox={true}
+          hidePanelTitleBlock={true}
         />
       ) : null}
 

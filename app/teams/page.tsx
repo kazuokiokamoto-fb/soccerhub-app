@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
 import AppHero from "@/app/components/AppHero";
@@ -75,13 +75,16 @@ function toTeamRows(value: unknown): TeamRow[] {
 
 export default function TeamsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
   const myUserId = user?.id ?? "";
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [teams, setTeams] = useState<TeamRow[]>([]);
-  const [panelMode, setPanelMode] = useState<"none" | "team">("none");
+  const [panelMode, setPanelMode] = useState<"none" | "team">(
+    searchParams.get("panel") === "team" ? "team" : "none"
+  );
 
   const {
     keyword,
@@ -107,6 +110,11 @@ export default function TeamsPage() {
     filters,
     clearAllFilters,
   } = useMatchFilters();
+
+  useEffect(() => {
+    const nextMode = searchParams.get("panel") === "team" ? "team" : "none";
+    setPanelMode(nextMode);
+  }, [searchParams]);
 
   useEffect(() => {
     let active = true;
@@ -255,7 +263,7 @@ export default function TeamsPage() {
   const isPanelOpen = panelMode === "team";
 
   return (
-    <main style={{ maxWidth: 980, margin: "0 auto", padding: 16 }}>
+    <main style={pageWrap}>
       <AppTabNav />
 
       {!isPanelOpen ? (
@@ -310,8 +318,8 @@ export default function TeamsPage() {
         filteredTeamsCount={filteredTeams.length}
         filteredSlotsCount={0}
         onOpenTeamList={() => router.push("/teams")}
-        onBackToCalendar={() => router.push("/match")}
-        initialPanelMode="none"
+        onBackToCalendar={() => router.push("/teams")}
+        initialPanelMode={searchParams.get("panel") === "team" ? "team" : "none"}
         onPanelModeChange={setPanelMode}
       />
 
@@ -409,6 +417,12 @@ export default function TeamsPage() {
     </main>
   );
 }
+
+const pageWrap: React.CSSProperties = {
+  maxWidth: 980,
+  margin: "0 auto",
+  padding: 16,
+};
 
 const errorBox: React.CSSProperties = {
   marginTop: 12,

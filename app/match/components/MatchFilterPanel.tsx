@@ -1,6 +1,10 @@
 "use client";
 
 import React from "react";
+import {
+  CATEGORY_OPTIONS as CATEGORY_MASTER_OPTIONS,
+  categoryLabel,
+} from "@/app/lib/categories";
 import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 
 type StrengthGuide = {
@@ -65,6 +69,10 @@ type MatchFilterPanelProps = {
   showTopHitBox?: boolean;
   stickyHitBox?: boolean;
   renderHeaderActionsInHitBox?: boolean;
+
+  hidePanelHeader?: boolean;
+  hidePanelTitleBlock?: boolean;
+  compactTopHitBox?: boolean;
 };
 
 const PREF_OPTIONS = [
@@ -78,18 +86,10 @@ const PREF_OPTIONS = [
   "群馬県",
 ];
 
-const CATEGORY_OPTIONS = [
-  "kids",
-  "elementary",
-  "junior",
-  "high",
-  "college",
-  "adult",
-  "senior",
-  "women",
-  "mixed",
-  "futsal",
-];
+const CATEGORY_OPTIONS = CATEGORY_MASTER_OPTIONS.map((opt) => ({
+  value: opt.value,
+  label: opt.label,
+}));
 
 export function MatchFilterPanel({
   filterRef,
@@ -129,6 +129,9 @@ export function MatchFilterPanel({
   showTopHitBox = true,
   stickyHitBox = false,
   renderHeaderActionsInHitBox = false,
+  hidePanelHeader = false,
+  hidePanelTitleBlock = false,
+  compactTopHitBox = false,
 }: MatchFilterPanelProps) {
   const toggleStrength = (rank: StrengthRank) => {
     if (strengthFilter.includes(rank)) {
@@ -149,9 +152,18 @@ export function MatchFilterPanel({
   return (
     <section style={wrap}>
       {showTopHitBox ? (
-        <section style={{ ...hitBox, ...(stickyHitBox ? stickyHitBoxStyle : {}) }}>
-          <div style={hitLabel}>{liveCountLabel}</div>
-          <div style={hitValue}>{liveCountText}</div>
+        <section
+          style={{
+            ...hitBox,
+            ...(compactTopHitBox ? compactHitBox : {}),
+            ...(stickyHitBox ? stickyHitBoxStyle : {}),
+          }}
+        >
+          <div style={hitTopRow}>
+            <div style={hitLabelInline}>{liveCountLabel}</div>
+            <div style={hitValueInline}>{liveCountText}</div>
+          </div>
+
           <div style={hitSub}>
             条件を変えるたびに、この件数がリアルタイムで変わります。
           </div>
@@ -189,26 +201,34 @@ export function MatchFilterPanel({
       ) : null}
 
       <section ref={filterRef} style={panelBox}>
-        <div style={headerRow}>
-          <div style={headerLeft}>
-            {!hideFilterBadge ? <div style={tinyBadge}>条件検索</div> : null}
-            <div style={title}>{titleText}</div>
-            <div style={desc}>{descriptionText}</div>
+        {!hidePanelHeader ? (
+          <div style={headerRow}>
+            {!hidePanelTitleBlock ? (
+              <div style={headerLeft}>
+                {!hideFilterBadge ? <div style={tinyBadge}>条件検索</div> : null}
+                <div style={title}>{titleText}</div>
+                <div style={desc}>{descriptionText}</div>
+              </div>
+            ) : (
+              <div />
+            )}
+
+            {!renderHeaderActionsInHitBox && inlineHeaderActions ? (
+              <div style={headerActions}>
+                <button type="button" className="sh-btn" onClick={onReset}>
+                  条件リセット
+                </button>
+                <button type="button" className="sh-btn" onClick={onBackToList}>
+                  閉じる
+                </button>
+              </div>
+            ) : null}
           </div>
+        ) : null}
 
-          {!renderHeaderActionsInHitBox && inlineHeaderActions ? (
-            <div style={headerActions}>
-              <button type="button" className="sh-btn" onClick={onReset}>
-                条件リセット
-              </button>
-              <button type="button" className="sh-btn" onClick={onBackToList}>
-                閉じる
-              </button>
-            </div>
-          ) : null}
-        </div>
-
-        {!renderHeaderActionsInHitBox && !inlineHeaderActions ? (
+        {!renderHeaderActionsInHitBox &&
+        !inlineHeaderActions &&
+        !hidePanelHeader ? (
           <div style={actionRow}>
             <button type="button" className="sh-btn" onClick={onReset}>
               条件リセット
@@ -225,7 +245,7 @@ export function MatchFilterPanel({
           <div style={label}>キーワード</div>
           <input
             className="sh-input"
-            placeholder="例：三宿 / 青 / 強度高め / 小学5年 / キッズ / SS"
+            placeholder="例：三宿 / 青 / 小学5年 / キッズ / SS"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
@@ -279,7 +299,9 @@ export function MatchFilterPanel({
               <button
                 type="button"
                 className="sh-btn"
-                onClick={() => setCategoryFilter(CATEGORY_OPTIONS)}
+                onClick={() =>
+                  setCategoryFilter(CATEGORY_OPTIONS.map((item) => item.value))
+                }
               >
                 全選択
               </button>
@@ -295,19 +317,26 @@ export function MatchFilterPanel({
 
           <div style={chipWrap}>
             {CATEGORY_OPTIONS.map((item) => {
-              const selected = categoryFilter.includes(item);
+              const selected = categoryFilter.includes(item.value);
               return (
                 <button
-                  key={item}
+                  key={item.value}
                   type="button"
-                  onClick={() => toggleCategory(item)}
+                  onClick={() => toggleCategory(item.value)}
                   style={selected ? chipActive : chip}
                 >
-                  {item}
+                  {item.label}
                 </button>
               );
             })}
           </div>
+
+          {categoryFilter.length > 0 ? (
+            <div style={hintText}>
+              選択中：
+              {categoryFilter.map((v) => categoryLabel(v) || v).join(" / ")}
+            </div>
+          ) : null}
         </div>
 
         <div style={card}>
@@ -426,30 +455,42 @@ const hitBox: React.CSSProperties = {
   padding: 16,
 };
 
+const compactHitBox: React.CSSProperties = {
+  padding: "14px 16px",
+};
+
 const stickyHitBoxStyle: React.CSSProperties = {
   position: "sticky",
   top: 10,
   zIndex: 40,
 };
 
-const hitLabel: React.CSSProperties = {
-  fontSize: 16,
-  fontWeight: 800,
-  color: "#2f5d3a",
+const hitTopRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
 };
 
-const hitValue: React.CSSProperties = {
-  marginTop: 6,
-  fontSize: 32,
+const hitLabelInline: React.CSSProperties = {
+  fontSize: 18,
   fontWeight: 900,
-  color: "#1f5d30",
-  lineHeight: 1.2,
+  color: "#2f5d3a",
+  lineHeight: 1.4,
+};
+
+const hitValueInline: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#14532d",
+  lineHeight: 1.4,
 };
 
 const hitSub: React.CSSProperties = {
-  marginTop: 8,
+  marginTop: 6,
   color: "#5f6f66",
   lineHeight: 1.7,
+  fontSize: 13,
 };
 
 const topActions: React.CSSProperties = {
