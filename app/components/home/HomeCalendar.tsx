@@ -253,7 +253,8 @@ export default function HomeCalendar() {
     }
   }, [myTeams, requestTeamId]);
 
-  const initialTeamPanelMode = searchParams.get("panel") === "team" ? "team" : "none";
+  const initialTeamPanelMode =
+    searchParams.get("panel") === "team" ? "team" : "none";
 
   const myTeamIds = useMemo(() => myTeams.map((t: any) => t.id), [myTeams]);
 
@@ -952,10 +953,6 @@ export default function HomeCalendar() {
         onOpenTeamList={openTeamListWindow}
         filteredTeamsCount={filteredTeams.length}
         filteredSlotsCount={filteredSlotsInMonth.length}
-        onClosePanelAfterReset={() => {
-          setSelectedSlotId("");
-          setRequestComment("");
-        }}
       />
 
       <div ref={calendarRef}>

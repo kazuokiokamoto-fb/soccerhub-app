@@ -63,13 +63,15 @@ type TeamSearchSectionProps = {
   clearAllFilters: () => void;
 
   filteredTeamsCount: number;
-  filteredSlotsCount: number;
+  filteredSlotsCount?: number;
 
-  onOpenTeamList: () => void;
+  onOpenTeamList?: () => void;
 
   initialPanelMode?: PanelMode;
   onPanelModeChange?: (mode: PanelMode) => void;
   onClosePanelAfterReset?: () => void;
+
+  showTeamListButton?: boolean;
 };
 
 function filterSummaryTextFromFilters(filters: {
@@ -163,6 +165,7 @@ export default function TeamSearchSection({
   initialPanelMode = "none",
   onPanelModeChange,
   onClosePanelAfterReset,
+  showTeamListButton = true,
 }: TeamSearchSectionProps) {
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
   const [panelMode, setPanelMode] = useState<PanelMode>(initialPanelMode);
@@ -216,6 +219,13 @@ export default function TeamSearchSection({
     return text || "すべて";
   }, [filters]);
 
+  const liveCountText = useMemo(() => {
+    if (typeof filteredSlotsCount === "number") {
+      return `${filteredTeamsCount}チーム / ${filteredSlotsCount}試合`;
+    }
+    return `${filteredTeamsCount}チーム`;
+  }, [filteredTeamsCount, filteredSlotsCount]);
+
   return (
     <>
       <section style={summaryBox}>
@@ -233,13 +243,15 @@ export default function TeamSearchSection({
               条件変更
             </button>
 
-            <button
-              type="button"
-              className="sh-btn sh-btn--primary"
-              onClick={onOpenTeamList}
-            >
-              チーム一覧
-            </button>
+            {showTeamListButton && onOpenTeamList ? (
+              <button
+                type="button"
+                className="sh-btn sh-btn--primary"
+                onClick={onOpenTeamList}
+              >
+                チーム一覧
+              </button>
+            ) : null}
           </div>
         </div>
       </section>
@@ -269,7 +281,7 @@ export default function TeamSearchSection({
           memberCountMin={memberCountMin}
           setMemberCountMin={setMemberCountMin}
           onBackToCalendar={closePanel}
-          onOpenTeamList={onOpenTeamList}
+          onOpenTeamList={onOpenTeamList ?? (() => {})}
           onReset={handleResetTeamFilters}
           onBackToList={closePanel}
           onOpenStrengthHelp={() => setShowStrengthHelp(true)}
@@ -277,7 +289,7 @@ export default function TeamSearchSection({
           titleText="相手を探す"
           descriptionText="レベル・エリア・人数感などから相手チームを探せます。"
           liveCountLabel="現在のヒット件数"
-          liveCountText={`${filteredTeamsCount}チーム / ${filteredSlotsCount}試合`}
+          liveCountText={liveCountText}
         />
       ) : null}
 

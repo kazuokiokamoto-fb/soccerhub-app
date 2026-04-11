@@ -7,6 +7,10 @@ import { useAuth } from "@/app/lib/auth";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import { categoryLabel } from "@/app/lib/categories";
+import TeamSearchSection from "@/app/match/components/TeamSearchSection";
+import { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
+
+import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 
 type TeamRow = {
   id: string;
@@ -28,21 +32,6 @@ type TeamRow = {
   uniform_sub?: string | null;
   note?: string | null;
 };
-
-type SavedFilters = {
-  keyword: string;
-  categoryFilter: string[];
-  prefectureFilter: string;
-  cityFilter: string;
-  townFilter: string;
-  groundFilter: "all" | "あり" | "なし";
-  strengthFilter: string[];
-  bikeFilter: "all" | "あり" | "なし" | "不明";
-  bikeCapacityMin: string;
-  memberCountMin: string;
-};
-
-const FILTER_STORAGE_KEY = "sakamatch:team-filters:v1";
 
 function norm(v?: string | null) {
   return String(v ?? "").trim();
@@ -85,93 +74,99 @@ function toTeamRows(value: unknown): TeamRow[] {
   return value.map((row) => row as TeamRow);
 }
 
-function getDefaultFilters(): SavedFilters {
-  return {
-    keyword: "",
-    categoryFilter: [],
-    prefectureFilter: "",
-    cityFilter: "",
-    townFilter: "",
-    groundFilter: "all",
-    strengthFilter: [],
-    bikeFilter: "all",
-    bikeCapacityMin: "",
-    memberCountMin: "",
-  };
-}
+function teamMatchesFilters(
+  team: TeamRow,
+  filters: {
+    keyword: string;
+    categoryFilter: string[];
+    prefectureFilter: string;
+    cityFilter: string;
+    townFilter: string;
+    groundFilter: "all" | "あり" | "なし";
+    strengthFilter: StrengthRank[];
+    bikeFilter: "all" | "あり" | "なし" | "不明";
+    bikeCapacityMin: string;
+    memberCountMin: string;
+  }
+) {
+  const categories = teamCategories(team);
 
-function readSavedFilters(): SavedFilters {
-  if (typeof window === "undefined") {
-    return getDefaultFilters();
+  if (filters.categoryFilter.length > 0) {
+    const ok = categories.some((c) =>
+      filters.categoryFilter.includes(String(c).trim())
+    );
+    if (!ok) return false;
   }
 
-  try {
-    const raw = window.localStorage.getItem(FILTER_STORAGE_KEY);
-    if (!raw) return getDefaultFilters();
-
-    const parsed = JSON.parse(raw);
-
-    return {
-      keyword: String(parsed?.keyword ?? ""),
-      categoryFilter: Array.isArray(parsed?.categoryFilter)
-        ? parsed.categoryFilter.map(String)
-        : [],
-      prefectureFilter: String(parsed?.prefectureFilter ?? ""),
-      cityFilter: String(parsed?.cityFilter ?? ""),
-      townFilter: String(parsed?.townFilter ?? ""),
-      groundFilter:
-        parsed?.groundFilter === "あり" || parsed?.groundFilter === "なし"
-          ? parsed.groundFilter
-          : "all",
-      strengthFilter: Array.isArray(parsed?.strengthFilter)
-        ? parsed.strengthFilter.map(String)
-        : [],
-      bikeFilter:
-        parsed?.bikeFilter === "あり" ||
-        parsed?.bikeFilter === "なし" ||
-        parsed?.bikeFilter === "不明"
-          ? parsed.bikeFilter
-          : "all",
-      bikeCapacityMin: String(parsed?.bikeCapacityMin ?? ""),
-      memberCountMin: String(parsed?.memberCountMin ?? ""),
-    };
-  } catch {
-    return getDefaultFilters();
+  if (
+    filters.prefectureFilter &&
+    norm(team.prefecture) !== filters.prefectureFilter
+  ) {
+    return false;
   }
-}
 
-function hasAnyFilter(filters: SavedFilters) {
-  return (
-    !!filters.keyword.trim() ||
-    filters.categoryFilter.length > 0 ||
-    !!filters.prefectureFilter ||
-    !!filters.cityFilter ||
-    !!filters.townFilter ||
-    filters.groundFilter !== "all" ||
-    filters.strengthFilter.length > 0 ||
-    filters.bikeFilter !== "all" ||
-    !!filters.bikeCapacityMin ||
-    !!filters.memberCountMin
-  );
-}
+  if (filters.cityFilter && norm(team.city) !== filters.cityFilter) {
+    return false;
+  }
 
-function buildFilterSummary(filters: SavedFilters) {
-  if (!hasAnyFilter(filters)) return "すべて";
+  if (filters.townFilter && norm(team.town) !== filters.townFilter) {
+    return false;
+  }
 
-  const parts: string[] = [];
+  if (filters.groundFilter !== "all") {
+    const ground = team.has_ground ? "あり" : "なし";
+    if (ground !== filters.groundFilter) return false;
+  }
 
-  if (filters.keyword.trim()) parts.push("キーワード");
-  if (filters.categoryFilter.length > 0) parts.push("カテゴリ");
-  if (filters.prefectureFilter) parts.push("都道府県");
-  if (filters.cityFilter) parts.push("市区町村");
-  if (filters.townFilter) parts.push("町名");
-  if (filters.groundFilter !== "all") parts.push("グラウンド");
-  if (filters.strengthFilter.length > 0) parts.push("強さ");
-  if (filters.bikeFilter !== "all") parts.push("駐輪場");
-  if (filters.memberCountMin) parts.push("所属人数");
-  if (filters.bikeCapacityMin) parts.push("駐輪台数");
+  if (filters.strengthFilter.length > 0) {
+    const rank = teamStrengthLabel(team);
+    if (!filters.strengthFilter.includes(rank as StrengthRank)) return false;
+  }
 
-  return parts.join(" / ");
+  if (filters.bikeFilter !== "all") {
+    const bike = (team.bike_parking ?? "不明") as "あり" | "なし" | "不明";
+    if (bike !== filters.bikeFilter) return false;
+  }
+
+  if (filters.memberCountMin) {
+    const count = Number(team.member_count ?? 0);
+    if (count < Number(filters.memberCountMin)) return false;
+  }
+
+  if (filters.bikeCapacityMin) {
+    const cap = parseBikeCapacity(team.bike_parking_capacity);
+    if (cap == null || cap < Number(filters.bikeCapacityMin)) {
+      return false;
+    }
+  }
+
+  if (filters.keyword.trim()) {
+    const q = filters.keyword.trim().toLowerCase();
+
+    const hay = [
+      team.name,
+      team.area,
+      team.prefecture,
+      team.city,
+      team.town,
+      team.category,
+      ...categories,
+      team.uniform_main,
+      team.uniform_sub,
+      team.note,
+      team.bike_parking,
+      team.bike_parking_capacity,
+      String(team.member_count ?? ""),
+      String(team.strength_rank ?? ""),
+      levelToRank(team.level),
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    if (!hay.includes(q)) return false;
+  }
+
+  return true;
 }
 
 export default function TeamsPage() {
@@ -181,31 +176,31 @@ export default function TeamsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [teams, setTeams] = useState<TeamRow[]>([]);
-  const [savedFilters, setSavedFilters] = useState<SavedFilters>(() =>
-    readSavedFilters()
-  );
 
-  useEffect(() => {
-    setSavedFilters(readSavedFilters());
-
-    const onFocus = () => {
-      setSavedFilters(readSavedFilters());
-    };
-
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === FILTER_STORAGE_KEY) {
-        setSavedFilters(readSavedFilters());
-      }
-    };
-
-    window.addEventListener("focus", onFocus);
-    window.addEventListener("storage", onStorage);
-
-    return () => {
-      window.removeEventListener("focus", onFocus);
-      window.removeEventListener("storage", onStorage);
-    };
-  }, []);
+  const {
+    keyword,
+    setKeyword,
+    categoryFilter,
+    setCategoryFilter,
+    prefectureFilter,
+    setPrefectureFilter,
+    cityFilter,
+    setCityFilter,
+    townFilter,
+    setTownFilter,
+    groundFilter,
+    setGroundFilter,
+    strengthFilter,
+    setStrengthFilter,
+    bikeFilter,
+    setBikeFilter,
+    bikeCapacityMin,
+    setBikeCapacityMin,
+    memberCountMin,
+    setMemberCountMin,
+    filters,
+    clearAllFilters,
+  } = useMatchFilters();
 
   useEffect(() => {
     let active = true;
@@ -266,100 +261,8 @@ export default function TeamsPage() {
   }, []);
 
   const filteredTeams = useMemo(() => {
-    return teams.filter((team) => {
-      const categories = teamCategories(team);
-
-      if (savedFilters.categoryFilter.length > 0) {
-        const ok = categories.some((c) =>
-          savedFilters.categoryFilter.includes(String(c).trim())
-        );
-        if (!ok) return false;
-      }
-
-      if (
-        savedFilters.prefectureFilter &&
-        norm(team.prefecture) !== savedFilters.prefectureFilter
-      ) {
-        return false;
-      }
-
-      if (
-        savedFilters.cityFilter &&
-        norm(team.city) !== savedFilters.cityFilter
-      ) {
-        return false;
-      }
-
-      if (
-        savedFilters.townFilter &&
-        norm(team.town) !== savedFilters.townFilter
-      ) {
-        return false;
-      }
-
-      if (savedFilters.groundFilter !== "all") {
-        const ground = team.has_ground ? "あり" : "なし";
-        if (ground !== savedFilters.groundFilter) return false;
-      }
-
-      if (savedFilters.strengthFilter.length > 0) {
-        const rank = teamStrengthLabel(team);
-        if (!savedFilters.strengthFilter.includes(rank)) return false;
-      }
-
-      if (savedFilters.bikeFilter !== "all") {
-        const bike = (team.bike_parking ?? "不明") as
-          | "あり"
-          | "なし"
-          | "不明";
-        if (bike !== savedFilters.bikeFilter) return false;
-      }
-
-      if (savedFilters.memberCountMin) {
-        const count = Number(team.member_count ?? 0);
-        if (count < Number(savedFilters.memberCountMin)) return false;
-      }
-
-      if (savedFilters.bikeCapacityMin) {
-        const cap = parseBikeCapacity(team.bike_parking_capacity);
-        if (cap == null || cap < Number(savedFilters.bikeCapacityMin)) {
-          return false;
-        }
-      }
-
-      if (savedFilters.keyword.trim()) {
-        const q = savedFilters.keyword.trim().toLowerCase();
-
-        const hay = [
-          team.name,
-          team.area,
-          team.prefecture,
-          team.city,
-          team.town,
-          team.category,
-          ...categories,
-          team.uniform_main,
-          team.uniform_sub,
-          team.note,
-          team.bike_parking,
-          team.bike_parking_capacity,
-          String(team.member_count ?? ""),
-          String(team.strength_rank ?? ""),
-          levelToRank(team.level),
-        ]
-          .join(" ")
-          .toLowerCase();
-
-        if (!hay.includes(q)) return false;
-      }
-
-      return true;
-    });
-  }, [teams, savedFilters]);
-
-  const filterSummaryText = useMemo(() => {
-    return buildFilterSummary(savedFilters);
-  }, [savedFilters]);
+    return teams.filter((team) => teamMatchesFilters(team, filters));
+  }, [teams, filters]);
 
   return (
     <main style={{ maxWidth: 980, margin: "0 auto", padding: 16 }}>
@@ -368,7 +271,7 @@ export default function TeamsPage() {
       <AppHero
         icon="👥"
         title="チーム一覧"
-        desc="サカまっちに登録している全チームを一覧表示します。条件変更はホームと同じ設定を使います。"
+        desc="サカまっちに登録している全チームを一覧表示します。条件検索はホームと同じUIです。"
       />
 
       {loadError ? (
@@ -387,25 +290,34 @@ export default function TeamsPage() {
         </div>
       ) : null}
 
-      <section style={summaryBox}>
-        <div style={summaryHead}>
-          <div style={summaryTextWrap}>
-            <div style={summaryTitle}>表示条件</div>
-            <div style={summaryText}>条件：{filterSummaryText}</div>
-            <div style={resultText}>
-              {loading || authLoading
-                ? "読み込み中…"
-                : `${filteredTeams.length}チーム表示 / 全${teams.length}チーム`}
-            </div>
-          </div>
-
-          <div style={summaryButtonRow}>
-            <Link href="/match?panel=team" className="sh-btn sh-btn--primary">
-              条件変更
-            </Link>
-          </div>
-        </div>
-      </section>
+      <TeamSearchSection
+        loading={loading || authLoading}
+        keyword={keyword}
+        setKeyword={setKeyword}
+        categoryFilter={categoryFilter}
+        setCategoryFilter={setCategoryFilter}
+        prefectureFilter={prefectureFilter}
+        setPrefectureFilter={setPrefectureFilter}
+        cityFilter={cityFilter}
+        setCityFilter={setCityFilter}
+        townFilter={townFilter}
+        setTownFilter={setTownFilter}
+        groundFilter={groundFilter}
+        setGroundFilter={setGroundFilter}
+        strengthFilter={strengthFilter}
+        setStrengthFilter={setStrengthFilter}
+        bikeFilter={bikeFilter}
+        setBikeFilter={setBikeFilter}
+        bikeCapacityMin={bikeCapacityMin}
+        setBikeCapacityMin={setBikeCapacityMin}
+        memberCountMin={memberCountMin}
+        setMemberCountMin={setMemberCountMin}
+        filters={filters}
+        clearAllFilters={clearAllFilters}
+        filteredTeamsCount={filteredTeams.length}
+        filteredSlotsCount={0}
+        onOpenTeamList={() => {}}
+      />
 
       {loading || authLoading ? (
         <div style={emptyBox}>読み込み中…</div>
@@ -512,53 +424,6 @@ const errorBox: React.CSSProperties = {
 const errorTitle: React.CSSProperties = {
   fontWeight: 900,
   marginBottom: 4,
-};
-
-const summaryBox: React.CSSProperties = {
-  marginTop: 12,
-  padding: 16,
-  borderRadius: 16,
-  border: "1px solid #dce9df",
-  background: "#f7fbf8",
-};
-
-const summaryHead: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-end",
-  gap: 12,
-  flexWrap: "wrap",
-};
-
-const summaryTextWrap: React.CSSProperties = {
-  display: "grid",
-  gap: 6,
-  minWidth: 0,
-};
-
-const summaryTitle: React.CSSProperties = {
-  fontSize: 18,
-  fontWeight: 900,
-  color: "#16391f",
-};
-
-const summaryText: React.CSSProperties = {
-  fontSize: 14,
-  color: "#3b6a49",
-  lineHeight: 1.7,
-};
-
-const summaryButtonRow: React.CSSProperties = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-  marginLeft: "auto",
-};
-
-const resultText: React.CSSProperties = {
-  fontSize: 14,
-  fontWeight: 800,
-  color: "#14532d",
 };
 
 const listWrap: React.CSSProperties = {

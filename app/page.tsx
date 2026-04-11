@@ -69,7 +69,7 @@ export default function HomePage() {
       }
     };
 
-    loadTeams();
+    void loadTeams();
 
     return () => {
       mounted = false;
