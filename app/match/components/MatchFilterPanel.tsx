@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 
 type StrengthGuide = {
   rank: string;
@@ -32,8 +33,8 @@ type MatchFilterPanelProps = {
   groundFilter: "all" | "あり" | "なし";
   setGroundFilter: (value: "all" | "あり" | "なし") => void;
 
-  strengthFilter: string[];
-  setStrengthFilter: (value: string[]) => void;
+  strengthFilter: StrengthRank[];
+  setStrengthFilter: (value: StrengthRank[]) => void;
 
   bikeFilter: "all" | "あり" | "なし" | "不明";
   setBikeFilter: (value: "all" | "あり" | "なし" | "不明") => void;
@@ -129,7 +130,7 @@ export function MatchFilterPanel({
   stickyHitBox = false,
   renderHeaderActionsInHitBox = false,
 }: MatchFilterPanelProps) {
-  const toggleStrength = (rank: string) => {
+  const toggleStrength = (rank: StrengthRank) => {
     if (strengthFilter.includes(rank)) {
       setStrengthFilter(strengthFilter.filter((v) => v !== rank));
     } else {
@@ -326,7 +327,7 @@ export function MatchFilterPanel({
           </div>
 
           <div style={chipWrap}>
-            {["SS", "S", "A", "B", "C"].map((rank) => {
+            {(["SS", "S", "A", "B", "C"] as StrengthRank[]).map((rank) => {
               const selected = strengthFilter.includes(rank);
               return (
                 <button
