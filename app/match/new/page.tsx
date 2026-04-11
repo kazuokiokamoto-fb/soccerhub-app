@@ -8,6 +8,8 @@ import AppTabNav from "@/app/components/AppTabNav";
 import AppHero from "@/app/components/AppHero";
 import PageBackNav from "@/app/components/PageBackNav";
 import { CATEGORY_OPTIONS, categoryLabel } from "@/app/lib/categories";
+import { MatchHelpModals } from "@/app/match/components/MatchHelpModals";
+import { STRENGTH_GUIDES } from "@/app/match/constants/strengthGuides";
 
 type DbTeam = {
   id: string;
@@ -81,7 +83,7 @@ function MatchCreatePageInner() {
 
   const [wantedLevelMin, setWantedLevelMin] = useState("");
   const [wantedLevelMax, setWantedLevelMax] = useState("");
-  const [showLevelHelp, setShowLevelHelp] = useState(false);
+  const [showStrengthHelp, setShowStrengthHelp] = useState(false);
 
   useEffect(() => {
     void load();
@@ -162,7 +164,10 @@ function MatchCreatePageInner() {
           .select("id,owner_id,name,area,category,categories,prefecture,city,town")
           .eq("owner_id", uid)
           .order("updated_at", { ascending: false }),
-        supabase.from("venues").select("id,name,area").order("name", { ascending: true }),
+        supabase
+          .from("venues")
+          .select("id,name,area")
+          .order("name", { ascending: true }),
       ]);
 
       const teams = (teamRows ?? []) as DbTeam[];
@@ -254,7 +259,8 @@ function MatchCreatePageInner() {
 
   const canSave = useMemo(() => {
     const categoryOk = slotCategories.length > 0;
-    const venueOk = venueMode === "existing" ? true : newVenueName.trim().length > 0;
+    const venueOk =
+      venueMode === "existing" ? true : newVenueName.trim().length > 0;
 
     return (
       !!slotDate &&
@@ -375,287 +381,288 @@ function MatchCreatePageInner() {
   }
 
   if (loading) {
-    return (
-      <main style={pageWrap}>
-        読み込み中…
-      </main>
-    );
+    return <main style={pageWrap}>読み込み中…</main>;
   }
 
   return (
-    <main style={pageWrap}>
-      <AppTabNav />
-      <PageBackNav current="募集枠を作る" />
+    <>
+      <main style={pageWrap}>
+        <AppTabNav />
+        <PageBackNav current="募集枠を作る" />
 
-      <AppHero
-        icon="🗓️"
-        title="募集枠を作る"
-        desc="日付・時間・カテゴリ・希望相手の強さを設定して募集を作成します。"
-      />
+        <AppHero
+          icon="🗓️"
+          title="募集枠を作る"
+          desc="日付・時間・カテゴリ・希望相手の強さを設定して募集を作成します。"
+        />
 
-      <section style={card}>
-        <div style={formGrid}>
-          <label style={label}>
-            <span style={labelTitle}>日付</span>
-            <input
-              type="date"
-              value={slotDate}
-              onChange={(e) => setSlotDate(e.target.value)}
-              style={nativeInput}
-              disabled={saving}
-            />
-          </label>
-
-          <label style={label}>
-            <span style={labelTitle}>ホストチーム</span>
-            <select
-              value={hostTeamId}
-              onChange={(e) => setHostTeamId(e.target.value)}
-              style={selectInput}
-              disabled={saving}
-            >
-              {myTeams.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name ?? "チーム未設定"}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div style={stackCols}>
+        <section style={card}>
+          <div style={formGrid}>
             <label style={label}>
-              <span style={labelTitle}>開始</span>
+              <span style={labelTitle}>日付</span>
               <input
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
+                type="date"
+                value={slotDate}
+                onChange={(e) => setSlotDate(e.target.value)}
                 style={nativeInput}
                 disabled={saving}
               />
             </label>
 
             <label style={label}>
-              <span style={labelTitle}>終了</span>
+              <span style={labelTitle}>ホストチーム</span>
+              <select
+                value={hostTeamId}
+                onChange={(e) => setHostTeamId(e.target.value)}
+                style={selectInput}
+                disabled={saving}
+              >
+                {myTeams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name ?? "チーム未設定"}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div style={stackCols}>
+              <label style={label}>
+                <span style={labelTitle}>開始</span>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  style={nativeInput}
+                  disabled={saving}
+                />
+              </label>
+
+              <label style={label}>
+                <span style={labelTitle}>終了</span>
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  style={nativeInput}
+                  disabled={saving}
+                />
+              </label>
+            </div>
+
+            <label style={label}>
+              <span style={labelTitle}>エリア</span>
               <input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                style={nativeInput}
+                value={slotArea}
+                onChange={(e) => setSlotArea(e.target.value)}
+                style={textInput}
+                placeholder="例：世田谷区 三宿"
                 disabled={saving}
               />
             </label>
-          </div>
 
-          <label style={label}>
-            <span style={labelTitle}>エリア</span>
-            <input
-              value={slotArea}
-              onChange={(e) => setSlotArea(e.target.value)}
-              style={textInput}
-              placeholder="例：世田谷区 三宿"
-              disabled={saving}
-            />
-          </label>
-
-          <div style={sectionBox}>
-            <div style={sectionTitle}>カテゴリ（複数選択可）</div>
-            <div style={sectionSubText}>
-              複数選択した場合は OR 条件で募集されます。
-            </div>
-
-            <div style={chipWrap}>
-              {CATEGORY_OPTIONS.map((opt) => {
-                const active = slotCategories.includes(opt.value);
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => toggleCategory(opt.value)}
-                    disabled={saving}
-                    aria-pressed={active}
-                    style={{
-                      ...chip,
-                      ...(active ? chipActive : null),
-                      ...(saving ? chipDisabled : null),
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {slotCategories.length > 0 ? (
-              <div style={helperText}>
-                選択中: {slotCategories.map((v) => categoryLabel(v)).join(" / ")}
+            <div style={sectionBox}>
+              <div style={sectionTitle}>カテゴリ（複数選択可）</div>
+              <div style={sectionSubText}>
+                複数選択した場合は OR 条件で募集されます。
               </div>
-            ) : (
-              <div style={helperText}>カテゴリを1つ以上選択してください。</div>
-            )}
-          </div>
 
-          <div style={sectionBox}>
-            <div style={strengthTitleRow}>
-              <div style={sectionTitle}>希望相手の強さ</div>
+              <div style={chipWrap}>
+                {CATEGORY_OPTIONS.map((opt) => {
+                  const active = slotCategories.includes(opt.value);
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => toggleCategory(opt.value)}
+                      disabled={saving}
+                      aria-pressed={active}
+                      style={{
+                        ...chip,
+                        ...(active ? chipActive : null),
+                        ...(saving ? chipDisabled : null),
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {slotCategories.length > 0 ? (
+                <div style={helperText}>
+                  選択中:{" "}
+                  {slotCategories.map((v) => categoryLabel(v)).join(" / ")}
+                </div>
+              ) : (
+                <div style={helperText}>
+                  カテゴリを1つ以上選択してください。
+                </div>
+              )}
+            </div>
+
+            <div style={sectionBox}>
+              <div style={strengthTitleRow}>
+                <div style={sectionTitle}>希望相手の強さ</div>
+                <button
+                  type="button"
+                  onClick={() => setShowStrengthHelp(true)}
+                  style={helpButton}
+                  aria-label="希望相手の強さの説明"
+                >
+                  ?
+                </button>
+              </div>
+
+              <div style={strengthGrid}>
+                <label style={label}>
+                  <span style={subLabelTitle}>下限</span>
+                  <select
+                    value={wantedLevelMin}
+                    onChange={(e) => setWantedLevelMin(e.target.value)}
+                    style={selectInput}
+                    disabled={saving}
+                  >
+                    <option value="">指定なし</option>
+                    <option value="9">SS</option>
+                    <option value="7">S</option>
+                    <option value="5">A</option>
+                    <option value="3">B</option>
+                    <option value="1">C</option>
+                  </select>
+                </label>
+
+                <label style={label}>
+                  <span style={subLabelTitle}>上限</span>
+                  <select
+                    value={wantedLevelMax}
+                    onChange={(e) => setWantedLevelMax(e.target.value)}
+                    style={selectInput}
+                    disabled={saving}
+                  >
+                    <option value="">指定なし</option>
+                    <option value="9">SS</option>
+                    <option value="7">S</option>
+                    <option value="5">A</option>
+                    <option value="3">B</option>
+                    <option value="1">C</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div style={sectionBox}>
+              <div style={sectionTitle}>グラウンド</div>
+
+              <div style={toggleRow}>
+                <button
+                  type="button"
+                  className="sh-btn"
+                  onClick={() => setVenueMode("existing")}
+                  disabled={saving}
+                  style={venueMode === "existing" ? activeModeBtn : undefined}
+                >
+                  既存から選ぶ
+                </button>
+
+                <button
+                  type="button"
+                  className="sh-btn"
+                  onClick={() => setVenueMode("new")}
+                  disabled={saving}
+                  style={venueMode === "new" ? activeModeBtn : undefined}
+                >
+                  新しく登録する
+                </button>
+              </div>
+
+              {venueMode === "existing" ? (
+                <label style={label}>
+                  <span style={labelTitle}>既存グラウンド</span>
+                  <select
+                    value={venueId}
+                    onChange={(e) => setVenueId(e.target.value)}
+                    style={selectInput}
+                    disabled={saving}
+                  >
+                    <option value="">（未設定）</option>
+                    {venues.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name}
+                        {v.area ? ` / ${v.area}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <div style={subGrid}>
+                  <label style={label}>
+                    <span style={labelTitle}>新規グラウンド名</span>
+                    <input
+                      value={newVenueName}
+                      onChange={(e) => setNewVenueName(e.target.value)}
+                      style={textInput}
+                      placeholder="例：世田谷公園 サッカー場"
+                      disabled={saving}
+                    />
+                  </label>
+
+                  <label style={label}>
+                    <span style={labelTitle}>新規グラウンドのエリア</span>
+                    <input
+                      value={newVenueArea}
+                      onChange={(e) => setNewVenueArea(e.target.value)}
+                      style={textInput}
+                      placeholder="例：世田谷区 池尻"
+                      disabled={saving}
+                    />
+                  </label>
+
+                  <div style={helperText}>
+                    作成時に venues に保存されるので、次回以降も候補に表示されます。
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={actionRow}>
+              <Link href="/match" className="sh-btn">
+                キャンセル
+              </Link>
+
               <button
                 type="button"
-                onClick={() => setShowLevelHelp((v) => !v)}
-                style={helpButton}
-                aria-label="希望相手の強さの説明"
+                className="sh-btn sh-btn--primary"
+                onClick={createSlot}
+                disabled={!canSave}
               >
-                ?
+                {saving ? "作成中…" : "募集枠を作成"}
               </button>
             </div>
 
-            {showLevelHelp ? (
-              <div style={helpBox}>
-                下限と上限を設定すると、募集したい相手の強さ範囲を指定できます。
+            {selectedHostTeam ? (
+              <div style={helperText}>
+                ホストチーム: {selectedHostTeam.name ?? "未設定"}
                 <br />
-                例）下限 B / 上限 S → B〜S の相手を募集
+                エリア初期値: {selectedHostTeam.area ?? "未設定"}
+                <br />
+                カテゴリ初期値:{" "}
+                {getDefaultCategories(selectedHostTeam)
+                  .map((v) => categoryLabel(v))
+                  .join(" / ") || "未設定"}
               </div>
             ) : null}
-
-            <div style={strengthGrid}>
-              <label style={label}>
-                <span style={subLabelTitle}>下限</span>
-                <select
-                  value={wantedLevelMin}
-                  onChange={(e) => setWantedLevelMin(e.target.value)}
-                  style={selectInput}
-                  disabled={saving}
-                >
-                  <option value="">指定なし</option>
-                  <option value="9">SS</option>
-                  <option value="7">S</option>
-                  <option value="5">A</option>
-                  <option value="3">B</option>
-                  <option value="1">C</option>
-                </select>
-              </label>
-
-              <label style={label}>
-                <span style={subLabelTitle}>上限</span>
-                <select
-                  value={wantedLevelMax}
-                  onChange={(e) => setWantedLevelMax(e.target.value)}
-                  style={selectInput}
-                  disabled={saving}
-                >
-                  <option value="">指定なし</option>
-                  <option value="9">SS</option>
-                  <option value="7">S</option>
-                  <option value="5">A</option>
-                  <option value="3">B</option>
-                  <option value="1">C</option>
-                </select>
-              </label>
-            </div>
           </div>
+        </section>
+      </main>
 
-          <div style={sectionBox}>
-            <div style={sectionTitle}>グラウンド</div>
-
-            <div style={toggleRow}>
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={() => setVenueMode("existing")}
-                disabled={saving}
-                style={venueMode === "existing" ? activeModeBtn : undefined}
-              >
-                既存から選ぶ
-              </button>
-
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={() => setVenueMode("new")}
-                disabled={saving}
-                style={venueMode === "new" ? activeModeBtn : undefined}
-              >
-                新しく登録する
-              </button>
-            </div>
-
-            {venueMode === "existing" ? (
-              <label style={label}>
-                <span style={labelTitle}>既存グラウンド</span>
-                <select
-                  value={venueId}
-                  onChange={(e) => setVenueId(e.target.value)}
-                  style={selectInput}
-                  disabled={saving}
-                >
-                  <option value="">（未設定）</option>
-                  {venues.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name}
-                      {v.area ? ` / ${v.area}` : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              <div style={subGrid}>
-                <label style={label}>
-                  <span style={labelTitle}>新規グラウンド名</span>
-                  <input
-                    value={newVenueName}
-                    onChange={(e) => setNewVenueName(e.target.value)}
-                    style={textInput}
-                    placeholder="例：世田谷公園 サッカー場"
-                    disabled={saving}
-                  />
-                </label>
-
-                <label style={label}>
-                  <span style={labelTitle}>新規グラウンドのエリア</span>
-                  <input
-                    value={newVenueArea}
-                    onChange={(e) => setNewVenueArea(e.target.value)}
-                    style={textInput}
-                    placeholder="例：世田谷区 池尻"
-                    disabled={saving}
-                  />
-                </label>
-
-                <div style={helperText}>
-                  作成時に venues に保存されるので、次回以降も候補に表示されます。
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div style={actionRow}>
-            <Link href="/match" className="sh-btn">
-              キャンセル
-            </Link>
-
-            <button
-              type="button"
-              className="sh-btn sh-btn--primary"
-              onClick={createSlot}
-              disabled={!canSave}
-            >
-              {saving ? "作成中…" : "募集枠を作成"}
-            </button>
-          </div>
-
-          {selectedHostTeam ? (
-            <div style={helperText}>
-              ホストチーム: {selectedHostTeam.name ?? "未設定"}
-              <br />
-              エリア初期値: {selectedHostTeam.area ?? "未設定"}
-              <br />
-              カテゴリ初期値:{" "}
-              {getDefaultCategories(selectedHostTeam)
-                .map((v) => categoryLabel(v))
-                .join(" / ") || "未設定"}
-            </div>
-          ) : null}
-        </div>
-      </section>
-    </main>
+      <MatchHelpModals
+        showStrengthHelp={showStrengthHelp}
+        showCalendarHelp={false}
+        onCloseStrengthHelp={() => setShowStrengthHelp(false)}
+        onCloseCalendarHelp={() => {}}
+        strengthGuides={STRENGTH_GUIDES}
+      />
+    </>
   );
 }
 
@@ -864,14 +871,4 @@ const helpButton: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   padding: 0,
-};
-
-const helpBox: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #dce9df",
-  background: "#f7fbf8",
-  color: "#3b6a49",
-  fontSize: 13,
-  lineHeight: 1.7,
 };

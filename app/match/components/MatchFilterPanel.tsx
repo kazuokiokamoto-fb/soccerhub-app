@@ -1,34 +1,19 @@
 "use client";
 
 import React from "react";
-import { CATEGORY_OPTIONS } from "@/app/lib/categories";
-import { CheckboxGroup } from "@/app/components/CheckboxGroup";
-import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
 import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 
-import {
-  filterHeaderRow,
-  filterTitle,
-  label,
-  labelTitle,
-  twoCols,
-  actionRow,
-} from "../styles/matchPageStyles";
-
 type StrengthGuide = {
-  rank: StrengthRank;
+  rank: string;
   short: string;
   title: string;
   bullets: string[];
   note: string;
 };
 
-type GroundFilter = "all" | "あり" | "なし";
-type BikeFilter = "all" | "あり" | "なし" | "不明";
-
-type Props = {
-  filterRef: React.RefObject<HTMLElement | null>;
-  loading: boolean;
+type MatchFilterPanelProps = {
+  filterRef?: React.RefObject<HTMLElement | null>;
+  loading?: boolean;
 
   keyword: string;
   setKeyword: React.Dispatch<React.SetStateAction<string>>;
@@ -45,14 +30,18 @@ type Props = {
   townFilter: string;
   setTownFilter: React.Dispatch<React.SetStateAction<string>>;
 
-  groundFilter: GroundFilter;
-  setGroundFilter: React.Dispatch<React.SetStateAction<GroundFilter>>;
+  groundFilter: "all" | "あり" | "なし";
+  setGroundFilter: React.Dispatch<
+    React.SetStateAction<"all" | "あり" | "なし">
+  >;
 
   strengthFilter: StrengthRank[];
   setStrengthFilter: React.Dispatch<React.SetStateAction<StrengthRank[]>>;
 
-  bikeFilter: BikeFilter;
-  setBikeFilter: React.Dispatch<React.SetStateAction<BikeFilter>>;
+  bikeFilter: "all" | "あり" | "なし" | "不明";
+  setBikeFilter: React.Dispatch<
+    React.SetStateAction<"all" | "あり" | "なし" | "不明">
+  >;
 
   bikeCapacityMin: string;
   setBikeCapacityMin: React.Dispatch<React.SetStateAction<string>>;
@@ -60,20 +49,48 @@ type Props = {
   memberCountMin: string;
   setMemberCountMin: React.Dispatch<React.SetStateAction<string>>;
 
+  onBackToCalendar: () => void;
+  onOpenTeamList: () => void;
   onReset: () => void;
   onBackToList: () => void;
-  onBackToCalendar?: () => void;
   onOpenStrengthHelp: () => void;
-  onOpenTeamList?: () => void;
 
   strengthGuides: StrengthGuide[];
 
-  bandText?: string;
   titleText?: string;
   descriptionText?: string;
   liveCountLabel?: string;
   liveCountText?: string;
+
+  hideFilterBadge?: boolean;
+  inlineHeaderActions?: boolean;
 };
+
+const PREF_OPTIONS = [
+  "関東（すべて）",
+  "東京都",
+  "神奈川県",
+  "千葉県",
+  "埼玉県",
+  "茨城県",
+  "栃木県",
+  "群馬県",
+] as const;
+
+const CATEGORY_OPTIONS = [
+  "kids",
+  "elementary",
+  "junior",
+  "high",
+  "college",
+  "adult",
+  "senior",
+  "women",
+  "mixed",
+  "futsal",
+] as const;
+
+const STRENGTH_OPTIONS: StrengthRank[] = ["SS", "S", "A", "B", "C"];
 
 export function MatchFilterPanel({
   filterRef,
@@ -98,518 +115,494 @@ export function MatchFilterPanel({
   setBikeCapacityMin,
   memberCountMin,
   setMemberCountMin,
+  onBackToCalendar,
+  onOpenTeamList,
   onReset,
   onBackToList,
-  onBackToCalendar,
   onOpenStrengthHelp,
-  onOpenTeamList,
-  strengthGuides,
-  bandText = "条件検索",
   titleText = "相手を探す",
   descriptionText = "レベル・エリア・人数感などから相手チームを探せます。",
   liveCountLabel = "現在のヒット件数",
-  liveCountText = "0チーム / 0試合",
-}: Props) {
+  liveCountText = "",
+  hideFilterBadge = false,
+  inlineHeaderActions = false,
+}: MatchFilterPanelProps) {
+  const toggleStrength = (rank: StrengthRank) => {
+    if (strengthFilter.includes(rank)) {
+      setStrengthFilter((prev) => prev.filter((v) => v !== rank));
+    } else {
+      setStrengthFilter((prev) => [...prev, rank]);
+    }
+  };
+
+  const toggleCategory = (value: string) => {
+    if (categoryFilter.includes(value)) {
+      setCategoryFilter((prev) => prev.filter((v) => v !== value));
+    } else {
+      setCategoryFilter((prev) => [...prev, value]);
+    }
+  };
+
   return (
-    <section ref={filterRef} style={overlay} aria-modal="true" role="dialog">
-      <div style={modal}>
-        <div style={stickyTopBox}>
-          <div style={stickyCountBox}>
-            <div style={stickyCountLabel}>{liveCountLabel}</div>
-            <div style={stickyCountValue}>{liveCountText}</div>
-            <div style={stickyCountSub}>
-              条件を変えるたびに、この件数がリアルタイムで変わります
-            </div>
-          </div>
-
-          <div style={stickyTopActions}>
-            {onBackToCalendar ? (
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={onBackToCalendar}
-                disabled={loading}
-              >
-                カレンダーへ戻る
-              </button>
-            ) : null}
-
-            {onOpenTeamList ? (
-              <button
-                type="button"
-                className="sh-btn sh-btn--primary"
-                onClick={onOpenTeamList}
-                disabled={loading}
-              >
-                チーム一覧
-              </button>
-            ) : null}
-          </div>
+    <section ref={filterRef} style={wrap}>
+      <section style={hitBox}>
+        <div style={hitLabel}>{liveCountLabel}</div>
+        <div style={hitValue}>{liveCountText}</div>
+        <div style={hitSub}>
+          条件を変えるたびに、この件数がリアルタイムで変わります。
         </div>
 
-        <div style={modalBody}>
-          <div style={panelInner}>
-            <div style={sectionLeadWrap}>
-              <div style={sectionBand}>{bandText}</div>
-              <div style={sectionLeadTitle}>{titleText}</div>
-              <div style={sectionLeadDesc}>{descriptionText}</div>
-            </div>
+        <div style={topActions}>
+          <button
+            type="button"
+            className="sh-btn"
+            onClick={onBackToCalendar}
+          >
+            カレンダーへ戻る
+          </button>
+          <button
+            type="button"
+            className="sh-btn sh-btn--primary"
+            onClick={onOpenTeamList}
+          >
+            チーム一覧
+          </button>
+        </div>
+      </section>
 
-            <div style={filterHeaderRow}>
-              <h2 style={filterTitle}>絞り込み条件</h2>
+      <section style={panelBox}>
+        <div style={headerRow}>
+          <div style={headerLeft}>
+            {!hideFilterBadge ? <div style={tinyBadge}>条件検索</div> : null}
+            <div style={title}>{titleText}</div>
+            <div style={desc}>{descriptionText}</div>
+          </div>
 
-              <div style={headerActions}>
-                <button
-                  type="button"
-                  className="sh-btn"
-                  onClick={onReset}
-                  disabled={loading}
-                >
-                  条件リセット
-                </button>
-
-                <button
-                  type="button"
-                  className="sh-btn"
-                  onClick={onBackToList}
-                  disabled={loading}
-                >
-                  閉じる
-                </button>
-              </div>
-            </div>
-
-            <label style={label}>
-              <span style={labelTitle}>キーワード</span>
-              <input
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                className="sh-input"
-                disabled={loading}
-                placeholder="例：三宿 / 青 / 強度高め / 小学5年 / キッズ / SS"
-              />
-            </label>
-
-            <AreaPickerKanto
-              title="エリア"
-              allowAll={true}
-              allLabel="関東（すべて）"
-              disabled={loading}
-              prefecture={prefectureFilter}
-              setPrefecture={setPrefectureFilter}
-              city={cityFilter}
-              setCity={setCityFilter}
-              town={townFilter}
-              setTown={setTownFilter}
-              townOptional={true}
-              useChipUI={true}
-            />
-
-            <CheckboxGroup
-              title="カテゴリ"
-              options={CATEGORY_OPTIONS}
-              values={categoryFilter}
-              onChange={setCategoryFilter}
-              columns={3}
-              disabled={loading}
-              useChipUI={true}
-            />
-
-            <div style={strengthCard}>
-              <div style={strengthHead}>
-                <div style={strengthTitleWrap}>
-                  <div style={strengthTitleRow}>
-                    <div style={strengthTitle}>強さ</div>
-                    <button
-                      type="button"
-                      aria-label="強さの説明"
-                      title="強さの説明"
-                      style={helpButton}
-                      onClick={onOpenStrengthHelp}
-                      disabled={loading}
-                    >
-                      ?
-                    </button>
-                  </div>
-                  <div style={strengthSubText}>複数選択できます</div>
-                </div>
-
-                <div style={strengthHeadRight}>
-                  <button
-                    type="button"
-                    className="sh-btn sh-btn--ghost"
-                    onClick={() =>
-                      setStrengthFilter(strengthGuides.map((o) => o.rank))
-                    }
-                    disabled={loading}
-                  >
-                    全選択
-                  </button>
-
-                  <button
-                    type="button"
-                    className="sh-btn"
-                    onClick={() => setStrengthFilter([])}
-                    disabled={loading}
-                  >
-                    クリア
-                  </button>
-                </div>
-              </div>
-
-              <div style={strengthSimpleList}>
-                {strengthGuides.map((item) => {
-                  const active = strengthFilter.includes(item.rank);
-
-                  return (
-                    <button
-                      key={item.rank}
-                      type="button"
-                      disabled={loading}
-                      onClick={() => {
-                        setStrengthFilter((prev) => {
-                          if (prev.includes(item.rank)) {
-                            return prev.filter((v) => v !== item.rank);
-                          }
-                          return [...prev, item.rank];
-                        });
-                      }}
-                      aria-pressed={active}
-                      style={{
-                        ...strengthSimpleButton,
-                        border: active
-                          ? "1px solid #145c2a"
-                          : "1px solid #d6eadb",
-                        background: active ? "#145c2a" : "#fff",
-                        color: active ? "#fff" : "#23412c",
-                        boxShadow: active
-                          ? "0 6px 14px rgba(20,92,42,0.14)"
-                          : "none",
-                        ...(loading ? strengthSimpleButtonDisabled : {}),
-                      }}
-                    >
-                      <span style={strengthSimpleCode}>{item.rank}</span>
-                      <span>{item.short}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div style={twoCols}>
-              <label style={label}>
-                <span style={labelTitle}>チーム所属人数（以上）</span>
-                <select
-                  value={memberCountMin}
-                  onChange={(e) => setMemberCountMin(e.target.value)}
-                  className="sh-select"
-                  disabled={loading}
-                >
-                  <option value="">指定なし</option>
-                  <option value="5">5人以上</option>
-                  <option value="10">10人以上</option>
-                  <option value="15">15人以上</option>
-                  <option value="20">20人以上</option>
-                  <option value="25">25人以上</option>
-                  <option value="30">30人以上</option>
-                </select>
-              </label>
-
-              <label style={label}>
-                <span style={labelTitle}>グラウンド</span>
-                <select
-                  value={groundFilter}
-                  onChange={(e) =>
-                    setGroundFilter(e.target.value as GroundFilter)
-                  }
-                  className="sh-select"
-                  disabled={loading}
-                >
-                  <option value="all">指定なし</option>
-                  <option value="あり">あり</option>
-                  <option value="なし">なし</option>
-                </select>
-              </label>
-            </div>
-
-            <div style={twoCols}>
-              <label style={label}>
-                <span style={labelTitle}>駐輪場</span>
-                <select
-                  value={bikeFilter}
-                  onChange={(e) => setBikeFilter(e.target.value as BikeFilter)}
-                  className="sh-select"
-                  disabled={loading}
-                >
-                  <option value="all">指定なし</option>
-                  <option value="あり">あり</option>
-                  <option value="なし">なし</option>
-                  <option value="不明">不明</option>
-                </select>
-              </label>
-
-              <label style={label}>
-                <span style={labelTitle}>駐輪場台数（以上）</span>
-                <select
-                  value={bikeCapacityMin}
-                  onChange={(e) => setBikeCapacityMin(e.target.value)}
-                  className="sh-select"
-                  disabled={loading}
-                >
-                  <option value="">指定なし</option>
-                  <option value="5">5台以上</option>
-                  <option value="10">10台以上</option>
-                  <option value="15">15台以上</option>
-                  <option value="20">20台以上</option>
-                  <option value="25">25台以上</option>
-                  <option value="30">30台以上</option>
-                  <option value="40">40台以上</option>
-                  <option value="50">50台以上</option>
-                </select>
-              </label>
-            </div>
-
-            <div style={footerNote}>
-              条件を選んだら、上の「カレンダーへ戻る」または「チーム一覧」を押してください。
-            </div>
-
-            <div style={actionRow}>
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={onBackToList}
-                disabled={loading}
-              >
+          {inlineHeaderActions ? (
+            <div style={headerActions}>
+              <button type="button" className="sh-btn" onClick={onReset}>
+                条件リセット
+              </button>
+              <button type="button" className="sh-btn" onClick={onBackToList}>
                 閉じる
               </button>
             </div>
+          ) : null}
+        </div>
+
+        {!inlineHeaderActions ? (
+          <div style={actionRow}>
+            <button type="button" className="sh-btn" onClick={onReset}>
+              条件リセット
+            </button>
+            <button type="button" className="sh-btn" onClick={onBackToList}>
+              閉じる
+            </button>
+          </div>
+        ) : null}
+
+        <div style={sectionTitle}>絞り込み条件</div>
+
+        <div style={fieldBlock}>
+          <div style={label}>キーワード</div>
+          <input
+            className="sh-input"
+            placeholder="例：三宿 / 青 / 強度高め / 小学5年 / キッズ / SS"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+          />
+        </div>
+
+        <div style={card}>
+          <div style={cardTitle}>エリア</div>
+
+          <div style={subLabel}>都県</div>
+          <div style={chipWrap}>
+            {PREF_OPTIONS.map((pref) => {
+              const selected = prefectureFilter === pref;
+              return (
+                <button
+                  key={pref}
+                  type="button"
+                  onClick={() => setPrefectureFilter(selected ? "" : pref)}
+                  style={selected ? chipActive : chip}
+                >
+                  {pref}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={hintText}>表示例：{prefectureFilter || "未選択"}</div>
+
+          <div style={inlineInputs}>
+            <input
+              className="sh-input"
+              placeholder="市区町村"
+              value={cityFilter}
+              onChange={(e) => setCityFilter(e.target.value)}
+            />
+            <input
+              className="sh-input"
+              placeholder="町名"
+              value={townFilter}
+              onChange={(e) => setTownFilter(e.target.value)}
+            />
           </div>
         </div>
-      </div>
+
+        <div style={card}>
+          <div style={cardHead}>
+            <div>
+              <div style={cardTitle}>カテゴリ</div>
+              <div style={cardSub}>複数選択できます</div>
+            </div>
+            <div style={miniActions}>
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={() => setCategoryFilter([...CATEGORY_OPTIONS])}
+              >
+                全選択
+              </button>
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={() => setCategoryFilter([])}
+              >
+                クリア
+              </button>
+            </div>
+          </div>
+
+          <div style={chipWrap}>
+            {CATEGORY_OPTIONS.map((item) => {
+              const selected = categoryFilter.includes(item);
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => toggleCategory(item)}
+                  style={selected ? chipActive : chip}
+                >
+                  {item}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={card}>
+          <div style={cardHead}>
+            <div>
+              <div style={cardTitle}>強さ</div>
+              <div style={cardSub}>複数選択できます</div>
+            </div>
+            <button
+              type="button"
+              style={helpBtn}
+              onClick={onOpenStrengthHelp}
+              aria-label="強さの説明"
+            >
+              ？
+            </button>
+          </div>
+
+          <div style={chipWrap}>
+            {STRENGTH_OPTIONS.map((rank) => {
+              const selected = strengthFilter.includes(rank);
+              return (
+                <button
+                  key={rank}
+                  type="button"
+                  onClick={() => toggleStrength(rank)}
+                  style={selected ? chipActive : chip}
+                >
+                  {rank}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={card}>
+          <div style={cardTitle}>グラウンド</div>
+          <div style={chipWrap}>
+            {(["all", "あり", "なし"] as const).map((value) => {
+              const selected = groundFilter === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setGroundFilter(value)}
+                  style={selected ? chipActive : chip}
+                >
+                  {value === "all" ? "すべて" : value}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={card}>
+          <div style={cardTitle}>駐輪場</div>
+          <div style={chipWrap}>
+            {(["all", "あり", "なし", "不明"] as const).map((value) => {
+              const selected = bikeFilter === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setBikeFilter(value)}
+                  style={selected ? chipActive : chip}
+                >
+                  {value === "all" ? "すべて" : value}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={inlineInputs}>
+            <input
+              className="sh-input"
+              placeholder="最低駐輪台数"
+              inputMode="numeric"
+              value={bikeCapacityMin}
+              onChange={(e) => setBikeCapacityMin(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div style={card}>
+          <div style={cardTitle}>所属人数</div>
+          <div style={inlineInputs}>
+            <input
+              className="sh-input"
+              placeholder="最低人数"
+              inputMode="numeric"
+              value={memberCountMin}
+              onChange={(e) => setMemberCountMin(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {loading ? <div style={loadingText}>読み込み中…</div> : null}
+      </section>
     </section>
   );
 }
 
-const overlay: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  zIndex: 1200,
-  background: "rgba(15, 23, 42, 0.28)",
-  padding: 16,
+const wrap: React.CSSProperties = {
+  display: "grid",
+  gap: 14,
 };
 
-const modal: React.CSSProperties = {
-  maxWidth: 980,
-  height: "calc(100dvh - 32px)",
-  margin: "0 auto",
-  background: "#fff",
-  borderRadius: 24,
+const hitBox: React.CSSProperties = {
+  borderRadius: 18,
   border: "1px solid #dce9df",
-  boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
-  overflow: "hidden",
-  display: "grid",
-  gridTemplateRows: "auto 1fr",
-};
-
-const stickyTopBox: React.CSSProperties = {
-  position: "sticky",
-  top: 0,
-  zIndex: 10,
   background: "#fff",
   padding: 16,
-  borderBottom: "1px solid #e5ece7",
-  display: "grid",
-  gap: 12,
 };
 
-const stickyCountBox: React.CSSProperties = {
-  display: "grid",
-  gap: 4,
-  padding: "14px 16px",
-  borderRadius: 16,
-  border: "1px solid #86efac",
-  background: "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)",
-  boxShadow: "0 8px 20px rgba(20,92,42,0.10)",
+const hitLabel: React.CSSProperties = {
+  fontSize: 16,
+  fontWeight: 800,
+  color: "#2f5d3a",
 };
 
-const stickyTopActions: React.CSSProperties = {
+const hitValue: React.CSSProperties = {
+  marginTop: 6,
+  fontSize: 32,
+  fontWeight: 900,
+  color: "#1f5d30",
+  lineHeight: 1.2,
+};
+
+const hitSub: React.CSSProperties = {
+  marginTop: 8,
+  color: "#5f6f66",
+  lineHeight: 1.7,
+};
+
+const topActions: React.CSSProperties = {
+  marginTop: 16,
   display: "flex",
-  gap: 8,
+  gap: 12,
   flexWrap: "wrap",
   justifyContent: "flex-end",
 };
 
-const modalBody: React.CSSProperties = {
-  overflowY: "auto",
+const panelBox: React.CSSProperties = {
+  borderRadius: 18,
+  border: "1px solid #dce9df",
+  background: "#fff",
   padding: 16,
-};
-
-const panelInner: React.CSSProperties = {
   display: "grid",
-  gap: 12,
+  gap: 18,
 };
 
-const stickyCountLabel: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 900,
-  color: "#166534",
-  letterSpacing: "0.04em",
+const headerRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 16,
+  flexWrap: "wrap",
 };
 
-const stickyCountValue: React.CSSProperties = {
-  fontSize: 28,
-  fontWeight: 900,
-  color: "#14532d",
-  lineHeight: 1.15,
-};
-
-const stickyCountSub: React.CSSProperties = {
-  fontSize: 12,
-  color: "#3f5f47",
-  lineHeight: 1.5,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-};
-
-const sectionLeadWrap: React.CSSProperties = {
+const headerLeft: React.CSSProperties = {
+  minWidth: 0,
   display: "grid",
   gap: 8,
-  paddingBottom: 4,
 };
 
-const sectionBand: React.CSSProperties = {
+const tinyBadge: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
   width: "fit-content",
   minHeight: 28,
-  padding: "0 10px",
+  padding: "0 12px",
   borderRadius: 999,
-  background: "#e8f5ec",
-  color: "#145c2a",
-  border: "1px solid #cfe8d7",
-  fontSize: 11,
-  fontWeight: 900,
-  letterSpacing: "0.06em",
+  border: "1px solid #cfe6d5",
+  background: "#eef7f0",
+  color: "#2f5d3a",
+  fontSize: 14,
+  fontWeight: 800,
 };
 
-const sectionLeadTitle: React.CSSProperties = {
-  fontSize: 22,
+const title: React.CSSProperties = {
+  fontSize: 28,
   fontWeight: 900,
   color: "#16391f",
-  lineHeight: 1.3,
+  lineHeight: 1.2,
 };
 
-const sectionLeadDesc: React.CSSProperties = {
-  fontSize: 14,
-  color: "#5b6470",
-  lineHeight: 1.7,
+const desc: React.CSSProperties = {
+  fontSize: 16,
+  color: "#5f6f66",
+  lineHeight: 1.8,
 };
 
 const headerActions: React.CSSProperties = {
   display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-};
-
-const strengthCard: React.CSSProperties = {
-  border: "1px solid #e5ece7",
-  borderRadius: 16,
-  padding: 14,
-  background: "#fff",
-};
-
-const strengthHead: React.CSSProperties = {
-  display: "flex",
-  alignItems: "flex-start",
-  justifyContent: "space-between",
   gap: 12,
   flexWrap: "wrap",
-  marginBottom: 12,
+  marginLeft: "auto",
+  justifyContent: "flex-end",
 };
 
-const strengthTitleWrap: React.CSSProperties = {
-  display: "grid",
-  gap: 4,
-};
-
-const strengthTitleRow: React.CSSProperties = {
+const actionRow: React.CSSProperties = {
   display: "flex",
-  alignItems: "center",
-  gap: 6,
+  gap: 12,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
 };
 
-const strengthTitle: React.CSSProperties = {
+const sectionTitle: React.CSSProperties = {
+  fontSize: 18,
   fontWeight: 900,
-  fontSize: 16,
-  color: "#1f5d30",
+  color: "#2f5d3a",
 };
 
-const strengthSubText: React.CSSProperties = {
-  fontSize: 12,
-  color: "#66756d",
-};
-
-const strengthHeadRight: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
+const fieldBlock: React.CSSProperties = {
+  display: "grid",
   gap: 8,
+};
+
+const label: React.CSSProperties = {
+  fontSize: 16,
+  fontWeight: 800,
+  color: "#22372a",
+};
+
+const card: React.CSSProperties = {
+  border: "1px solid #e5ece7",
+  borderRadius: 18,
+  padding: 16,
+  display: "grid",
+  gap: 14,
+};
+
+const cardHead: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
   flexWrap: "wrap",
 };
 
-const helpButton: React.CSSProperties = {
-  width: 34,
-  height: 34,
-  borderRadius: 999,
-  border: "1px solid #d6eadb",
-  background: "#fff",
-  color: "#23412c",
-  cursor: "pointer",
-  fontWeight: 800,
+const cardTitle: React.CSSProperties = {
   fontSize: 18,
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  WebkitAppearance: "none",
-  appearance: "none",
-};
-
-const strengthSimpleList: React.CSSProperties = {
-  display: "grid",
-  gap: 8,
-};
-
-const strengthSimpleButton: React.CSSProperties = {
-  width: "100%",
-  textAlign: "left",
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #d6eadb",
-  background: "#fff",
-  cursor: "pointer",
-  fontSize: 14,
-  fontWeight: 800,
-  color: "#23412c",
-  lineHeight: 1.5,
-  WebkitAppearance: "none",
-  appearance: "none",
-};
-
-const strengthSimpleButtonDisabled: React.CSSProperties = {
-  opacity: 0.6,
-  cursor: "not-allowed",
-};
-
-const strengthSimpleCode: React.CSSProperties = {
-  display: "inline-block",
-  minWidth: 28,
   fontWeight: 900,
+  color: "#2f5d3a",
 };
 
-const footerNote: React.CSSProperties = {
-  fontSize: 12,
-  color: "#5b6470",
+const cardSub: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 14,
+  color: "#6b7280",
+};
+
+const subLabel: React.CSSProperties = {
+  fontSize: 16,
+  fontWeight: 800,
+  color: "#22372a",
+};
+
+const hintText: React.CSSProperties = {
+  color: "#6b7280",
   lineHeight: 1.7,
-  padding: "4px 2px 0",
+};
+
+const chipWrap: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 10,
+};
+
+const chip: React.CSSProperties = {
+  minHeight: 48,
+  padding: "0 16px",
+  borderRadius: 999,
+  border: "1px solid #cfe0d3",
+  background: "#fff",
+  color: "#22372a",
+  fontSize: 16,
+  fontWeight: 800,
+};
+
+const chipActive: React.CSSProperties = {
+  ...chip,
+  background: "#2f7d3d",
+  border: "1px solid #2f7d3d",
+  color: "#fff",
+};
+
+const inlineInputs: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+};
+
+const miniActions: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const helpBtn: React.CSSProperties = {
+  width: 40,
+  height: 40,
+  borderRadius: 999,
+  border: "1px solid #cfe0d3",
+  background: "#fff",
+  color: "#2f5d3a",
+  fontSize: 20,
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const loadingText: React.CSSProperties = {
+  textAlign: "center",
+  color: "#6b7280",
+  padding: 8,
 };

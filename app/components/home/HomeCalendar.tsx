@@ -9,6 +9,8 @@ import { categoryLabel } from "@/app/lib/categories";
 import { Calendar } from "@/app/match/components/Calendar";
 import { DaySlotList } from "@/app/match/components/DaySlotList";
 import TeamSearchSection from "@/app/match/components/TeamSearchSection";
+import { MatchHelpModals } from "@/app/match/components/MatchHelpModals";
+import { STRENGTH_GUIDES } from "@/app/match/constants/strengthGuides";
 
 import { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
 import { useMatchData } from "@/app/match/hooks/useMatchData";
@@ -195,6 +197,7 @@ export default function HomeCalendar() {
 
   const [requestTeamId, setRequestTeamId] = useState<string>("");
   const [requestComment, setRequestComment] = useState<string>("");
+  const [showCalendarHelp, setShowCalendarHelp] = useState(false);
 
   const calendarRef = useRef<HTMLDivElement | null>(null);
   const dayListRef = useRef<HTMLDivElement | null>(null);
@@ -953,6 +956,11 @@ export default function HomeCalendar() {
         onOpenTeamList={openTeamListWindow}
         filteredTeamsCount={filteredTeams.length}
         filteredSlotsCount={filteredSlotsInMonth.length}
+        onClosePanelAfterReset={() => {
+          setSelectedSlotId("");
+          setRequestComment("");
+        }}
+        backMode="calendar"
       />
 
       <div ref={calendarRef}>
@@ -984,7 +992,7 @@ export default function HomeCalendar() {
             setRequestComment("");
           }}
           onCreateForDate={(ymd) => goToCreatePage(ymd)}
-          onOpenCalendarHelp={() => {}}
+          onOpenCalendarHelp={() => setShowCalendarHelp(true)}
           disableCreate={!authReady}
           selectedDateSummaryText={selectedDateSummaryText}
           titleText="試合日で探す"
@@ -1024,6 +1032,14 @@ export default function HomeCalendar() {
           loading={loading}
         />
       </div>
+
+      <MatchHelpModals
+        showStrengthHelp={false}
+        showCalendarHelp={showCalendarHelp}
+        onCloseStrengthHelp={() => {}}
+        onCloseCalendarHelp={() => setShowCalendarHelp(false)}
+        strengthGuides={STRENGTH_GUIDES}
+      />
     </section>
   );
 }

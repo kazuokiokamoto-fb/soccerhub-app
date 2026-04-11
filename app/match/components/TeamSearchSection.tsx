@@ -72,6 +72,8 @@ type TeamSearchSectionProps = {
   onClosePanelAfterReset?: () => void;
 
   showTeamListButton?: boolean;
+
+  backMode?: "calendar" | "teams";
 };
 
 function filterSummaryTextFromFilters(filters: {
@@ -166,6 +168,7 @@ export default function TeamSearchSection({
   onPanelModeChange,
   onClosePanelAfterReset,
   showTeamListButton = true,
+  backMode = "calendar",
 }: TeamSearchSectionProps) {
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
   const [panelMode, setPanelMode] = useState<PanelMode>(initialPanelMode);
@@ -212,6 +215,14 @@ export default function TeamSearchSection({
   const handleResetTeamFilters = () => {
     clearAllFilters();
     onClosePanelAfterReset?.();
+  };
+
+  const handleBack = () => {
+    if (backMode === "teams") {
+      window.location.href = "/teams";
+      return;
+    }
+    window.location.href = "/";
   };
 
   const conditionText = useMemo(() => {
@@ -280,7 +291,7 @@ export default function TeamSearchSection({
           setBikeCapacityMin={setBikeCapacityMin}
           memberCountMin={memberCountMin}
           setMemberCountMin={setMemberCountMin}
-          onBackToCalendar={closePanel}
+          onBackToCalendar={handleBack}
           onOpenTeamList={onOpenTeamList ?? (() => {})}
           onReset={handleResetTeamFilters}
           onBackToList={closePanel}
@@ -290,6 +301,8 @@ export default function TeamSearchSection({
           descriptionText="レベル・エリア・人数感などから相手チームを探せます。"
           liveCountLabel="現在のヒット件数"
           liveCountText={liveCountText}
+          hideFilterBadge
+          inlineHeaderActions
         />
       ) : null}
 
