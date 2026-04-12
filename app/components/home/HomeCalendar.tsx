@@ -1168,14 +1168,6 @@ export default function HomeCalendar(props: {
             />
           </div>
 
-          {!loading && slotsOnSelectedDate.length === 0 ? (
-            <div style={emptyRecruitBox}>
-              <div style={emptyRecruitTitle}>該当する募集がありません</div>
-              <div style={emptyRecruitText}>
-                条件を緩めるか、別の日付を選んでください
-              </div>
-            </div>
-          ) : null}
         </>
       ) : null}
 
