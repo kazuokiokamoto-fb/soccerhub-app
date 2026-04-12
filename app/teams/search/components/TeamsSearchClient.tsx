@@ -72,6 +72,7 @@ export default function TeamsSearchClient() {
 
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const filterRef = useRef<HTMLElement | null>(null);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
 
   const {
     keyword,
@@ -389,7 +390,17 @@ export default function TeamsSearchClient() {
   };
 
   return (
-    <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
+    <main
+      style={{
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        maxWidth: 980,
+        margin: "0 auto",
+        background: "#fff",
+      }}
+    >
       {toast ? (
         <div
           style={{
@@ -399,6 +410,8 @@ export default function TeamsSearchClient() {
               : toast.type === "error"
                 ? toastError
                 : toastInfo),
+            margin: "12px 16px 0",
+            flexShrink: 0,
           }}
           role="status"
           aria-live="polite"
@@ -415,72 +428,85 @@ export default function TeamsSearchClient() {
         </div>
       ) : null}
 
-      <AppTabNav />
+      <div style={{ flexShrink: 0, padding: "16px 16px 0" }}>
+        <AppTabNav />
 
-      <AppHero
-        icon="🔎"
-        title="チーム検索"
-        desc="試合を探すと同じ条件で絞り込みながら、対戦候補のチームを探せます。"
-      />
+        <AppHero
+          icon="🔎"
+          title="チーム検索"
+          desc="試合を探すと同じ条件で絞り込みながら、対戦候補のチームを探せます。"
+        />
 
-      <div style={summaryWrap}>
-        <div style={stickySummaryBar}>
-          <div style={summaryHeaderRow}>
-            <div>
-              <div style={stickySummaryDate}>🔎 検索結果</div>
-              <div style={stickySummaryCount}>{filteredTeams.length}件ヒット</div>
+        <div style={summaryWrap}>
+          <div style={stickySummaryBar}>
+            <div style={summaryHeaderRow}>
+              <div>
+                <div style={stickySummaryDate}>🔎 検索結果</div>
+                <div style={stickySummaryCount}>{filteredTeams.length}件ヒット</div>
+              </div>
+
+              <button type="button" className="sh-btn" onClick={scrollToFilter}>
+                検索条件へ
+              </button>
             </div>
-
-            <button type="button" className="sh-btn" onClick={scrollToFilter}>
-              検索条件へ
-            </button>
           </div>
         </div>
       </div>
 
-      <div style={pageStack}>
-        <TeamSearchResultList
-          loading={loading}
-          filteredTeams={filteredTeams}
-          myTeams={myTeams}
-          openTeamId={openTeamId}
-          setOpenTeamId={setOpenTeamId}
-          resultsRef={resultsRef}
-          onScrollToFilter={scrollToFilter}
-          onOpenDmAndGo={openDmAndGo}
-          onOpenOfferModal={openOfferModal}
-        />
+      <div
+        ref={scrollAreaRef}
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
+          padding: "0 16px 16px",
+          minHeight: 0,
+        }}
+      >
+        <div style={pageStack}>
+          <TeamSearchResultList
+            loading={loading}
+            filteredTeams={filteredTeams}
+            myTeams={myTeams}
+            openTeamId={openTeamId}
+            setOpenTeamId={setOpenTeamId}
+            resultsRef={resultsRef}
+            onScrollToFilter={scrollToFilter}
+            onOpenDmAndGo={openDmAndGo}
+            onOpenOfferModal={openOfferModal}
+          />
 
-        <TeamSearchFilterPanel
-          filterRef={filterRef}
-          loading={loading}
-          keyword={keyword}
-          setKeyword={setKeyword}
-          categoryFilter={categoryFilter}
-          setCategoryFilter={setCategoryFilter}
-          prefectureFilter={prefectureFilter}
-          setPrefectureFilter={setPrefectureFilter}
-          cityFilter={cityFilter}
-          setCityFilter={setCityFilter}
-          townFilter={townFilter}
-          setTownFilter={setTownFilter}
-          groundFilter={groundFilter}
-          setGroundFilter={setGroundFilter}
-          strengthFilter={strengthFilter}
-          setStrengthFilter={setStrengthFilter}
-          bikeFilter={bikeFilter}
-          setBikeFilter={setBikeFilter}
-          bikeCapacityMin={bikeCapacityMin}
-          setBikeCapacityMin={setBikeCapacityMin}
-          memberCountMin={memberCountMin}
-          setMemberCountMin={setMemberCountMin}
-          onReset={handleResetFilters}
-          onBackToResults={scrollToResults}
-          onOpenStrengthHelp={() => setShowStrengthHelp(true)}
-          strengthGuides={STRENGTH_GUIDES}
-          strengthOptions={STRENGTH_OPTIONS}
-          liveCount={filteredTeams.length}
-        />
+          <TeamSearchFilterPanel
+            filterRef={filterRef}
+            loading={loading}
+            keyword={keyword}
+            setKeyword={setKeyword}
+            categoryFilter={categoryFilter}
+            setCategoryFilter={setCategoryFilter}
+            prefectureFilter={prefectureFilter}
+            setPrefectureFilter={setPrefectureFilter}
+            cityFilter={cityFilter}
+            setCityFilter={setCityFilter}
+            townFilter={townFilter}
+            setTownFilter={setTownFilter}
+            groundFilter={groundFilter}
+            setGroundFilter={setGroundFilter}
+            strengthFilter={strengthFilter}
+            setStrengthFilter={setStrengthFilter}
+            bikeFilter={bikeFilter}
+            setBikeFilter={setBikeFilter}
+            bikeCapacityMin={bikeCapacityMin}
+            setBikeCapacityMin={setBikeCapacityMin}
+            memberCountMin={memberCountMin}
+            setMemberCountMin={setMemberCountMin}
+            onReset={handleResetFilters}
+            onBackToResults={scrollToResults}
+            onOpenStrengthHelp={() => setShowStrengthHelp(true)}
+            strengthGuides={STRENGTH_GUIDES}
+            strengthOptions={STRENGTH_OPTIONS}
+            liveCount={filteredTeams.length}
+          />
+        </div>
       </div>
 
       {showStrengthHelp ? (
