@@ -1056,7 +1056,18 @@ export default function HomeCalendar(props: {
           <section style={summaryBox}>
             <div style={summaryCardTop}>
               <div style={summaryDateText}>チーム条件で探す</div>
+            </div>
 
+            {/* ★ここが今回の本体（追加） */}
+            <div
+              style={{
+                marginTop: 8,
+                padding: 16,
+                borderRadius: 16,
+                border: "1px solid #dce9df",
+                background: "#f7fbf8",
+              }}
+            >
               <div style={summaryActionRow}>
                 <button
                   type="button"
@@ -1074,10 +1085,17 @@ export default function HomeCalendar(props: {
                   チーム一覧
                 </button>
               </div>
-            </div>
 
-            <div style={summaryCountLine}>対象チーム数：{filteredTeams.length}件</div>
-            <div style={summarySub}>表示条件：{topConditionText}</div>
+              <div style={{ marginTop: 12 }}>
+                <div style={summaryCountLine}>
+                  対象チーム数：{filteredTeams.length}件
+                </div>
+
+                <div style={summarySub}>
+                  表示条件：{topConditionText}
+                </div>
+              </div>
+            </div>
           </section>
 
           <div ref={calendarRef}>
