@@ -392,7 +392,8 @@ export default function TeamsSearchClient() {
   return (
     <main
       style={{
-        height: "100vh",
+        height: "100dvh",
+        minHeight: "100dvh",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
@@ -457,10 +458,12 @@ export default function TeamsSearchClient() {
         ref={scrollAreaRef}
         style={{
           flex: 1,
-          overflowY: "auto",
-          WebkitOverflowScrolling: "touch",
-          padding: "0 16px 16px",
           minHeight: 0,
+          overflowY: "auto",
+          overflowX: "hidden",
+          WebkitOverflowScrolling: "touch",
+          overscrollBehavior: "contain",
+          padding: "0 16px 16px",
         }}
       >
         <div style={pageStack}>
