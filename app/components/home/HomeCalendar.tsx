@@ -1283,7 +1283,7 @@ const summaryBox: React.CSSProperties = {
   padding: "14px 16px",
   borderRadius: 16,
   border: "1px solid #dce9df",
-  background: "#f7fbf8",
+  background: "#fff",
 };
 
 const summaryCardTop: React.CSSProperties = {
