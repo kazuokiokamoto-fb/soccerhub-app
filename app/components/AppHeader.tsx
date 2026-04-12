@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -15,6 +15,34 @@ export default function AppHeader() {
 
   const [busy, setBusy] = useState(false);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
+  const headerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+
+    const setHeaderHeight = () => {
+      const height = el.getBoundingClientRect().height;
+      document.documentElement.style.setProperty(
+        "--app-header-height",
+        `${height}px`
+      );
+    };
+
+    setHeaderHeight();
+
+    const resizeObserver = new ResizeObserver(() => {
+      setHeaderHeight();
+    });
+
+    resizeObserver.observe(el);
+    window.addEventListener("resize", setHeaderHeight);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", setHeaderHeight);
+    };
+  }, []);
 
   useEffect(() => {
     if (!user?.id) {
@@ -108,7 +136,7 @@ export default function AppHeader() {
   };
 
   return (
-    <header className="smh-header">
+    <header ref={headerRef} className="smh-header">
       <div className="smh-inner">
         <Link href="/" className="smh-brand">
           <div className="smh-brandMark">

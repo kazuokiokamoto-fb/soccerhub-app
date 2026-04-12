@@ -19,6 +19,8 @@ body {
 ================================ */
 
 :root {
+  --app-header-height: 64px;
+  
   --sm-green-1: #1f8f43;
   --sm-green-2: #14652f;
   --sm-green-3: #0f4d23;
