@@ -76,7 +76,7 @@ type MatchFilterPanelProps = {
 };
 
 const PREF_OPTIONS = [
-  "関東（すべて）",
+  "",
   "東京都",
   "神奈川県",
   "千葉県",
@@ -85,6 +85,15 @@ const PREF_OPTIONS = [
   "栃木県",
   "群馬県",
 ];
+
+const GROUND_OPTIONS: Array<"all" | "あり" | "なし"> = ["all", "あり", "なし"];
+const BIKE_OPTIONS: Array<"all" | "あり" | "なし" | "不明"> = [
+  "all",
+  "あり",
+  "なし",
+  "不明",
+];
+const STRENGTH_OPTIONS: StrengthRank[] = ["SS", "S", "A", "B", "C"];
 
 const CATEGORY_OPTIONS = CATEGORY_MASTER_OPTIONS.map((opt) => ({
   value: opt.value,
@@ -176,6 +185,148 @@ function cleanTownOptions(towns: string[], city: string): string[] {
   );
 }
 
+type MultiSelectModalProps = {
+  open: boolean;
+  title: string;
+  options: Array<{ value: string; label: string }>;
+  selectedValues: string[];
+  onToggle: (value: string) => void;
+  onClear: () => void;
+  onSelectAll?: () => void;
+  onClose: () => void;
+};
+
+function MultiSelectModal({
+  open,
+  title,
+  options,
+  selectedValues,
+  onToggle,
+  onClear,
+  onSelectAll,
+  onClose,
+}: MultiSelectModalProps) {
+  if (!open) return null;
+
+  return (
+    <div style={modalOverlay} onClick={onClose} role="dialog" aria-modal="true">
+      <div style={selectModalCard} onClick={(e) => e.stopPropagation()}>
+        <div style={selectModalHeader}>
+          <div style={selectModalTitle}>{title}</div>
+          <button type="button" className="sh-btn" onClick={onClose}>
+            閉じる
+          </button>
+        </div>
+
+        <div style={selectModalActionRow}>
+          {onSelectAll ? (
+            <button type="button" className="sh-btn" onClick={onSelectAll}>
+              全選択
+            </button>
+          ) : null}
+          <button type="button" className="sh-btn" onClick={onClear}>
+            クリア
+          </button>
+        </div>
+
+        <div style={modalChipWrap}>
+          {options.map((item) => {
+            const selected = selectedValues.includes(item.value);
+            return (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => onToggle(item.value)}
+                style={selected ? chipActive : chip}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type SearchableSelectProps = {
+  label: string;
+  placeholder: string;
+  value: string;
+  options: string[];
+  disabled?: boolean;
+  loading?: boolean;
+  onChange: (value: string) => void;
+  onClear?: () => void;
+};
+
+function SearchableSelect({
+  label,
+  placeholder,
+  value,
+  options,
+  disabled,
+  loading,
+  onChange,
+  onClear,
+}: SearchableSelectProps) {
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (!value) {
+      setQuery("");
+    }
+  }, [value]);
+
+  const filteredOptions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((item) => item.toLowerCase().includes(q));
+  }, [options, query]);
+
+  return (
+    <div style={searchableWrap}>
+      <div style={subLabel}>{label}</div>
+
+      <input
+        className="sh-input"
+        placeholder={`${placeholder}を検索`}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        disabled={disabled}
+      />
+
+      <select
+        className="sh-select"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+      >
+        <option value="">
+          {loading ? `${placeholder}を読み込み中…` : `${placeholder}を選択`}
+        </option>
+        {filteredOptions.map((item) => (
+          <option key={item} value={item}>
+            {item}
+          </option>
+        ))}
+      </select>
+
+      <div style={searchableFooter}>
+        <div style={hintText}>
+          {loading ? `${placeholder}を読み込み中…` : `${filteredOptions.length}件`}
+        </div>
+
+        {value && onClear ? (
+          <button type="button" className="sh-btn" onClick={onClear}>
+            解除
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function MatchFilterPanel({
   filterRef,
   loading,
@@ -223,9 +374,11 @@ export function MatchFilterPanel({
   const [cityLoading, setCityLoading] = useState(false);
   const [townLoading, setTownLoading] = useState(false);
 
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showStrengthModal, setShowStrengthModal] = useState(false);
+
   const normalizedPrefecture = useMemo(() => {
-    if (!prefectureFilter || prefectureFilter === "関東（すべて）") return "";
-    return prefectureFilter;
+    return prefectureFilter.trim();
   }, [prefectureFilter]);
 
   const toggleStrength = (rank: StrengthRank) => {
@@ -242,21 +395,6 @@ export function MatchFilterPanel({
     } else {
       setCategoryFilter([...categoryFilter, value]);
     }
-  };
-
-  const selectPrefecture = (pref: string) => {
-    const next = prefectureFilter === pref ? "" : pref;
-    setPrefectureFilter(next);
-    setCityFilter("");
-    setTownFilter("");
-    setCityOptions([]);
-    setTownOptions([]);
-  };
-
-  const selectCity = (value: string) => {
-    setCityFilter(value);
-    setTownFilter("");
-    setTownOptions([]);
   };
 
   useEffect(() => {
@@ -325,68 +463,23 @@ export function MatchFilterPanel({
   }, [normalizedPrefecture, cityFilter]);
 
   return (
-    <section style={wrap}>
-      {showTopHitBox ? (
-        <section
-          style={{
-            ...hitBox,
-            ...(compactTopHitBox ? compactHitBox : {}),
-            ...(stickyHitBox ? stickyHitBoxStyle : {}),
-          }}
-        >
-          <div style={hitMainRow}>
-            <div style={hitCountInlineRow}>
-              <span style={hitLabelInline}>{liveCountLabel}</span>
-              <span style={hitValueInline}>{liveCountText}</span>
-            </div>
-
-            <div style={hitBottomActions}>
-              <button
-                type="button"
-                className="sh-btn sh-btn--primary"
-                onClick={onOpenTeamList}
-                disabled={loading}
-              >
-                チーム一覧
-              </button>
-
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={onReset}
-                disabled={loading}
-              >
-                条件リセット
-              </button>
-
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={onBackToList}
-                disabled={loading}
-              >
-                閉じる
-              </button>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      <section ref={filterRef} style={panelBox}>
-        {!hidePanelHeader ? (
-          <div style={headerRow}>
-            {!hidePanelTitleBlock ? (
-              <div style={headerLeft}>
-                {!hideFilterBadge ? <div style={tinyBadge}>条件検索</div> : null}
-                <div style={title}>{titleText}</div>
-                <div style={desc}>{descriptionText}</div>
+    <>
+      <section style={wrap}>
+        {showTopHitBox ? (
+          <section
+            style={{
+              ...hitBox,
+              ...(compactTopHitBox ? compactHitBox : {}),
+              ...(stickyHitBox ? stickyHitBoxStyle : {}),
+            }}
+          >
+            <div style={hitMainRow}>
+              <div style={hitCountInlineRow}>
+                <span style={hitLabelInline}>{liveCountLabel}</span>
+                <span style={hitValueInline}>{liveCountText}</span>
               </div>
-            ) : (
-              <div />
-            )}
 
-            {!renderHeaderActionsInHitBox && inlineHeaderActions ? (
-              <div style={headerActions}>
+              <div style={hitBottomActions}>
                 <button
                   type="button"
                   className="sh-btn sh-btn--primary"
@@ -395,6 +488,7 @@ export function MatchFilterPanel({
                 >
                   チーム一覧
                 </button>
+
                 <button
                   type="button"
                   className="sh-btn"
@@ -403,6 +497,7 @@ export function MatchFilterPanel({
                 >
                   条件リセット
                 </button>
+
                 <button
                   type="button"
                   className="sh-btn"
@@ -412,367 +507,325 @@ export function MatchFilterPanel({
                   閉じる
                 </button>
               </div>
-            ) : null}
-          </div>
+            </div>
+          </section>
         ) : null}
 
-        {!renderHeaderActionsInHitBox &&
-        !inlineHeaderActions &&
-        !hidePanelHeader ? (
-          <div style={actionRow}>
-            <button
-              type="button"
-              className="sh-btn sh-btn--primary"
-              onClick={onOpenTeamList}
-              disabled={loading}
-            >
-              チーム一覧
-            </button>
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={onReset}
-              disabled={loading}
-            >
-              条件リセット
-            </button>
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={onBackToList}
-              disabled={loading}
-            >
-              閉じる
-            </button>
-          </div>
-        ) : null}
-
-        <div style={sectionTitle}>絞り込み条件</div>
-
-        <div style={fieldBlock}>
-          <div style={label}>キーワード</div>
-          <input
-            className="sh-input"
-            placeholder="例：三宿 / 青 / 小学5年 / キッズ / SS"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            disabled={loading}
-          />
-        </div>
-
-        <div style={card}>
-          <div style={cardTitle}>エリア</div>
-
-          <div style={subLabel}>都道府県</div>
-          <div style={chipWrap}>
-            {PREF_OPTIONS.map((pref) => {
-              const selected = prefectureFilter === pref;
-              return (
-                <button
-                  key={pref}
-                  type="button"
-                  onClick={() => selectPrefecture(pref)}
-                  style={{
-                    ...(selected ? chipActive : chip),
-                    ...(loading ? disabledButtonStyle : {}),
-                  }}
-                  disabled={loading}
-                >
-                  {pref}
-                </button>
-              );
-            })}
-          </div>
-
-          <div style={hintText}>
-            選択中：
-            {prefectureFilter || "未選択"}
-            {cityFilter ? ` ＞ ${cityFilter}` : ""}
-            {townFilter ? ` ＞ ${townFilter}` : ""}
-          </div>
-
-          {!!normalizedPrefecture ? (
-            <div style={areaTreeBox}>
-              <div style={areaTreeTitle}>市区町村</div>
-
-              {cityOptions.length > 0 ? (
-                <>
-                  <select
-                    className="sh-select"
-                    value={cityFilter}
-                    onChange={(e) => selectCity(e.target.value)}
-                    disabled={loading || cityLoading}
-                  >
-                    <option value="">市区町村を選択</option>
-                    {cityOptions.map((city) => (
-                      <option key={city} value={city}>
-                        {city}
-                      </option>
-                    ))}
-                  </select>
-
-                  <div style={hintText}>
-                    {cityLoading
-                      ? "市区町村を読み込み中…"
-                      : `${cityOptions.length}件の候補`}
-                  </div>
-                </>
+        <section ref={filterRef} style={panelBox}>
+          {!hidePanelHeader ? (
+            <div style={headerRow}>
+              {!hidePanelTitleBlock ? (
+                <div style={headerLeft}>
+                  {!hideFilterBadge ? <div style={tinyBadge}>条件検索</div> : null}
+                  <div style={title}>{titleText}</div>
+                  <div style={desc}>{descriptionText}</div>
+                </div>
               ) : (
-                <>
-                  <input
-                    className="sh-input"
-                    placeholder="市区町村"
-                    value={cityFilter}
-                    onChange={(e) => selectCity(e.target.value)}
-                    disabled={loading || cityLoading}
-                  />
-                  <div style={hintText}>
-                    {cityLoading
-                      ? "市区町村を読み込み中…"
-                      : "市区町村を入力してください"}
-                  </div>
-                </>
+                <div />
               )}
 
-              {!!cityFilter.trim() ? (
-                <>
-                  <div style={areaTreeDivider} />
-
-                  <div style={areaTreeTitle}>町名</div>
-
-                  {townOptions.length > 0 ? (
-                    <>
-                      <div style={chipWrap}>
-                        {townOptions.slice(0, 30).map((town) => {
-                          const selected = townFilter === town;
-                          return (
-                            <button
-                              key={town}
-                              type="button"
-                              onClick={() => setTownFilter(selected ? "" : town)}
-                              style={{
-                                ...(selected ? chipActive : chip),
-                                ...(loading ? disabledButtonStyle : {}),
-                              }}
-                              disabled={loading || townLoading}
-                            >
-                              {town}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <input
-                        className="sh-input"
-                        placeholder="町名を直接入力"
-                        value={townFilter}
-                        onChange={(e) => setTownFilter(e.target.value)}
-                        disabled={loading || townLoading}
-                      />
-
-                      <div style={hintText}>
-                        {townLoading
-                          ? "町名を読み込み中…"
-                          : `${townOptions.length}件の候補`}
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <input
-                        className="sh-input"
-                        placeholder="町名"
-                        value={townFilter}
-                        onChange={(e) => setTownFilter(e.target.value)}
-                        disabled={loading || townLoading}
-                      />
-                      <div style={hintText}>
-                        {townLoading
-                          ? "町名を読み込み中…"
-                          : "町名を入力してください"}
-                      </div>
-                    </>
-                  )}
-                </>
+              {!renderHeaderActionsInHitBox && inlineHeaderActions ? (
+                <div style={headerActions}>
+                  <button
+                    type="button"
+                    className="sh-btn sh-btn--primary"
+                    onClick={onOpenTeamList}
+                    disabled={loading}
+                  >
+                    チーム一覧
+                  </button>
+                  <button
+                    type="button"
+                    className="sh-btn"
+                    onClick={onReset}
+                    disabled={loading}
+                  >
+                    条件リセット
+                  </button>
+                  <button
+                    type="button"
+                    className="sh-btn"
+                    onClick={onBackToList}
+                    disabled={loading}
+                  >
+                    閉じる
+                  </button>
+                </div>
               ) : null}
             </div>
           ) : null}
-        </div>
 
-        <div style={card}>
-          <div style={cardHead}>
-            <div>
-              <div style={cardTitle}>カテゴリ</div>
-              <div style={cardSub}>複数選択できます</div>
-            </div>
-            <div style={miniActions}>
+          {!renderHeaderActionsInHitBox &&
+          !inlineHeaderActions &&
+          !hidePanelHeader ? (
+            <div style={actionRow}>
               <button
                 type="button"
-                className="sh-btn"
-                onClick={() =>
-                  setCategoryFilter(CATEGORY_OPTIONS.map((item) => item.value))
-                }
+                className="sh-btn sh-btn--primary"
+                onClick={onOpenTeamList}
                 disabled={loading}
               >
-                全選択
+                チーム一覧
               </button>
               <button
                 type="button"
                 className="sh-btn"
-                onClick={() => setCategoryFilter([])}
+                onClick={onReset}
                 disabled={loading}
               >
-                クリア
+                条件リセット
               </button>
-            </div>
-          </div>
-
-          <div style={chipWrap}>
-            {CATEGORY_OPTIONS.map((item) => {
-              const selected = categoryFilter.includes(item.value);
-              return (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => toggleCategory(item.value)}
-                  style={{
-                    ...(selected ? chipActive : chip),
-                    ...(loading ? disabledButtonStyle : {}),
-                  }}
-                  disabled={loading}
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {categoryFilter.length > 0 ? (
-            <div style={hintText}>
-              選択中：
-              {categoryFilter.map((v) => categoryLabel(v) || v).join(" / ")}
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={onBackToList}
+                disabled={loading}
+              >
+                閉じる
+              </button>
             </div>
           ) : null}
-        </div>
 
-        <div style={card}>
-          <div style={cardHead}>
-            <div>
-              <div style={cardTitle}>強さ</div>
-              <div style={cardSub}>複数選択できます</div>
-            </div>
-            <button
-              type="button"
-              style={{
-                ...helpBtn,
-                ...(loading ? disabledButtonStyle : {}),
-              }}
-              onClick={onOpenStrengthHelp}
-              aria-label="強さの説明"
-              disabled={loading}
-            >
-              ？
-            </button>
-          </div>
+          <div style={sectionTitle}>絞り込み条件</div>
 
-          <div style={chipWrap}>
-            {(["SS", "S", "A", "B", "C"] as StrengthRank[]).map((rank) => {
-              const selected = strengthFilter.includes(rank);
-              return (
-                <button
-                  key={rank}
-                  type="button"
-                  onClick={() => toggleStrength(rank)}
-                  style={{
-                    ...(selected ? chipActive : chip),
-                    ...(loading ? disabledButtonStyle : {}),
-                  }}
-                  disabled={loading}
-                >
-                  {rank}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div style={card}>
-          <div style={cardTitle}>グラウンド</div>
-          <div style={chipWrap}>
-            {["all", "あり", "なし"].map((value) => {
-              const selected = groundFilter === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() =>
-                    setGroundFilter(value as "all" | "あり" | "なし")
-                  }
-                  style={{
-                    ...(selected ? chipActive : chip),
-                    ...(loading ? disabledButtonStyle : {}),
-                  }}
-                  disabled={loading}
-                >
-                  {value === "all" ? "すべて" : value}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div style={card}>
-          <div style={cardTitle}>駐輪場</div>
-          <div style={chipWrap}>
-            {["all", "あり", "なし", "不明"].map((value) => {
-              const selected = bikeFilter === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() =>
-                    setBikeFilter(value as "all" | "あり" | "なし" | "不明")
-                  }
-                  style={{
-                    ...(selected ? chipActive : chip),
-                    ...(loading ? disabledButtonStyle : {}),
-                  }}
-                  disabled={loading}
-                >
-                  {value === "all" ? "すべて" : value}
-                </button>
-              );
-            })}
-          </div>
-
-          <div style={inlineInputs}>
+          <div style={fieldBlock}>
+            <div style={label}>キーワード</div>
             <input
               className="sh-input"
-              placeholder="最低駐輪台数"
-              inputMode="numeric"
-              value={bikeCapacityMin}
-              onChange={(e) => setBikeCapacityMin(e.target.value)}
+              placeholder="例：三宿 / 青 / 小学5年 / キッズ / SS"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
               disabled={loading}
             />
           </div>
-        </div>
 
-        <div style={card}>
-          <div style={cardTitle}>所属人数</div>
-          <div style={inlineInputs}>
+          <div style={card}>
+            <div style={cardTitle}>都道府県</div>
+            <select
+              className="sh-select"
+              value={prefectureFilter}
+              onChange={(e) => {
+                setPrefectureFilter(e.target.value);
+                setCityFilter("");
+                setTownFilter("");
+                setCityOptions([]);
+                setTownOptions([]);
+              }}
+              disabled={loading}
+            >
+              <option value="">都道府県を選択</option>
+              {PREF_OPTIONS.filter(Boolean).map((pref) => (
+                <option key={pref} value={pref}>
+                  {pref}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={card}>
+            <SearchableSelect
+              label="市区町村"
+              placeholder="市区町村"
+              value={cityFilter}
+              options={cityOptions}
+              disabled={loading || !normalizedPrefecture}
+              loading={cityLoading}
+              onChange={(value) => {
+                setCityFilter(value);
+                setTownFilter("");
+                setTownOptions([]);
+              }}
+              onClear={() => {
+                setCityFilter("");
+                setTownFilter("");
+                setTownOptions([]);
+              }}
+            />
+
+            <SearchableSelect
+              label="町名"
+              placeholder="町名"
+              value={townFilter}
+              options={townOptions}
+              disabled={loading || !normalizedPrefecture || !cityFilter.trim()}
+              loading={townLoading}
+              onChange={(value) => setTownFilter(value)}
+              onClear={() => setTownFilter("")}
+            />
+
+            <div style={hintText}>
+              選択中：
+              {prefectureFilter || "未選択"}
+              {cityFilter ? ` ＞ ${cityFilter}` : ""}
+              {townFilter ? ` ＞ ${townFilter}` : ""}
+            </div>
+          </div>
+
+          <div style={card}>
+            <div style={cardHead}>
+              <div>
+                <div style={cardTitle}>カテゴリ</div>
+                <div style={cardSub}>複数選択できます</div>
+              </div>
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={() => setShowCategoryModal(true)}
+                disabled={loading}
+              >
+                選択する
+              </button>
+            </div>
+
+            <div style={chipWrap}>
+              {categoryFilter.length === 0 ? (
+                <div style={emptySelectedText}>未選択</div>
+              ) : (
+                categoryFilter.map((value) => (
+                  <span key={value} style={selectedChip}>
+                    {categoryLabel(value) || value}
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div style={card}>
+            <div style={cardHead}>
+              <div>
+                <div style={cardTitle}>強さ</div>
+                <div style={cardSub}>複数選択できます</div>
+              </div>
+
+              <div style={miniActions}>
+                <button
+                  type="button"
+                  className="sh-btn"
+                  onClick={() => setShowStrengthModal(true)}
+                  disabled={loading}
+                >
+                  選択する
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    ...helpBtn,
+                    ...(loading ? disabledButtonStyle : {}),
+                  }}
+                  onClick={onOpenStrengthHelp}
+                  aria-label="強さの説明"
+                  disabled={loading}
+                >
+                  ？
+                </button>
+              </div>
+            </div>
+
+            <div style={chipWrap}>
+              {strengthFilter.length === 0 ? (
+                <div style={emptySelectedText}>未選択</div>
+              ) : (
+                strengthFilter.map((value) => (
+                  <span key={value} style={selectedChip}>
+                    {value}
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div style={card}>
+            <div style={cardTitle}>チーム人数</div>
             <input
               className="sh-input"
-              placeholder="最低人数"
+              placeholder="最低人数を入力"
               inputMode="numeric"
               value={memberCountMin}
               onChange={(e) => setMemberCountMin(e.target.value)}
               disabled={loading}
             />
           </div>
-        </div>
 
-        {loading ? <div style={loadingText}>読み込み中…</div> : null}
+          <div style={card}>
+            <div style={cardTitle}>グラウンド</div>
+            <select
+              className="sh-select"
+              value={groundFilter}
+              onChange={(e) =>
+                setGroundFilter(e.target.value as "all" | "あり" | "なし")
+              }
+              disabled={loading}
+            >
+              {GROUND_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {value === "all" ? "すべて" : value}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={card}>
+            <div style={cardTitle}>駐輪場</div>
+            <select
+              className="sh-select"
+              value={bikeFilter}
+              onChange={(e) =>
+                setBikeFilter(
+                  e.target.value as "all" | "あり" | "なし" | "不明"
+                )
+              }
+              disabled={loading}
+            >
+              {BIKE_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {value === "all" ? "すべて" : value}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={card}>
+            <div style={cardTitle}>駐輪台数</div>
+            <input
+              className="sh-input"
+              placeholder="最低駐輪台数を入力"
+              inputMode="numeric"
+              value={bikeCapacityMin}
+              onChange={(e) => setBikeCapacityMin(e.target.value)}
+              disabled={loading}
+            />
+          </div>
+
+          {loading ? <div style={loadingText}>読み込み中…</div> : null}
+        </section>
       </section>
-    </section>
+
+      <MultiSelectModal
+        open={showCategoryModal}
+        title="カテゴリを選択"
+        options={CATEGORY_OPTIONS}
+        selectedValues={categoryFilter}
+        onToggle={toggleCategory}
+        onClear={() => setCategoryFilter([])}
+        onSelectAll={() =>
+          setCategoryFilter(CATEGORY_OPTIONS.map((item) => item.value))
+        }
+        onClose={() => setShowCategoryModal(false)}
+      />
+
+      <MultiSelectModal
+        open={showStrengthModal}
+        title="強さを選択"
+        options={STRENGTH_OPTIONS.map((value) => ({
+          value,
+          label: value,
+        }))}
+        selectedValues={strengthFilter}
+        onToggle={(value) => toggleStrength(value as StrengthRank)}
+        onClear={() => setStrengthFilter([])}
+        onClose={() => setShowStrengthModal(false)}
+      />
+    </>
   );
 }
 
@@ -825,14 +878,6 @@ const hitValueInline: React.CSSProperties = {
   fontWeight: 900,
   color: "#14532d",
   lineHeight: 1.1,
-};
-
-const topActions: React.CSSProperties = {
-  marginTop: 16,
-  display: "flex",
-  gap: 12,
-  flexWrap: "wrap",
-  justifyContent: "flex-end",
 };
 
 const hitBottomActions: React.CSSProperties = {
@@ -991,15 +1036,11 @@ const chipActive: React.CSSProperties = {
   color: "#fff",
 };
 
-const inlineInputs: React.CSSProperties = {
-  display: "grid",
-  gap: 12,
-};
-
 const miniActions: React.CSSProperties = {
   display: "flex",
   gap: 10,
   flexWrap: "wrap",
+  alignItems: "center",
 };
 
 const helpBtn: React.CSSProperties = {
@@ -1025,22 +1066,85 @@ const disabledButtonStyle: React.CSSProperties = {
   cursor: "not-allowed",
 };
 
-const areaTreeBox: React.CSSProperties = {
+const modalOverlay: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(15, 23, 42, 0.38)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
+  zIndex: 120,
+};
+
+const selectModalCard: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 720,
+  maxHeight: "80vh",
+  overflowY: "auto",
+  borderRadius: 20,
+  background: "#fff",
+  border: "1px solid #dce9df",
+  padding: 16,
   display: "grid",
+  gap: 14,
+};
+
+const selectModalHeader: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
   gap: 12,
-  padding: 14,
-  borderRadius: 14,
-  background: "#f8fbf9",
-  border: "1px solid #e5ece7",
+  flexWrap: "wrap",
 };
 
-const areaTreeTitle: React.CSSProperties = {
-  fontSize: 15,
-  fontWeight: 800,
+const selectModalTitle: React.CSSProperties = {
+  fontSize: 20,
+  fontWeight: 900,
+  color: "#16391f",
+};
+
+const selectModalActionRow: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+};
+
+const modalChipWrap: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 10,
+};
+
+const selectedChip: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 36,
+  padding: "0 12px",
+  borderRadius: 999,
+  background: "#eef7f0",
+  border: "1px solid #cfe6d5",
   color: "#2f5d3a",
+  fontSize: 14,
+  fontWeight: 800,
 };
 
-const areaTreeDivider: React.CSSProperties = {
-  height: 1,
-  background: "#e5ece7",
+const emptySelectedText: React.CSSProperties = {
+  fontSize: 14,
+  color: "#6b7280",
+  lineHeight: 1.7,
+};
+
+const searchableWrap: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+};
+
+const searchableFooter: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
 };

@@ -33,6 +33,20 @@ import {
   guideNote,
 } from "./teamSearchStyles";
 
+function normalizeRank(level?: number | null, strengthRank?: string | null) {
+  if (strengthRank && String(strengthRank).trim()) {
+    return String(strengthRank).trim();
+  }
+
+  const n = Number(level ?? 0);
+  if (!Number.isFinite(n)) return "";
+  if (n >= 9) return "SS";
+  if (n >= 7) return "S";
+  if (n >= 5) return "A";
+  if (n >= 3) return "B";
+  return "C";
+}
+
 export default function TeamsSearchClient() {
   const searchParams = useSearchParams();
 
@@ -180,6 +194,51 @@ export default function TeamsSearchClient() {
             ? [team.category]
             : [];
 
+      if (filters.keyword.trim()) {
+        const q = filters.keyword.trim().toLowerCase();
+
+        const hay = [
+          team.name,
+          team.area,
+          team.prefecture,
+          team.city,
+          team.town,
+          team.address_detail,
+          team.category,
+          ...teamCategories,
+          team.uniform_main,
+          team.uniform_sub,
+          team.note,
+          team.bike_parking,
+          team.bike_parking_capacity,
+          String(team.member_count ?? ""),
+          String(team.strength_rank ?? ""),
+          String(team.level ?? ""),
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        if (!hay.includes(q)) return false;
+      }
+
+      if (filters.prefectureFilter) {
+        if (String(team.prefecture ?? "").trim() !== filters.prefectureFilter) {
+          return false;
+        }
+      }
+
+      if (filters.cityFilter) {
+        if (String(team.city ?? "").trim() !== filters.cityFilter) {
+          return false;
+        }
+      }
+
+      if (filters.townFilter) {
+        if (String(team.town ?? "").trim() !== filters.townFilter) {
+          return false;
+        }
+      }
+
       if (filters.categoryFilter.length > 0) {
         const ok = teamCategories.some((c) =>
           filters.categoryFilter.includes(String(c).trim())
@@ -187,46 +246,21 @@ export default function TeamsSearchClient() {
         if (!ok) return false;
       }
 
-      if (
-        filters.prefectureFilter &&
-        String(team.prefecture ?? "").trim() !== filters.prefectureFilter
-      ) {
-        return false;
+      if (filters.strengthFilter.length > 0) {
+        const rank = normalizeRank(team.level, team.strength_rank);
+        if (!rank || !filters.strengthFilter.includes(rank as any)) {
+          return false;
+        }
       }
 
-      if (
-        filters.cityFilter &&
-        String(team.city ?? "").trim() !== filters.cityFilter
-      ) {
-        return false;
-      }
-
-      if (
-        filters.townFilter &&
-        String(team.town ?? "").trim() !== filters.townFilter
-      ) {
-        return false;
+      if (filters.memberCountMin) {
+        const count = Number(team.member_count ?? 0);
+        if (count < Number(filters.memberCountMin)) return false;
       }
 
       if (filters.groundFilter !== "all") {
         const ground = team.has_ground ? "あり" : "なし";
         if (ground !== filters.groundFilter) return false;
-      }
-
-      if (filters.strengthFilter.length > 0) {
-        const rank =
-          (team.strength_rank?.trim() as any) ||
-          (() => {
-            const n = Number(team.level ?? 0);
-            if (!Number.isFinite(n)) return "";
-            if (n >= 9) return "SS";
-            if (n >= 7) return "S";
-            if (n >= 5) return "A";
-            if (n >= 3) return "B";
-            return "C";
-          })();
-
-        if (!rank || !filters.strengthFilter.includes(rank)) return false;
       }
 
       if (filters.bikeFilter !== "all") {
@@ -243,37 +277,6 @@ export default function TeamsSearchClient() {
         if (!Number.isFinite(cap) || cap < Number(filters.bikeCapacityMin)) {
           return false;
         }
-      }
-
-      if (filters.memberCountMin) {
-        const count = Number(team.member_count ?? 0);
-        if (count < Number(filters.memberCountMin)) return false;
-      }
-
-      if (filters.keyword.trim()) {
-        const q = filters.keyword.trim().toLowerCase();
-
-        const hay = [
-          team.name,
-          team.area,
-          team.prefecture,
-          team.city,
-          team.town,
-          team.category,
-          ...teamCategories,
-          team.uniform_main,
-          team.uniform_sub,
-          team.note,
-          team.bike_parking,
-          team.bike_parking_capacity,
-          String(team.member_count ?? ""),
-          String(team.strength_rank ?? ""),
-          String(team.level ?? ""),
-        ]
-          .join(" ")
-          .toLowerCase();
-
-        if (!hay.includes(q)) return false;
       }
 
       return true;
@@ -300,6 +303,10 @@ export default function TeamsSearchClient() {
       params.set("rank", strengthFilter.join(","));
     }
 
+    if (memberCountMin) {
+      params.set("memberMin", memberCountMin);
+    }
+
     if (groundFilter !== "all") {
       params.set("ground", groundFilter);
     }
@@ -310,10 +317,6 @@ export default function TeamsSearchClient() {
 
     if (bikeCapacityMin) {
       params.set("bikeMin", bikeCapacityMin);
-    }
-
-    if (memberCountMin) {
-      params.set("memberMin", memberCountMin);
     }
 
     const qs = params.toString();
@@ -370,6 +373,7 @@ export default function TeamsSearchClient() {
                 type="button"
                 className="sh-btn sh-btn--primary"
                 onClick={openFilteredTeamsPage}
+                disabled={loading}
               >
                 チーム一覧
               </button>
@@ -378,6 +382,7 @@ export default function TeamsSearchClient() {
                 type="button"
                 className="sh-btn"
                 onClick={handleResetFilters}
+                disabled={loading}
               >
                 条件リセット
               </button>
@@ -388,6 +393,7 @@ export default function TeamsSearchClient() {
                 onClick={() => {
                   window.history.back();
                 }}
+                disabled={loading}
               >
                 閉じる
               </button>

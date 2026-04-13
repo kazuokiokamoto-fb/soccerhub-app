@@ -185,6 +185,7 @@ function TeamsPageInner() {
     setPrefectureFilter(prefParam);
     setCityFilter(cityParam);
     setTownFilter(townParam);
+
     setCategoryFilter(
       catParam
         ? catParam
@@ -193,6 +194,7 @@ function TeamsPageInner() {
             .filter(Boolean)
         : []
     );
+
     setStrengthFilter(
       rankParam
         ? (rankParam
@@ -201,14 +203,17 @@ function TeamsPageInner() {
             .filter(Boolean) as any)
         : []
     );
+
     setGroundFilter(
       groundParam === "あり" || groundParam === "なし" ? groundParam : "all"
     );
+
     setBikeFilter(
       bikeParam === "あり" || bikeParam === "なし" || bikeParam === "不明"
         ? bikeParam
         : "all"
     );
+
     setBikeCapacityMin(bikeMinParam);
     setMemberCountMin(memberMinParam);
 
@@ -255,14 +260,19 @@ function TeamsPageInner() {
         return false;
       }
 
-      if (filters.groundFilter !== "all") {
-        const ground = team.has_ground ? "あり" : "なし";
-        if (ground !== filters.groundFilter) return false;
-      }
-
       if (filters.strengthFilter.length > 0) {
         const rank = teamStrengthLabel(team);
         if (!filters.strengthFilter.includes(rank as any)) return false;
+      }
+
+      if (filters.memberCountMin) {
+        const count = Number(team.member_count ?? 0);
+        if (count < Number(filters.memberCountMin)) return false;
+      }
+
+      if (filters.groundFilter !== "all") {
+        const ground = team.has_ground ? "あり" : "なし";
+        if (ground !== filters.groundFilter) return false;
       }
 
       if (filters.bikeFilter !== "all") {
@@ -271,11 +281,6 @@ function TeamsPageInner() {
           | "なし"
           | "不明";
         if (bike !== filters.bikeFilter) return false;
-      }
-
-      if (filters.memberCountMin) {
-        const count = Number(team.member_count ?? 0);
-        if (count < Number(filters.memberCountMin)) return false;
       }
 
       if (filters.bikeCapacityMin) {
@@ -337,20 +342,20 @@ function TeamsPageInner() {
           .join(" / ")}`
       );
     }
-    if (filters.groundFilter !== "all") {
-      parts.push(`グラウンド: ${filters.groundFilter}`);
-    }
     if (filters.strengthFilter.length > 0) {
       parts.push(`強さ: ${filters.strengthFilter.join(" / ")}`);
+    }
+    if (filters.memberCountMin) {
+      parts.push(`チーム人数: ${filters.memberCountMin}人以上`);
+    }
+    if (filters.groundFilter !== "all") {
+      parts.push(`グラウンド: ${filters.groundFilter}`);
     }
     if (filters.bikeFilter !== "all") {
       parts.push(`駐輪場: ${filters.bikeFilter}`);
     }
     if (filters.bikeCapacityMin) {
-      parts.push(`駐輪場台数: ${filters.bikeCapacityMin}台以上`);
-    }
-    if (filters.memberCountMin) {
-      parts.push(`所属人数: ${filters.memberCountMin}人以上`);
+      parts.push(`駐輪台数: ${filters.bikeCapacityMin}台以上`);
     }
 
     return parts.join(" / ") || "すべての条件で表示中";
@@ -372,6 +377,10 @@ function TeamsPageInner() {
       params.set("rank", strengthFilter.join(","));
     }
 
+    if (memberCountMin) {
+      params.set("memberMin", memberCountMin);
+    }
+
     if (groundFilter !== "all") {
       params.set("ground", groundFilter);
     }
@@ -382,10 +391,6 @@ function TeamsPageInner() {
 
     if (bikeCapacityMin) {
       params.set("bikeMin", bikeCapacityMin);
-    }
-
-    if (memberCountMin) {
-      params.set("memberMin", memberCountMin);
     }
 
     const qs = params.toString();
@@ -491,6 +496,11 @@ function TeamsPageInner() {
                     </div>
 
                     <div>
+                      <strong>チーム人数：</strong>
+                      {team.member_count ?? "未設定"}
+                    </div>
+
+                    <div>
                       <strong>グラウンド：</strong>
                       {team.has_ground ? "あり" : "なし"}
                     </div>
@@ -501,11 +511,6 @@ function TeamsPageInner() {
                       {team.bike_parking_capacity
                         ? ` / ${team.bike_parking_capacity}`
                         : ""}
-                    </div>
-
-                    <div>
-                      <strong>所属人数：</strong>
-                      {team.member_count ?? "未設定"}
                     </div>
 
                     {(team.uniform_main || team.uniform_sub) && (
