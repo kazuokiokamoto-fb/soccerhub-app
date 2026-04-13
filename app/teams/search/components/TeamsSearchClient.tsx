@@ -1,18 +1,14 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
-import { categoryLabel } from "@/app/lib/categories";
 import { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
 import { MatchFilterPanel } from "@/app/match/components/MatchFilterPanel";
 
-import {
-  DbTeam,
-  Toast,
-  STRENGTH_GUIDES,
-} from "./teamSearchUtils";
+import { DbTeam, Toast, STRENGTH_GUIDES } from "./teamSearchUtils";
 
 import {
   toastBox,
@@ -38,10 +34,13 @@ import {
 } from "./teamSearchStyles";
 
 export default function TeamsSearchClient() {
+  const searchParams = useSearchParams();
+
   const [toast, setToast] = useState<Toast | null>(null);
   const [loading, setLoading] = useState(true);
   const [teams, setTeams] = useState<DbTeam[]>([]);
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
+  const [queryApplied, setQueryApplied] = useState(false);
 
   const {
     keyword,
@@ -73,6 +72,75 @@ export default function TeamsSearchClient() {
     const t = setTimeout(() => setToast(null), 2800);
     return () => clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    if (queryApplied) return;
+
+    clearAllFilters();
+
+    const keywordParam = searchParams.get("keyword") ?? "";
+    const prefParam = searchParams.get("pref") ?? "";
+    const cityParam = searchParams.get("city") ?? "";
+    const townParam = searchParams.get("town") ?? "";
+    const catParam = searchParams.get("cat") ?? "";
+    const rankParam = searchParams.get("rank") ?? "";
+    const groundParam = searchParams.get("ground") ?? "";
+    const bikeParam = searchParams.get("bike") ?? "";
+    const bikeMinParam = searchParams.get("bikeMin") ?? "";
+    const memberMinParam = searchParams.get("memberMin") ?? "";
+
+    setKeyword(keywordParam);
+    setPrefectureFilter(prefParam);
+    setCityFilter(cityParam);
+    setTownFilter(townParam);
+
+    setCategoryFilter(
+      catParam
+        ? catParam
+            .split(",")
+            .map((v) => v.trim())
+            .filter(Boolean)
+        : []
+    );
+
+    setStrengthFilter(
+      rankParam
+        ? (rankParam
+            .split(",")
+            .map((v) => v.trim())
+            .filter(Boolean) as any)
+        : []
+    );
+
+    setGroundFilter(
+      groundParam === "あり" || groundParam === "なし" ? groundParam : "all"
+    );
+
+    setBikeFilter(
+      bikeParam === "あり" || bikeParam === "なし" || bikeParam === "不明"
+        ? bikeParam
+        : "all"
+    );
+
+    setBikeCapacityMin(bikeMinParam);
+    setMemberCountMin(memberMinParam);
+
+    setQueryApplied(true);
+  }, [
+    queryApplied,
+    searchParams,
+    clearAllFilters,
+    setKeyword,
+    setCategoryFilter,
+    setPrefectureFilter,
+    setCityFilter,
+    setTownFilter,
+    setGroundFilter,
+    setStrengthFilter,
+    setBikeFilter,
+    setBikeCapacityMin,
+    setMemberCountMin,
+  ]);
 
   const load = async () => {
     setLoading(true);
@@ -214,10 +282,42 @@ export default function TeamsSearchClient() {
 
   const handleResetFilters = () => {
     clearAllFilters();
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
+  };
+
+  const openFilteredTeamsPage = () => {
+    const params = new URLSearchParams();
+
+    if (keyword.trim()) params.set("keyword", keyword.trim());
+    if (prefectureFilter) params.set("pref", prefectureFilter);
+    if (cityFilter.trim()) params.set("city", cityFilter.trim());
+    if (townFilter.trim()) params.set("town", townFilter.trim());
+
+    if (categoryFilter.length > 0) {
+      params.set("cat", categoryFilter.join(","));
+    }
+
+    if (strengthFilter.length > 0) {
+      params.set("rank", strengthFilter.join(","));
+    }
+
+    if (groundFilter !== "all") {
+      params.set("ground", groundFilter);
+    }
+
+    if (bikeFilter !== "all") {
+      params.set("bike", bikeFilter);
+    }
+
+    if (bikeCapacityMin) {
+      params.set("bikeMin", bikeCapacityMin);
+    }
+
+    if (memberCountMin) {
+      params.set("memberMin", memberCountMin);
+    }
+
+    const qs = params.toString();
+    window.location.href = qs ? `/teams?${qs}` : "/teams";
   };
 
   return (
@@ -258,14 +358,39 @@ export default function TeamsSearchClient() {
           desc="ホームと同じ条件UIで、相手チームを絞り込めます。"
         />
 
-        <section style={summaryOuter}>
-          <div style={summaryTitle}>チーム条件で探す</div>
+        <section style={stickySummaryBox}>
+          <div style={stickySummaryTopRow}>
+            <div style={stickySummaryTextBlock}>
+              <div style={stickySummaryMini}>現在のヒット件数</div>
+              <div style={stickySummaryValue}>{filteredTeams.length}件</div>
+            </div>
 
-          <div style={summaryInner}>
-            <div style={summaryCountLabel}>現在のヒット件数</div>
-            <div style={summaryCountValue}>{filteredTeams.length}件</div>
-            <div style={summarySubText}>
-              条件を変えるたびに、この件数がリアルタイムで変わります。
+            <div style={stickySummaryActions}>
+              <button
+                type="button"
+                className="sh-btn sh-btn--primary"
+                onClick={openFilteredTeamsPage}
+              >
+                チーム一覧
+              </button>
+
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={handleResetFilters}
+              >
+                条件リセット
+              </button>
+
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={() => {
+                  window.history.back();
+                }}
+              >
+                閉じる
+              </button>
             </div>
           </div>
         </section>
@@ -298,9 +423,7 @@ export default function TeamsSearchClient() {
           onBackToCalendar={() => {
             window.history.back();
           }}
-          onOpenTeamList={() => {
-            window.location.href = "/teams";
-          }}
+          onOpenTeamList={openFilteredTeamsPage}
           onReset={handleResetFilters}
           onBackToList={() => {
             window.history.back();
@@ -390,50 +513,49 @@ const topFixedArea: React.CSSProperties = {
   borderBottom: "1px solid #edf2ee",
 };
 
-const summaryOuter: React.CSSProperties = {
+const stickySummaryBox: React.CSSProperties = {
   marginTop: 12,
   marginBottom: 12,
-  padding: "14px 16px",
-  borderRadius: 16,
-  border: "1px solid #dce9df",
-  background: "#fff",
-};
-
-const summaryTitle: React.CSSProperties = {
-  fontWeight: 900,
-  fontSize: 22,
-  color: "#16391f",
-  lineHeight: 1.3,
-};
-
-const summaryInner: React.CSSProperties = {
-  marginTop: 12,
-  padding: 16,
+  padding: "12px 14px",
   borderRadius: 16,
   border: "1px solid #dce9df",
   background: "#f7fbf8",
 };
 
-const summaryCountLabel: React.CSSProperties = {
-  fontSize: 14,
+const stickySummaryTopRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const stickySummaryTextBlock: React.CSSProperties = {
+  display: "grid",
+  gap: 2,
+  minWidth: 0,
+};
+
+const stickySummaryMini: React.CSSProperties = {
+  fontSize: 13,
   fontWeight: 800,
   color: "#3b6a49",
-  lineHeight: 1.6,
+  lineHeight: 1.5,
 };
 
-const summaryCountValue: React.CSSProperties = {
-  marginTop: 4,
-  fontSize: 28,
+const stickySummaryValue: React.CSSProperties = {
+  fontSize: 24,
   fontWeight: 900,
   color: "#14532d",
-  lineHeight: 1.2,
+  lineHeight: 1.1,
 };
 
-const summarySubText: React.CSSProperties = {
-  marginTop: 8,
-  fontSize: 13,
-  color: "#5f6f66",
-  lineHeight: 1.7,
+const stickySummaryActions: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginLeft: "auto",
+  justifyContent: "flex-end",
 };
 
 const filterScrollArea: React.CSSProperties = {

@@ -2,6 +2,7 @@
 
 import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
 import AppHero from "@/app/components/AppHero";
@@ -72,15 +73,38 @@ function toTeamRows(value: unknown): TeamRow[] {
 }
 
 function TeamsPageInner() {
+  const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
   const myUserId = user?.id ?? "";
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [queryApplied, setQueryApplied] = useState(false);
 
   const {
+    keyword,
+    setKeyword,
+    categoryFilter,
+    setCategoryFilter,
+    prefectureFilter,
+    setPrefectureFilter,
+    cityFilter,
+    setCityFilter,
+    townFilter,
+    setTownFilter,
+    groundFilter,
+    setGroundFilter,
+    strengthFilter,
+    setStrengthFilter,
+    bikeFilter,
+    setBikeFilter,
+    bikeCapacityMin,
+    setBikeCapacityMin,
+    memberCountMin,
+    setMemberCountMin,
     filters,
+    clearAllFilters,
   } = useMatchFilters();
 
   useEffect(() => {
@@ -140,6 +164,70 @@ function TeamsPageInner() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (queryApplied) return;
+
+    clearAllFilters();
+
+    const keywordParam = searchParams.get("keyword") ?? "";
+    const prefParam = searchParams.get("pref") ?? "";
+    const cityParam = searchParams.get("city") ?? "";
+    const townParam = searchParams.get("town") ?? "";
+    const catParam = searchParams.get("cat") ?? "";
+    const rankParam = searchParams.get("rank") ?? "";
+    const groundParam = searchParams.get("ground") ?? "";
+    const bikeParam = searchParams.get("bike") ?? "";
+    const bikeMinParam = searchParams.get("bikeMin") ?? "";
+    const memberMinParam = searchParams.get("memberMin") ?? "";
+
+    setKeyword(keywordParam);
+    setPrefectureFilter(prefParam);
+    setCityFilter(cityParam);
+    setTownFilter(townParam);
+    setCategoryFilter(
+      catParam
+        ? catParam
+            .split(",")
+            .map((v) => v.trim())
+            .filter(Boolean)
+        : []
+    );
+    setStrengthFilter(
+      rankParam
+        ? (rankParam
+            .split(",")
+            .map((v) => v.trim())
+            .filter(Boolean) as any)
+        : []
+    );
+    setGroundFilter(
+      groundParam === "あり" || groundParam === "なし" ? groundParam : "all"
+    );
+    setBikeFilter(
+      bikeParam === "あり" || bikeParam === "なし" || bikeParam === "不明"
+        ? bikeParam
+        : "all"
+    );
+    setBikeCapacityMin(bikeMinParam);
+    setMemberCountMin(memberMinParam);
+
+    setQueryApplied(true);
+  }, [
+    queryApplied,
+    searchParams,
+    clearAllFilters,
+    setKeyword,
+    setCategoryFilter,
+    setPrefectureFilter,
+    setCityFilter,
+    setTownFilter,
+    setGroundFilter,
+    setStrengthFilter,
+    setBikeFilter,
+    setBikeCapacityMin,
+    setMemberCountMin,
+  ]);
 
   const filteredTeams = useMemo(() => {
     return teams.filter((team) => {
@@ -268,6 +356,42 @@ function TeamsPageInner() {
     return parts.join(" / ") || "すべての条件で表示中";
   }, [filters]);
 
+  const openSearchPageWithCurrentFilters = () => {
+    const params = new URLSearchParams();
+
+    if (keyword.trim()) params.set("keyword", keyword.trim());
+    if (prefectureFilter) params.set("pref", prefectureFilter);
+    if (cityFilter.trim()) params.set("city", cityFilter.trim());
+    if (townFilter.trim()) params.set("town", townFilter.trim());
+
+    if (categoryFilter.length > 0) {
+      params.set("cat", categoryFilter.join(","));
+    }
+
+    if (strengthFilter.length > 0) {
+      params.set("rank", strengthFilter.join(","));
+    }
+
+    if (groundFilter !== "all") {
+      params.set("ground", groundFilter);
+    }
+
+    if (bikeFilter !== "all") {
+      params.set("bike", bikeFilter);
+    }
+
+    if (bikeCapacityMin) {
+      params.set("bikeMin", bikeCapacityMin);
+    }
+
+    if (memberCountMin) {
+      params.set("memberMin", memberCountMin);
+    }
+
+    const qs = params.toString();
+    window.location.href = qs ? `/teams/search?${qs}` : "/teams/search";
+  };
+
   return (
     <main style={{ maxWidth: 980, margin: "0 auto", padding: 16 }}>
       <AppTabNav />
@@ -307,9 +431,7 @@ function TeamsPageInner() {
             <button
               type="button"
               className="sh-btn"
-              onClick={() => {
-                window.location.href = "/teams/search";
-              }}
+              onClick={openSearchPageWithCurrentFilters}
             >
               条件変更
             </button>

@@ -159,44 +159,41 @@ export function MatchFilterPanel({
             ...(stickyHitBox ? stickyHitBoxStyle : {}),
           }}
         >
-          <div style={hitTopRow}>
-            <div style={hitLabelInline}>{liveCountLabel}</div>
-            <div style={hitValueInline}>{liveCountText}</div>
-          </div>
+          <div style={hitMainRow}>
+            <div style={hitCountBlock}>
+              <div style={hitLabelInline}>{liveCountLabel}</div>
+              <div style={hitValueInline}>{liveCountText}</div>
+            </div>
 
-          <div style={hitSub}>
-            条件を変えるたびに、この件数がリアルタイムで変わります。
-          </div>
-
-          {showTopActions ? (
-            <div style={topActions}>
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={onBackToCalendar}
-              >
-                カレンダーへ戻る
-              </button>
+            <div style={hitBottomActions}>
               <button
                 type="button"
                 className="sh-btn sh-btn--primary"
                 onClick={onOpenTeamList}
+                disabled={loading}
               >
                 チーム一覧
               </button>
-            </div>
-          ) : null}
 
-          {renderHeaderActionsInHitBox ? (
-            <div style={hitBottomActions}>
-              <button type="button" className="sh-btn" onClick={onReset}>
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={onReset}
+                disabled={loading}
+              >
                 条件リセット
               </button>
-              <button type="button" className="sh-btn" onClick={onBackToList}>
+
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={onBackToList}
+                disabled={loading}
+              >
                 閉じる
               </button>
             </div>
-          ) : null}
+          </div>
         </section>
       ) : null}
 
@@ -215,10 +212,28 @@ export function MatchFilterPanel({
 
             {!renderHeaderActionsInHitBox && inlineHeaderActions ? (
               <div style={headerActions}>
-                <button type="button" className="sh-btn" onClick={onReset}>
+                <button
+                  type="button"
+                  className="sh-btn sh-btn--primary"
+                  onClick={onOpenTeamList}
+                  disabled={loading}
+                >
+                  チーム一覧
+                </button>
+                <button
+                  type="button"
+                  className="sh-btn"
+                  onClick={onReset}
+                  disabled={loading}
+                >
                   条件リセット
                 </button>
-                <button type="button" className="sh-btn" onClick={onBackToList}>
+                <button
+                  type="button"
+                  className="sh-btn"
+                  onClick={onBackToList}
+                  disabled={loading}
+                >
                   閉じる
                 </button>
               </div>
@@ -230,10 +245,28 @@ export function MatchFilterPanel({
         !inlineHeaderActions &&
         !hidePanelHeader ? (
           <div style={actionRow}>
-            <button type="button" className="sh-btn" onClick={onReset}>
+            <button
+              type="button"
+              className="sh-btn sh-btn--primary"
+              onClick={onOpenTeamList}
+              disabled={loading}
+            >
+              チーム一覧
+            </button>
+            <button
+              type="button"
+              className="sh-btn"
+              onClick={onReset}
+              disabled={loading}
+            >
               条件リセット
             </button>
-            <button type="button" className="sh-btn" onClick={onBackToList}>
+            <button
+              type="button"
+              className="sh-btn"
+              onClick={onBackToList}
+              disabled={loading}
+            >
               閉じる
             </button>
           </div>
@@ -263,12 +296,12 @@ export function MatchFilterPanel({
                 <button
                   key={pref}
                   type="button"
-                  disabled={loading}
                   onClick={() => setPrefectureFilter(selected ? "" : pref)}
                   style={{
                     ...(selected ? chipActive : chip),
                     ...(loading ? disabledButtonStyle : {}),
                   }}
+                  disabled={loading}
                 >
                   {pref}
                 </button>
@@ -331,12 +364,12 @@ export function MatchFilterPanel({
                 <button
                   key={item.value}
                   type="button"
-                  disabled={loading}
                   onClick={() => toggleCategory(item.value)}
                   style={{
                     ...(selected ? chipActive : chip),
                     ...(loading ? disabledButtonStyle : {}),
                   }}
+                  disabled={loading}
                 >
                   {item.label}
                 </button>
@@ -379,12 +412,12 @@ export function MatchFilterPanel({
                 <button
                   key={rank}
                   type="button"
-                  disabled={loading}
                   onClick={() => toggleStrength(rank)}
                   style={{
                     ...(selected ? chipActive : chip),
                     ...(loading ? disabledButtonStyle : {}),
                   }}
+                  disabled={loading}
                 >
                   {rank}
                 </button>
@@ -402,7 +435,6 @@ export function MatchFilterPanel({
                 <button
                   key={value}
                   type="button"
-                  disabled={loading}
                   onClick={() =>
                     setGroundFilter(value as "all" | "あり" | "なし")
                   }
@@ -410,6 +442,7 @@ export function MatchFilterPanel({
                     ...(selected ? chipActive : chip),
                     ...(loading ? disabledButtonStyle : {}),
                   }}
+                  disabled={loading}
                 >
                   {value === "all" ? "すべて" : value}
                 </button>
@@ -427,7 +460,6 @@ export function MatchFilterPanel({
                 <button
                   key={value}
                   type="button"
-                  disabled={loading}
                   onClick={() =>
                     setBikeFilter(value as "all" | "あり" | "なし" | "不明")
                   }
@@ -435,6 +467,7 @@ export function MatchFilterPanel({
                     ...(selected ? chipActive : chip),
                     ...(loading ? disabledButtonStyle : {}),
                   }}
+                  disabled={loading}
                 >
                   {value === "all" ? "すべて" : value}
                 </button>
@@ -479,48 +512,52 @@ const wrap: React.CSSProperties = {
 };
 
 const hitBox: React.CSSProperties = {
-  borderRadius: 18,
+  borderRadius: 16,
   border: "1px solid #dce9df",
   background: "#fff",
-  padding: 16,
+  padding: 12,
 };
 
 const compactHitBox: React.CSSProperties = {
-  padding: "14px 16px",
+  padding: "10px 12px",
 };
 
 const stickyHitBoxStyle: React.CSSProperties = {
   position: "sticky",
-  top: 10,
+  top: 8,
   zIndex: 40,
 };
 
-const hitTopRow: React.CSSProperties = {
+const hitMainRow: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
-  gap: 10,
+  justifyContent: "space-between",
+  gap: 12,
   flexWrap: "wrap",
 };
 
+const hitCountBlock: React.CSSProperties = {
+  display: "grid",
+  gap: 2,
+  minWidth: 0,
+};
+
 const hitLabelInline: React.CSSProperties = {
-  fontSize: 18,
-  fontWeight: 900,
-  color: "#2f5d3a",
-  lineHeight: 1.4,
+  fontSize: 13,
+  fontWeight: 800,
+  color: "#5f6f66",
+  lineHeight: 1.2,
 };
 
 const hitValueInline: React.CSSProperties = {
-  fontSize: 18,
+  fontSize: 24,
   fontWeight: 900,
   color: "#14532d",
-  lineHeight: 1.4,
+  lineHeight: 1.1,
 };
 
 const hitSub: React.CSSProperties = {
-  marginTop: 6,
-  color: "#5f6f66",
-  lineHeight: 1.7,
-  fontSize: 13,
+  display: "none",
 };
 
 const topActions: React.CSSProperties = {
@@ -532,15 +569,15 @@ const topActions: React.CSSProperties = {
 };
 
 const hitBottomActions: React.CSSProperties = {
-  marginTop: 16,
   display: "flex",
-  gap: 12,
+  gap: 8,
   flexWrap: "wrap",
   justifyContent: "flex-end",
+  marginLeft: "auto",
 };
 
 const panelBox: React.CSSProperties = {
-  marginTop: 12,
+  marginTop: 10,
   borderRadius: 18,
   border: "1px solid #dce9df",
   background: "#fff",
