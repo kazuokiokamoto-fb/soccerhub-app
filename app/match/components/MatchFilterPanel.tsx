@@ -106,15 +106,12 @@ async function tryFetchJson(urls: string[]) {
 }
 
 function normalizeStringList(value: unknown): string[] {
+  let raw: string[] = [];
+
   if (Array.isArray(value)) {
-    return value
-      .map((v) => String(v ?? "").trim())
-      .filter(Boolean);
-  }
-
-  if (value && typeof value === "object") {
+    raw = value.map((v) => String(v ?? "").trim());
+  } else if (value && typeof value === "object") {
     const obj = value as Record<string, unknown>;
-
     const candidateKeys = [
       "items",
       "data",
@@ -126,29 +123,57 @@ function normalizeStringList(value: unknown): string[] {
 
     for (const key of candidateKeys) {
       const found = obj[key];
-      if (Array.isArray(found)) {
-        return found
-          .map((v) => {
-            if (typeof v === "string") return v.trim();
-            if (v && typeof v === "object") {
-              const row = v as Record<string, unknown>;
-              return String(
-                row.name ??
-                  row.city ??
-                  row.town ??
-                  row.label ??
-                  row.value ??
-                  ""
-              ).trim();
-            }
-            return "";
-          })
-          .filter(Boolean);
-      }
+      if (!Array.isArray(found)) continue;
+
+      raw = found.map((v) => {
+        if (typeof v === "string") return v.trim();
+
+        if (v && typeof v === "object") {
+          const row = v as Record<string, unknown>;
+          return String(
+            row.town ??
+              row.name ??
+              row.label ??
+              row.value ??
+              row.city ??
+              row.ward ??
+              ""
+          ).trim();
+        }
+
+        return "";
+      });
+
+      break;
     }
   }
 
-  return [];
+  return Array.from(
+    new Set(
+      raw
+        .map((v) => v.replace(/\s+/g, " ").trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function cleanTownOptions(towns: string[], city: string): string[] {
+  const normalizedCity = city.replace(/\s+/g, "").trim();
+
+  return Array.from(
+    new Set(
+      towns.filter((town) => {
+        const normalizedTown = town.replace(/\s+/g, "").trim();
+
+        if (!normalizedTown) return false;
+        if (normalizedTown === normalizedCity) return false;
+        if (normalizedTown === "未設定") return false;
+        if (normalizedTown === "不明") return false;
+
+        return true;
+      })
+    )
+  );
 }
 
 export function MatchFilterPanel({
@@ -287,7 +312,8 @@ export function MatchFilterPanel({
 
       if (!active) return;
 
-      setTownOptions(normalizeStringList(json));
+      const rawTowns = normalizeStringList(json);
+      setTownOptions(cleanTownOptions(rawTowns, city));
       setTownLoading(false);
     };
 
