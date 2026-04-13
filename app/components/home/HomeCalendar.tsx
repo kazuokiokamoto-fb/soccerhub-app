@@ -7,12 +7,10 @@ import { categoryLabel } from "@/app/lib/categories";
 
 import { Calendar } from "@/app/match/components/Calendar";
 import { DaySlotList } from "@/app/match/components/DaySlotList";
-import { MatchFilterPanel } from "@/app/match/components/MatchFilterPanel";
 import { MatchHelpModals } from "@/app/match/components/MatchHelpModals";
 
 import { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
 import { useMatchData } from "@/app/match/hooks/useMatchData";
-import { STRENGTH_GUIDES } from "@/app/match/constants/strengthGuides";
 
 import {
   buildCalendarCells,
@@ -265,12 +263,10 @@ export default function HomeCalendar(props: {
 
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
   const [showCalendarHelp, setShowCalendarHelp] = useState(false);
-  const [panelMode, setPanelMode] = useState<PanelMode>(initialPanelMode);
 
   const homeTopRef = useRef<HTMLDivElement | null>(null);
   const calendarRef = useRef<HTMLDivElement | null>(null);
   const dayListRef = useRef<HTMLDivElement | null>(null);
-  const filterRef = useRef<HTMLElement | null>(null);
 
   const {
     keyword,
@@ -325,21 +321,6 @@ export default function HomeCalendar(props: {
       setRequestTeamId(myTeams[0].id);
     }
   }, [myTeams, requestTeamId]);
-
-  useEffect(() => {
-    if (initialPanelMode !== "team") return;
-
-    setPanelMode("team");
-
-    const timer = setTimeout(() => {
-      filterRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 220);
-
-    return () => clearTimeout(timer);
-  }, [initialPanelMode]);
 
   const myTeamIds = useMemo(() => myTeams.map((t: any) => t.id), [myTeams]);
 
@@ -519,26 +500,8 @@ export default function HomeCalendar(props: {
     }, 120);
   };
 
-  const openTeamFilterPanel = () => {
-    setPanelMode("team");
-
-    setTimeout(() => {
-      filterRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 120);
-  };
-
-  const closePanel = () => {
-    setPanelMode("none");
-
-    setTimeout(() => {
-      homeTopRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 120);
+  const openTeamFilterPage = () => {
+    window.location.href = "/teams/search";
   };
 
   const handleResetTeamFilters = () => {
@@ -995,10 +958,6 @@ export default function HomeCalendar(props: {
 
   const topConditionText = useMemo(() => filterSummaryText, [filterSummaryText]);
 
-  const teamCountText = useMemo(() => {
-    return `チーム数：${filteredTeams.length}件`;
-  }, [filteredTeams.length]);
-
   const totalTeamCountText = useMemo(() => {
     return `チーム総数：${allTeams.length}件`;
   }, [allTeams.length]);
@@ -1011,8 +970,6 @@ export default function HomeCalendar(props: {
   const showCriticalError =
     (baseError && baseError.includes("teams:")) ||
     (monthError && monthError.includes("match_slots:"));
-
-  const isPanelOpen = panelMode === "team";
 
   return (
     <section style={wrap} ref={homeTopRef}>
@@ -1043,188 +1000,134 @@ export default function HomeCalendar(props: {
         </div>
       ) : null}
 
-      {!isPanelOpen ? (
-        <>
-          <section style={summaryStatsBox}>
-            <div style={summaryStatsInner}>
-              {totalTeamCountText}
-              <span style={summaryStatsDivider}> / </span>
-              {totalOpenSlotCountText}
-            </div>
-          </section>
+      <section style={summaryStatsBox}>
+        <div style={summaryStatsInner}>
+          {totalTeamCountText}
+          <span style={summaryStatsDivider}> / </span>
+          {totalOpenSlotCountText}
+        </div>
+      </section>
 
-          <section style={summaryBox}>
-            <div style={summaryCardTop}>
-              <div style={summaryDateText}>チーム条件で探す</div>
-            </div>
+      <section style={summaryBox}>
+        <div style={summaryCardTop}>
+          <div style={summaryDateText}>チーム条件で探す</div>
+        </div>
 
-            {/* ★ここが今回の本体（追加） */}
-            <div
-              style={{
-                marginTop: 8,
-                padding: 16,
-                borderRadius: 16,
-                border: "1px solid #dce9df",
-                background: "#f7fbf8",
-              }}
+        <div
+          style={{
+            marginTop: 8,
+            padding: 16,
+            borderRadius: 16,
+            border: "1px solid #dce9df",
+            background: "#f7fbf8",
+          }}
+        >
+          <div style={summaryActionRow}>
+            <button
+              type="button"
+              className="sh-btn"
+              onClick={openTeamFilterPage}
             >
-              <div style={summaryActionRow}>
-                <button
-                  type="button"
-                  className="sh-btn"
-                  onClick={openTeamFilterPanel}
-                >
-                  条件変更
-                </button>
+              条件変更
+            </button>
 
-                <button
-                  type="button"
-                  className="sh-btn sh-btn--primary"
-                  onClick={openTeamListWindow}
-                >
-                  チーム一覧
-                </button>
-              </div>
+            <button
+              type="button"
+              className="sh-btn sh-btn--primary"
+              onClick={openTeamListWindow}
+            >
+              チーム一覧
+            </button>
+          </div>
 
-              <div style={{ marginTop: 12 }}>
-                <div style={summaryCountLine}>
-                  対象チーム数：{filteredTeams.length}件
-                </div>
-
-                <div style={summarySub}>
-                  表示条件：{topConditionText}
-                </div>
-              </div>
+          <div style={{ marginTop: 12 }}>
+            <div style={summaryCountLine}>
+              対象チーム数：{filteredTeams.length}件
             </div>
-          </section>
 
-          <div ref={calendarRef}>
-            <Calendar
-              monthKey={monthKey}
-              loading={loading}
-              cells={calendarCells}
-              selectedYmd={selectedYmd}
-              countByDate={countByDate}
-              dayStatusSummaryByDate={dayStatusSummaryByDate}
-              onSelectDate={(ymd) => {
-                setSelectedYmd(ymd);
-                setSelectedSlotId("");
-                setRequestComment("");
-                scrollToDayList();
-              }}
-              onPrevMonth={() => {
-                const nextMonth = addMonths(monthDate, -1);
-                setMonthDate(nextMonth);
-                setSelectedYmd(firstDayYmdOfMonth(nextMonth));
-                setSelectedSlotId("");
-                setRequestComment("");
-              }}
-              onNextMonth={() => {
-                const nextMonth = addMonths(monthDate, 1);
-                setMonthDate(nextMonth);
-                setSelectedYmd(firstDayYmdOfMonth(nextMonth));
-                setSelectedSlotId("");
-                setRequestComment("");
-              }}
-              onCreateForDate={(ymd) => goToCreatePage(ymd)}
-              onOpenCalendarHelp={() => setShowCalendarHelp(true)}
-              disableCreate={!authReady}
-              selectedDateSummaryText={selectedDateSummaryText}
-              titleText="試合日で探す"
-            />
+            <div style={summarySub}>
+              表示条件：{topConditionText}
+            </div>
           </div>
+        </div>
+      </section>
 
-          <div ref={dayListRef}>
-            <DaySlotList
-              selectedYmd={selectedYmd}
-              slots={slotsOnSelectedDate as any}
-              venues={venues}
-              allTeams={allTeams as any}
-              myTeams={myTeams as any}
-              meId={currentUserId}
-              requestsForMonth={requestsForMonth}
-              selectedSlotId={selectedSlotId}
-              slotStatusResolver={getSlotStatus}
-              onToggleDetail={(slotId) => {
-                const next = selectedSlotId === slotId ? "" : slotId;
-                setSelectedSlotId(next);
-                setRequestComment("");
-              }}
-              requestTeamId={requestTeamId}
-              onChangeRequestTeamId={setRequestTeamId}
-              requestComment={requestComment}
-              onChangeRequestComment={setRequestComment}
-              onRequestSlot={requestSlot}
-              onCancelMyRequest={cancelMyRequest}
-              selectedSlot={selectedSlot}
-              selectedHostTeam={selectedHostTeam as any}
-              selectedSlotRequests={selectedSlotRequests}
-              isMineSlot={isMineSlot}
-              onAccept={accept}
-              onReject={reject}
-              onOpenChatWithTeam={openDmAndGo}
-              onToggleClosed={toggleClosed}
-              loading={loading}
-            />
-          </div>
-
-        </>
-      ) : null}
-
-      {isPanelOpen ? (
-        <MatchFilterPanel
-          filterRef={filterRef}
+      <div ref={calendarRef}>
+        <Calendar
+          monthKey={monthKey}
           loading={loading}
-          keyword={keyword}
-          setKeyword={setKeyword}
-          categoryFilter={categoryFilter}
-          setCategoryFilter={setCategoryFilter}
-          prefectureFilter={prefectureFilter}
-          setPrefectureFilter={setPrefectureFilter}
-          cityFilter={cityFilter}
-          setCityFilter={setCityFilter}
-          townFilter={townFilter}
-          setTownFilter={setTownFilter}
-          groundFilter={groundFilter}
-          setGroundFilter={setGroundFilter}
-          strengthFilter={strengthFilter}
-          setStrengthFilter={(value) =>
-            setStrengthFilter(value as StrengthRank[])
-          }
-          bikeFilter={bikeFilter}
-          setBikeFilter={setBikeFilter}
-          bikeCapacityMin={bikeCapacityMin}
-          setBikeCapacityMin={setBikeCapacityMin}
-          memberCountMin={memberCountMin}
-          setMemberCountMin={setMemberCountMin}
-          onBackToCalendar={() => {}}
-          onOpenTeamList={() => {}}
-          onReset={handleResetTeamFilters}
-          onBackToList={closePanel}
-          onOpenStrengthHelp={() => setShowStrengthHelp(true)}
-          strengthGuides={STRENGTH_GUIDES}
-          titleText="相手を探す"
-          descriptionText="レベル・エリア・人数感などから相手チームを探せます。"
-          liveCountLabel="現在のヒット件数"
-          liveCountText={teamCountText}
-          hideFilterBadge={true}
-          inlineHeaderActions={false}
-          showTopActions={false}
-          showTopHitBox={true}
-          stickyHitBox={true}
-          renderHeaderActionsInHitBox={true}
-          hidePanelHeader={true}
-          hidePanelTitleBlock={true}
-          compactTopHitBox={true}
+          cells={calendarCells}
+          selectedYmd={selectedYmd}
+          countByDate={countByDate}
+          dayStatusSummaryByDate={dayStatusSummaryByDate}
+          onSelectDate={(ymd) => {
+            setSelectedYmd(ymd);
+            setSelectedSlotId("");
+            setRequestComment("");
+            scrollToDayList();
+          }}
+          onPrevMonth={() => {
+            const nextMonth = addMonths(monthDate, -1);
+            setMonthDate(nextMonth);
+            setSelectedYmd(firstDayYmdOfMonth(nextMonth));
+            setSelectedSlotId("");
+            setRequestComment("");
+          }}
+          onNextMonth={() => {
+            const nextMonth = addMonths(monthDate, 1);
+            setMonthDate(nextMonth);
+            setSelectedYmd(firstDayYmdOfMonth(nextMonth));
+            setSelectedSlotId("");
+            setRequestComment("");
+          }}
+          onCreateForDate={(ymd) => goToCreatePage(ymd)}
+          onOpenCalendarHelp={() => setShowCalendarHelp(true)}
+          disableCreate={!authReady}
+          selectedDateSummaryText={selectedDateSummaryText}
+          titleText="試合日で探す"
         />
-      ) : null}
+      </div>
+
+      <div ref={dayListRef}>
+        <DaySlotList
+          selectedYmd={selectedYmd}
+          slots={slotsOnSelectedDate as any}
+          venues={venues}
+          allTeams={allTeams as any}
+          myTeams={myTeams as any}
+          meId={currentUserId}
+          requestsForMonth={requestsForMonth}
+          selectedSlotId={selectedSlotId}
+          slotStatusResolver={getSlotStatus}
+          onToggleDetail={(slotId) => {
+            const next = selectedSlotId === slotId ? "" : slotId;
+            setSelectedSlotId(next);
+            setRequestComment("");
+          }}
+          requestTeamId={requestTeamId}
+          onChangeRequestTeamId={setRequestTeamId}
+          requestComment={requestComment}
+          onChangeRequestComment={setRequestComment}
+          onRequestSlot={requestSlot}
+          onCancelMyRequest={cancelMyRequest}
+          selectedSlot={selectedSlot}
+          selectedHostTeam={selectedHostTeam as any}
+          selectedSlotRequests={selectedSlotRequests}
+          isMineSlot={isMineSlot}
+          onAccept={accept}
+          onReject={reject}
+          onOpenChatWithTeam={openDmAndGo}
+          onToggleClosed={toggleClosed}
+          loading={loading}
+        />
+      </div>
 
       <MatchHelpModals
         showStrengthHelp={showStrengthHelp}
         showCalendarHelp={showCalendarHelp}
         onCloseStrengthHelp={() => setShowStrengthHelp(false)}
         onCloseCalendarHelp={() => setShowCalendarHelp(false)}
-        strengthGuides={STRENGTH_GUIDES}
+        strengthGuides={[]}
       />
     </section>
   );

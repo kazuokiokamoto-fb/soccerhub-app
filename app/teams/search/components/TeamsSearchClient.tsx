@@ -164,12 +164,10 @@ export default function TeamsSearchClient() {
   };
 
   const scrollToFilter = () => {
-    setTimeout(() => {
-      filterRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 120);
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   };
 
   const handleResetFilters = () => {
