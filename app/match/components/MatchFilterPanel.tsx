@@ -248,6 +248,7 @@ export function MatchFilterPanel({
             placeholder="例：三宿 / 青 / 小学5年 / キッズ / SS"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
+            disabled={loading}
           />
         </div>
 
@@ -262,8 +263,12 @@ export function MatchFilterPanel({
                 <button
                   key={pref}
                   type="button"
+                  disabled={loading}
                   onClick={() => setPrefectureFilter(selected ? "" : pref)}
-                  style={selected ? chipActive : chip}
+                  style={{
+                    ...(selected ? chipActive : chip),
+                    ...(loading ? disabledButtonStyle : {}),
+                  }}
                 >
                   {pref}
                 </button>
@@ -279,12 +284,14 @@ export function MatchFilterPanel({
               placeholder="市区町村"
               value={cityFilter}
               onChange={(e) => setCityFilter(e.target.value)}
+              disabled={loading}
             />
             <input
               className="sh-input"
               placeholder="町名"
               value={townFilter}
               onChange={(e) => setTownFilter(e.target.value)}
+              disabled={loading}
             />
           </div>
         </div>
@@ -302,6 +309,7 @@ export function MatchFilterPanel({
                 onClick={() =>
                   setCategoryFilter(CATEGORY_OPTIONS.map((item) => item.value))
                 }
+                disabled={loading}
               >
                 全選択
               </button>
@@ -309,6 +317,7 @@ export function MatchFilterPanel({
                 type="button"
                 className="sh-btn"
                 onClick={() => setCategoryFilter([])}
+                disabled={loading}
               >
                 クリア
               </button>
@@ -322,8 +331,12 @@ export function MatchFilterPanel({
                 <button
                   key={item.value}
                   type="button"
+                  disabled={loading}
                   onClick={() => toggleCategory(item.value)}
-                  style={selected ? chipActive : chip}
+                  style={{
+                    ...(selected ? chipActive : chip),
+                    ...(loading ? disabledButtonStyle : {}),
+                  }}
                 >
                   {item.label}
                 </button>
@@ -347,9 +360,13 @@ export function MatchFilterPanel({
             </div>
             <button
               type="button"
-              style={helpBtn}
+              style={{
+                ...helpBtn,
+                ...(loading ? disabledButtonStyle : {}),
+              }}
               onClick={onOpenStrengthHelp}
               aria-label="強さの説明"
+              disabled={loading}
             >
               ？
             </button>
@@ -362,8 +379,12 @@ export function MatchFilterPanel({
                 <button
                   key={rank}
                   type="button"
+                  disabled={loading}
                   onClick={() => toggleStrength(rank)}
-                  style={selected ? chipActive : chip}
+                  style={{
+                    ...(selected ? chipActive : chip),
+                    ...(loading ? disabledButtonStyle : {}),
+                  }}
                 >
                   {rank}
                 </button>
@@ -381,10 +402,14 @@ export function MatchFilterPanel({
                 <button
                   key={value}
                   type="button"
+                  disabled={loading}
                   onClick={() =>
                     setGroundFilter(value as "all" | "あり" | "なし")
                   }
-                  style={selected ? chipActive : chip}
+                  style={{
+                    ...(selected ? chipActive : chip),
+                    ...(loading ? disabledButtonStyle : {}),
+                  }}
                 >
                   {value === "all" ? "すべて" : value}
                 </button>
@@ -402,10 +427,14 @@ export function MatchFilterPanel({
                 <button
                   key={value}
                   type="button"
+                  disabled={loading}
                   onClick={() =>
                     setBikeFilter(value as "all" | "あり" | "なし" | "不明")
                   }
-                  style={selected ? chipActive : chip}
+                  style={{
+                    ...(selected ? chipActive : chip),
+                    ...(loading ? disabledButtonStyle : {}),
+                  }}
                 >
                   {value === "all" ? "すべて" : value}
                 </button>
@@ -420,6 +449,7 @@ export function MatchFilterPanel({
               inputMode="numeric"
               value={bikeCapacityMin}
               onChange={(e) => setBikeCapacityMin(e.target.value)}
+              disabled={loading}
             />
           </div>
         </div>
@@ -433,6 +463,7 @@ export function MatchFilterPanel({
               inputMode="numeric"
               value={memberCountMin}
               onChange={(e) => setMemberCountMin(e.target.value)}
+              disabled={loading}
             />
           </div>
         </div>
@@ -444,8 +475,7 @@ export function MatchFilterPanel({
 }
 
 const wrap: React.CSSProperties = {
-  display: "grid",
-  gap: 14,
+  display: "block",
 };
 
 const hitBox: React.CSSProperties = {
@@ -510,6 +540,7 @@ const hitBottomActions: React.CSSProperties = {
 };
 
 const panelBox: React.CSSProperties = {
+  marginTop: 12,
   borderRadius: 18,
   border: "1px solid #dce9df",
   background: "#fff",
@@ -646,6 +677,7 @@ const chip: React.CSSProperties = {
   color: "#22372a",
   fontSize: 16,
   fontWeight: 800,
+  cursor: "pointer",
 };
 
 const chipActive: React.CSSProperties = {
@@ -682,4 +714,9 @@ const loadingText: React.CSSProperties = {
   textAlign: "center",
   color: "#6b7280",
   padding: 8,
+};
+
+const disabledButtonStyle: React.CSSProperties = {
+  opacity: 0.55,
+  cursor: "not-allowed",
 };

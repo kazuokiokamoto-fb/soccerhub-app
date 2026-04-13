@@ -10,19 +10,11 @@ import { MatchFilterPanel } from "@/app/match/components/MatchFilterPanel";
 
 import {
   DbTeam,
-  OfferRow,
   Toast,
   STRENGTH_GUIDES,
-  buildAreaText,
-  matchesTeamFilters,
 } from "./teamSearchUtils";
 
 import {
-  summaryWrap,
-  summaryHeaderRow,
-  stickySummaryBar,
-  stickySummaryDate,
-  stickySummaryCount,
   toastBox,
   toastSuccess,
   toastError,
@@ -30,12 +22,9 @@ import {
   toastClose,
   modalOverlay,
   modalCard,
-  offerModalCard,
-  offerInfoBox,
   modalHeader,
   modalTitle,
   modalCloseButton,
-  textareaStyle,
   guideList,
   guideCard,
   guideTop,
@@ -46,24 +35,13 @@ import {
   guideBulletRow,
   guideBulletMark,
   guideNote,
-  detailLabel,
-  detailValue,
-  label,
-  labelTitle,
-  buttonRow,
 } from "./teamSearchStyles";
 
 export default function TeamsSearchClient() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [loading, setLoading] = useState(true);
   const [teams, setTeams] = useState<DbTeam[]>([]);
-  const [myTeams, setMyTeams] = useState<DbTeam[]>([]);
-  const [requestTeamId, setRequestTeamId] = useState("");
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
-
-  const [offerTargetTeam, setOfferTargetTeam] = useState<DbTeam | null>(null);
-  const [offerMessage, setOfferMessage] = useState("");
-  const [sendingOffer, setSendingOffer] = useState(false);
 
   const {
     keyword,
@@ -117,23 +95,7 @@ export default function TeamsSearchClient() {
       return;
     }
 
-    const rows = (data ?? []) as DbTeam[];
-    setTeams(rows);
-
-    const { data: authData } = await supabase.auth.getUser();
-    const meId = authData?.user?.id ?? "";
-
-    if (meId) {
-      const own = rows.filter((t) => t.owner_id === meId);
-      setMyTeams(own);
-
-      if (!requestTeamId && own[0]?.id) {
-        setRequestTeamId(own[0].id);
-      }
-    } else {
-      setMyTeams([]);
-    }
-
+    setTeams((data ?? []) as DbTeam[]);
     setLoading(false);
   };
 
@@ -142,216 +104,124 @@ export default function TeamsSearchClient() {
   }, []);
 
   const filteredTeams = useMemo(() => {
-    return teams.filter((t) => matchesTeamFilters(t, filters));
-  }, [teams, filters]);
+    return teams.filter((team) => {
+      const teamCategories =
+        Array.isArray(team.categories) && team.categories.length > 0
+          ? team.categories
+          : team.category
+            ? [team.category]
+            : [];
 
-  const scrollToTop = () => {
-    setTimeout(() => {
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
-    }, 120);
-  };
+      if (filters.categoryFilter.length > 0) {
+        const ok = teamCategories.some((c) =>
+          filters.categoryFilter.includes(String(c).trim())
+        );
+        if (!ok) return false;
+      }
+
+      if (
+        filters.prefectureFilter &&
+        String(team.prefecture ?? "").trim() !== filters.prefectureFilter
+      ) {
+        return false;
+      }
+
+      if (
+        filters.cityFilter &&
+        String(team.city ?? "").trim() !== filters.cityFilter
+      ) {
+        return false;
+      }
+
+      if (
+        filters.townFilter &&
+        String(team.town ?? "").trim() !== filters.townFilter
+      ) {
+        return false;
+      }
+
+      if (filters.groundFilter !== "all") {
+        const ground = team.has_ground ? "あり" : "なし";
+        if (ground !== filters.groundFilter) return false;
+      }
+
+      if (filters.strengthFilter.length > 0) {
+        const rank =
+          (team.strength_rank?.trim() as any) ||
+          (() => {
+            const n = Number(team.level ?? 0);
+            if (!Number.isFinite(n)) return "";
+            if (n >= 9) return "SS";
+            if (n >= 7) return "S";
+            if (n >= 5) return "A";
+            if (n >= 3) return "B";
+            return "C";
+          })();
+
+        if (!rank || !filters.strengthFilter.includes(rank)) return false;
+      }
+
+      if (filters.bikeFilter !== "all") {
+        const bike = (team.bike_parking ?? "不明") as
+          | "あり"
+          | "なし"
+          | "不明";
+        if (bike !== filters.bikeFilter) return false;
+      }
+
+      if (filters.bikeCapacityMin) {
+        const raw = String(team.bike_parking_capacity ?? "").trim();
+        const cap = raw ? Number(raw.replace(/[^\d]/g, "")) : NaN;
+        if (!Number.isFinite(cap) || cap < Number(filters.bikeCapacityMin)) {
+          return false;
+        }
+      }
+
+      if (filters.memberCountMin) {
+        const count = Number(team.member_count ?? 0);
+        if (count < Number(filters.memberCountMin)) return false;
+      }
+
+      if (filters.keyword.trim()) {
+        const q = filters.keyword.trim().toLowerCase();
+
+        const hay = [
+          team.name,
+          team.area,
+          team.prefecture,
+          team.city,
+          team.town,
+          team.category,
+          ...teamCategories,
+          team.uniform_main,
+          team.uniform_sub,
+          team.note,
+          team.bike_parking,
+          team.bike_parking_capacity,
+          String(team.member_count ?? ""),
+          String(team.strength_rank ?? ""),
+          String(team.level ?? ""),
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        if (!hay.includes(q)) return false;
+      }
+
+      return true;
+    });
+  }, [teams, filters]);
 
   const handleResetFilters = () => {
     clearAllFilters();
-  };
-
-  const getOrCreateDmThread = async (myTeamId: string, otherTeamId: string) => {
-    const { data, error } = await supabase.rpc("rpc_get_or_create_dm_thread", {
-      my_team_id: myTeamId,
-      other_team_id: otherTeamId,
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
     });
-
-    if (error) throw error;
-    return data as string;
-  };
-
-  const openOfferModal = (team: DbTeam) => {
-    if (!requestTeamId && !myTeams[0]?.id) {
-      alert("自分のチームがありません");
-      return;
-    }
-
-    setOfferTargetTeam(team);
-    setOfferMessage("");
-  };
-
-  const sendOffer = async () => {
-    try {
-      if (!offerTargetTeam) return;
-
-      const fromTeamId = requestTeamId || myTeams[0]?.id;
-
-      if (!fromTeamId) {
-        alert("自分のチームを選択してください");
-        return;
-      }
-
-      if (fromTeamId === offerTargetTeam.id) {
-        alert("自分自身のチームには送れません");
-        return;
-      }
-
-      setSendingOffer(true);
-
-      const { data: authData } = await supabase.auth.getUser();
-      const meId = authData?.user?.id ?? "";
-
-      if (!meId) {
-        alert("ログインが必要です");
-        setSendingOffer(false);
-        return;
-      }
-
-      const { data: existingRows, error: existingErr } = await supabase
-        .from("match_offers")
-        .select("id, from_team_id, to_team_id, status, message, created_at")
-        .eq("from_team_id", fromTeamId)
-        .eq("to_team_id", offerTargetTeam.id)
-        .in("status", ["pending", "accepted"])
-        .limit(1);
-
-      if (existingErr) {
-        console.error(existingErr);
-      }
-
-      const existing = ((existingRows ?? []) as OfferRow[])[0];
-      if (existing) {
-        alert("この相手にはすでに有効なオファーを送っています");
-        setSendingOffer(false);
-        return;
-      }
-
-      const { data: insertedOffer, error } = await supabase
-        .from("match_offers")
-        .insert({
-          from_team_id: fromTeamId,
-          to_team_id: offerTargetTeam.id,
-          from_user_id: meId,
-          status: "pending",
-          message: offerMessage.trim() || null,
-        })
-        .select("id, from_team_id, to_team_id, status, message, created_at")
-        .single();
-
-      if (error) {
-        console.error(error);
-        alert(`オファー送信に失敗しました: ${error.message}`);
-        setSendingOffer(false);
-        return;
-      }
-
-      const myTeam = myTeams.find((t) => t.id === fromTeamId);
-
-      let threadId = "";
-      try {
-        threadId = await getOrCreateDmThread(fromTeamId, offerTargetTeam.id);
-      } catch (e) {
-        console.error("thread create failed:", e);
-      }
-
-      try {
-        const { data: targetTeamRow, error: targetTeamErr } = await supabase
-          .from("teams")
-          .select("owner_id")
-          .eq("id", offerTargetTeam.id)
-          .maybeSingle();
-
-        if (targetTeamErr) {
-          console.error("target team owner fetch error:", targetTeamErr);
-        }
-
-        const targetUserId =
-          (targetTeamRow as { owner_id?: string | null } | null)?.owner_id ?? "";
-
-        if (targetUserId) {
-          const notificationTitle = "新しい試合オファー";
-          const notificationBody = `${
-            myTeam?.name ?? "相手チーム"
-          } からオファーが届きました`;
-          const notificationUrl = threadId ? `/chat/${threadId}` : "/chat";
-
-          const { error: notificationErr } = await supabase
-            .from("notifications")
-            .insert({
-              user_id: targetUserId,
-              type: "match_offer",
-              title: notificationTitle,
-              body: notificationBody,
-              target_url: notificationUrl,
-              is_read: false,
-              related_team_id: fromTeamId,
-              related_offer_id: insertedOffer.id,
-              related_thread_id: threadId || null,
-            });
-
-          if (notificationErr) {
-            console.error("notification insert error:", notificationErr);
-          } else {
-            try {
-              const pushRes = await fetch("/api/push/send", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  userId: targetUserId,
-                  title: notificationTitle,
-                  body: notificationBody,
-                  url: notificationUrl,
-                }),
-              });
-
-              if (!pushRes.ok) {
-                const pushJson = await pushRes.json().catch(() => null);
-                console.error("push send error:", pushJson ?? pushRes.statusText);
-              }
-            } catch (e) {
-              console.error("push send fetch error:", e);
-            }
-          }
-        }
-      } catch (e) {
-        console.error("offer notification error:", e);
-      }
-
-      try {
-        if (!threadId) {
-          threadId = await getOrCreateDmThread(fromTeamId, offerTargetTeam.id);
-        }
-
-        await supabase.from("chat_messages").insert({
-          thread_id: threadId,
-          sender_id: meId,
-          sender_team_id: fromTeamId,
-          body: [
-            "【試合オファー】",
-            `送信元チーム: ${myTeam?.name ?? "未設定"}`,
-            `送信先チーム: ${offerTargetTeam.name ?? "未設定"}`,
-            offerMessage.trim() ? `メッセージ: ${offerMessage.trim()}` : "",
-          ]
-            .filter(Boolean)
-            .join("\n"),
-        });
-      } catch (e) {
-        console.error("offer chat relay failed:", e);
-      }
-
-      setOfferTargetTeam(null);
-      setOfferMessage("");
-      setToast({ type: "success", text: "オファーを送信しました" });
-      setSendingOffer(false);
-    } catch (e: any) {
-      console.error(e);
-      setSendingOffer(false);
-      alert(e?.message ?? "オファー送信に失敗しました");
-    }
   };
 
   return (
-    <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
+    <main style={pageShell}>
       {toast ? (
         <div
           style={{
@@ -361,6 +231,8 @@ export default function TeamsSearchClient() {
               : toast.type === "error"
                 ? toastError
                 : toastInfo),
+            margin: "12px 16px 0",
+            flexShrink: 0,
           }}
           role="status"
           aria-live="polite"
@@ -377,30 +249,29 @@ export default function TeamsSearchClient() {
         </div>
       ) : null}
 
-      <AppTabNav />
+      <div style={topFixedArea}>
+        <AppTabNav />
 
-      <AppHero
-        icon="🔎"
-        title="チーム検索"
-        desc="試合を探すと同じ条件で絞り込みながら、対戦候補のチームを探せます。"
-      />
+        <AppHero
+          icon="🔎"
+          title="条件検索"
+          desc="ホームと同じ条件UIで、相手チームを絞り込めます。"
+        />
 
-      <div style={summaryWrap}>
-        <div style={stickySummaryBar}>
-          <div style={summaryHeaderRow}>
-            <div>
-              <div style={stickySummaryDate}>🔎 検索条件</div>
-              <div style={stickySummaryCount}>{filteredTeams.length}件ヒット</div>
+        <section style={summaryOuter}>
+          <div style={summaryTitle}>チーム条件で探す</div>
+
+          <div style={summaryInner}>
+            <div style={summaryCountLabel}>現在のヒット件数</div>
+            <div style={summaryCountValue}>{filteredTeams.length}件</div>
+            <div style={summarySubText}>
+              条件を変えるたびに、この件数がリアルタイムで変わります。
             </div>
-
-            <button type="button" className="sh-btn" onClick={scrollToTop}>
-              ページ上部へ
-            </button>
           </div>
-        </div>
+        </section>
       </div>
 
-      <div style={{ display: "grid", gap: 16 }}>
+      <div style={filterScrollArea}>
         <MatchFilterPanel
           filterRef={undefined}
           loading={loading}
@@ -427,7 +298,9 @@ export default function TeamsSearchClient() {
           onBackToCalendar={() => {
             window.history.back();
           }}
-          onOpenTeamList={() => {}}
+          onOpenTeamList={() => {
+            window.location.href = "/teams";
+          }}
           onReset={handleResetFilters}
           onBackToList={() => {
             window.history.back();
@@ -437,16 +310,15 @@ export default function TeamsSearchClient() {
           titleText="相手を探す"
           descriptionText="レベル・エリア・人数感などから相手チームを探せます。"
           liveCountLabel="現在のヒット件数"
-          liveCountText={`チーム数：${filteredTeams.length}件`}
+          liveCountText={`${filteredTeams.length}件`}
           hideFilterBadge={true}
           inlineHeaderActions={false}
           showTopActions={false}
-          showTopHitBox={true}
-          stickyHitBox={true}
-          renderHeaderActionsInHitBox={true}
-          hidePanelHeader={true}
-          hidePanelTitleBlock={true}
-          compactTopHitBox={true}
+          showTopHitBox={false}
+          renderHeaderActionsInHitBox={false}
+          hidePanelHeader={false}
+          hidePanelTitleBlock={false}
+          compactTopHitBox={false}
         />
       </div>
 
@@ -496,116 +368,79 @@ export default function TeamsSearchClient() {
           </div>
         </div>
       ) : null}
-
-      {offerTargetTeam ? (
-        <div
-          style={modalOverlay}
-          onClick={() => {
-            if (!sendingOffer) {
-              setOfferTargetTeam(null);
-              setOfferMessage("");
-            }
-          }}
-          role="dialog"
-          aria-modal="true"
-          aria-label="オファー送信"
-        >
-          <div style={offerModalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={modalHeader}>
-              <h3 style={modalTitle}>オファー送信</h3>
-              <button
-                type="button"
-                style={modalCloseButton}
-                onClick={() => {
-                  if (!sendingOffer) {
-                    setOfferTargetTeam(null);
-                    setOfferMessage("");
-                  }
-                }}
-                disabled={sendingOffer}
-              >
-                閉じる
-              </button>
-            </div>
-
-            <div style={{ display: "grid", gap: 12 }}>
-              <div style={offerInfoBox}>
-                <div style={detailLabel}>送信先</div>
-                <div style={detailValue}>
-                  {offerTargetTeam.name ?? "未設定"}
-                  {offerTargetTeam.category
-                    ? `（${
-                        categoryLabel(offerTargetTeam.category) ||
-                        offerTargetTeam.category
-                      }）`
-                    : ""}
-                  <br />
-                  {buildAreaText(offerTargetTeam)}
-                </div>
-              </div>
-
-              <label style={label}>
-                <span style={labelTitle}>送信元チーム</span>
-                <select
-                  value={requestTeamId}
-                  onChange={(e) => setRequestTeamId(e.target.value)}
-                  className="sh-select"
-                  disabled={sendingOffer}
-                >
-                  {myTeams.length === 0 ? (
-                    <option value="">自分のチームがありません</option>
-                  ) : (
-                    myTeams.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name ?? "チーム未設定"}
-                        {t.category
-                          ? `（${categoryLabel(t.category) || t.category}）`
-                          : ""}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </label>
-
-              <label style={label}>
-                <span style={labelTitle}>メッセージ</span>
-                <textarea
-                  value={offerMessage}
-                  onChange={(e) => setOfferMessage(e.target.value)}
-                  placeholder="例：3月後半〜4月前半で練習試合のご相談をしたいです。ご都合いかがでしょうか。"
-                  disabled={sendingOffer}
-                  style={textareaStyle}
-                />
-              </label>
-
-              <div style={buttonRow}>
-                <button
-                  type="button"
-                  className="sh-btn sh-btn--primary"
-                  onClick={sendOffer}
-                  disabled={sendingOffer || myTeams.length === 0 || !requestTeamId}
-                >
-                  {sendingOffer ? "送信中…" : "オファーを送信"}
-                </button>
-
-                <button
-                  type="button"
-                  className="sh-btn"
-                  onClick={() => {
-                    if (!sendingOffer) {
-                      setOfferTargetTeam(null);
-                      setOfferMessage("");
-                    }
-                  }}
-                  disabled={sendingOffer}
-                >
-                  キャンセル
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </main>
   );
 }
+
+const pageShell: React.CSSProperties = {
+  height: "100dvh",
+  minHeight: "100dvh",
+  maxWidth: 980,
+  margin: "0 auto",
+  background: "#fff",
+  display: "flex",
+  flexDirection: "column",
+  overflow: "hidden",
+};
+
+const topFixedArea: React.CSSProperties = {
+  flexShrink: 0,
+  padding: "16px 16px 0",
+  background: "#fff",
+  borderBottom: "1px solid #edf2ee",
+};
+
+const summaryOuter: React.CSSProperties = {
+  marginTop: 12,
+  marginBottom: 12,
+  padding: "14px 16px",
+  borderRadius: 16,
+  border: "1px solid #dce9df",
+  background: "#fff",
+};
+
+const summaryTitle: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 22,
+  color: "#16391f",
+  lineHeight: 1.3,
+};
+
+const summaryInner: React.CSSProperties = {
+  marginTop: 12,
+  padding: 16,
+  borderRadius: 16,
+  border: "1px solid #dce9df",
+  background: "#f7fbf8",
+};
+
+const summaryCountLabel: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 800,
+  color: "#3b6a49",
+  lineHeight: 1.6,
+};
+
+const summaryCountValue: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 28,
+  fontWeight: 900,
+  color: "#14532d",
+  lineHeight: 1.2,
+};
+
+const summarySubText: React.CSSProperties = {
+  marginTop: 8,
+  fontSize: 13,
+  color: "#5f6f66",
+  lineHeight: 1.7,
+};
+
+const filterScrollArea: React.CSSProperties = {
+  flex: 1,
+  minHeight: 0,
+  overflowY: "auto",
+  overflowX: "hidden",
+  WebkitOverflowScrolling: "touch",
+  padding: "0 16px 16px",
+};

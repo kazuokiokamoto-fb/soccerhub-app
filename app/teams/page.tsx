@@ -2,13 +2,11 @@
 
 import React, { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import { categoryLabel } from "@/app/lib/categories";
-import TeamSearchSection from "@/app/match/components/TeamSearchSection";
 import { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
 
 type TeamRow = {
@@ -74,49 +72,16 @@ function toTeamRows(value: unknown): TeamRow[] {
 }
 
 function TeamsPageInner() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
   const myUserId = user?.id ?? "";
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [teams, setTeams] = useState<TeamRow[]>([]);
-  const [panelMode, setPanelMode] = useState<"none" | "team">("none");
 
   const {
-    keyword,
-    setKeyword,
-    categoryFilter,
-    setCategoryFilter,
-    prefectureFilter,
-    setPrefectureFilter,
-    cityFilter,
-    setCityFilter,
-    townFilter,
-    setTownFilter,
-    groundFilter,
-    setGroundFilter,
-    strengthFilter,
-    setStrengthFilter,
-    bikeFilter,
-    setBikeFilter,
-    bikeCapacityMin,
-    setBikeCapacityMin,
-    memberCountMin,
-    setMemberCountMin,
     filters,
-    clearAllFilters,
   } = useMatchFilters();
-
-  useEffect(() => {
-    const panel = searchParams.get("panel");
-    if (panel === "team") {
-      setPanelMode("team");
-    } else {
-      setPanelMode("none");
-    }
-  }, [searchParams]);
 
   useEffect(() => {
     let active = true;
@@ -262,19 +227,56 @@ function TeamsPageInner() {
     });
   }, [teams, filters]);
 
-  const isPanelOpen = panelMode === "team";
+  const filterSummaryText = useMemo(() => {
+    const parts: string[] = [];
+
+    if (filters.keyword.trim()) {
+      parts.push(`キーワード: ${filters.keyword.trim()}`);
+    }
+    if (filters.prefectureFilter) {
+      parts.push(`都道府県: ${filters.prefectureFilter}`);
+    }
+    if (filters.cityFilter) {
+      parts.push(`市区町村: ${filters.cityFilter}`);
+    }
+    if (filters.townFilter) {
+      parts.push(`町名: ${filters.townFilter}`);
+    }
+    if (filters.categoryFilter.length > 0) {
+      parts.push(
+        `カテゴリ: ${filters.categoryFilter
+          .map((v) => categoryLabel(v) || v)
+          .join(" / ")}`
+      );
+    }
+    if (filters.groundFilter !== "all") {
+      parts.push(`グラウンド: ${filters.groundFilter}`);
+    }
+    if (filters.strengthFilter.length > 0) {
+      parts.push(`強さ: ${filters.strengthFilter.join(" / ")}`);
+    }
+    if (filters.bikeFilter !== "all") {
+      parts.push(`駐輪場: ${filters.bikeFilter}`);
+    }
+    if (filters.bikeCapacityMin) {
+      parts.push(`駐輪場台数: ${filters.bikeCapacityMin}台以上`);
+    }
+    if (filters.memberCountMin) {
+      parts.push(`所属人数: ${filters.memberCountMin}人以上`);
+    }
+
+    return parts.join(" / ") || "すべての条件で表示中";
+  }, [filters]);
 
   return (
     <main style={{ maxWidth: 980, margin: "0 auto", padding: 16 }}>
       <AppTabNav />
 
-      {!isPanelOpen ? (
-        <AppHero
-          icon="👥"
-          title="チーム一覧"
-          desc="サカまっちに登録している全チームを一覧表示します。条件検索はホームと同じUIです。"
-        />
-      ) : null}
+      <AppHero
+        icon="👥"
+        title="チーム一覧"
+        desc="サカまっちに登録している全チームを一覧表示します。条件変更は専用ページで行います。"
+      />
 
       {loadError ? (
         <div style={errorBox}>
@@ -292,38 +294,28 @@ function TeamsPageInner() {
         </div>
       ) : null}
 
-      <TeamSearchSection
-        mode="teams"
-        loading={loading || authLoading}
-        keyword={keyword}
-        setKeyword={setKeyword}
-        categoryFilter={categoryFilter}
-        setCategoryFilter={setCategoryFilter}
-        prefectureFilter={prefectureFilter}
-        setPrefectureFilter={setPrefectureFilter}
-        cityFilter={cityFilter}
-        setCityFilter={setCityFilter}
-        townFilter={townFilter}
-        setTownFilter={setTownFilter}
-        groundFilter={groundFilter}
-        setGroundFilter={setGroundFilter}
-        strengthFilter={strengthFilter}
-        setStrengthFilter={setStrengthFilter}
-        bikeFilter={bikeFilter}
-        setBikeFilter={setBikeFilter}
-        bikeCapacityMin={bikeCapacityMin}
-        setBikeCapacityMin={setBikeCapacityMin}
-        memberCountMin={memberCountMin}
-        setMemberCountMin={setMemberCountMin}
-        filters={filters}
-        clearAllFilters={clearAllFilters}
-        filteredTeamsCount={filteredTeams.length}
-        filteredSlotsCount={0}
-        onOpenTeamList={() => router.push("/teams")}
-        onBackToCalendar={() => router.push("/match")}
-        initialPanelMode={searchParams.get("panel") === "team" ? "team" : "none"}
-        onPanelModeChange={setPanelMode}
-      />
+      <section style={summaryBox}>
+        <div style={summaryTitle}>チーム条件で探す</div>
+
+        <div style={summaryInnerBox}>
+          <div style={summaryTopRow}>
+            <div>
+              <div style={summaryCount}>対象チーム数：{filteredTeams.length}件</div>
+              <div style={summarySub}>表示条件：{filterSummaryText}</div>
+            </div>
+
+            <button
+              type="button"
+              className="sh-btn"
+              onClick={() => {
+                window.location.href = "/teams/search";
+              }}
+            >
+              条件変更
+            </button>
+          </div>
+        </div>
+      </section>
 
       {loading || authLoading ? (
         <div style={emptyBox}>読み込み中…</div>
@@ -449,6 +441,51 @@ const errorBox: React.CSSProperties = {
 const errorTitle: React.CSSProperties = {
   fontWeight: 900,
   marginBottom: 4,
+};
+
+const summaryBox: React.CSSProperties = {
+  marginTop: 12,
+  padding: "14px 16px",
+  borderRadius: 16,
+  border: "1px solid #dce9df",
+  background: "#fff",
+};
+
+const summaryTitle: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 22,
+  color: "#16391f",
+  lineHeight: 1.3,
+};
+
+const summaryInnerBox: React.CSSProperties = {
+  marginTop: 12,
+  padding: 16,
+  borderRadius: 16,
+  border: "1px solid #dce9df",
+  background: "#f7fbf8",
+};
+
+const summaryTopRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const summaryCount: React.CSSProperties = {
+  fontSize: 16,
+  fontWeight: 800,
+  color: "#14532d",
+  lineHeight: 1.7,
+};
+
+const summarySub: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 14,
+  color: "#3b6a49",
+  lineHeight: 1.7,
 };
 
 const listWrap: React.CSSProperties = {

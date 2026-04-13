@@ -473,7 +473,10 @@ export default function HomeCalendar(props: {
     return !!currentUserId && selectedSlot.owner_id === currentUserId;
   }, [selectedSlot, currentUserId]);
 
-  const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
+  const calendarCells = useMemo(
+    () => buildCalendarCells(monthDate),
+    [monthDate]
+  );
   const monthKey = useMemo(() => toMonthKey(monthDate), [monthDate]);
 
   useEffect(() => {
@@ -502,12 +505,6 @@ export default function HomeCalendar(props: {
 
   const openTeamFilterPage = () => {
     window.location.href = "/teams/search";
-  };
-
-  const handleResetTeamFilters = () => {
-    clearAllFilters();
-    setSelectedSlotId("");
-    setRequestComment("");
   };
 
   const openTeamListWindow = () => {
@@ -956,7 +953,10 @@ export default function HomeCalendar(props: {
     return `${selectedYmd} / 募集件数 ${slotsOnSelectedDate.length}件`;
   }, [selectedYmd, slotsOnSelectedDate.length]);
 
-  const topConditionText = useMemo(() => filterSummaryText, [filterSummaryText]);
+  const topConditionText = useMemo(
+    () => filterSummaryText,
+    [filterSummaryText]
+  );
 
   const totalTeamCountText = useMemo(() => {
     return `チーム総数：${allTeams.length}件`;
@@ -1045,9 +1045,7 @@ export default function HomeCalendar(props: {
               対象チーム数：{filteredTeams.length}件
             </div>
 
-            <div style={summarySub}>
-              表示条件：{topConditionText}
-            </div>
+            <div style={summarySub}>表示条件：{topConditionText}</div>
           </div>
         </div>
       </section>
