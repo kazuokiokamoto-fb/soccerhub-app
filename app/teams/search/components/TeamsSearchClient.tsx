@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
@@ -20,7 +20,6 @@ import {
 import {
   summaryWrap,
   summaryHeaderRow,
-  pageStack,
   stickySummaryBar,
   stickySummaryDate,
   stickySummaryCount,
@@ -54,8 +53,6 @@ import {
   buttonRow,
 } from "./teamSearchStyles";
 
-import { TeamSearchResultList } from "./TeamSearchResultList";
-
 export default function TeamsSearchClient() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,14 +60,10 @@ export default function TeamsSearchClient() {
   const [myTeams, setMyTeams] = useState<DbTeam[]>([]);
   const [requestTeamId, setRequestTeamId] = useState("");
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
-  const [openTeamId, setOpenTeamId] = useState("");
 
   const [offerTargetTeam, setOfferTargetTeam] = useState<DbTeam | null>(null);
   const [offerMessage, setOfferMessage] = useState("");
   const [sendingOffer, setSendingOffer] = useState(false);
-
-  const resultsRef = useRef<HTMLDivElement | null>(null);
-  const filterRef = useRef<HTMLElement | null>(null);
 
   const {
     keyword,
@@ -152,16 +145,7 @@ export default function TeamsSearchClient() {
     return teams.filter((t) => matchesTeamFilters(t, filters));
   }, [teams, filters]);
 
-  const scrollToResults = () => {
-    setTimeout(() => {
-      resultsRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 120);
-  };
-
-  const scrollToFilter = () => {
+  const scrollToTop = () => {
     setTimeout(() => {
       window.scrollTo({
         top: 0,
@@ -172,7 +156,6 @@ export default function TeamsSearchClient() {
 
   const handleResetFilters = () => {
     clearAllFilters();
-    setOpenTeamId("");
   };
 
   const getOrCreateDmThread = async (myTeamId: string, otherTeamId: string) => {
@@ -183,25 +166,6 @@ export default function TeamsSearchClient() {
 
     if (error) throw error;
     return data as string;
-  };
-
-  const openDmAndGo = async (otherTeamId: string) => {
-    try {
-      const myTeamId = requestTeamId || myTeams[0]?.id;
-
-      if (!myTeamId) {
-        alert("自分のチームがありません");
-        return;
-      }
-
-      if (!otherTeamId || myTeamId === otherTeamId) return;
-
-      const threadId = await getOrCreateDmThread(myTeamId, otherTeamId);
-      window.location.href = `/chat/${threadId}`;
-    } catch (e: any) {
-      console.error(e);
-      alert(`チャットを開けません: ${e?.message ?? "unknown error"}`);
-    }
   };
 
   const openOfferModal = (team: DbTeam) => {
@@ -425,32 +389,20 @@ export default function TeamsSearchClient() {
         <div style={stickySummaryBar}>
           <div style={summaryHeaderRow}>
             <div>
-              <div style={stickySummaryDate}>🔎 検索結果</div>
+              <div style={stickySummaryDate}>🔎 検索条件</div>
               <div style={stickySummaryCount}>{filteredTeams.length}件ヒット</div>
             </div>
 
-            <button type="button" className="sh-btn" onClick={scrollToFilter}>
-              検索条件へ
+            <button type="button" className="sh-btn" onClick={scrollToTop}>
+              ページ上部へ
             </button>
           </div>
         </div>
       </div>
 
-      <div style={pageStack}>
-        <TeamSearchResultList
-          loading={loading}
-          filteredTeams={filteredTeams}
-          myTeams={myTeams}
-          openTeamId={openTeamId}
-          setOpenTeamId={setOpenTeamId}
-          resultsRef={resultsRef}
-          onScrollToFilter={scrollToFilter}
-          onOpenDmAndGo={openDmAndGo}
-          onOpenOfferModal={openOfferModal}
-        />
-
+      <div style={{ display: "grid", gap: 16 }}>
         <MatchFilterPanel
-          filterRef={filterRef}
+          filterRef={undefined}
           loading={loading}
           keyword={keyword}
           setKeyword={setKeyword}
@@ -472,10 +424,14 @@ export default function TeamsSearchClient() {
           setBikeCapacityMin={setBikeCapacityMin}
           memberCountMin={memberCountMin}
           setMemberCountMin={setMemberCountMin}
-          onBackToCalendar={() => {}}
+          onBackToCalendar={() => {
+            window.history.back();
+          }}
           onOpenTeamList={() => {}}
           onReset={handleResetFilters}
-          onBackToList={scrollToResults}
+          onBackToList={() => {
+            window.history.back();
+          }}
           onOpenStrengthHelp={() => setShowStrengthHelp(true)}
           strengthGuides={STRENGTH_GUIDES}
           titleText="相手を探す"
