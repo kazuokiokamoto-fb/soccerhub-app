@@ -359,10 +359,10 @@ export default function TeamsSearchClient() {
         />
 
         <section style={stickySummaryBox}>
-          <div style={stickySummaryTopRow}>
-            <div style={stickySummaryTextBlock}>
-              <div style={stickySummaryMini}>現在のヒット件数</div>
-              <div style={stickySummaryValue}>{filteredTeams.length}件</div>
+          <div style={stickySummaryRow}>
+            <div style={stickySummaryCountRow}>
+              <span style={stickySummaryMini}>現在のヒット件数</span>
+              <span style={stickySummaryValue}>{filteredTeams.length}件</span>
             </div>
 
             <div style={stickySummaryActions}>
@@ -439,8 +439,8 @@ export default function TeamsSearchClient() {
           showTopActions={false}
           showTopHitBox={false}
           renderHeaderActionsInHitBox={false}
-          hidePanelHeader={false}
-          hidePanelTitleBlock={false}
+          hidePanelHeader={true}
+          hidePanelTitleBlock={true}
           compactTopHitBox={false}
         />
       </div>
@@ -515,39 +515,41 @@ const topFixedArea: React.CSSProperties = {
 
 const stickySummaryBox: React.CSSProperties = {
   marginTop: 12,
-  marginBottom: 12,
-  padding: "12px 14px",
+  marginBottom: 10,
+  padding: "10px 12px",
   borderRadius: 16,
   border: "1px solid #dce9df",
   background: "#f7fbf8",
 };
 
-const stickySummaryTopRow: React.CSSProperties = {
+const stickySummaryRow: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  gap: 12,
+  gap: 10,
   flexWrap: "wrap",
 };
 
-const stickySummaryTextBlock: React.CSSProperties = {
-  display: "grid",
-  gap: 2,
+const stickySummaryCountRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  gap: 10,
   minWidth: 0,
+  flexWrap: "wrap",
 };
 
 const stickySummaryMini: React.CSSProperties = {
-  fontSize: 13,
+  fontSize: 14,
   fontWeight: 800,
   color: "#3b6a49",
-  lineHeight: 1.5,
+  lineHeight: 1.4,
 };
 
 const stickySummaryValue: React.CSSProperties = {
-  fontSize: 24,
+  fontSize: 28,
   fontWeight: 900,
   color: "#14532d",
-  lineHeight: 1.1,
+  lineHeight: 1,
 };
 
 const stickySummaryActions: React.CSSProperties = {

@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   CATEGORY_OPTIONS as CATEGORY_MASTER_OPTIONS,
   categoryLabel,
@@ -91,6 +91,66 @@ const CATEGORY_OPTIONS = CATEGORY_MASTER_OPTIONS.map((opt) => ({
   label: opt.label,
 }));
 
+async function tryFetchJson(urls: string[]) {
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) continue;
+      const json = await res.json();
+      return json;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((v) => String(v ?? "").trim())
+      .filter(Boolean);
+  }
+
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+
+    const candidateKeys = [
+      "items",
+      "data",
+      "results",
+      "cities",
+      "towns",
+      "list",
+    ];
+
+    for (const key of candidateKeys) {
+      const found = obj[key];
+      if (Array.isArray(found)) {
+        return found
+          .map((v) => {
+            if (typeof v === "string") return v.trim();
+            if (v && typeof v === "object") {
+              const row = v as Record<string, unknown>;
+              return String(
+                row.name ??
+                  row.city ??
+                  row.town ??
+                  row.label ??
+                  row.value ??
+                  ""
+              ).trim();
+            }
+            return "";
+          })
+          .filter(Boolean);
+      }
+    }
+  }
+
+  return [];
+}
+
 export function MatchFilterPanel({
   filterRef,
   loading,
@@ -133,6 +193,16 @@ export function MatchFilterPanel({
   hidePanelTitleBlock = false,
   compactTopHitBox = false,
 }: MatchFilterPanelProps) {
+  const [cityOptions, setCityOptions] = useState<string[]>([]);
+  const [townOptions, setTownOptions] = useState<string[]>([]);
+  const [cityLoading, setCityLoading] = useState(false);
+  const [townLoading, setTownLoading] = useState(false);
+
+  const normalizedPrefecture = useMemo(() => {
+    if (!prefectureFilter || prefectureFilter === "関東（すべて）") return "";
+    return prefectureFilter;
+  }, [prefectureFilter]);
+
   const toggleStrength = (rank: StrengthRank) => {
     if (strengthFilter.includes(rank)) {
       setStrengthFilter(strengthFilter.filter((v) => v !== rank));
@@ -149,6 +219,85 @@ export function MatchFilterPanel({
     }
   };
 
+  const selectPrefecture = (pref: string) => {
+    const next = prefectureFilter === pref ? "" : pref;
+    setPrefectureFilter(next);
+    setCityFilter("");
+    setTownFilter("");
+    setCityOptions([]);
+    setTownOptions([]);
+  };
+
+  const selectCity = (value: string) => {
+    setCityFilter(value);
+    setTownFilter("");
+    setTownOptions([]);
+  };
+
+  useEffect(() => {
+    let active = true;
+
+    const loadCities = async () => {
+      if (!normalizedPrefecture) {
+        setCityOptions([]);
+        return;
+      }
+
+      setCityLoading(true);
+
+      const json = await tryFetchJson([
+        `/api/address/cities?prefecture=${encodeURIComponent(normalizedPrefecture)}`,
+        `/api/address/cities?pref=${encodeURIComponent(normalizedPrefecture)}`,
+      ]);
+
+      if (!active) return;
+
+      setCityOptions(normalizeStringList(json));
+      setCityLoading(false);
+    };
+
+    void loadCities();
+
+    return () => {
+      active = false;
+    };
+  }, [normalizedPrefecture]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadTowns = async () => {
+      if (!normalizedPrefecture || !cityFilter.trim()) {
+        setTownOptions([]);
+        return;
+      }
+
+      setTownLoading(true);
+
+      const city = cityFilter.trim();
+
+      const json = await tryFetchJson([
+        `/api/address/search-town?prefecture=${encodeURIComponent(
+          normalizedPrefecture
+        )}&city=${encodeURIComponent(city)}`,
+        `/api/address/search-town?pref=${encodeURIComponent(
+          normalizedPrefecture
+        )}&city=${encodeURIComponent(city)}`,
+      ]);
+
+      if (!active) return;
+
+      setTownOptions(normalizeStringList(json));
+      setTownLoading(false);
+    };
+
+    void loadTowns();
+
+    return () => {
+      active = false;
+    };
+  }, [normalizedPrefecture, cityFilter]);
+
   return (
     <section style={wrap}>
       {showTopHitBox ? (
@@ -160,9 +309,9 @@ export function MatchFilterPanel({
           }}
         >
           <div style={hitMainRow}>
-            <div style={hitCountBlock}>
-              <div style={hitLabelInline}>{liveCountLabel}</div>
-              <div style={hitValueInline}>{liveCountText}</div>
+            <div style={hitCountInlineRow}>
+              <span style={hitLabelInline}>{liveCountLabel}</span>
+              <span style={hitValueInline}>{liveCountText}</span>
             </div>
 
             <div style={hitBottomActions}>
@@ -288,7 +437,7 @@ export function MatchFilterPanel({
         <div style={card}>
           <div style={cardTitle}>エリア</div>
 
-          <div style={subLabel}>都県</div>
+          <div style={subLabel}>都道府県</div>
           <div style={chipWrap}>
             {PREF_OPTIONS.map((pref) => {
               const selected = prefectureFilter === pref;
@@ -296,7 +445,7 @@ export function MatchFilterPanel({
                 <button
                   key={pref}
                   type="button"
-                  onClick={() => setPrefectureFilter(selected ? "" : pref)}
+                  onClick={() => selectPrefecture(pref)}
                   style={{
                     ...(selected ? chipActive : chip),
                     ...(loading ? disabledButtonStyle : {}),
@@ -309,24 +458,118 @@ export function MatchFilterPanel({
             })}
           </div>
 
-          <div style={hintText}>表示例：{prefectureFilter || "未選択"}</div>
-
-          <div style={inlineInputs}>
-            <input
-              className="sh-input"
-              placeholder="市区町村"
-              value={cityFilter}
-              onChange={(e) => setCityFilter(e.target.value)}
-              disabled={loading}
-            />
-            <input
-              className="sh-input"
-              placeholder="町名"
-              value={townFilter}
-              onChange={(e) => setTownFilter(e.target.value)}
-              disabled={loading}
-            />
+          <div style={hintText}>
+            選択中：
+            {prefectureFilter || "未選択"}
+            {cityFilter ? ` ＞ ${cityFilter}` : ""}
+            {townFilter ? ` ＞ ${townFilter}` : ""}
           </div>
+
+          {!!normalizedPrefecture ? (
+            <div style={areaTreeBox}>
+              <div style={areaTreeTitle}>市区町村</div>
+
+              {cityOptions.length > 0 ? (
+                <>
+                  <select
+                    className="sh-select"
+                    value={cityFilter}
+                    onChange={(e) => selectCity(e.target.value)}
+                    disabled={loading || cityLoading}
+                  >
+                    <option value="">市区町村を選択</option>
+                    {cityOptions.map((city) => (
+                      <option key={city} value={city}>
+                        {city}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div style={hintText}>
+                    {cityLoading
+                      ? "市区町村を読み込み中…"
+                      : `${cityOptions.length}件の候補`}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <input
+                    className="sh-input"
+                    placeholder="市区町村"
+                    value={cityFilter}
+                    onChange={(e) => selectCity(e.target.value)}
+                    disabled={loading || cityLoading}
+                  />
+                  <div style={hintText}>
+                    {cityLoading
+                      ? "市区町村を読み込み中…"
+                      : "市区町村を入力してください"}
+                  </div>
+                </>
+              )}
+
+              {!!cityFilter.trim() ? (
+                <>
+                  <div style={areaTreeDivider} />
+
+                  <div style={areaTreeTitle}>町名</div>
+
+                  {townOptions.length > 0 ? (
+                    <>
+                      <div style={chipWrap}>
+                        {townOptions.slice(0, 30).map((town) => {
+                          const selected = townFilter === town;
+                          return (
+                            <button
+                              key={town}
+                              type="button"
+                              onClick={() => setTownFilter(selected ? "" : town)}
+                              style={{
+                                ...(selected ? chipActive : chip),
+                                ...(loading ? disabledButtonStyle : {}),
+                              }}
+                              disabled={loading || townLoading}
+                            >
+                              {town}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <input
+                        className="sh-input"
+                        placeholder="町名を直接入力"
+                        value={townFilter}
+                        onChange={(e) => setTownFilter(e.target.value)}
+                        disabled={loading || townLoading}
+                      />
+
+                      <div style={hintText}>
+                        {townLoading
+                          ? "町名を読み込み中…"
+                          : `${townOptions.length}件の候補`}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        className="sh-input"
+                        placeholder="町名"
+                        value={townFilter}
+                        onChange={(e) => setTownFilter(e.target.value)}
+                        disabled={loading || townLoading}
+                      />
+                      <div style={hintText}>
+                        {townLoading
+                          ? "町名を読み込み中…"
+                          : "町名を入力してください"}
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div style={card}>
@@ -536,14 +779,16 @@ const hitMainRow: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
-const hitCountBlock: React.CSSProperties = {
-  display: "grid",
-  gap: 2,
+const hitCountInlineRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  gap: 10,
   minWidth: 0,
+  flexWrap: "wrap",
 };
 
 const hitLabelInline: React.CSSProperties = {
-  fontSize: 13,
+  fontSize: 14,
   fontWeight: 800,
   color: "#5f6f66",
   lineHeight: 1.2,
@@ -554,10 +799,6 @@ const hitValueInline: React.CSSProperties = {
   fontWeight: 900,
   color: "#14532d",
   lineHeight: 1.1,
-};
-
-const hitSub: React.CSSProperties = {
-  display: "none",
 };
 
 const topActions: React.CSSProperties = {
@@ -756,4 +997,24 @@ const loadingText: React.CSSProperties = {
 const disabledButtonStyle: React.CSSProperties = {
   opacity: 0.55,
   cursor: "not-allowed",
+};
+
+const areaTreeBox: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  padding: 14,
+  borderRadius: 14,
+  background: "#f8fbf9",
+  border: "1px solid #e5ece7",
+};
+
+const areaTreeTitle: React.CSSProperties = {
+  fontSize: 15,
+  fontWeight: 800,
+  color: "#2f5d3a",
+};
+
+const areaTreeDivider: React.CSSProperties = {
+  height: 1,
+  background: "#e5ece7",
 };
