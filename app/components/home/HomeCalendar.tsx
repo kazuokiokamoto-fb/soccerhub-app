@@ -1223,32 +1223,32 @@ export default function HomeCalendar(props: {
                     {nextSchedule.role === "host" ? "主催" : "参加"}
                   </span>
                 </div>
-
-                <div style={summaryActionRowCompact}>
-                  <button
-                    type="button"
-                    className="sh-btn"
-                    onClick={() =>
-                      openScheduleChat(nextSchedule.slotId, nextSchedule.date)
-                    }
-                  >
-                    詳細
-                  </button>
-
-                  {hasMultipleSchedules ? (
-                    <button
-                      type="button"
-                      className="sh-btn sh-btn--primary"
-                      onClick={openMySchedulePage}
-                    >
-                      一覧
-                    </button>
-                  ) : null}
-                </div>
               </div>
 
               <div style={summarySubTight}>
                 {nextSchedule.categoryText} / {nextSchedule.areaText}
+              </div>
+
+              <div style={scheduleActionRowRight}>
+                <button
+                  type="button"
+                  className="sh-btn"
+                  onClick={() =>
+                    openScheduleChat(nextSchedule.slotId, nextSchedule.date)
+                  }
+                >
+                  詳細
+                </button>
+
+                {hasMultipleSchedules ? (
+                  <button
+                    type="button"
+                    className="sh-btn sh-btn--primary"
+                    onClick={openMySchedulePage}
+                  >
+                    一覧
+                  </button>
+                ) : null}
               </div>
             </>
           ) : (
@@ -1475,7 +1475,7 @@ const summarySubTight: React.CSSProperties = {
 
 const scheduleMainRow: React.CSSProperties = {
   display: "flex",
-  alignItems: "flex-start",
+  alignItems: "center",
   justifyContent: "space-between",
   gap: 10,
   flexWrap: "wrap",
@@ -1487,6 +1487,14 @@ const schedulePrimaryText: React.CSSProperties = {
   gap: 8,
   flexWrap: "wrap",
   minWidth: 0,
+};
+
+const scheduleActionRowRight: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+  marginTop: 2,
 };
 
 const scheduleDateBadge: React.CSSProperties = {
