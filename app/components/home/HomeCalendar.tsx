@@ -688,17 +688,8 @@ export default function HomeCalendar(props: {
     window.location.href = "/match/my-schedule";
   };
 
-  const openScheduleChat = async (slotId: string, date: string) => {
-    const slot = slotsInMonth.find((s: any) => s.id === slotId);
-    if (slot) {
-      setSelectedYmd(date);
-      setSelectedSlotId(slotId);
-      setRequestComment("");
-      scrollToDayList();
-      return;
-    }
-
-    window.location.href = `/match?date=${encodeURIComponent(date)}&slotId=${encodeURIComponent(slotId)}`;
+  const openScheduleDetail = (slotId: string) => {
+    window.location.href = `/match/${slotId}`;
   };
 
   const goToCreatePage = (ymd: string) => {
@@ -1233,9 +1224,7 @@ export default function HomeCalendar(props: {
                 <button
                   type="button"
                   className="sh-btn"
-                  onClick={() =>
-                    openScheduleChat(nextSchedule.slotId, nextSchedule.date)
-                  }
+                  onClick={() => openScheduleDetail(nextSchedule.slotId)}
                 >
                   詳細
                 </button>

@@ -94,7 +94,17 @@ export default function MySchedulePage() {
 
         if (hostedSlotsError) throw hostedSlotsError;
 
-        const hostedSlots = (hostedSlotsRaw ?? []) as any[];
+        const hostedSlots = (hostedSlotsRaw ?? []) as Array<{
+          id: string;
+          date: string | null;
+          start_time: string | null;
+          end_time: string | null;
+          area: string | null;
+          area_text: string | null;
+          category: string | null;
+          host_team_id: string;
+        }>;
+
         const hostedSlotIds = hostedSlots.map((slot) => slot.id);
 
         let hostedAcceptedSlotIds: string[] = [];
@@ -135,7 +145,17 @@ export default function MySchedulePage() {
           new Set(requesterAccepted.map((row) => row.slot_id))
         ).filter((id) => !hostedSlotIds.includes(id));
 
-        let requesterSlots: any[] = [];
+        let requesterSlots: Array<{
+          id: string;
+          date: string | null;
+          start_time: string | null;
+          end_time: string | null;
+          area: string | null;
+          area_text: string | null;
+          category: string | null;
+          host_team_id: string;
+        }> = [];
+
         if (requesterSlotIds.length > 0) {
           const { data: requesterSlotsRaw, error: requesterSlotsError } =
             await supabase
@@ -149,7 +169,7 @@ export default function MySchedulePage() {
               .order("start_time", { ascending: true });
 
           if (requesterSlotsError) throw requesterSlotsError;
-          requesterSlots = (requesterSlotsRaw ?? []) as any[];
+          requesterSlots = (requesterSlotsRaw ?? []) as typeof requesterSlots;
         }
 
         const hostedItems: ScheduleRow[] = hostedSlots
@@ -161,9 +181,9 @@ export default function MySchedulePage() {
             endTime: String(slot.end_time ?? ""),
             areaText: String(slot.area_text ?? slot.area ?? "未設定"),
             categoryText: String(
-              categoryLabel(slot.category) || slot.category || "未設定"
+              categoryLabel(slot.category || "") || slot.category || "未設定"
             ),
-            role: "host" as const,
+            role: "host",
           }));
 
         const requesterItems: ScheduleRow[] = requesterSlots.map((slot) => ({
@@ -173,9 +193,9 @@ export default function MySchedulePage() {
           endTime: String(slot.end_time ?? ""),
           areaText: String(slot.area_text ?? slot.area ?? "未設定"),
           categoryText: String(
-            categoryLabel(slot.category) || slot.category || "未設定"
+            categoryLabel(slot.category || "") || slot.category || "未設定"
           ),
-          role: "guest" as const,
+          role: "guest",
         }));
 
         const merged = [...hostedItems, ...requesterItems]
@@ -262,9 +282,7 @@ export default function MySchedulePage() {
           ログイン後にマイスケジュールを表示できます。
         </div>
       ) : schedules.length === 0 ? (
-        <div style={emptyBox}>
-          直近の予定はありません。
-        </div>
+        <div style={emptyBox}>直近の予定はありません。</div>
       ) : (
         <section style={sectionWrap}>
           {groupedSchedules.map(([date, items]) => (
@@ -278,7 +296,7 @@ export default function MySchedulePage() {
                     type="button"
                     style={scheduleCard}
                     onClick={() => {
-                      window.location.href = `/match?date=${encodeURIComponent(item.date)}&slotId=${encodeURIComponent(item.slotId)}`;
+                      window.location.href = `/match/${item.slotId}`;
                     }}
                   >
                     <div style={scheduleCardTop}>
@@ -286,7 +304,9 @@ export default function MySchedulePage() {
                         {item.startTime.slice(0, 5)}–{item.endTime.slice(0, 5)}
                       </div>
 
-                      <span style={item.role === "host" ? hostBadge : guestBadge}>
+                      <span
+                        style={item.role === "host" ? hostBadge : guestBadge}
+                      >
                         {item.role === "host" ? "主催" : "参加"}
                       </span>
                     </div>
