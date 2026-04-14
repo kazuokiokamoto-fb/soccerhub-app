@@ -33,6 +33,16 @@ type DayCalendarSummary = {
 
 type PanelMode = "none" | "team";
 
+type MyScheduleItem = {
+  slotId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  areaText: string;
+  categoryText: string;
+  role: "host" | "guest";
+};
+
 function norm(v?: string | null) {
   return String(v ?? "").trim();
 }
@@ -244,6 +254,13 @@ function teamMatchesFilters(
   return true;
 }
 
+function formatScheduleDate(ymd: string) {
+  if (!ymd) return "";
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (!y || !m || !d) return ymd;
+  return `${m}/${d}`;
+}
+
 export default function HomeCalendar(props: {
   initialPanelMode?: PanelMode;
 }) {
@@ -263,6 +280,11 @@ export default function HomeCalendar(props: {
 
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
   const [showCalendarHelp, setShowCalendarHelp] = useState(false);
+
+  const [myUpcomingSchedules, setMyUpcomingSchedules] = useState<MyScheduleItem[]>(
+    []
+  );
+  const [myScheduleLoading, setMyScheduleLoading] = useState(false);
 
   const homeTopRef = useRef<HTMLDivElement | null>(null);
   const calendarRef = useRef<HTMLDivElement | null>(null);
@@ -494,6 +516,157 @@ export default function HomeCalendar(props: {
     setSelectedYmd(firstDayYmdOfMonth(monthDate));
   }, [monthDate, selectedYmd]);
 
+  useEffect(() => {
+    let active = true;
+
+    const loadMyUpcomingSchedules = async () => {
+      if (!authReady || myTeamIds.length === 0) {
+        if (active) {
+          setMyUpcomingSchedules([]);
+          setMyScheduleLoading(false);
+        }
+        return;
+      }
+
+      setMyScheduleLoading(true);
+
+      try {
+        const today = ymdToday();
+
+        const { data: hostedSlotsRaw, error: hostedSlotsError } = await supabase
+          .from("match_slots")
+          .select(
+            "id, date, start_time, end_time, area, area_text, category, host_team_id"
+          )
+          .in("host_team_id", myTeamIds)
+          .gte("date", today)
+          .order("date", { ascending: true })
+          .order("start_time", { ascending: true })
+          .limit(50);
+
+        if (hostedSlotsError) throw hostedSlotsError;
+
+        const hostedSlots = (hostedSlotsRaw ?? []) as any[];
+        const hostedSlotIds = hostedSlots.map((slot) => slot.id);
+
+        let hostedAcceptedSlotIds: string[] = [];
+        if (hostedSlotIds.length > 0) {
+          const { data: hostedAcceptedRaw, error: hostedAcceptedError } =
+            await supabase
+              .from("match_requests")
+              .select("slot_id")
+              .in("slot_id", hostedSlotIds)
+              .eq("status", "accepted");
+
+          if (hostedAcceptedError) throw hostedAcceptedError;
+
+          hostedAcceptedSlotIds = Array.from(
+            new Set(
+              ((hostedAcceptedRaw ?? []) as Array<{ slot_id: string }>).map(
+                (row) => row.slot_id
+              )
+            )
+          );
+        }
+
+        const { data: requesterAcceptedRaw, error: requesterAcceptedError } =
+          await supabase
+            .from("match_requests")
+            .select("slot_id, requester_team_id")
+            .in("requester_team_id", myTeamIds)
+            .eq("status", "accepted");
+
+        if (requesterAcceptedError) throw requesterAcceptedError;
+
+        const requesterAccepted = (requesterAcceptedRaw ?? []) as Array<{
+          slot_id: string;
+          requester_team_id: string;
+        }>;
+
+        const requesterSlotIds = Array.from(
+          new Set(requesterAccepted.map((row) => row.slot_id))
+        ).filter((id) => !hostedSlotIds.includes(id));
+
+        let requesterSlots: any[] = [];
+        if (requesterSlotIds.length > 0) {
+          const { data: requesterSlotsRaw, error: requesterSlotsError } =
+            await supabase
+              .from("match_slots")
+              .select(
+                "id, date, start_time, end_time, area, area_text, category, host_team_id"
+              )
+              .in("id", requesterSlotIds)
+              .gte("date", today)
+              .order("date", { ascending: true })
+              .order("start_time", { ascending: true });
+
+          if (requesterSlotsError) throw requesterSlotsError;
+          requesterSlots = (requesterSlotsRaw ?? []) as any[];
+        }
+
+        const hostedItems: MyScheduleItem[] = hostedSlots
+          .filter((slot) => hostedAcceptedSlotIds.includes(slot.id))
+          .map((slot) => ({
+            slotId: slot.id,
+            date: String(slot.date ?? ""),
+            startTime: String(slot.start_time ?? ""),
+            endTime: String(slot.end_time ?? ""),
+            areaText: String(slot.area_text ?? slot.area ?? "未設定"),
+            categoryText: String(
+              categoryLabel(slot.category) || slot.category || "未設定"
+            ),
+            role: "host" as const,
+          }));
+
+        const requesterItems: MyScheduleItem[] = requesterSlots.map((slot) => ({
+          slotId: slot.id,
+          date: String(slot.date ?? ""),
+          startTime: String(slot.start_time ?? ""),
+          endTime: String(slot.end_time ?? ""),
+          areaText: String(slot.area_text ?? slot.area ?? "未設定"),
+          categoryText: String(
+            categoryLabel(slot.category) || slot.category || "未設定"
+          ),
+          role: "guest" as const,
+        }));
+
+        const merged = [...hostedItems, ...requesterItems]
+          .filter((item) => !!item.date)
+          .sort((a, b) => {
+            const aa = `${a.date} ${a.startTime}`;
+            const bb = `${b.date} ${b.startTime}`;
+            return aa.localeCompare(bb);
+          });
+
+        const deduped: MyScheduleItem[] = [];
+        const seen = new Set<string>();
+
+        for (const item of merged) {
+          if (seen.has(item.slotId)) continue;
+          seen.add(item.slotId);
+          deduped.push(item);
+        }
+
+        if (!active) return;
+        setMyUpcomingSchedules(deduped);
+      } catch (e) {
+        console.error("loadMyUpcomingSchedules error:", e);
+        if (!active) return;
+        setMyUpcomingSchedules([]);
+      } finally {
+        if (active) {
+          setMyScheduleLoading(false);
+        }
+      }
+    };
+
+    void loadMyUpcomingSchedules();
+
+    return () => {
+      active = false;
+    };
+  }, [authReady, myTeamIds]);
+
   const scrollToDayList = () => {
     setTimeout(() => {
       dayListRef.current?.scrollIntoView({
@@ -509,6 +682,23 @@ export default function HomeCalendar(props: {
 
   const openTeamListWindow = () => {
     window.location.href = "/teams";
+  };
+
+  const openMySchedulePage = () => {
+    window.location.href = "/match/my-schedule";
+  };
+
+  const openScheduleChat = async (slotId: string, date: string) => {
+    const slot = slotsInMonth.find((s: any) => s.id === slotId);
+    if (slot) {
+      setSelectedYmd(date);
+      setSelectedSlotId(slotId);
+      setRequestComment("");
+      scrollToDayList();
+      return;
+    }
+
+    window.location.href = `/match?date=${encodeURIComponent(date)}&slotId=${encodeURIComponent(slotId)}`;
   };
 
   const goToCreatePage = (ymd: string) => {
@@ -971,6 +1161,9 @@ export default function HomeCalendar(props: {
     (baseError && baseError.includes("teams:")) ||
     (monthError && monthError.includes("match_slots:"));
 
+  const nextSchedule = myUpcomingSchedules[0] ?? null;
+  const hasMultipleSchedules = myUpcomingSchedules.length > 1;
+
   return (
     <section style={wrap} ref={homeTopRef}>
       {showCriticalError ? (
@@ -1010,27 +1203,75 @@ export default function HomeCalendar(props: {
 
       <section style={summaryBox}>
         <div style={summaryCardTop}>
+          <div style={summaryDateText}>マイスケジュール</div>
+        </div>
+
+        <div style={summaryInnerCompactBox}>
+          {myScheduleLoading ? (
+            <div style={summarySub}>予定を読み込み中…</div>
+          ) : nextSchedule ? (
+            <>
+              <div style={scheduleMainRow}>
+                <div style={schedulePrimaryText}>
+                  <span style={scheduleDateBadge}>
+                    {formatScheduleDate(nextSchedule.date)}
+                  </span>
+                  <span style={scheduleTimeText}>
+                    {nextSchedule.startTime.slice(0, 5)}–{nextSchedule.endTime.slice(0, 5)}
+                  </span>
+                  <span style={scheduleRoleBadge}>
+                    {nextSchedule.role === "host" ? "主催" : "参加"}
+                  </span>
+                </div>
+
+                <div style={summaryActionRowCompact}>
+                  <button
+                    type="button"
+                    className="sh-btn"
+                    onClick={() =>
+                      openScheduleChat(nextSchedule.slotId, nextSchedule.date)
+                    }
+                  >
+                    詳細
+                  </button>
+
+                  {hasMultipleSchedules ? (
+                    <button
+                      type="button"
+                      className="sh-btn sh-btn--primary"
+                      onClick={openMySchedulePage}
+                    >
+                      一覧
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              <div style={summarySubTight}>
+                {nextSchedule.categoryText} / {nextSchedule.areaText}
+              </div>
+            </>
+          ) : (
+            <div style={summarySub}>直近の予定はありません。</div>
+          )}
+        </div>
+      </section>
+
+      <section style={summaryBox}>
+        <div style={summaryCardTop}>
           <div style={summaryDateText}>チーム条件で探す</div>
         </div>
 
-        <div
-          style={{
-            marginTop: 8,
-            padding: 16,
-            borderRadius: 16,
-            border: "1px solid #dce9df",
-            background: "#f7fbf8",
-          }}
-        >
+        <div style={summaryInnerCompactBox}>
           <div>
-            <div style={summaryCountLine}>
+            <div style={summaryCountLineCompact}>
               対象チーム数：{filteredTeams.length}件
             </div>
 
-            <div style={summarySub}>表示条件：{topConditionText}</div>
+            <div style={summarySubTight}>表示条件：{topConditionText}</div>
           </div>
 
-          <div style={{ marginTop: 12, ...summaryActionRow }}>
+          <div style={summaryActionRowCompact}>
             <button
               type="button"
               className="sh-btn"
@@ -1132,18 +1373,19 @@ export default function HomeCalendar(props: {
 }
 
 const wrap: React.CSSProperties = {
-  marginTop: 16,
+  marginTop: 12,
   display: "grid",
-  gap: 14,
+  gap: 10,
 };
 
 const errorBox: React.CSSProperties = {
-  padding: 12,
+  padding: 10,
   borderRadius: 12,
   border: "1px solid #fecaca",
   background: "#fef2f2",
   color: "#991b1b",
-  lineHeight: 1.7,
+  lineHeight: 1.6,
+  fontSize: 14,
 };
 
 const errorTitle: React.CSSProperties = {
@@ -1153,17 +1395,17 @@ const errorTitle: React.CSSProperties = {
 
 const summaryStatsBox: React.CSSProperties = {
   marginTop: 2,
-  padding: "14px 16px",
-  borderRadius: 16,
+  padding: "12px 14px",
+  borderRadius: 14,
   border: "1px solid #dce9df",
   background: "#eef6f0",
 };
 
 const summaryStatsInner: React.CSSProperties = {
-  fontSize: 16,
+  fontSize: 15,
   fontWeight: 800,
   color: "#2f5d3a",
-  lineHeight: 1.7,
+  lineHeight: 1.5,
   textAlign: "center",
 };
 
@@ -1173,8 +1415,8 @@ const summaryStatsDivider: React.CSSProperties = {
 
 const summaryBox: React.CSSProperties = {
   marginTop: 2,
-  padding: "14px 16px",
-  borderRadius: 16,
+  padding: "12px 14px",
+  borderRadius: 14,
   border: "1px solid #dce9df",
   background: "#fff",
 };
@@ -1183,54 +1425,117 @@ const summaryCardTop: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  gap: 12,
+  gap: 10,
   flexWrap: "wrap",
 };
 
 const summaryDateText: React.CSSProperties = {
   fontWeight: 900,
-  fontSize: 22,
+  fontSize: 20,
   color: "#16391f",
-  lineHeight: 1.3,
+  lineHeight: 1.25,
 };
 
-const summaryActionRow: React.CSSProperties = {
+const summaryInnerCompactBox: React.CSSProperties = {
+  marginTop: 8,
+  padding: 12,
+  borderRadius: 14,
+  border: "1px solid #dce9df",
+  background: "#f7fbf8",
+  display: "grid",
+  gap: 10,
+};
+
+const summaryActionRowCompact: React.CSSProperties = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
-  marginLeft: "auto",
   justifyContent: "flex-end",
 };
 
-const summaryCountLine: React.CSSProperties = {
-  marginTop: 12,
-  fontSize: 16,
+const summaryCountLineCompact: React.CSSProperties = {
+  fontSize: 15,
   fontWeight: 800,
   color: "#14532d",
-  lineHeight: 1.7,
+  lineHeight: 1.5,
 };
 
 const summarySub: React.CSSProperties = {
   marginTop: 4,
-  fontSize: 14,
+  fontSize: 13,
   color: "#3b6a49",
-  lineHeight: 1.7,
+  lineHeight: 1.6,
+};
+
+const summarySubTight: React.CSSProperties = {
+  fontSize: 13,
+  color: "#3b6a49",
+  lineHeight: 1.55,
+};
+
+const scheduleMainRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const schedulePrimaryText: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+  minWidth: 0,
+};
+
+const scheduleDateBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 28,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#ecfdf3",
+  color: "#166534",
+  fontSize: 13,
+  fontWeight: 900,
+  border: "1px solid #bbf7d0",
+};
+
+const scheduleTimeText: React.CSSProperties = {
+  fontSize: 15,
+  fontWeight: 800,
+  color: "#16391f",
+  lineHeight: 1.4,
+};
+
+const scheduleRoleBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 26,
+  padding: "0 9px",
+  borderRadius: 999,
+  background: "#eef6f0",
+  color: "#14532d",
+  fontSize: 12,
+  fontWeight: 900,
+  border: "1px solid #dce9df",
 };
 
 const emptyRecruitBox: React.CSSProperties = {
   marginTop: 8,
-  padding: 20,
-  borderRadius: 16,
+  padding: 18,
+  borderRadius: 14,
   border: "1px solid #e5ece7",
   background: "#fff",
   textAlign: "center",
 };
 
 const emptyRecruitTitle: React.CSSProperties = {
-  fontSize: 18,
+  fontSize: 17,
   fontWeight: 900,
   color: "#16391f",
-  lineHeight: 1.5,
+  lineHeight: 1.45,
 };
 
 const emptyRecruitText: React.CSSProperties = {
@@ -1241,5 +1546,5 @@ const emptyRecruitText: React.CSSProperties = {
   overflow: "hidden",
   textOverflow: "clip",
   letterSpacing: "-0.02em",
-  fontSize: "clamp(9px, 2.7vw, 16px)",
+  fontSize: "clamp(9px, 2.7vw, 15px)",
 };
