@@ -185,11 +185,13 @@ export function DaySlotList(props: {
   }, [slots]);
 
   return (
-    <section style={{ ...card, marginTop: 14 }}>
+    <section style={card} className="ui-card">
       {sortedSlots.length === 0 ? (
         <div style={emptyBox}>
-          <div style={emptyTitle}>該当する募集がありません</div>
-          <div style={emptySub}>
+          <div style={emptyTitle} className="ui-title">
+            該当する募集がありません
+          </div>
+          <div style={emptySub} className="ui-meta">
             条件を緩めるか、別の日付を選んでください
           </div>
         </div>
@@ -238,6 +240,7 @@ export function DaySlotList(props: {
                   ...slotCard,
                   ...(isExpanded ? slotCardExpanded : {}),
                 }}
+                className="ui-card"
               >
                 <div style={slotBubbleRow}>
                   <div style={avatarCircle}>⚽️</div>
@@ -259,17 +262,13 @@ export function DaySlotList(props: {
                         </span>
 
                         {!isMine && myReq ? (
-                          <span
-                            style={requestStatusBadgeStyle(myReq.status)}
-                          >
+                          <span style={requestStatusBadgeStyle(myReq.status)}>
                             {requestStatusLabel(myReq.status)}
                           </span>
                         ) : null}
 
                         {s.is_closed && slotStatus === "open" ? (
-                          <span
-                            style={requestStatusBadgeStyle("cancelled")}
-                          >
+                          <span style={requestStatusBadgeStyle("cancelled")}>
                             締切
                           </span>
                         ) : null}
@@ -277,23 +276,23 @@ export function DaySlotList(props: {
                     </div>
 
                     <div style={teamNameRow}>
-                      <div style={teamName}>
+                      <div style={teamName} className="ui-title">
                         {displayTeam?.name || "チーム未設定"}
                       </div>
                       {isMine ? <span style={mineBadge}>あなたの募集</span> : null}
                     </div>
 
                     {slotStatus === "decided" && opponentTeam ? (
-                      <div style={decidedNote}>
+                      <div style={decidedNote} className="ui-body">
                         対戦相手：{opponentTeam.name}
                       </div>
                     ) : null}
 
-                    <div style={slotSubLine}>
+                    <div style={slotSubLine} className="ui-body">
                       📍 {s.area_text ?? s.area ?? "未設定"}
                     </div>
 
-                    <div style={slotSubLine}>
+                    <div style={slotSubLine} className="ui-body">
                       🏷 {slotCategoryText(s)}
                     </div>
 
@@ -310,6 +309,7 @@ export function DaySlotList(props: {
                         <Link
                           href={`/teams/${displayTeam.id}?${teamDetailQuery}`}
                           className="sh-btn sh-btn--ghost"
+                          style={teamDetailLink}
                         >
                           チーム詳細
                         </Link>
@@ -359,29 +359,20 @@ const emptyBox: React.CSSProperties = {
 };
 
 const emptyTitle: React.CSSProperties = {
-  fontWeight: 900,
-  fontSize: 16,
-  color: "#16391f",
+  marginBottom: 6,
 };
 
 const emptySub: React.CSSProperties = {
-  fontSize: 13,
-  color: "#666",
-  marginTop: 6,
   lineHeight: 1.7,
 };
 
 const card: React.CSSProperties = {
+  marginTop: 14,
   padding: 14,
-  border: "1px solid #eee",
-  borderRadius: 18,
-  background: "#fff",
 };
 
 const slotCard: React.CSSProperties = {
   borderRadius: 18,
-  border: "1px solid #e5e7eb",
-  background: "#fff",
   overflow: "hidden",
 };
 
@@ -406,6 +397,7 @@ const avatarCircle: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   fontSize: 22,
+  flexShrink: 0,
 };
 
 const slotBubbleMain: React.CSSProperties = {
@@ -429,6 +421,7 @@ const timeBadge: React.CSSProperties = {
   borderRadius: 999,
   fontWeight: 900,
   fontSize: 12,
+  lineHeight: 1.2,
 };
 
 const badgeRow: React.CSSProperties = {
@@ -454,8 +447,6 @@ const teamNameRow: React.CSSProperties = {
 
 const teamName: React.CSSProperties = {
   fontSize: 18,
-  fontWeight: 900,
-  color: "#16391f",
   lineHeight: 1.4,
 };
 
@@ -474,14 +465,10 @@ const mineBadge: React.CSSProperties = {
 };
 
 const decidedNote: React.CSSProperties = {
-  fontSize: 13,
-  color: "#166534",
   lineHeight: 1.6,
 };
 
 const slotSubLine: React.CSSProperties = {
-  fontSize: 14,
-  color: "#555",
   lineHeight: 1.6,
 };
 
@@ -489,9 +476,14 @@ const buttonRow: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr",
   gap: 8,
+  marginTop: 2,
+};
+
+const teamDetailLink: React.CSSProperties = {
+  textAlign: "center",
 };
 
 const detailWrap: React.CSSProperties = {
   padding: 12,
-  borderTop: "1px solid #eee",
+  borderTop: "1px solid #e5e7eb",
 };

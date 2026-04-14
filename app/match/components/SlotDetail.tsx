@@ -66,7 +66,9 @@ function requestStatusLabel(status: DbRequest["status"]) {
   }
 }
 
-function requestStatusBadgeStyle(status: DbRequest["status"]): React.CSSProperties {
+function requestStatusBadgeStyle(
+  status: DbRequest["status"]
+): React.CSSProperties {
   return {
     display: "inline-flex",
     alignItems: "center",
@@ -211,47 +213,51 @@ export function SlotDetail(props: {
         {slotStatusLabel(slotStatus)}
       </div>
 
-      <section style={card}>
-        <div style={sectionTitle}>募集情報</div>
+      <section style={card} className="ui-card">
+        <div style={sectionTitle} className="ui-title">
+          募集情報
+        </div>
 
-        <div style={infoRow}>
+        <div style={infoRow} className="ui-body">
           <b>日時</b>：{slot.date} {hhmm(slot.start_time)}–{hhmm(slot.end_time)}
         </div>
 
-        <div style={infoRow}>
+        <div style={infoRow} className="ui-body">
           <b>エリア</b>：{slot.area_text ?? slot.area ?? "未設定"}
         </div>
 
-        <div style={infoRow}>
+        <div style={infoRow} className="ui-body">
           <b>カテゴリ</b>：
           {categoryLabel(slot.category) || slot.category || "未設定"}
         </div>
 
-        <div style={infoRow}>
+        <div style={infoRow} className="ui-body">
           <b>希望レベル</b>：{wantedLevelText}
         </div>
 
-        <div style={infoRow}>
+        <div style={infoRow} className="ui-body">
           <b>会場</b>：{venueText}
         </div>
 
-        <div style={infoRow}>
+        <div style={infoRow} className="ui-body">
           <b>募集チーム</b>：{hostTeam?.name ?? "チーム未設定"}
         </div>
 
-        <div style={infoRow}>
+        <div style={infoRow} className="ui-body">
           <b>募集状態</b>：{slot.is_closed ? "締切" : "受付中"}
         </div>
       </section>
 
       {!isMine && !resolvedMyRequest && slotStatus === "open" ? (
-        <section style={card}>
-          <div style={sectionTitle}>試合申込</div>
+        <section style={card} className="ui-card">
+          <div style={sectionTitle} className="ui-title">
+            試合申込
+          </div>
 
           <select
             value={requestTeamId}
             onChange={(e) => onChangeRequestTeamId(e.target.value)}
-            style={input}
+            className="sh-select"
             disabled={!!loading || myTeams.length === 0}
           >
             {myTeams.map((t) => (
@@ -264,13 +270,14 @@ export function SlotDetail(props: {
           <textarea
             value={displayRequestComment}
             onChange={(e) => onChangeRequestComment(e.target.value)}
+            className="sh-textarea"
             style={textarea}
             disabled={!!loading}
           />
 
           <button
             className="sh-btn sh-btn--primary"
-            style={primaryBtn}
+            style={fullBtn}
             onClick={() => onRequestSlot(slot.id)}
             disabled={!!loading || myTeams.length === 0}
           >
@@ -280,8 +287,10 @@ export function SlotDetail(props: {
       ) : null}
 
       {!isMine && resolvedMyRequest ? (
-        <section style={card}>
-          <div style={sectionTitle}>申込状況</div>
+        <section style={card} className="ui-card">
+          <div style={sectionTitle} className="ui-title">
+            申込状況
+          </div>
 
           <div style={statusRow}>
             <span style={requestStatusBadgeStyle(resolvedMyRequest.status)}>
@@ -289,7 +298,7 @@ export function SlotDetail(props: {
             </span>
           </div>
 
-          <div style={infoRow}>
+          <div style={infoRow} className="ui-body">
             <b>コメント</b>：
             {resolvedMyRequest.comment?.trim() || "なし"}
           </div>
@@ -298,7 +307,7 @@ export function SlotDetail(props: {
             <button
               type="button"
               className="sh-btn"
-              style={secondaryBtn}
+              style={fullBtn}
               onClick={() => onCancelMyRequest(resolvedMyRequest.id)}
               disabled={!!loading}
             >
@@ -309,17 +318,21 @@ export function SlotDetail(props: {
       ) : null}
 
       {!isMine && slotStatus !== "open" && !resolvedMyRequest ? (
-        <div style={alertBox}>この募集は現在申込できません</div>
+        <div style={alertBox} className="ui-body">
+          この募集は現在申込できません
+        </div>
       ) : null}
 
       {isMine ? (
-        <section style={card}>
-          <div style={sectionTitle}>募集管理</div>
+        <section style={card} className="ui-card">
+          <div style={sectionTitle} className="ui-title">
+            募集管理
+          </div>
 
           <button
             type="button"
             className="sh-btn"
-            style={secondaryBtn}
+            style={fullBtn}
             onClick={() => onToggleClosed(slot.id, !slot.is_closed)}
             disabled={!!loading || slotStatus === "decided"}
           >
@@ -329,17 +342,21 @@ export function SlotDetail(props: {
       ) : null}
 
       {isMine ? (
-        <section style={card}>
-          <div style={sectionTitle}>申込み一覧</div>
+        <section style={card} className="ui-card">
+          <div style={sectionTitle} className="ui-title">
+            申込み一覧
+          </div>
 
           {requests.length === 0 ? (
-            <div style={emptyText}>まだ申込みはありません</div>
+            <div style={emptyText} className="ui-meta">
+              まだ申込みはありません
+            </div>
           ) : (
             <div style={requestList}>
               {requests.map((r) => (
                 <div key={r.id} style={requestCard}>
                   <div style={requestHeader}>
-                    <div style={requestTeamName}>
+                    <div style={requestTeamName} className="ui-title">
                       {teamNameById(allTeams, r.requester_team_id)}
                     </div>
                     <span style={requestStatusBadgeStyle(r.status)}>
@@ -347,7 +364,7 @@ export function SlotDetail(props: {
                     </span>
                   </div>
 
-                  <div style={requestCommentBox}>
+                  <div style={requestCommentBox} className="ui-body">
                     {r.comment?.trim() || "コメントなし"}
                   </div>
 
@@ -383,7 +400,7 @@ export function SlotDetail(props: {
         <button
           type="button"
           className="sh-btn"
-          style={chatBtn}
+          style={fullBtn}
           onClick={() => onOpenChat(chatTargetTeamId, slot)}
           disabled={!!loading}
         >
@@ -404,65 +421,48 @@ const statusHero: React.CSSProperties = {
   borderRadius: 12,
   fontWeight: 900,
   textAlign: "center",
+  fontSize: 14,
+  lineHeight: 1.4,
 };
 
 const card: React.CSSProperties = {
   padding: 14,
-  border: "1px solid #e5e7eb",
-  borderRadius: 12,
+  borderRadius: 16,
   background: "#fff",
   display: "grid",
   gap: 10,
 };
 
 const sectionTitle: React.CSSProperties = {
-  fontWeight: 900,
   fontSize: 15,
-  color: "#16391f",
+  lineHeight: 1.4,
 };
 
 const infoRow: React.CSSProperties = {
   fontSize: 14,
-  lineHeight: 1.6,
-};
-
-const input: React.CSSProperties = {
-  padding: 10,
-  borderRadius: 8,
-  border: "1px solid #ddd",
-  background: "#fff",
+  lineHeight: 1.7,
+  color: "#334155",
 };
 
 const textarea: React.CSSProperties = {
-  padding: 10,
-  borderRadius: 8,
-  border: "1px solid #ddd",
-  minHeight: 80,
+  minHeight: 96,
   resize: "vertical",
   fontFamily: "inherit",
-  fontSize: 14,
-  lineHeight: 1.6,
 };
 
-const primaryBtn: React.CSSProperties = {
-  width: "100%",
-  marginTop: 6,
-};
-
-const secondaryBtn: React.CSSProperties = {
-  width: "100%",
-};
-
-const chatBtn: React.CSSProperties = {
+const fullBtn: React.CSSProperties = {
   width: "100%",
 };
 
 const alertBox: React.CSSProperties = {
   padding: 12,
-  borderRadius: 10,
+  borderRadius: 12,
   background: "#fef2f2",
   color: "#991b1b",
   fontWeight: 800,
+  fontSize: 14,
+  lineHeight: 1.6,
+  border: "1px solid #fecaca",
 };
 
 const statusRow: React.CSSProperties = {
@@ -478,7 +478,7 @@ const requestList: React.CSSProperties = {
 
 const requestCard: React.CSSProperties = {
   padding: 12,
-  borderRadius: 10,
+  borderRadius: 12,
   border: "1px solid #e5e7eb",
   background: "#fafafa",
   display: "grid",
@@ -494,14 +494,14 @@ const requestHeader: React.CSSProperties = {
 };
 
 const requestTeamName: React.CSSProperties = {
-  fontWeight: 900,
-  color: "#16391f",
+  fontSize: 14,
+  lineHeight: 1.4,
 };
 
 const requestCommentBox: React.CSSProperties = {
   fontSize: 14,
-  lineHeight: 1.6,
-  color: "#444",
+  lineHeight: 1.7,
+  color: "#475569",
   whiteSpace: "pre-wrap",
 };
 
@@ -513,6 +513,5 @@ const requestActionRow: React.CSSProperties = {
 
 const emptyText: React.CSSProperties = {
   fontSize: 14,
-  color: "#666",
   lineHeight: 1.6,
 };

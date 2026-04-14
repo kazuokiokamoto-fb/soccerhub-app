@@ -281,9 +281,9 @@ export default function HomeCalendar(props: {
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
   const [showCalendarHelp, setShowCalendarHelp] = useState(false);
 
-  const [myUpcomingSchedules, setMyUpcomingSchedules] = useState<MyScheduleItem[]>(
-    []
-  );
+  const [myUpcomingSchedules, setMyUpcomingSchedules] = useState<
+    MyScheduleItem[]
+  >([]);
   const [myScheduleLoading, setMyScheduleLoading] = useState(false);
 
   const homeTopRef = useRef<HTMLDivElement | null>(null);
@@ -1158,15 +1158,15 @@ export default function HomeCalendar(props: {
   return (
     <section style={wrap} ref={homeTopRef}>
       {showCriticalError ? (
-        <div style={errorBox}>
-          <div style={errorTitle}>読み込みエラー</div>
+        <div style={errorBox} className="ui-card">
+          <div style={errorTitle} className="ui-title">読み込みエラー</div>
 
           {baseError && baseError.includes("teams:") ? (
-            <div>基礎データ: {baseError}</div>
+            <div className="ui-body">基礎データ: {baseError}</div>
           ) : null}
 
           {monthError && monthError.includes("match_slots:") ? (
-            <div>月データ: {monthError}</div>
+            <div className="ui-body">月データ: {monthError}</div>
           ) : null}
 
           <div style={{ marginTop: 10 }}>
@@ -1184,22 +1184,22 @@ export default function HomeCalendar(props: {
         </div>
       ) : null}
 
-      <section style={summaryStatsBox}>
-        <div style={summaryStatsInner}>
+      <section style={summaryStatsBox} className="ui-card-soft">
+        <div style={summaryStatsInner} className="ui-meta ui-strong">
           {totalTeamCountText}
           <span style={summaryStatsDivider}> / </span>
           {totalOpenSlotCountText}
         </div>
       </section>
 
-      <section style={summaryBox}>
+      <section style={summaryBox} className="ui-card">
         <div style={summaryCardTop}>
-          <div style={summaryDateText}>マイスケジュール</div>
+          <div style={summaryDateText} className="ui-title">マイスケジュール</div>
         </div>
 
-        <div style={summaryInnerCompactBox}>
+        <div style={summaryInnerCompactBox} className="ui-card-soft">
           {myScheduleLoading ? (
-            <div style={summarySub}>予定を読み込み中…</div>
+            <div style={summarySub} className="ui-meta">予定を読み込み中…</div>
           ) : nextSchedule ? (
             <>
               <div style={scheduleMainRow}>
@@ -1207,8 +1207,9 @@ export default function HomeCalendar(props: {
                   <span style={scheduleDateBadge}>
                     {formatScheduleDate(nextSchedule.date)}
                   </span>
-                  <span style={scheduleTimeText}>
-                    {nextSchedule.startTime.slice(0, 5)}–{nextSchedule.endTime.slice(0, 5)}
+                  <span style={scheduleTimeText} className="ui-title">
+                    {nextSchedule.startTime.slice(0, 5)}–
+                    {nextSchedule.endTime.slice(0, 5)}
                   </span>
                   <span style={scheduleRoleBadge}>
                     {nextSchedule.role === "host" ? "主催" : "参加"}
@@ -1216,7 +1217,7 @@ export default function HomeCalendar(props: {
                 </div>
               </div>
 
-              <div style={summarySubTight}>
+              <div style={summarySubTight} className="ui-meta">
                 {nextSchedule.categoryText} / {nextSchedule.areaText}
               </div>
 
@@ -1241,23 +1242,27 @@ export default function HomeCalendar(props: {
               </div>
             </>
           ) : (
-            <div style={summarySub}>直近の予定はありません。</div>
+            <div style={summarySub} className="ui-meta">
+              直近の予定はありません。
+            </div>
           )}
         </div>
       </section>
 
-      <section style={summaryBox}>
+      <section style={summaryBox} className="ui-card">
         <div style={summaryCardTop}>
-          <div style={summaryDateText}>チーム条件で探す</div>
+          <div style={summaryDateText} className="ui-title">チーム条件で探す</div>
         </div>
 
-        <div style={summaryInnerCompactBox}>
+        <div style={summaryInnerCompactBox} className="ui-card-soft">
           <div>
-            <div style={summaryCountLineCompact}>
+            <div style={summaryCountLineCompact} className="ui-title">
               対象チーム数：{filteredTeams.length}件
             </div>
 
-            <div style={summarySubTight}>表示条件：{topConditionText}</div>
+            <div style={summarySubTight} className="ui-meta">
+              表示条件：{topConditionText}
+            </div>
           </div>
 
           <div style={summaryActionRowCompact}>
@@ -1369,31 +1374,21 @@ const wrap: React.CSSProperties = {
 
 const errorBox: React.CSSProperties = {
   padding: 10,
-  borderRadius: 12,
-  border: "1px solid #fecaca",
-  background: "#fef2f2",
-  color: "#991b1b",
-  lineHeight: 1.6,
   fontSize: 14,
+  lineHeight: 1.6,
 };
 
 const errorTitle: React.CSSProperties = {
-  fontWeight: 900,
   marginBottom: 4,
 };
 
 const summaryStatsBox: React.CSSProperties = {
   marginTop: 2,
   padding: "12px 14px",
-  borderRadius: 14,
-  border: "1px solid #dce9df",
-  background: "#eef6f0",
 };
 
 const summaryStatsInner: React.CSSProperties = {
   fontSize: 15,
-  fontWeight: 800,
-  color: "#2f5d3a",
   lineHeight: 1.5,
   textAlign: "center",
 };
@@ -1405,9 +1400,6 @@ const summaryStatsDivider: React.CSSProperties = {
 const summaryBox: React.CSSProperties = {
   marginTop: 2,
   padding: "12px 14px",
-  borderRadius: 14,
-  border: "1px solid #dce9df",
-  background: "#fff",
 };
 
 const summaryCardTop: React.CSSProperties = {
@@ -1419,18 +1411,13 @@ const summaryCardTop: React.CSSProperties = {
 };
 
 const summaryDateText: React.CSSProperties = {
-  fontWeight: 900,
   fontSize: 20,
-  color: "#16391f",
   lineHeight: 1.25,
 };
 
 const summaryInnerCompactBox: React.CSSProperties = {
   marginTop: 8,
   padding: 12,
-  borderRadius: 14,
-  border: "1px solid #dce9df",
-  background: "#f7fbf8",
   display: "grid",
   gap: 10,
 };
@@ -1444,21 +1431,17 @@ const summaryActionRowCompact: React.CSSProperties = {
 
 const summaryCountLineCompact: React.CSSProperties = {
   fontSize: 15,
-  fontWeight: 800,
-  color: "#14532d",
   lineHeight: 1.5,
 };
 
 const summarySub: React.CSSProperties = {
   marginTop: 4,
   fontSize: 13,
-  color: "#3b6a49",
   lineHeight: 1.6,
 };
 
 const summarySubTight: React.CSSProperties = {
   fontSize: 13,
-  color: "#3b6a49",
   lineHeight: 1.55,
 };
 
@@ -1501,8 +1484,6 @@ const scheduleDateBadge: React.CSSProperties = {
 
 const scheduleTimeText: React.CSSProperties = {
   fontSize: 15,
-  fontWeight: 800,
-  color: "#16391f",
   lineHeight: 1.4,
 };
 

@@ -14,13 +14,30 @@ body {
   overflow-x: hidden;
 }
 
+body {
+  margin: 0;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Hiragino Kaku Gothic ProN",
+    "Hiragino Sans",
+    "Noto Sans JP",
+    sans-serif;
+  line-height: 1.6;
+  color: #1f2937;
+  background: #fff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 /* ===============================
    COLOR VARIABLES
 ================================ */
 
 :root {
   --app-header-height: 64px;
-  
+
   --sm-green-1: #1f8f43;
   --sm-green-2: #14652f;
   --sm-green-3: #0f4d23;
@@ -33,6 +50,40 @@ body {
 }
 
 /* ===============================
+   TYPOGRAPHY UTIL
+================================ */
+
+.ui-title {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.ui-body {
+  font-weight: 400;
+}
+
+.ui-meta {
+  font-weight: 500;
+}
+
+.ui-card {
+  border-radius: 14px;
+  border: 1px solid #dce9df;
+  background: #fff;
+}
+
+.ui-card-soft {
+  border-radius: 14px;
+  border: 1px solid #dce9df;
+  background: #f7fbf8;
+}
+
+.ui-section-gap {
+  display: grid;
+  gap: 10px;
+}
+
+/* ===============================
    INPUT UI
 ================================ */
 
@@ -42,6 +93,7 @@ body {
   width: 100%;
   padding: 14px 16px;
   font-size: 16px;
+  font-family: inherit;
   border-radius: 14px;
   border: 1px solid #d9e4dc;
   background: #fff;
@@ -85,6 +137,7 @@ body {
   background: #fff;
   color: var(--sm-green-3);
 
+  font-family: inherit;
   font-size: 15px;
   font-weight: 800;
   letter-spacing: 0.02em;
@@ -155,8 +208,11 @@ body {
   border: 1px solid #e4ebe6;
   border-radius: 18px;
   background: #fff;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.04);
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.04);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
 }
 
 .sh-card:hover {
@@ -228,7 +284,7 @@ body {
   top: 0;
   z-index: 60;
 
-  background: rgba(255,255,255,0.94);
+  background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(10px);
 
   border-bottom: 1px solid #e8efe9;
@@ -254,19 +310,23 @@ body {
 }
 
 .smh-brandMark {
-  width: 42px;
-  height: 42px;
-  border-radius: 999px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px rgba(0, 255, 120, 0.35);
+}
 
-  display: grid;
-  place-items: center;
-
-  font-size: 22px;
-  color: #fff;
-
-  background: linear-gradient(180deg, var(--sm-green-1), var(--sm-green-2));
-
-  box-shadow: 0 6px 14px rgba(20, 92, 42, 0.18);
+.smh-brandMarkImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .smh-brandText {
@@ -309,62 +369,6 @@ body {
   min-height: 40px;
   padding: 8px 12px;
   border-radius: 12px;
-}
-
-/* ===============================
-   RESPONSIVE
-================================ */
-
-@media (max-width: 900px) {
-
-  .sh-home-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .smh-link {
-    display: none;
-  }
-
-  .smh-user {
-    display: none;
-  }
-
-}
-
-@media (max-width: 640px) {
-
-  .sh-home-grid {
-    grid-template-columns: repeat(1, minmax(0, 1fr));
-  }
-
-  .smh-inner {
-    padding: 8px 10px;
-  }
-
-  .smh-brandMark {
-    width: 36px;
-    height: 36px;
-    font-size: 19px;
-  }
-
-  .smh-brandText {
-    font-size: 22px;
-  }
-
-  .smh-brandSub {
-    font-size: 9px;
-  }
-
-  .smh-logout {
-    min-height: 36px;
-    padding: 6px 10px;
-    font-size: 13px;
-  }
-
-  .sh-btn {
-    min-height: 44px;
-  }
-
 }
 
 .logoText {
@@ -411,22 +415,54 @@ body {
   text-align: center;
 }
 
-.smh-brandMark {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: #000;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 0 6px rgba(0, 255, 120, 0.35);
+/* ===============================
+   RESPONSIVE
+================================ */
+
+@media (max-width: 900px) {
+  .sh-home-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .smh-link {
+    display: none;
+  }
+
+  .smh-user {
+    display: none;
+  }
 }
 
-.smh-brandMarkImage {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
+@media (max-width: 640px) {
+  .sh-home-grid {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+
+  .smh-inner {
+    padding: 8px 10px;
+  }
+
+  .smh-brandMark {
+    width: 36px;
+    height: 36px;
+    font-size: 19px;
+  }
+
+  .smh-brandText {
+    font-size: 22px;
+  }
+
+  .smh-brandSub {
+    font-size: 9px;
+  }
+
+  .smh-logout {
+    min-height: 36px;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  .sh-btn {
+    min-height: 44px;
+  }
 }

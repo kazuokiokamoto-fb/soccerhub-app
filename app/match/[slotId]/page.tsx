@@ -93,15 +93,14 @@ function formatTransportation(team?: TeamRow | null) {
 
   const items: string[] = [];
 
-  const groundText =
-    team.has_ground === true ? "グラウンドあり" : "グラウンドなし";
-  items.push(groundText);
+  items.push(team.has_ground === true ? "グラウンドあり" : "グラウンドなし");
 
   const bikeText = String(team.bike_parking ?? "").trim();
+  const bikeCapText = String(team.bike_parking_capacity ?? "").trim();
+
   if (bikeText) {
-    const capText = String(team.bike_parking_capacity ?? "").trim();
     items.push(
-      capText ? `駐輪場 ${bikeText} / ${capText}` : `駐輪場 ${bikeText}`
+      bikeCapText ? `駐輪場 ${bikeText} / ${bikeCapText}` : `駐輪場 ${bikeText}`
     );
   }
 
@@ -118,6 +117,11 @@ function formatRoster(team?: TeamRow | null) {
   if (entries.length === 0) return "";
 
   return entries.map(([grade, count]) => `${grade}:${count}人`).join(" / ");
+}
+
+function hhmm(value?: string | null) {
+  if (!value) return "--:--";
+  return value.slice(0, 5);
 }
 
 export default function MatchDetailPage() {
@@ -197,6 +201,14 @@ export default function MatchDetailPage() {
     return true;
   }, [team?.id, team?.owner_id, myUserId]);
 
+  const openScheduleList = () => {
+    window.location.href = "/match/my-schedule";
+  };
+
+  const openHome = () => {
+    window.location.href = "/";
+  };
+
   const openChat = async () => {
     try {
       if (!myUserId) {
@@ -205,6 +217,7 @@ export default function MatchDetailPage() {
       }
 
       if (!team?.id) return;
+
       if (team.owner_id === myUserId) {
         alert("自分のチームにはチャットできません");
         return;
@@ -258,23 +271,20 @@ export default function MatchDetailPage() {
 
         <div style={errorBox}>
           <div style={errorTitle}>読み込みエラー</div>
-          <div>{errorText}</div>
+          <div style={errorBody}>{errorText}</div>
+
           <div style={topButtonRow}>
             <button
               type="button"
               className="sh-btn"
-              onClick={() => {
-                window.location.href = "/match/my-schedule";
-              }}
+              onClick={openScheduleList}
             >
               予定一覧へ
             </button>
             <button
               type="button"
               className="sh-btn sh-btn--primary"
-              onClick={() => {
-                window.location.href = "/";
-              }}
+              onClick={openHome}
             >
               ホームへ
             </button>
@@ -301,9 +311,7 @@ export default function MatchDetailPage() {
         <button
           type="button"
           className="sh-btn"
-          onClick={() => {
-            window.location.href = "/match/my-schedule";
-          }}
+          onClick={openScheduleList}
         >
           予定一覧へ
         </button>
@@ -311,56 +319,63 @@ export default function MatchDetailPage() {
         <button
           type="button"
           className="sh-btn"
-          onClick={() => {
-            window.location.href = "/";
-          }}
+          onClick={openHome}
         >
           ホームへ
         </button>
       </div>
 
       <section style={titleWrap}>
+        <div style={pageBadge}>マイスケジュール詳細</div>
         <h1 style={pageTitle}>試合詳細</h1>
       </section>
 
-      <section style={card}>
+      <section style={card} className="sh-card">
+        <div style={sectionTitle}>試合情報</div>
+
         <div style={detailList}>
           <div style={detailRow}>
             <span style={icon}>📅</span>
-            <span>{slot.date || "未設定"}</span>
+            <span style={bodyText}>{slot.date || "未設定"}</span>
           </div>
 
           <div style={detailRow}>
             <span style={icon}>⏰</span>
-            <span>
-              {slot.start_time?.slice(0, 5) || "--:--"}〜
-              {slot.end_time?.slice(0, 5) || "--:--"}
+            <span style={bodyText}>
+              {hhmm(slot.start_time)}〜{hhmm(slot.end_time)}
             </span>
           </div>
 
           <div style={detailRow}>
             <span style={icon}>📍</span>
-            <span>{slot.area_text || slot.area || "未設定"}</span>
+            <span style={bodyText}>{slot.area_text || slot.area || "未設定"}</span>
           </div>
 
           <div style={detailRow}>
             <span style={icon}>🏷</span>
-            <span>
+            <span style={bodyText}>
               {categoryLabel(slot.category || "") || slot.category || "未設定"}
+            </span>
+          </div>
+
+          <div style={detailRow}>
+            <span style={icon}>📌</span>
+            <span style={bodyText}>
+              {slot.is_closed ? "現在は締切" : "現在受付中"}
             </span>
           </div>
 
           {slot.note ? (
             <div style={detailRowTop}>
               <span style={icon}>📝</span>
-              <span>{slot.note}</span>
+              <span style={bodyText}>{slot.note}</span>
             </div>
           ) : null}
         </div>
       </section>
 
-      <section style={card}>
-        <div style={sectionTitle}>募集チーム詳細</div>
+      <section style={card} className="sh-card">
+        <div style={sectionTitle}>相手チーム詳細</div>
 
         <div style={teamName}>{team?.name || "未設定"}</div>
 
@@ -430,9 +445,7 @@ export default function MatchDetailPage() {
         <button
           type="button"
           className="sh-btn"
-          onClick={() => {
-            window.location.href = "/match/my-schedule";
-          }}
+          onClick={openScheduleList}
         >
           予定一覧へ
         </button>
@@ -440,9 +453,7 @@ export default function MatchDetailPage() {
         <button
           type="button"
           className="sh-btn"
-          onClick={() => {
-            window.location.href = "/";
-          }}
+          onClick={openHome}
         >
           ホームへ
         </button>
@@ -471,10 +482,24 @@ const titleWrap: React.CSSProperties = {
   marginTop: 16,
 };
 
+const pageBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 28,
+  padding: "0 12px",
+  borderRadius: 999,
+  border: "1px solid #d6eadb",
+  background: "#eef7f0",
+  color: "#1f5d30",
+  fontSize: 12,
+  fontWeight: 800,
+};
+
 const pageTitle: React.CSSProperties = {
+  marginTop: 10,
   fontSize: 30,
   fontWeight: 900,
-  color: "#111827",
+  color: "#16391f",
   lineHeight: 1.2,
 };
 
@@ -498,6 +523,7 @@ const card: React.CSSProperties = {
   borderRadius: 18,
   border: "1px solid #dce9df",
   background: "#fff",
+  boxShadow: "0 6px 18px rgba(0,0,0,0.04)",
 };
 
 const sectionTitle: React.CSSProperties = {
@@ -508,39 +534,42 @@ const sectionTitle: React.CSSProperties = {
 };
 
 const detailList: React.CSSProperties = {
+  marginTop: 14,
   display: "grid",
-  gap: 14,
+  gap: 12,
 };
 
 const detailRow: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 10,
-  fontSize: 16,
-  color: "#111827",
-  lineHeight: 1.6,
 };
 
 const detailRowTop: React.CSSProperties = {
   display: "flex",
   alignItems: "flex-start",
   gap: 10,
-  fontSize: 16,
-  color: "#111827",
-  lineHeight: 1.7,
 };
 
 const icon: React.CSSProperties = {
   width: 28,
   flexShrink: 0,
   textAlign: "center",
+  fontSize: 16,
+  lineHeight: 1.6,
+};
+
+const bodyText: React.CSSProperties = {
+  fontSize: 15,
+  color: "#1c2b22",
+  lineHeight: 1.75,
 };
 
 const teamName: React.CSSProperties = {
   marginTop: 14,
   fontSize: 28,
   fontWeight: 900,
-  color: "#111827",
+  color: "#16391f",
   lineHeight: 1.3,
 };
 
@@ -556,16 +585,16 @@ const teamMetaItem: React.CSSProperties = {
 };
 
 const metaLabel: React.CSSProperties = {
-  fontSize: 13,
+  fontSize: 12,
   fontWeight: 800,
-  color: "#6b7280",
+  color: "#66756d",
   lineHeight: 1.4,
 };
 
 const metaValue: React.CSSProperties = {
-  fontSize: 16,
-  color: "#111827",
-  lineHeight: 1.7,
+  fontSize: 15,
+  color: "#1c2b22",
+  lineHeight: 1.75,
 };
 
 const bottomActionRow: React.CSSProperties = {
@@ -584,6 +613,8 @@ const loadingBox: React.CSSProperties = {
   background: "#fff",
   color: "#666",
   textAlign: "center",
+  fontSize: 15,
+  lineHeight: 1.7,
 };
 
 const errorBox: React.CSSProperties = {
@@ -599,4 +630,10 @@ const errorBox: React.CSSProperties = {
 const errorTitle: React.CSSProperties = {
   fontWeight: 900,
   marginBottom: 4,
+  fontSize: 16,
+};
+
+const errorBody: React.CSSProperties = {
+  fontSize: 14,
+  lineHeight: 1.7,
 };
