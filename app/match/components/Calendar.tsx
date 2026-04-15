@@ -69,7 +69,7 @@ export function Calendar(props: {
   const today = todayYmd();
 
   return (
-    <section style={{ ...card, marginTop: 14 }}>
+    <section style={card}>
       <div style={topHead}>
         <div style={topHeadLeft}>
           <div style={topTitle}>{titleText}</div>
@@ -243,9 +243,10 @@ export function Calendar(props: {
 }
 
 const card: React.CSSProperties = {
-  padding: 14,
-  border: "1px solid #eee",
-  borderRadius: 16,
+  marginTop: 2,
+  padding: "12px 14px",
+  border: "1px solid #dce9df",
+  borderRadius: 14,
   background: "#fff",
 };
 
@@ -270,9 +271,8 @@ const topTitle: React.CSSProperties = {
 };
 
 const summaryBar: React.CSSProperties = {
-  marginTop: 14,
-  marginBottom: 12,
-  padding: "14px 16px",
+  marginTop: 8,
+  padding: 12,
   borderRadius: 14,
   background: "#f7fbf8",
   border: "1px solid #dce9df",
@@ -339,6 +339,7 @@ const monthTitle: React.CSSProperties = {
   fontSize: 18,
   lineHeight: 1.2,
   textAlign: "center",
+  color: "#16391f",
 };
 
 const weekHeaderGrid: React.CSSProperties = {
