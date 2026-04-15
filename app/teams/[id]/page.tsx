@@ -269,7 +269,7 @@ export default function TeamDetailPage() {
 
         <div style={topRow}>
           <Link href="/teams" className="sh-btn">
-            ← チーム一覧へ戻る
+            チーム一覧
           </Link>
 
           {mine && team ? (

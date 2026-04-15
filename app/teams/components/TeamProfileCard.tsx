@@ -15,6 +15,7 @@ export type TeamProfileCardRow = {
   prefecture?: string | null;
   city?: string | null;
   town?: string | null;
+  address_detail?: string | null;
   member_count?: number | null;
   uniform_main?: string | null;
   uniform_sub?: string | null;
@@ -55,9 +56,7 @@ export function teamCategories(team?: TeamProfileCardRow | null) {
   if (Array.isArray(team.categories) && team.categories.length > 0) {
     return team.categories;
   }
-  if (team.category) {
-    return [team.category];
-  }
+  if (team.category) return [team.category];
   return [];
 }
 
@@ -70,12 +69,15 @@ export function teamCategoryText(team?: TeamProfileCardRow | null) {
 export function teamAreaText(team?: TeamProfileCardRow | null) {
   if (!team) return "未設定";
 
-  const joined = [team.prefecture, team.city, team.town]
+  const parts = [team.prefecture, team.city, team.town]
     .map((v) => String(v ?? "").trim())
-    .filter(Boolean)
-    .join(" ・ ");
+    .filter(Boolean);
 
-  return joined || team.area || "未設定";
+  if (parts.length > 0) {
+    return parts.join(" ・ ");
+  }
+
+  return team.area || "未設定";
 }
 
 export function uniformText(team?: TeamProfileCardRow | null) {
@@ -89,22 +91,26 @@ export function uniformText(team?: TeamProfileCardRow | null) {
 }
 
 export type TeamProfileCardProps = {
-  team: TeamProfileCardRow;
   title?: string;
+  team: TeamProfileCardRow;
   mine?: boolean;
-  onOpenStrengthHelp?: () => void;
-  onOpenGeminiSearch?: () => void;
+  categoryTextOverride?: string;
+  showAddressDetail?: boolean;
   showGeminiSection?: boolean;
+  onOpenGeminiSearch?: () => void;
+  onOpenStrengthHelp?: () => void;
 };
 
 export default function TeamProfileCard(props: TeamProfileCardProps) {
   const {
-    team,
     title = "チーム詳細",
+    team,
     mine = false,
-    onOpenStrengthHelp,
-    onOpenGeminiSearch,
+    categoryTextOverride,
+    showAddressDetail = true,
     showGeminiSection = false,
+    onOpenGeminiSearch,
+    onOpenStrengthHelp,
   } = props;
 
   return (
@@ -119,7 +125,9 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
       <div style={teamMetaGrid}>
         <div style={teamMetaItem}>
           <div style={metaLabel}>カテゴリ</div>
-          <div style={metaValue}>{teamCategoryText(team)}</div>
+          <div style={metaValue}>
+            {categoryTextOverride || teamCategoryText(team)}
+          </div>
         </div>
 
         <div style={teamMetaItem}>
@@ -160,6 +168,13 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
           <div style={metaValue}>{uniformText(team)}</div>
         </div>
 
+        {showAddressDetail && team.address_detail ? (
+          <div style={teamMetaItem}>
+            <div style={metaLabel}>住所補足</div>
+            <div style={metaValue}>{team.address_detail}</div>
+          </div>
+        ) : null}
+
         {team.note ? (
           <div style={teamMetaItem}>
             <div style={metaLabel}>チームメモ</div>
@@ -191,10 +206,10 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
 }
 
 const card: React.CSSProperties = {
-  marginTop: 14,
-  padding: 18,
+  marginTop: 16,
+  padding: 16,
   borderRadius: 18,
-  border: "1px solid #e5ece7",
+  border: "1px solid #dce9df",
   background: "#fff",
 };
 

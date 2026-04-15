@@ -6,6 +6,15 @@ import AppTabNav from "@/app/components/AppTabNav";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
 import { categoryLabel } from "@/app/lib/categories";
+import TeamProfileCard, {
+  TeamProfileCardRow,
+  teamAreaText,
+  teamStrengthLabel,
+  teamStrengthShortDescription,
+  uniformText,
+} from "@/app/teams/components/TeamProfileCard";
+import { MatchHelpModals } from "@/app/match/components/MatchHelpModals";
+import { STRENGTH_GUIDES } from "@/app/match/constants/strengthGuides";
 
 type SlotRow = {
   id: string;
@@ -22,27 +31,11 @@ type SlotRow = {
   note?: string | null;
 };
 
-type TeamRow = {
-  id: string;
-  owner_id: string | null;
-  name: string | null;
-  area: string | null;
-  prefecture?: string | null;
-  city?: string | null;
-  town?: string | null;
-  address_detail?: string | null;
-  category: string | null;
-  categories?: string[] | null;
-  level: number | null;
-  strength_rank?: string | null;
+type TeamRow = TeamProfileCardRow & {
   has_ground?: boolean | null;
   bike_parking?: string | null;
   bike_parking_capacity?: string | null;
-  member_count?: number | null;
-  uniform_main?: string | null;
-  uniform_sub?: string | null;
   roster_by_grade?: Record<string, number> | null;
-  note?: string | null;
 };
 
 type VenueRow = {
@@ -59,55 +52,6 @@ type RequestRow = {
   requester_team_id: string;
   status: string;
 };
-
-function levelToRank(level?: number | null) {
-  const n = Number(level ?? 0);
-  if (!Number.isFinite(n)) return "";
-  if (n >= 9) return "SS";
-  if (n >= 7) return "S";
-  if (n >= 5) return "A";
-  if (n >= 3) return "B";
-  return "C";
-}
-
-function teamStrengthLabel(team?: TeamRow | null) {
-  if (!team) return "未設定";
-  if (team.strength_rank && String(team.strength_rank).trim()) {
-    return String(team.strength_rank).trim();
-  }
-  return levelToRank(team.level) || "未設定";
-}
-
-function formatTeamArea(team?: TeamRow | null) {
-  if (!team) return "未設定";
-
-  const parts = [team.prefecture, team.city, team.town]
-    .map((v) => String(v ?? "").trim())
-    .filter(Boolean);
-
-  if (parts.length > 0) {
-    return parts.join(" ・ ");
-  }
-
-  return team.area || "未設定";
-}
-
-function formatTransportation(team?: TeamRow | null) {
-  if (!team) return "未設定";
-
-  const items: string[] = [];
-  items.push(team.has_ground ? "グラウンドあり" : "グラウンドなし");
-
-  const bikeText = String(team.bike_parking ?? "").trim();
-  if (bikeText) {
-    const capText = String(team.bike_parking_capacity ?? "").trim();
-    items.push(
-      capText ? `駐輪場 ${bikeText} / ${capText}` : `駐輪場 ${bikeText}`
-    );
-  }
-
-  return items.join(" / ") || "未設定";
-}
 
 function buildMapUrl(params: {
   venue?: VenueRow | null;
@@ -153,20 +97,19 @@ function buildGroundLabel(params: {
 }
 
 function buildGeminiPrompt(params: {
-  teamName: string;
+  team: TeamRow | null | undefined;
   categoryText: string;
-  areaText: string;
-  transportationText: string;
-  strengthText: string;
 }) {
   return `少年サッカー・キッズサッカーの対戦相手チームについて調べたいです。
 以下の条件をもとに、日本語で簡潔に整理してください。
 
-チーム名: ${params.teamName}
-試合カテゴリ: ${params.categoryText}
-活動エリア: ${params.areaText}
-交通手段・受入情報: ${params.transportationText}
-強さ: ${params.strengthText}
+チーム名: ${params.team?.name ?? "未設定"}
+カテゴリ: ${params.categoryText}
+活動エリア: ${teamAreaText(params.team)}
+強さ: ${teamStrengthLabel(params.team)}
+強さの目安: ${teamStrengthShortDescription(params.team)}
+所属人数: ${params.team?.member_count ?? "未設定"}
+ユニフォーム: ${uniformText(params.team)}
 
 知りたいこと:
 ・このチームがどんなチームか
@@ -193,6 +136,7 @@ export default function MatchDetailPage() {
 
   const [showGeminiModal, setShowGeminiModal] = useState(false);
   const [copiedGemini, setCopiedGemini] = useState(false);
+  const [showStrengthHelp, setShowStrengthHelp] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -334,16 +278,16 @@ export default function MatchDetailPage() {
     return buildMapUrl({ venue, slot });
   }, [venue, slot]);
 
+  const categoryTextForOpponent = useMemo(() => {
+    return categoryLabel(slot?.category || "") || slot?.category || "未設定";
+  }, [slot]);
+
   const geminiPrompt = useMemo(() => {
     return buildGeminiPrompt({
-      teamName: String(opponentTeam?.name ?? "未設定"),
-      categoryText:
-        categoryLabel(slot?.category || "") || slot?.category || "未設定",
-      areaText: formatTeamArea(opponentTeam),
-      transportationText: formatTransportation(opponentTeam),
-      strengthText: teamStrengthLabel(opponentTeam),
+      team: opponentTeam,
+      categoryText: categoryTextForOpponent,
     });
-  }, [opponentTeam, slot]);
+  }, [opponentTeam, categoryTextForOpponent]);
 
   const openChat = async () => {
     try {
@@ -426,193 +370,114 @@ export default function MatchDetailPage() {
   }
 
   return (
-    <main style={pageWrap}>
-      <AppTabNav />
+    <>
+      <main style={pageWrap}>
+        <AppTabNav />
 
-      <div style={titleRow}>
-        <h1 style={pageTitle}>試合詳細</h1>
+        <div style={titleRow}>
+          <h1 style={pageTitle}>試合詳細</h1>
 
-        <button
-          type="button"
-          className="sh-btn"
-          onClick={() => {
-            window.location.href = "/match/my-schedule";
-          }}
-        >
-          予定一覧
-        </button>
-      </div>
-
-      <section style={card}>
-        <div style={sectionTitle}>試合情報</div>
-
-        <div style={detailList}>
-          <div style={detailRow}>
-            <span style={icon}>📅</span>
-            <span>{slot.date || "未設定"}</span>
-          </div>
-
-          <div style={detailRow}>
-            <span style={icon}>⏰</span>
-            <span>
-              {slot.start_time?.slice(0, 5) || "--:--"}〜
-              {slot.end_time?.slice(0, 5) || "--:--"}
-            </span>
-          </div>
-
-          <div style={detailRow}>
-            <span style={icon}>📍</span>
-            <span>{slot.area_text || slot.area || "未設定"}</span>
-          </div>
-
-          <div style={detailRow}>
-            <span style={icon}>🏷</span>
-            <span>
-              {categoryLabel(slot.category || "") || slot.category || "未設定"}
-            </span>
-          </div>
-
-          <div style={detailRowTop}>
-            <span style={icon}>🏟</span>
-            <span>{groundLabel}</span>
-          </div>
-
-          {mapUrl ? (
-            <div style={detailRow}>
-              <span style={icon}>🗺️</span>
-              <a href={mapUrl} target="_blank" rel="noreferrer" style={mapLink}>
-                Googleマップで見る
-              </a>
-            </div>
-          ) : null}
-
-          <div style={detailRow}>
-            <span style={icon}>📌</span>
-            <span>{slot.is_closed ? "現在は締切" : "受付中"}</span>
-          </div>
-
-          {slot.note ? (
-            <div style={detailRowTop}>
-              <span style={icon}>📝</span>
-              <span>{slot.note}</span>
-            </div>
-          ) : null}
-        </div>
-      </section>
-
-      <section style={card}>
-        <div style={sectionTitle}>相手チーム詳細</div>
-
-        <div style={teamName}>{opponentTeam?.name || "未設定"}</div>
-
-        <div style={teamMetaGrid}>
-          <div style={teamMetaItem}>
-            <div style={metaLabel}>試合カテゴリ</div>
-            <div style={metaValue}>
-              {categoryLabel(slot.category || "") || slot.category || "未設定"}
-            </div>
-          </div>
-
-          <div style={teamMetaItem}>
-            <div style={metaLabel}>強さ</div>
-            <div style={metaValue}>{teamStrengthLabel(opponentTeam)}</div>
-          </div>
-
-          <div style={teamMetaItem}>
-            <div style={metaLabel}>エリア</div>
-            <div style={metaValue}>{formatTeamArea(opponentTeam)}</div>
-          </div>
-
-          <div style={teamMetaItem}>
-            <div style={metaLabel}>チーム人数</div>
-            <div style={metaValue}>
-              {opponentTeam?.member_count != null
-                ? `${opponentTeam.member_count}人`
-                : "未設定"}
-            </div>
-          </div>
-
-          <div style={teamMetaItem}>
-            <div style={metaLabel}>交通手段・受入情報</div>
-            <div style={metaValue}>{formatTransportation(opponentTeam)}</div>
-          </div>
-
-          {(opponentTeam?.uniform_main || opponentTeam?.uniform_sub) && (
-            <div style={teamMetaItem}>
-              <div style={metaLabel}>ユニフォーム</div>
-              <div style={metaValue}>
-                {[opponentTeam?.uniform_main, opponentTeam?.uniform_sub]
-                  .filter(Boolean)
-                  .join(" / ")}
-              </div>
-            </div>
-          )}
-
-          {opponentTeam?.address_detail ? (
-            <div style={teamMetaItem}>
-              <div style={metaLabel}>住所補足</div>
-              <div style={metaValue}>{opponentTeam.address_detail}</div>
-            </div>
-          ) : null}
-
-          {opponentTeam?.note ? (
-            <div style={teamMetaItem}>
-              <div style={metaLabel}>チームメモ</div>
-              <div style={metaValue}>{opponentTeam.note}</div>
-            </div>
-          ) : null}
-
-          <div style={teamMetaItem}>
-            <div style={metaLabel}>Geminiによるチーム情報</div>
-            <div style={metaValue}>
-              Gemini用の検索文を確認してからコピーできます。
-            </div>
-
-            <div style={{ marginTop: 8 }}>
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={() => setShowGeminiModal(true)}
-              >
-                Geminiでこのチームを調べる
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {canOpenChat ? (
-        <div style={bottomActionRow}>
           <button
             type="button"
-            className="sh-btn sh-btn--primary"
-            onClick={openChat}
+            className="sh-btn"
+            onClick={() => {
+              window.location.href = "/match/my-schedule";
+            }}
           >
-            チャットで連絡
+            予定一覧
           </button>
         </div>
-      ) : null}
+
+        <section style={card}>
+          <div style={sectionTitle}>試合情報</div>
+
+          <div style={detailList}>
+            <div style={detailRow}>
+              <span style={icon}>📅</span>
+              <span>{slot.date || "未設定"}</span>
+            </div>
+
+            <div style={detailRow}>
+              <span style={icon}>⏰</span>
+              <span>
+                {slot.start_time?.slice(0, 5) || "--:--"}〜
+                {slot.end_time?.slice(0, 5) || "--:--"}
+              </span>
+            </div>
+
+            <div style={detailRow}>
+              <span style={icon}>📍</span>
+              <span>{slot.area_text || slot.area || "未設定"}</span>
+            </div>
+
+            <div style={detailRow}>
+              <span style={icon}>🏷</span>
+              <span>{categoryTextForOpponent}</span>
+            </div>
+
+            <div style={detailRowTop}>
+              <span style={icon}>🏟</span>
+              <span>{groundLabel}</span>
+            </div>
+
+            {mapUrl ? (
+              <div style={detailRow}>
+                <span style={icon}>🗺️</span>
+                <a href={mapUrl} target="_blank" rel="noreferrer" style={mapLink}>
+                  Googleマップで見る
+                </a>
+              </div>
+            ) : null}
+
+            <div style={detailRow}>
+              <span style={icon}>📌</span>
+              <span>{slot.is_closed ? "現在は締切" : "受付中"}</span>
+            </div>
+
+            {slot.note ? (
+              <div style={detailRowTop}>
+                <span style={icon}>📝</span>
+                <span>{slot.note}</span>
+              </div>
+            ) : null}
+          </div>
+        </section>
+
+        {opponentTeam ? (
+          <TeamProfileCard
+            title="相手チーム詳細"
+            team={opponentTeam}
+            categoryTextOverride={categoryTextForOpponent}
+            showAddressDetail={true}
+            showGeminiSection={true}
+            onOpenGeminiSearch={() => setShowGeminiModal(true)}
+            onOpenStrengthHelp={() => setShowStrengthHelp(true)}
+          />
+        ) : null}
+
+        {canOpenChat ? (
+          <div style={bottomActionRow}>
+            <button
+              type="button"
+              className="sh-btn sh-btn--primary"
+              onClick={openChat}
+            >
+              チャットで連絡
+            </button>
+          </div>
+        ) : null}
+      </main>
 
       {showGeminiModal ? (
-        <div
-          style={modalOverlay}
-          onClick={() => setShowGeminiModal(false)}
-        >
-          <div
-            style={modalCard}
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div style={modalOverlay} onClick={() => setShowGeminiModal(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <div style={modalTitle}>Gemini検索文</div>
 
             <div style={modalText}>
               下の文章をコピーして、Geminiに貼り付けて使ってください。
             </div>
 
-            <textarea
-              value={geminiPrompt}
-              readOnly
-              style={promptTextarea}
-            />
+            <textarea value={geminiPrompt} readOnly style={promptTextarea} />
 
             <div style={copiedText}>
               {copiedGemini ? "コピーしました" : "そのままコピーして使えます"}
@@ -648,7 +513,15 @@ export default function MatchDetailPage() {
           </div>
         </div>
       ) : null}
-    </main>
+
+      <MatchHelpModals
+        showStrengthHelp={showStrengthHelp}
+        showCalendarHelp={false}
+        onCloseStrengthHelp={() => setShowStrengthHelp(false)}
+        onCloseCalendarHelp={() => {}}
+        strengthGuides={STRENGTH_GUIDES}
+      />
+    </>
   );
 }
 
@@ -724,38 +597,6 @@ const mapLink: React.CSSProperties = {
   color: "#145c2a",
   fontWeight: 800,
   textDecoration: "underline",
-};
-
-const teamName: React.CSSProperties = {
-  marginTop: 14,
-  fontSize: 28,
-  fontWeight: 900,
-  color: "#16391f",
-  lineHeight: 1.3,
-};
-
-const teamMetaGrid: React.CSSProperties = {
-  marginTop: 16,
-  display: "grid",
-  gap: 14,
-};
-
-const teamMetaItem: React.CSSProperties = {
-  display: "grid",
-  gap: 6,
-};
-
-const metaLabel: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 800,
-  color: "#6b7280",
-  lineHeight: 1.4,
-};
-
-const metaValue: React.CSSProperties = {
-  fontSize: 16,
-  color: "#1c2b22",
-  lineHeight: 1.7,
 };
 
 const bottomActionRow: React.CSSProperties = {
