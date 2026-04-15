@@ -11,6 +11,7 @@ type SlotRow = {
   id: string;
   host_team_id: string;
   owner_id?: string | null;
+  venue_id?: string | null;
   date: string | null;
   start_time: string | null;
   end_time: string | null;
@@ -44,6 +45,21 @@ type TeamRow = {
   note?: string | null;
 };
 
+type VenueRow = {
+  id: string;
+  name?: string | null;
+  address?: string | null;
+  google_map_url?: string | null;
+  googleMapUrl?: string | null;
+};
+
+type RequestRow = {
+  id: string;
+  slot_id: string;
+  requester_team_id: string;
+  status: string;
+};
+
 function levelToRank(level?: number | null) {
   const n = Number(level ?? 0);
   if (!Number.isFinite(n)) return "";
@@ -60,18 +76,6 @@ function teamStrengthLabel(team?: TeamRow | null) {
     return String(team.strength_rank).trim();
   }
   return levelToRank(team.level) || "未設定";
-}
-
-function formatTeamCategories(team?: TeamRow | null) {
-  if (!team) return "未設定";
-
-  if (Array.isArray(team.categories) && team.categories.length > 0) {
-    return team.categories
-      .map((v) => categoryLabel(v) || v)
-      .join(" / ");
-  }
-
-  return categoryLabel(team.category || "") || team.category || "未設定";
 }
 
 function formatTeamArea(team?: TeamRow | null) {
@@ -93,9 +97,7 @@ function formatTransportation(team?: TeamRow | null) {
 
   const items: string[] = [];
 
-  const groundText =
-    team.has_ground === true ? "グラウンドあり" : "グラウンドなし";
-  items.push(groundText);
+  items.push(team.has_ground ? "グラウンドあり" : "グラウンドなし");
 
   const bikeText = String(team.bike_parking ?? "").trim();
   if (bikeText) {
@@ -108,27 +110,85 @@ function formatTransportation(team?: TeamRow | null) {
   return items.join(" / ") || "未設定";
 }
 
-function formatRoster(team?: TeamRow | null) {
-  if (!team?.roster_by_grade) return "";
+function buildMapUrl(params: {
+  venue?: VenueRow | null;
+  slot?: SlotRow | null;
+}) {
+  const { venue, slot } = params;
 
-  const entries = Object.entries(team.roster_by_grade)
-    .filter(([, count]) => Number(count) > 0)
-    .sort(([a], [b]) => a.localeCompare(b, "ja"));
+  const explicit =
+    String(venue?.google_map_url ?? "").trim() ||
+    String(venue?.googleMapUrl ?? "").trim();
 
-  if (entries.length === 0) return "";
+  if (explicit) return explicit;
 
-  return entries.map(([grade, count]) => `${grade}:${count}人`).join(" / ");
+  const query =
+    String(venue?.address ?? "").trim() ||
+    String(slot?.area_text ?? "").trim() ||
+    String(slot?.area ?? "").trim();
+
+  if (!query) return "";
+
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    query
+  )}`;
+}
+
+function buildGroundLabel(params: {
+  venue?: VenueRow | null;
+  slot?: SlotRow | null;
+}) {
+  const { venue, slot } = params;
+
+  const venueName = String(venue?.name ?? "").trim();
+  const venueAddress = String(venue?.address ?? "").trim();
+
+  if (venueName && venueAddress) {
+    return `${venueName} / ${venueAddress}`;
+  }
+
+  if (venueName) return venueName;
+  if (venueAddress) return venueAddress;
+
+  return String(slot?.area_text ?? slot?.area ?? "未設定");
+}
+
+function buildGeminiPrompt(params: {
+  teamName: string;
+  categoryText: string;
+  areaText: string;
+  transportationText: string;
+  strengthText: string;
+}) {
+  return `少年サッカー・キッズサッカーの対戦相手チームについて調べたいです。
+以下の条件をもとに、日本語で簡潔に整理してください。
+
+チーム名: ${params.teamName}
+試合カテゴリ: ${params.categoryText}
+活動エリア: ${params.areaText}
+交通手段・受入情報: ${params.transportationText}
+強さ: ${params.strengthText}
+
+知りたいこと:
+・このチームがどんなチームか
+・このカテゴリでの活動傾向
+・対戦前に確認すると良いこと
+・一般的に想定されるレベル感や特徴
+
+不明な情報は推測しすぎず、「不明」と明記してください。`;
 }
 
 export default function MatchDetailPage() {
   const params = useParams();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   const slotId = String(params?.slotId ?? "");
   const myUserId = user?.id ?? "";
 
   const [slot, setSlot] = useState<SlotRow | null>(null);
-  const [team, setTeam] = useState<TeamRow | null>(null);
+  const [opponentTeam, setOpponentTeam] = useState<TeamRow | null>(null);
+  const [venue, setVenue] = useState<VenueRow | null>(null);
+  const [myTeamIds, setMyTeamIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
 
@@ -137,11 +197,30 @@ export default function MatchDetailPage() {
 
     const load = async () => {
       if (!slotId) return;
+      if (authLoading) return;
 
       setLoading(true);
       setErrorText("");
 
       try {
+        let mine: string[] = [];
+
+        if (myUserId) {
+          const { data: myTeamsRaw, error: myTeamsError } = await supabase
+            .from("teams")
+            .select("id")
+            .eq("owner_id", myUserId);
+
+          if (myTeamsError) throw myTeamsError;
+
+          mine = ((myTeamsRaw ?? []) as Array<{ id: string }>).map(
+            (row) => row.id
+          );
+        }
+
+        if (!active) return;
+        setMyTeamIds(mine);
+
         const { data: slotData, error: slotError } = await supabase
           .from("match_slots")
           .select("*")
@@ -149,32 +228,79 @@ export default function MatchDetailPage() {
           .single();
 
         if (slotError) throw slotError;
-        if (!active) return;
 
         const nextSlot = (slotData ?? null) as SlotRow | null;
+        if (!active) return;
+
         setSlot(nextSlot);
 
-        if (!nextSlot?.host_team_id) {
-          setTeam(null);
+        if (!nextSlot) {
+          setOpponentTeam(null);
+          setVenue(null);
           setLoading(false);
           return;
+        }
+
+        let acceptedRequest: RequestRow | null = null;
+        const { data: acceptedRaw, error: acceptedError } = await supabase
+          .from("match_requests")
+          .select("id, slot_id, requester_team_id, status")
+          .eq("slot_id", nextSlot.id)
+          .eq("status", "accepted")
+          .maybeSingle();
+
+        if (acceptedError) throw acceptedError;
+        acceptedRequest = (acceptedRaw ?? null) as RequestRow | null;
+
+        let opponentTeamId = nextSlot.host_team_id;
+
+        const iAmHost = mine.includes(nextSlot.host_team_id);
+        const iAmRequester =
+          !!acceptedRequest &&
+          mine.includes(acceptedRequest.requester_team_id);
+
+        if (iAmHost && acceptedRequest?.requester_team_id) {
+          opponentTeamId = acceptedRequest.requester_team_id;
+        } else if (iAmRequester) {
+          opponentTeamId = nextSlot.host_team_id;
+        } else if (
+          acceptedRequest?.requester_team_id &&
+          acceptedRequest.requester_team_id !== nextSlot.host_team_id
+        ) {
+          opponentTeamId = nextSlot.host_team_id;
         }
 
         const { data: teamData, error: teamError } = await supabase
           .from("teams")
           .select("*")
-          .eq("id", nextSlot.host_team_id)
+          .eq("id", opponentTeamId)
           .single();
 
         if (teamError) throw teamError;
         if (!active) return;
 
-        setTeam((teamData ?? null) as TeamRow | null);
+        setOpponentTeam((teamData ?? null) as TeamRow | null);
+
+        if (nextSlot.venue_id) {
+          const { data: venueData, error: venueError } = await supabase
+            .from("venues")
+            .select("*")
+            .eq("id", nextSlot.venue_id)
+            .maybeSingle();
+
+          if (venueError) throw venueError;
+          if (!active) return;
+
+          setVenue((venueData ?? null) as VenueRow | null);
+        } else {
+          setVenue(null);
+        }
       } catch (e: any) {
         console.error("[match detail] load error:", e);
         if (!active) return;
         setSlot(null);
-        setTeam(null);
+        setOpponentTeam(null);
+        setVenue(null);
         setErrorText(e?.message ?? "詳細の取得に失敗しました");
       } finally {
         if (active) {
@@ -188,14 +314,23 @@ export default function MatchDetailPage() {
     return () => {
       active = false;
     };
-  }, [slotId]);
+  }, [slotId, myUserId, authLoading]);
 
   const canOpenChat = useMemo(() => {
-    if (!team?.id) return false;
+    if (!opponentTeam?.id) return false;
     if (!myUserId) return false;
-    if (team.owner_id === myUserId) return false;
+    if (!myTeamIds.length) return false;
+    if (opponentTeam.owner_id === myUserId) return false;
     return true;
-  }, [team?.id, team?.owner_id, myUserId]);
+  }, [opponentTeam?.id, opponentTeam?.owner_id, myUserId, myTeamIds]);
+
+  const groundLabel = useMemo(() => {
+    return buildGroundLabel({ venue, slot });
+  }, [venue, slot]);
+
+  const mapUrl = useMemo(() => {
+    return buildMapUrl({ venue, slot });
+  }, [venue, slot]);
 
   const openChat = async () => {
     try {
@@ -204,32 +339,20 @@ export default function MatchDetailPage() {
         return;
       }
 
-      if (!team?.id) return;
-      if (team.owner_id === myUserId) {
-        alert("自分のチームにはチャットできません");
-        return;
-      }
-
-      const { data: myTeams, error: myTeamsError } = await supabase
-        .from("teams")
-        .select("id")
-        .eq("owner_id", myUserId)
-        .limit(1);
-
-      if (myTeamsError) throw myTeamsError;
-
-      const myTeamId = myTeams?.[0]?.id;
-      if (!myTeamId) {
+      if (!opponentTeam?.id) return;
+      if (!myTeamIds.length) {
         alert("先に自分のチームを登録してください");
         window.location.href = "/teams/new";
         return;
       }
 
+      const myTeamId = myTeamIds[0];
+
       const { data: threadId, error: threadError } = await supabase.rpc(
         "rpc_get_or_create_dm_thread",
         {
           my_team_id: myTeamId,
-          other_team_id: team.id,
+          other_team_id: opponentTeam.id,
         }
       );
 
@@ -239,6 +362,31 @@ export default function MatchDetailPage() {
     } catch (e: any) {
       console.error("[match detail] open chat error:", e);
       alert(`チャットを開けません: ${e?.message ?? "unknown error"}`);
+    }
+  };
+
+  const openGeminiSearch = async () => {
+    const prompt = buildGeminiPrompt({
+      teamName: String(opponentTeam?.name ?? "未設定"),
+      categoryText:
+        categoryLabel(slot?.category || "") || slot?.category || "未設定",
+      areaText: formatTeamArea(opponentTeam),
+      transportationText: formatTransportation(opponentTeam),
+      strengthText: teamStrengthLabel(opponentTeam),
+    });
+
+    try {
+      await navigator.clipboard.writeText(prompt);
+      window.open("https://gemini.google.com/", "_blank", "noopener,noreferrer");
+      alert(
+        "Geminiを開きました。検索文をコピー済みなので、そのまま貼り付けてください。"
+      );
+    } catch (e) {
+      console.error("[match detail] gemini open error:", e);
+      window.open("https://gemini.google.com/", "_blank", "noopener,noreferrer");
+      alert(
+        "Geminiを開きました。コピーに失敗したため、必要なら検索文を手動で作成してください。"
+      );
     }
   };
 
@@ -255,21 +403,9 @@ export default function MatchDetailPage() {
     return (
       <main style={pageWrap}>
         <AppTabNav />
-
         <div style={errorBox}>
           <div style={errorTitle}>読み込みエラー</div>
           <div>{errorText}</div>
-          <div style={topButtonRow}>
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={() => {
-                window.location.href = "/match/my-schedule";
-              }}
-            >
-              予定一覧
-            </button>
-          </div>
         </div>
       </main>
     );
@@ -288,7 +424,7 @@ export default function MatchDetailPage() {
     <main style={pageWrap}>
       <AppTabNav />
 
-      <section style={titleRow}>
+      <div style={titleRow}>
         <h1 style={pageTitle}>試合詳細</h1>
 
         <button
@@ -300,7 +436,7 @@ export default function MatchDetailPage() {
         >
           予定一覧
         </button>
-      </section>
+      </div>
 
       <section style={card}>
         <div style={sectionTitle}>試合情報</div>
@@ -331,9 +467,28 @@ export default function MatchDetailPage() {
             </span>
           </div>
 
+          <div style={detailRowTop}>
+            <span style={icon}>🏟</span>
+            <span>{groundLabel}</span>
+          </div>
+
+          {mapUrl ? (
+            <div style={detailRow}>
+              <span style={icon}>🗺</span>
+              <a
+                href={mapUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={mapLink}
+              >
+                Googleマップで見る
+              </a>
+            </div>
+          ) : null}
+
           <div style={detailRow}>
             <span style={icon}>📌</span>
-            <span>{slot.is_closed ? "現在は締切" : "現在募集中"}</span>
+            <span>{slot.is_closed ? "現在は締切" : "受付中"}</span>
           </div>
 
           {slot.note ? (
@@ -348,72 +503,86 @@ export default function MatchDetailPage() {
       <section style={card}>
         <div style={sectionTitle}>相手チーム詳細</div>
 
-        <div style={teamName}>{team?.name || "未設定"}</div>
+        <div style={teamName}>{opponentTeam?.name || "未設定"}</div>
 
         <div style={teamMetaGrid}>
           <div style={teamMetaItem}>
-            <div style={metaLabel}>カテゴリ</div>
-            <div style={metaValue}>{formatTeamCategories(team)}</div>
+            <div style={metaLabel}>試合カテゴリ</div>
+            <div style={metaValue}>
+              {categoryLabel(slot.category || "") || slot.category || "未設定"}
+            </div>
           </div>
 
           <div style={teamMetaItem}>
             <div style={metaLabel}>強さ</div>
-            <div style={metaValue}>{teamStrengthLabel(team)}</div>
+            <div style={metaValue}>{teamStrengthLabel(opponentTeam)}</div>
           </div>
 
           <div style={teamMetaItem}>
             <div style={metaLabel}>エリア</div>
-            <div style={metaValue}>{formatTeamArea(team)}</div>
+            <div style={metaValue}>{formatTeamArea(opponentTeam)}</div>
           </div>
 
           <div style={teamMetaItem}>
             <div style={metaLabel}>チーム人数</div>
             <div style={metaValue}>
-              {team?.member_count != null ? `${team.member_count}人` : "未設定"}
+              {opponentTeam?.member_count != null
+                ? `${opponentTeam.member_count}人`
+                : "未設定"}
             </div>
           </div>
 
           <div style={teamMetaItem}>
             <div style={metaLabel}>交通手段・受入情報</div>
-            <div style={metaValue}>{formatTransportation(team)}</div>
+            <div style={metaValue}>{formatTransportation(opponentTeam)}</div>
           </div>
 
-          {(team?.uniform_main || team?.uniform_sub) && (
+          {(opponentTeam?.uniform_main || opponentTeam?.uniform_sub) && (
             <div style={teamMetaItem}>
               <div style={metaLabel}>ユニフォーム</div>
               <div style={metaValue}>
-                {[team?.uniform_main, team?.uniform_sub]
+                {[opponentTeam?.uniform_main, opponentTeam?.uniform_sub]
                   .filter(Boolean)
                   .join(" / ")}
               </div>
             </div>
           )}
 
-          {team?.address_detail ? (
+          {opponentTeam?.address_detail ? (
             <div style={teamMetaItem}>
               <div style={metaLabel}>住所補足</div>
-              <div style={metaValue}>{team.address_detail}</div>
+              <div style={metaValue}>{opponentTeam.address_detail}</div>
             </div>
           ) : null}
 
-          {formatRoster(team) ? (
-            <div style={teamMetaItem}>
-              <div style={metaLabel}>学年別人数</div>
-              <div style={metaValue}>{formatRoster(team)}</div>
-            </div>
-          ) : null}
-
-          {team?.note ? (
+          {opponentTeam?.note ? (
             <div style={teamMetaItem}>
               <div style={metaLabel}>チームメモ</div>
-              <div style={metaValue}>{team.note}</div>
+              <div style={metaValue}>{opponentTeam.note}</div>
             </div>
           ) : null}
+
+          <div style={teamMetaItem}>
+            <div style={metaLabel}>Geminiによるチーム情報</div>
+            <div style={metaValue}>
+              Geminiを開いて、このチームの情報を検索できます。
+            </div>
+
+            <div style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={openGeminiSearch}
+              >
+                Geminiでこのチームを調べる
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
       {canOpenChat ? (
-        <div style={chatOnlyRow}>
+        <div style={bottomActionRow}>
           <button
             type="button"
             className="sh-btn sh-btn--primary"
@@ -443,18 +612,11 @@ const titleRow: React.CSSProperties = {
 };
 
 const pageTitle: React.CSSProperties = {
-  margin: 0,
   fontSize: 30,
   fontWeight: 900,
-  color: "#111827",
+  color: "#16391f",
   lineHeight: 1.2,
-};
-
-const topButtonRow: React.CSSProperties = {
-  marginTop: 12,
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
+  margin: 0,
 };
 
 const card: React.CSSProperties = {
@@ -483,7 +645,7 @@ const detailRow: React.CSSProperties = {
   alignItems: "center",
   gap: 10,
   fontSize: 16,
-  color: "#111827",
+  color: "#1c2b22",
   lineHeight: 1.6,
 };
 
@@ -492,7 +654,7 @@ const detailRowTop: React.CSSProperties = {
   alignItems: "flex-start",
   gap: 10,
   fontSize: 16,
-  color: "#111827",
+  color: "#1c2b22",
   lineHeight: 1.7,
 };
 
@@ -502,11 +664,17 @@ const icon: React.CSSProperties = {
   textAlign: "center",
 };
 
+const mapLink: React.CSSProperties = {
+  color: "#145c2a",
+  fontWeight: 800,
+  textDecoration: "underline",
+};
+
 const teamName: React.CSSProperties = {
   marginTop: 14,
   fontSize: 28,
   fontWeight: 900,
-  color: "#111827",
+  color: "#16391f",
   lineHeight: 1.3,
 };
 
@@ -530,11 +698,11 @@ const metaLabel: React.CSSProperties = {
 
 const metaValue: React.CSSProperties = {
   fontSize: 16,
-  color: "#111827",
+  color: "#1c2b22",
   lineHeight: 1.7,
 };
 
-const chatOnlyRow: React.CSSProperties = {
+const bottomActionRow: React.CSSProperties = {
   marginTop: 20,
   display: "flex",
   justifyContent: "flex-end",
