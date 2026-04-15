@@ -486,7 +486,7 @@ export function MatchFilterPanel({
                   onClick={onOpenTeamList}
                   disabled={loading}
                 >
-                  チーム一覧
+                  検索
                 </button>
 
                 <button
@@ -504,7 +504,7 @@ export function MatchFilterPanel({
                   onClick={onBackToList}
                   disabled={loading}
                 >
-                  閉じる
+                  戻る
                 </button>
               </div>
             </div>
@@ -532,7 +532,7 @@ export function MatchFilterPanel({
                     onClick={onOpenTeamList}
                     disabled={loading}
                   >
-                    チーム一覧
+                    検索
                   </button>
                   <button
                     type="button"
@@ -548,7 +548,7 @@ export function MatchFilterPanel({
                     onClick={onBackToList}
                     disabled={loading}
                   >
-                    閉じる
+                    戻る
                   </button>
                 </div>
               ) : null}
@@ -565,7 +565,7 @@ export function MatchFilterPanel({
                 onClick={onOpenTeamList}
                 disabled={loading}
               >
-                チーム一覧
+                検索
               </button>
               <button
                 type="button"
@@ -581,7 +581,7 @@ export function MatchFilterPanel({
                 onClick={onBackToList}
                 disabled={loading}
               >
-                閉じる
+                戻る
               </button>
             </div>
           ) : null}

@@ -56,6 +56,24 @@ function isMissingColumnError(err: any) {
   );
 }
 
+function buildAreaText(
+  team?: {
+    area?: string | null;
+    prefecture?: string | null;
+    city?: string | null;
+    town?: string | null;
+  } | null,
+  fallback?: string
+) {
+  const fromTeam =
+    (team?.area ?? "").trim() ||
+    `${team?.prefecture ?? ""} ${team?.city ?? ""}${
+      team?.town ? "・" + team.town : ""
+    }`.trim();
+
+  return fromTeam || (fallback ?? "").trim() || null;
+}
+
 function MatchCreatePageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -92,27 +110,13 @@ function MatchCreatePageInner() {
   useEffect(() => {
     const date = searchParams.get("date") ?? "";
     const hostTeamIdParam = searchParams.get("hostTeamId") ?? "";
-    const areaParam = searchParams.get("area") ?? "";
-    const categoryParam = searchParams.get("category") ?? "";
-    const categoriesParam = searchParams.get("categories") ?? "";
 
     if (date) {
       setSlotDate(date);
     }
 
-    if (hostTeamIdParam) setHostTeamId(hostTeamIdParam);
-    if (areaParam) setSlotArea(areaParam);
-
-    const incomingCategories = [
-      ...categoriesParam
-        .split(",")
-        .map((v) => v.trim())
-        .filter(Boolean),
-      ...(categoryParam ? [categoryParam] : []),
-    ];
-
-    if (incomingCategories.length > 0) {
-      setSlotCategories(Array.from(new Set(incomingCategories)));
+    if (hostTeamIdParam) {
+      setHostTeamId(hostTeamIdParam);
     }
   }, [searchParams]);
 
@@ -129,26 +133,16 @@ function MatchCreatePageInner() {
   useEffect(() => {
     if (!selectedHostTeam) return;
 
-    if (!slotArea && selectedHostTeam.area) {
-      setSlotArea(selectedHostTeam.area);
-    }
+    const nextArea = buildAreaText(selectedHostTeam, "") ?? "";
 
-    if (slotCategories.length === 0) {
-      const defaults = getDefaultCategories(selectedHostTeam);
-      if (defaults.length > 0) {
-        setSlotCategories(defaults);
-      }
-    }
+    setSlotArea(nextArea);
+    setSlotCategories(getDefaultCategories(selectedHostTeam));
+    setNewVenueArea(nextArea);
 
-    if (!newVenueArea) {
-      const areaText =
-        selectedHostTeam.area ||
-        `${selectedHostTeam.prefecture ?? ""} ${selectedHostTeam.city ?? ""}${
-          selectedHostTeam.town ? "・" + selectedHostTeam.town : ""
-        }`.trim();
-      if (areaText) setNewVenueArea(areaText);
+    if (venueMode === "existing") {
+      setVenueId("");
     }
-  }, [selectedHostTeam, slotArea, slotCategories.length, newVenueArea]);
+  }, [hostTeamId, selectedHostTeam, venueMode]);
 
   async function load() {
     setLoading(true);
@@ -178,19 +172,8 @@ function MatchCreatePageInner() {
 
       setSlotDate((prev) => prev || initialQueryDate || getTodayYmd());
 
-      if (!hostTeamId && teams[0]?.id) {
+      if (teams[0]?.id && !hostTeamId) {
         setHostTeamId(teams[0].id);
-      }
-
-      if (!slotArea && teams[0]?.area) {
-        setSlotArea(teams[0].area ?? "");
-      }
-
-      if (slotCategories.length === 0) {
-        const defaults = getDefaultCategories(teams[0]);
-        if (defaults.length > 0) {
-          setSlotCategories(defaults);
-        }
       }
     } catch (e) {
       console.error(e);
@@ -198,24 +181,6 @@ function MatchCreatePageInner() {
     } finally {
       setLoading(false);
     }
-  }
-
-  function buildAreaText(
-    team?: {
-      area?: string | null;
-      prefecture?: string | null;
-      city?: string | null;
-      town?: string | null;
-    } | null,
-    fallback?: string
-  ) {
-    const fromTeam =
-      (team?.area ?? "").trim() ||
-      `${team?.prefecture ?? ""} ${team?.city ?? ""}${
-        team?.town ? "・" + team.town : ""
-      }`.trim();
-
-    return fromTeam || (fallback ?? "").trim() || null;
   }
 
   function toggleCategory(value: string) {
@@ -645,7 +610,8 @@ function MatchCreatePageInner() {
               <div style={helperText}>
                 ホストチーム: {selectedHostTeam.name ?? "未設定"}
                 <br />
-                エリア初期値: {selectedHostTeam.area ?? "未設定"}
+                エリア初期値:{" "}
+                {buildAreaText(selectedHostTeam, "") || "未設定"}
                 <br />
                 カテゴリ初期値:{" "}
                 {getDefaultCategories(selectedHostTeam)
