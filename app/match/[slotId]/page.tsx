@@ -96,7 +96,6 @@ function formatTransportation(team?: TeamRow | null) {
   if (!team) return "未設定";
 
   const items: string[] = [];
-
   items.push(team.has_ground ? "グラウンドあり" : "グラウンドなし");
 
   const bikeText = String(team.bike_parking ?? "").trim();
@@ -340,6 +339,7 @@ export default function MatchDetailPage() {
       }
 
       if (!opponentTeam?.id) return;
+
       if (!myTeamIds.length) {
         alert("先に自分のチームを登録してください");
         window.location.href = "/teams/new";
@@ -357,11 +357,16 @@ export default function MatchDetailPage() {
       );
 
       if (threadError) throw threadError;
+      if (!threadId) throw new Error("チャットスレッドを作成できませんでした");
 
       window.location.href = `/chat/${threadId}?from=match_detail&slotId=${slotId}`;
     } catch (e: any) {
       console.error("[match detail] open chat error:", e);
-      alert(`チャットを開けません: ${e?.message ?? "unknown error"}`);
+      alert(
+        `チャットを開けません。\n\n原因: ${
+          e?.message ?? "unknown error"
+        }\n\nこのエラーが出る場合は、Supabase の rpc_get_or_create_dm_thread を修正してください。`
+      );
     }
   };
 
@@ -376,18 +381,20 @@ export default function MatchDetailPage() {
     });
 
     try {
-      await navigator.clipboard.writeText(prompt);
-      window.open("https://gemini.google.com/", "_blank", "noopener,noreferrer");
-      alert(
-        "Geminiを開きました。検索文をコピー済みなので、そのまま貼り付けてください。"
-      );
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(prompt);
+        sessionStorage.setItem("gemini_team_prompt_copied", "1");
+      } else {
+        sessionStorage.setItem("gemini_team_prompt_manual", prompt);
+      }
     } catch (e) {
-      console.error("[match detail] gemini open error:", e);
-      window.open("https://gemini.google.com/", "_blank", "noopener,noreferrer");
-      alert(
-        "Geminiを開きました。コピーに失敗したため、必要なら検索文を手動で作成してください。"
-      );
+      console.error("[match detail] clipboard error:", e);
+      try {
+        sessionStorage.setItem("gemini_team_prompt_manual", prompt);
+      } catch {}
     }
+
+    window.location.href = "https://gemini.google.com/";
   };
 
   if (loading) {
@@ -474,13 +481,8 @@ export default function MatchDetailPage() {
 
           {mapUrl ? (
             <div style={detailRow}>
-              <span style={icon}>🗺</span>
-              <a
-                href={mapUrl}
-                target="_blank"
-                rel="noreferrer"
-                style={mapLink}
-              >
+              <span style={icon}>🗺️</span>
+              <a href={mapUrl} target="_blank" rel="noreferrer" style={mapLink}>
                 Googleマップで見る
               </a>
             </div>
@@ -565,7 +567,7 @@ export default function MatchDetailPage() {
           <div style={teamMetaItem}>
             <div style={metaLabel}>Geminiによるチーム情報</div>
             <div style={metaValue}>
-              Geminiを開いて、このチームの情報を検索できます。
+              Geminiを開いて、このチーム情報を検索できます。
             </div>
 
             <div style={{ marginTop: 8 }}>
