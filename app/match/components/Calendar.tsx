@@ -72,7 +72,9 @@ export function Calendar(props: {
     <section style={card}>
       <div style={topHead}>
         <div style={topHeadLeft}>
-          <div style={topTitle}>{titleText}</div>
+          <div style={topTitle} className="ui-title">
+            {titleText}
+          </div>
         </div>
       </div>
 
