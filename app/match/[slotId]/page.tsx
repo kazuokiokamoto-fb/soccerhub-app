@@ -191,6 +191,9 @@ export default function MatchDetailPage() {
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
 
+  const [showGeminiModal, setShowGeminiModal] = useState(false);
+  const [copiedGemini, setCopiedGemini] = useState(false);
+
   useEffect(() => {
     let active = true;
 
@@ -331,6 +334,17 @@ export default function MatchDetailPage() {
     return buildMapUrl({ venue, slot });
   }, [venue, slot]);
 
+  const geminiPrompt = useMemo(() => {
+    return buildGeminiPrompt({
+      teamName: String(opponentTeam?.name ?? "未設定"),
+      categoryText:
+        categoryLabel(slot?.category || "") || slot?.category || "未設定",
+      areaText: formatTeamArea(opponentTeam),
+      transportationText: formatTransportation(opponentTeam),
+      strengthText: teamStrengthLabel(opponentTeam),
+    });
+  }, [opponentTeam, slot]);
+
   const openChat = async () => {
     try {
       if (!myUserId) {
@@ -362,39 +376,23 @@ export default function MatchDetailPage() {
       window.location.href = `/chat/${threadId}?from=match_detail&slotId=${slotId}`;
     } catch (e: any) {
       console.error("[match detail] open chat error:", e);
-      alert(
-        `チャットを開けません。\n\n原因: ${
-          e?.message ?? "unknown error"
-        }\n\nこのエラーが出る場合は、Supabase の rpc_get_or_create_dm_thread を修正してください。`
-      );
+      alert(`チャットを開けません。\n\n${e?.message ?? "unknown error"}`);
     }
   };
 
-  const openGeminiSearch = async () => {
-    const prompt = buildGeminiPrompt({
-      teamName: String(opponentTeam?.name ?? "未設定"),
-      categoryText:
-        categoryLabel(slot?.category || "") || slot?.category || "未設定",
-      areaText: formatTeamArea(opponentTeam),
-      transportationText: formatTransportation(opponentTeam),
-      strengthText: teamStrengthLabel(opponentTeam),
-    });
-
+  const copyGeminiPrompt = async () => {
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(prompt);
-        sessionStorage.setItem("gemini_team_prompt_copied", "1");
-      } else {
-        sessionStorage.setItem("gemini_team_prompt_manual", prompt);
-      }
+      await navigator.clipboard.writeText(geminiPrompt);
+      setCopiedGemini(true);
+      window.setTimeout(() => setCopiedGemini(false), 2000);
     } catch (e) {
       console.error("[match detail] clipboard error:", e);
-      try {
-        sessionStorage.setItem("gemini_team_prompt_manual", prompt);
-      } catch {}
+      alert("コピーに失敗しました。検索文を手動で選択してコピーしてください。");
     }
+  };
 
-    window.location.href = "https://gemini.google.com/";
+  const openGemini = () => {
+    window.open("https://gemini.google.com/", "_blank", "noopener,noreferrer");
   };
 
   if (loading) {
@@ -567,14 +565,14 @@ export default function MatchDetailPage() {
           <div style={teamMetaItem}>
             <div style={metaLabel}>Geminiによるチーム情報</div>
             <div style={metaValue}>
-              Geminiを開いて、このチーム情報を検索できます。
+              Gemini用の検索文を確認してからコピーできます。
             </div>
 
             <div style={{ marginTop: 8 }}>
               <button
                 type="button"
                 className="sh-btn"
-                onClick={openGeminiSearch}
+                onClick={() => setShowGeminiModal(true)}
               >
                 Geminiでこのチームを調べる
               </button>
@@ -592,6 +590,62 @@ export default function MatchDetailPage() {
           >
             チャットで連絡
           </button>
+        </div>
+      ) : null}
+
+      {showGeminiModal ? (
+        <div
+          style={modalOverlay}
+          onClick={() => setShowGeminiModal(false)}
+        >
+          <div
+            style={modalCard}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={modalTitle}>Gemini検索文</div>
+
+            <div style={modalText}>
+              下の文章をコピーして、Geminiに貼り付けて使ってください。
+            </div>
+
+            <textarea
+              value={geminiPrompt}
+              readOnly
+              style={promptTextarea}
+            />
+
+            <div style={copiedText}>
+              {copiedGemini ? "コピーしました" : "そのままコピーして使えます"}
+            </div>
+
+            <div style={modalActionRow}>
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={copyGeminiPrompt}
+              >
+                コピー
+              </button>
+
+              <button
+                type="button"
+                className="sh-btn sh-btn--primary"
+                onClick={openGemini}
+              >
+                Geminiを開く
+              </button>
+            </div>
+
+            <div style={modalCloseRow}>
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={() => setShowGeminiModal(false)}
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </main>
@@ -733,4 +787,72 @@ const errorBox: React.CSSProperties = {
 const errorTitle: React.CSSProperties = {
   fontWeight: 900,
   marginBottom: 4,
+};
+
+const modalOverlay: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0, 0, 0, 0.45)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
+  zIndex: 1000,
+};
+
+const modalCard: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 720,
+  background: "#fff",
+  borderRadius: 18,
+  border: "1px solid #dce9df",
+  padding: 16,
+  boxShadow: "0 20px 40px rgba(0,0,0,0.18)",
+  display: "grid",
+  gap: 12,
+};
+
+const modalTitle: React.CSSProperties = {
+  fontSize: 20,
+  fontWeight: 900,
+  color: "#16391f",
+  lineHeight: 1.3,
+};
+
+const modalText: React.CSSProperties = {
+  fontSize: 14,
+  color: "#4b5563",
+  lineHeight: 1.7,
+};
+
+const promptTextarea: React.CSSProperties = {
+  width: "100%",
+  minHeight: 260,
+  borderRadius: 14,
+  border: "1px solid #dce9df",
+  padding: 14,
+  fontSize: 14,
+  lineHeight: 1.7,
+  color: "#1c2b22",
+  background: "#f9fbfa",
+  resize: "vertical",
+  fontFamily: "inherit",
+};
+
+const copiedText: React.CSSProperties = {
+  fontSize: 13,
+  color: "#166534",
+  lineHeight: 1.5,
+};
+
+const modalActionRow: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+};
+
+const modalCloseRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
 };
