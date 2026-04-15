@@ -378,7 +378,7 @@ export default function TeamsSearchClient() {
                 className="sh-btn sh-btn--primary"
                 onClick={openFilteredTeamsPage}
               >
-                チーム一覧
+                検索
               </button>
 
               <button
@@ -396,7 +396,7 @@ export default function TeamsSearchClient() {
                   window.history.back();
                 }}
               >
-                閉じる
+                戻る
               </button>
             </div>
           </div>
