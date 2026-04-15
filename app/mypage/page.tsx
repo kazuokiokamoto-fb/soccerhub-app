@@ -2,7 +2,13 @@
 
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
@@ -95,6 +101,7 @@ type NextMatchCard = {
   area_text?: string | null;
   category: string | null;
   slot_id: string;
+  role: "host" | "guest";
 };
 
 type Toast = {
@@ -186,6 +193,13 @@ function fmtDate(ymd?: string | null) {
 function fmtTime(v?: string | null) {
   if (!v) return "";
   return String(v).slice(0, 5);
+}
+
+function formatScheduleDate(ymd?: string | null) {
+  if (!ymd) return "";
+  const [y, m, d] = String(ymd).split("-").map(Number);
+  if (!y || !m || !d) return String(ymd);
+  return `${m}/${d}`;
 }
 
 function toDateTimeMs(date?: string | null, time?: string | null) {
@@ -381,6 +395,7 @@ export default function MyPage() {
   const [sentOfferCount, setSentOfferCount] = useState(0);
   const [unreadTotal, setUnreadTotal] = useState(0);
   const [nextMatch, setNextMatch] = useState<NextMatchCard | null>(null);
+  const [acceptedSlotCount, setAcceptedSlotCount] = useState(0);
 
   const loadRunningRef = useRef(false);
   const mountedRef = useRef(true);
@@ -413,6 +428,7 @@ export default function MyPage() {
       setSentOfferCount(0);
       setUnreadTotal(0);
       setNextMatch(null);
+      setAcceptedSlotCount(0);
       setLoadError("");
       setLoading(false);
       loadRunningRef.current = false;
@@ -486,6 +502,7 @@ export default function MyPage() {
           setSentOfferCount(0);
           setUnreadTotal(0);
           setNextMatch(null);
+          setAcceptedSlotCount(0);
           setLoading(false);
         }
         loadRunningRef.current = false;
@@ -666,6 +683,10 @@ export default function MyPage() {
         )
       );
 
+      if (mountedRef.current) {
+        setAcceptedSlotCount(mergedAcceptedSlotIds.length);
+      }
+
       if (mergedAcceptedSlotIds.length > 0) {
         const { data: acceptedSlotsRaw, error: acceptedSlotsErr } = await supabase
           .from("match_slots")
@@ -693,6 +714,8 @@ export default function MyPage() {
 
           if (futureSlots.length > 0) {
             const s = futureSlots[0];
+            const role = myTeamIds.includes(s.host_team_id) ? "host" : "guest";
+
             if (mountedRef.current) {
               setNextMatch({
                 date: s.date,
@@ -702,6 +725,7 @@ export default function MyPage() {
                 area_text: s.area_text,
                 category: s.category,
                 slot_id: s.id,
+                role,
               });
             }
           } else {
@@ -1000,38 +1024,56 @@ export default function MyPage() {
           </div>
 
           <div style={dashboardCard}>
-            <div style={dashboardTitle}>📅 次の試合</div>
+            <div style={dashboardTitle}>🗓 マイスケジュール</div>
 
-            {nextMatch ? (
-              <>
-                <div style={successBadge}>✅ 試合成立</div>
-                <Link href="/match/next" style={nextMatchLink}>
-                  <div style={nextMatchDate}>
-                    {fmtDate(nextMatch.date)} {fmtTime(nextMatch.start_time)}
+            <div style={dashboardScheduleInner}>
+              {nextMatch ? (
+                <>
+                  <div style={scheduleMainRow}>
+                    <div style={schedulePrimaryText}>
+                      <span style={scheduleDateBadge}>
+                        {formatScheduleDate(nextMatch.date)}
+                      </span>
+
+                      <span style={scheduleTimeText}>
+                        {fmtTime(nextMatch.start_time)}–{fmtTime(nextMatch.end_time)}
+                      </span>
+
+                      <span style={scheduleRoleBadge}>
+                        {nextMatch.role === "host" ? "主催" : "参加"}
+                      </span>
+                    </div>
                   </div>
-                  <div style={nextMatchMeta}>
-                    {nextMatch.area_text ?? nextMatch.area ?? "エリア未設定"}
-                  </div>
-                  <div style={nextMatchMeta}>
+
+                  <div style={scheduleMetaText}>
                     {categoryLabel(nextMatch.category) ||
                       nextMatch.category ||
-                      "カテゴリ未設定"}
+                      "カテゴリ未設定"}{" "}
+                    / {nextMatch.area_text ?? nextMatch.area ?? "エリア未設定"}
                   </div>
-                </Link>
-              </>
-            ) : (
-              <div style={emptyActionBox}>
-                <div style={mutedText}>まだ試合は成立していません</div>
-                <div style={emptyActionRow}>
-                  <Link href="/" className="sh-btn">
-                    ホームで探す
-                  </Link>
-                  <Link href="/match/new" className="sh-btn sh-btn--primary">
-                    募集する
-                  </Link>
-                </div>
-              </div>
-            )}
+
+                  <div style={scheduleActionRowRight}>
+                    <Link
+                      href={`/match/${nextMatch.slot_id}`}
+                      className="sh-btn"
+                    >
+                      詳細
+                    </Link>
+
+                    {acceptedSlotCount > 1 ? (
+                      <Link
+                        href="/match/my-schedule"
+                        className="sh-btn sh-btn--primary"
+                      >
+                        予定一覧
+                      </Link>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <div style={emptyScheduleText}>直近の予定はありません。</div>
+              )}
+            </div>
           </div>
         </div>
       </section>
@@ -1320,58 +1362,83 @@ const dashboardLinkValue: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const successBadge: React.CSSProperties = {
-  display: "inline-block",
-  background: "#dcfce7",
-  color: "#166534",
-  fontWeight: 900,
-  padding: "4px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  marginBottom: 6,
+const dashboardScheduleInner: React.CSSProperties = {
+  padding: 12,
+  borderRadius: 14,
+  border: "1px solid #dce9df",
+  background: "#f7fbf8",
+  display: "grid",
+  gap: 10,
 };
 
-const nextMatchLink: React.CSSProperties = {
-  display: "block",
-  textDecoration: "none",
-  color: "#111",
-  border: "1px solid #edf1ee",
-  borderRadius: 12,
-  background: "#fafcfb",
-  padding: "12px 14px",
-};
-
-const nextMatchDate: React.CSSProperties = {
-  fontWeight: 900,
-  fontSize: 20,
-  color: "#145c2a",
-};
-
-const nextMatchMeta: React.CSSProperties = {
-  marginTop: 6,
-  fontSize: 13,
-  color: "#666",
-  lineHeight: 1.6,
-};
-
-const emptyActionBox: React.CSSProperties = {
-  border: "1px solid #edf1ee",
-  borderRadius: 12,
-  background: "#fafcfb",
-  padding: "12px 14px",
-};
-
-const emptyActionRow: React.CSSProperties = {
-  marginTop: 10,
+const scheduleMainRow: React.CSSProperties = {
   display: "flex",
-  gap: 8,
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
   flexWrap: "wrap",
 };
 
-const mutedText: React.CSSProperties = {
+const schedulePrimaryText: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+  minWidth: 0,
+};
+
+const scheduleDateBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 28,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#ecfdf3",
+  color: "#166534",
   fontSize: 13,
-  color: "#666",
-  lineHeight: 1.7,
+  fontWeight: 900,
+  border: "1px solid #bbf7d0",
+};
+
+const scheduleTimeText: React.CSSProperties = {
+  fontSize: 15,
+  fontWeight: 900,
+  color: "#16391f",
+  lineHeight: 1.4,
+};
+
+const scheduleRoleBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 26,
+  padding: "0 9px",
+  borderRadius: 999,
+  background: "#eef6f0",
+  color: "#14532d",
+  fontSize: 12,
+  fontWeight: 900,
+  border: "1px solid #dce9df",
+};
+
+const scheduleMetaText: React.CSSProperties = {
+  fontSize: 13,
+  color: "#3b6a49",
+  lineHeight: 1.55,
+};
+
+const scheduleActionRowRight: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+  marginTop: 2,
+};
+
+const emptyScheduleText: React.CSSProperties = {
+  marginTop: 4,
+  fontSize: 13,
+  color: "#3b6a49",
+  lineHeight: 1.6,
 };
 
 const card: React.CSSProperties = {
