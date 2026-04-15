@@ -212,8 +212,16 @@ function isReadByOther(params: {
   }
 }
 
-function isDeletedMessage(m: Msg) {
-  return !!m.deleted_for_everyone || !!m.deleted_by_sender || !!m.deleted_at;
+function isDeletedForEveryone(m: Msg) {
+  return !!m.deleted_for_everyone || !!m.deleted_at;
+}
+
+function isDeletedOnlyForSender(m: Msg) {
+  return !!m.deleted_by_sender && !m.deleted_for_everyone;
+}
+
+function shouldHideForMe(m: Msg, meId: string) {
+  return m.sender_id === meId && isDeletedOnlyForSender(m);
 }
 
 export default function ChatThreadPage() {
@@ -267,12 +275,16 @@ export default function ChatThreadPage() {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const chatBodyRef = useRef<HTMLDivElement | null>(null);
 
+  const visibleMessages = useMemo(() => {
+    return messages.filter((m) => !shouldHideForMe(m, meId));
+  }, [messages, meId]);
+
   const canSend = useMemo(() => {
     return !!meId && !!threadId && isMember && text.trim().length > 0 && !sending;
   }, [meId, threadId, isMember, text, sending]);
 
   const lastMyMessageId = useMemo(() => {
-    const lastMyMessage = [...messages]
+    const lastMyMessage = [...visibleMessages]
       .filter((m) => m.sender_id === meId)
       .sort((a, b) => {
         const at = new Date(a.created_at ?? 0).getTime();
@@ -281,7 +293,7 @@ export default function ChatThreadPage() {
       })[0];
 
     return lastMyMessage?.id ?? "";
-  }, [messages, meId]);
+  }, [visibleMessages, meId]);
 
   const scrollToBottom = (smooth = true) => {
     requestAnimationFrame(() => {
@@ -372,17 +384,19 @@ export default function ChatThreadPage() {
   async function loadThreadMeta(currentMeId: string) {
     if (!currentMeId || !threadId) return;
 
-    const [{ data: memberRows, error: memberErr }, { data: ownedTeamsRows, error: ownedTeamsErr }] =
-      await Promise.all([
-        supabase
-          .from("chat_members")
-          .select("thread_id,user_id,team_id,last_read_at")
-          .eq("thread_id", threadId),
-        supabase
-          .from("teams")
-          .select("id,name,category")
-          .eq("owner_id", currentMeId),
-      ]);
+    const [
+      { data: memberRows, error: memberErr },
+      { data: ownedTeamsRows, error: ownedTeamsErr },
+    ] = await Promise.all([
+      supabase
+        .from("chat_members")
+        .select("thread_id,user_id,team_id,last_read_at")
+        .eq("thread_id", threadId),
+      supabase
+        .from("teams")
+        .select("id,name,category")
+        .eq("owner_id", currentMeId),
+    ]);
 
     if (memberErr) console.error(memberErr);
     if (ownedTeamsErr) console.error(ownedTeamsErr);
@@ -461,7 +475,7 @@ export default function ChatThreadPage() {
       }
     };
 
-    initAuth();
+    void initAuth();
 
     const {
       data: { subscription },
@@ -674,7 +688,9 @@ export default function ChatThreadPage() {
     setSending(true);
     setText("");
 
-    const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const optimisticId = `optimistic-${Date.now()}-${Math.random()
+      .toString(16)
+      .slice(2)}`;
 
     const optimistic: Msg = {
       id: optimisticId,
@@ -787,16 +803,13 @@ export default function ChatThreadPage() {
     setSending(false);
   };
 
-  const deleteMessage = async (messageId: string) => {
+  const deleteForMe = async (messageId: string) => {
     if (!messageId || isOptimisticMessageId(messageId)) return;
 
     const target = messages.find((m) => m.id === messageId);
     if (!target) return;
     if (target.sender_id !== meId) return;
-    if (isDeletedMessage(target)) return;
-
-    const ok = window.confirm("このメッセージを削除しますか？");
-    if (!ok) return;
+    if (isDeletedForEveryone(target) || isDeletedOnlyForSender(target)) return;
 
     setDeletingMessageId(messageId);
 
@@ -804,10 +817,54 @@ export default function ChatThreadPage() {
       const { error } = await supabase
         .from("chat_messages")
         .update({
+          deleted_by_sender: true,
+          updated_at: nowIso(),
+        })
+        .eq("id", messageId)
+        .eq("sender_id", meId);
+
+      if (error) throw error;
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? {
+                ...m,
+                deleted_by_sender: true,
+                updated_at: nowIso(),
+              }
+            : m
+        )
+      );
+    } catch (e: any) {
+      console.error("deleteForMe error:", e);
+      alert(`削除に失敗しました: ${e?.message ?? "unknown error"}`);
+    } finally {
+      setDeletingMessageId("");
+    }
+  };
+
+  const deleteForEveryone = async (messageId: string) => {
+    if (!messageId || isOptimisticMessageId(messageId)) return;
+
+    const target = messages.find((m) => m.id === messageId);
+    if (!target) return;
+    if (target.sender_id !== meId) return;
+    if (isDeletedForEveryone(target)) return;
+
+    setDeletingMessageId(messageId);
+
+    try {
+      const deletedAt = nowIso();
+
+      const { error } = await supabase
+        .from("chat_messages")
+        .update({
           body: "",
-          deleted_at: nowIso(),
+          deleted_at: deletedAt,
           deleted_by_sender: true,
           deleted_for_everyone: true,
+          updated_at: deletedAt,
         })
         .eq("id", messageId)
         .eq("sender_id", meId);
@@ -820,25 +877,52 @@ export default function ChatThreadPage() {
             ? {
                 ...m,
                 body: "",
-                deleted_at: nowIso(),
+                deleted_at: deletedAt,
                 deleted_by_sender: true,
                 deleted_for_everyone: true,
+                updated_at: deletedAt,
               }
             : m
         )
       );
     } catch (e: any) {
-      console.error("deleteMessage error:", e);
-      alert(`削除に失敗しました: ${e?.message ?? "unknown error"}`);
+      console.error("deleteForEveryone error:", e);
+      alert(`送信取消に失敗しました: ${e?.message ?? "unknown error"}`);
     } finally {
       setDeletingMessageId("");
+    }
+  };
+
+  const openDeleteMenu = async (messageId: string) => {
+    if (!messageId || deletingMessageId) return;
+
+    const target = messages.find((m) => m.id === messageId);
+    if (!target) return;
+    if (target.sender_id !== meId) return;
+    if (isOptimisticMessageId(target.id)) return;
+    if (isDeletedForEveryone(target) || isDeletedOnlyForSender(target)) return;
+
+    const choice = window.prompt(
+      "削除方法を選んでください。\n\n1: 自分だけ削除\n2: 送信取消（全員）\n\nキャンセル: 何もしない",
+      "1"
+    );
+
+    if (choice === "1") {
+      await deleteForMe(messageId);
+      return;
+    }
+
+    if (choice === "2") {
+      const ok = window.confirm("このメッセージを全員の画面から削除しますか？");
+      if (!ok) return;
+      await deleteForEveryone(messageId);
     }
   };
 
   const onKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
-      if (canSend) send();
+      if (canSend) void send();
     }
   };
 
@@ -929,17 +1013,17 @@ export default function ChatThreadPage() {
             </div>
           ) : null}
 
-          {!loading && isMember && messages.length === 0 ? (
+          {!loading && isMember && visibleMessages.length === 0 ? (
             <p style={{ color: "#666" }}>メッセージはまだありません</p>
           ) : null}
 
           <div style={messageList}>
-            {messages.map((m, i) => {
+            {visibleMessages.map((m, i) => {
               const mine = m.sender_id === meId;
               const optimistic = isOptimisticMessageId(m.id);
-              const prev = i > 0 ? messages[i - 1] : null;
+              const prev = i > 0 ? visibleMessages[i - 1] : null;
               const showDate = !prev || !sameDate(prev.created_at, m.created_at);
-              const deleted = isDeletedMessage(m);
+              const deletedForEveryone = isDeletedForEveryone(m);
 
               const isLatestMyMessage = mine && m.id === lastMyMessageId;
               const isRead = isReadByOther({
@@ -978,11 +1062,11 @@ export default function ChatThreadPage() {
                           ...bubbleBase,
                           ...(mine ? bubbleMine : bubbleOther),
                           ...(optimistic ? bubbleSending : null),
-                          ...(deleted ? bubbleDeleted : null),
+                          ...(deletedForEveryone ? bubbleDeleted : null),
                         }}
                       >
                         <div style={bubbleText}>
-                          {deleted
+                          {deletedForEveryone
                             ? "このメッセージは削除されました"
                             : m.body}
                         </div>
@@ -998,14 +1082,14 @@ export default function ChatThreadPage() {
                           {optimistic ? "送信中…" : formatBubbleTime(m.created_at)}
                         </span>
 
-                        {mine && !optimistic && !deleted ? (
+                        {mine && !optimistic && !deletedForEveryone ? (
                           <button
                             type="button"
-                            onClick={() => deleteMessage(m.id)}
+                            onClick={() => void openDeleteMenu(m.id)}
                             disabled={deletingMessageId === m.id}
                             style={deleteLinkBtn}
                           >
-                            {deletingMessageId === m.id ? "削除中…" : "削除"}
+                            {deletingMessageId === m.id ? "処理中…" : "削除"}
                           </button>
                         ) : null}
 
@@ -1045,7 +1129,7 @@ export default function ChatThreadPage() {
             <button
               className="sh-btn sh-btn--primary"
               type="button"
-              onClick={send}
+              onClick={() => void send()}
               disabled={!canSend}
               style={sendButton}
             >
