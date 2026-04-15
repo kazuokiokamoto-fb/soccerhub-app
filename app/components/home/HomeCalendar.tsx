@@ -379,14 +379,13 @@ export default function HomeCalendar(props: {
 
   const filteredTeams = useMemo(() => {
     if (!hasAnyActiveFilter) {
-      return allTeams.filter((team: any) => !myTeamIds.includes(team.id));
+      return allTeams;
     }
 
     return allTeams.filter((team: any) => {
-      if (myTeamIds.includes(team.id)) return false;
       return teamMatchesFilters(team, filters);
     });
-  }, [allTeams, myTeamIds, filters, hasAnyActiveFilter]);
+  }, [allTeams, filters, hasAnyActiveFilter]);
 
   const countByDate = useMemo(() => {
     const m = new Map<string, number>();

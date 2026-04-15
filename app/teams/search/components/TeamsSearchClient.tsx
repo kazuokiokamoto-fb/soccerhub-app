@@ -364,7 +364,7 @@ export default function TeamsSearchClient() {
         <section style={stickySummaryBox}>
           <div style={stickySummaryTopRow}>
             <div style={stickySummaryInline}>
-              <span style={stickySummaryMini}>現在のヒット件数</span>
+              <span style={stickySummaryMini}>対象チーム数</span>
               <span style={stickySummaryValue}>{filteredTeams.length}件</span>
             </div>
 
@@ -438,7 +438,7 @@ export default function TeamsSearchClient() {
           strengthGuides={STRENGTH_GUIDES}
           titleText="相手を探す"
           descriptionText="レベル・エリア・人数感などから相手チームを探せます。"
-          liveCountLabel="現在のヒット件数"
+          liveCountLabel="対象チーム数"
           liveCountText={`${filteredTeams.length}件`}
           hideFilterBadge={true}
           inlineHeaderActions={false}

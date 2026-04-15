@@ -109,7 +109,7 @@ export function TeamSearchFilterPanel({
             <div style={filterHeaderRow}>
               <div style={{ display: "grid", gap: 4 }}>
                 <h2 style={filterTitle}>検索条件</h2>
-                <div style={liveCountTitle}>現在のヒット件数 チーム数：{liveCount}件</div>
+                <div style={liveCountTitle}>対象チーム数：{liveCount}件</div>
                 <div style={liveCountSub}>
                   条件を変えるたびに、この件数がリアルタイムで変わります。
                 </div>
