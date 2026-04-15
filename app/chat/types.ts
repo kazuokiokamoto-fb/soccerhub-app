@@ -12,19 +12,18 @@ export type ChatMember = {
   user_id: string;
   role: string | null;
   created_at: string;
-
-  // ✅ 未読管理：このスレッドを最後に読んだ時刻
   last_read_at: string | null;
 };
 
 export type ChatMessage = {
   id: string;
   thread_id: string;
-
-  // ✅ ここを DB に合わせて統一
   sender_id: string;
   sender_team_id: string | null;
-
   body: string;
   created_at: string;
+  updated_at?: string | null;
+  deleted_at?: string | null;
+  deleted_by_sender?: boolean;
+  deleted_for_everyone?: boolean;
 };

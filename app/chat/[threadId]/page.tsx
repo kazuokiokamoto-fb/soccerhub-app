@@ -14,6 +14,10 @@ type Msg = {
   sender_team_id: string | null;
   body: string | null;
   created_at: string;
+  updated_at?: string | null;
+  deleted_at?: string | null;
+  deleted_by_sender?: boolean;
+  deleted_for_everyone?: boolean;
 };
 
 type TeamMini = {
@@ -208,6 +212,10 @@ function isReadByOther(params: {
   }
 }
 
+function isDeletedMessage(m: Msg) {
+  return !!m.deleted_for_everyone || !!m.deleted_by_sender || !!m.deleted_at;
+}
+
 export default function ChatThreadPage() {
   const params = useParams<{ threadId: string }>();
   const searchParams = useSearchParams();
@@ -248,6 +256,7 @@ export default function ChatThreadPage() {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string>("");
+  const [deletingMessageId, setDeletingMessageId] = useState<string>("");
 
   const [otherTeamName, setOtherTeamName] = useState<string>("相手チーム");
   const [otherTeamCategory, setOtherTeamCategory] = useState<string>("");
@@ -259,13 +268,7 @@ export default function ChatThreadPage() {
   const chatBodyRef = useRef<HTMLDivElement | null>(null);
 
   const canSend = useMemo(() => {
-    return (
-      !!meId &&
-      !!threadId &&
-      isMember &&
-      text.trim().length > 0 &&
-      !sending
-    );
+    return !!meId && !!threadId && isMember && text.trim().length > 0 && !sending;
   }, [meId, threadId, isMember, text, sending]);
 
   const lastMyMessageId = useMemo(() => {
@@ -369,30 +372,22 @@ export default function ChatThreadPage() {
   async function loadThreadMeta(currentMeId: string) {
     if (!currentMeId || !threadId) return;
 
-    const [
-      { data: memberRows, error: memberErr },
-      { data: ownedTeamsRows, error: ownedTeamsErr },
-    ] = await Promise.all([
-      supabase
-        .from("chat_members")
-        .select("thread_id,user_id,team_id,last_read_at")
-        .eq("thread_id", threadId),
-      supabase
-        .from("teams")
-        .select("id,name,category")
-        .eq("owner_id", currentMeId),
-    ]);
+    const [{ data: memberRows, error: memberErr }, { data: ownedTeamsRows, error: ownedTeamsErr }] =
+      await Promise.all([
+        supabase
+          .from("chat_members")
+          .select("thread_id,user_id,team_id,last_read_at")
+          .eq("thread_id", threadId),
+        supabase
+          .from("teams")
+          .select("id,name,category")
+          .eq("owner_id", currentMeId),
+      ]);
 
-    if (memberErr) {
-      console.error(memberErr);
-    }
-    if (ownedTeamsErr) {
-      console.error(ownedTeamsErr);
-    }
+    if (memberErr) console.error(memberErr);
+    if (ownedTeamsErr) console.error(ownedTeamsErr);
 
-    const typedMemberRows = ((memberRows ?? []) as ChatMemberRow[]).filter(
-      Boolean
-    );
+    const typedMemberRows = ((memberRows ?? []) as ChatMemberRow[]).filter(Boolean);
     const ownedTeams = ((ownedTeamsRows ?? []) as TeamMini[]).filter(Boolean);
 
     setMemberRowsState(typedMemberRows);
@@ -407,13 +402,10 @@ export default function ChatThreadPage() {
 
     const ownedTeamIds = new Set(ownedTeams.map((t) => t.id).filter(Boolean));
 
-    const teamIds = typedMemberRows
-      .map((r) => r.team_id as string)
-      .filter(Boolean);
+    const teamIds = typedMemberRows.map((r) => r.team_id as string).filter(Boolean);
 
     const otherMemberRow =
-      typedMemberRows.find((r) => r.user_id && r.user_id !== currentMeId) ??
-      null;
+      typedMemberRows.find((r) => r.user_id && r.user_id !== currentMeId) ?? null;
 
     const otherUserIdValue = otherMemberRow?.user_id ?? "";
     setOtherUserId(otherUserIdValue);
@@ -433,16 +425,12 @@ export default function ChatThreadPage() {
         .eq("id", resolvedOtherTeamId)
         .maybeSingle();
 
-      if (teamErr) {
-        console.error(teamErr);
-      }
+      if (teamErr) console.error(teamErr);
 
       if (teamRow) {
         const team = teamRow as TeamMini;
         setOtherTeamName(team.name ?? "相手チーム");
-        setOtherTeamCategory(
-          categoryLabel(team.category) || team.category || ""
-        );
+        setOtherTeamCategory(categoryLabel(team.category) || team.category || "");
       } else {
         setOtherTeamName("相手チーム");
         setOtherTeamCategory("");
@@ -469,9 +457,7 @@ export default function ChatThreadPage() {
         if (!mounted) return;
         setMeId("");
       } finally {
-        if (mounted) {
-          setAuthLoading(false);
-        }
+        if (mounted) setAuthLoading(false);
       }
     };
 
@@ -546,7 +532,9 @@ export default function ChatThreadPage() {
 
       const { data, error } = await supabase
         .from("chat_messages")
-        .select("id,thread_id,sender_id,sender_team_id,body,created_at")
+        .select(
+          "id,thread_id,sender_id,sender_team_id,body,created_at,updated_at,deleted_at,deleted_by_sender,deleted_for_everyone"
+        )
         .eq("thread_id", threadId)
         .order("created_at", { ascending: true });
 
@@ -584,40 +572,49 @@ export default function ChatThreadPage() {
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
           table: "chat_messages",
           filter: `thread_id=eq.${threadId}`,
         },
         async (payload) => {
-          const row = payload.new as Msg;
+          if (payload.eventType === "INSERT") {
+            const row = payload.new as Msg;
 
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === row.id)) {
-              return prev.filter((m) => !String(m.id).startsWith("optimistic-"));
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === row.id)) {
+                return prev.filter((m) => !String(m.id).startsWith("optimistic-"));
+              }
+
+              const withoutOptimistic = prev.filter(
+                (m) =>
+                  !(
+                    m.sender_id === row.sender_id &&
+                    m.body === row.body &&
+                    String(m.id).startsWith("optimistic-")
+                  )
+              );
+
+              return [...withoutOptimistic, row].sort((a, b) =>
+                a.created_at > b.created_at ? 1 : -1
+              );
+            });
+
+            requestAnimationFrame(() => {
+              scrollToBottom(true);
+            });
+
+            if (row.sender_id && row.sender_id !== meId) {
+              notifyIncomingMessage(row.body);
+              await markRead();
             }
+          }
 
-            const withoutOptimistic = prev.filter(
-              (m) =>
-                !(
-                  m.sender_id === row.sender_id &&
-                  m.body === row.body &&
-                  String(m.id).startsWith("optimistic-")
-                )
+          if (payload.eventType === "UPDATE") {
+            const row = payload.new as Msg;
+            setMessages((prev) =>
+              prev.map((m) => (m.id === row.id ? { ...m, ...row } : m))
             );
-
-            return [...withoutOptimistic, row].sort((a, b) =>
-              a.created_at > b.created_at ? 1 : -1
-            );
-          });
-
-          requestAnimationFrame(() => {
-            scrollToBottom(true);
-          });
-
-          if (row.sender_id && row.sender_id !== meId) {
-            notifyIncomingMessage(row.body);
-            await markRead();
           }
         }
       )
@@ -677,9 +674,7 @@ export default function ChatThreadPage() {
     setSending(true);
     setText("");
 
-    const optimisticId = `optimistic-${Date.now()}-${Math.random()
-      .toString(16)
-      .slice(2)}`;
+    const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
     const optimistic: Msg = {
       id: optimisticId,
@@ -688,6 +683,9 @@ export default function ChatThreadPage() {
       sender_team_id: resolvedSendTeamId,
       body,
       created_at: nowIso(),
+      deleted_at: null,
+      deleted_by_sender: false,
+      deleted_for_everyone: false,
     };
 
     setMessages((prev) => [...prev, optimistic]);
@@ -706,7 +704,9 @@ export default function ChatThreadPage() {
     const { data, error } = await supabase
       .from("chat_messages")
       .insert(payload)
-      .select("id,thread_id,sender_id,sender_team_id,body,created_at")
+      .select(
+        "id,thread_id,sender_id,sender_team_id,body,created_at,updated_at,deleted_at,deleted_by_sender,deleted_for_everyone"
+      )
       .single();
 
     if (error) {
@@ -737,8 +737,7 @@ export default function ChatThreadPage() {
 
     if (otherUserId) {
       const notificationTitle = "新着チャット";
-      const notificationBody =
-        body.length > 40 ? `${body.slice(0, 40)}…` : body;
+      const notificationBody = body.length > 40 ? `${body.slice(0, 40)}…` : body;
 
       const notificationUrl = `/chat/${threadId}${
         carriedQueryString ? `?${carriedQueryString}` : ""
@@ -786,6 +785,54 @@ export default function ChatThreadPage() {
 
     await markRead();
     setSending(false);
+  };
+
+  const deleteMessage = async (messageId: string) => {
+    if (!messageId || isOptimisticMessageId(messageId)) return;
+
+    const target = messages.find((m) => m.id === messageId);
+    if (!target) return;
+    if (target.sender_id !== meId) return;
+    if (isDeletedMessage(target)) return;
+
+    const ok = window.confirm("このメッセージを削除しますか？");
+    if (!ok) return;
+
+    setDeletingMessageId(messageId);
+
+    try {
+      const { error } = await supabase
+        .from("chat_messages")
+        .update({
+          body: "",
+          deleted_at: nowIso(),
+          deleted_by_sender: true,
+          deleted_for_everyone: true,
+        })
+        .eq("id", messageId)
+        .eq("sender_id", meId);
+
+      if (error) throw error;
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? {
+                ...m,
+                body: "",
+                deleted_at: nowIso(),
+                deleted_by_sender: true,
+                deleted_for_everyone: true,
+              }
+            : m
+        )
+      );
+    } catch (e: any) {
+      console.error("deleteMessage error:", e);
+      alert(`削除に失敗しました: ${e?.message ?? "unknown error"}`);
+    } finally {
+      setDeletingMessageId("");
+    }
   };
 
   const onKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
@@ -838,9 +885,7 @@ export default function ChatThreadPage() {
 
             <div style={titleWrap}>
               <div style={threadTitle}>{otherTeamName}</div>
-              <div style={threadSubTitle}>
-                {otherTeamCategory || "チャット"}
-              </div>
+              <div style={threadSubTitle}>{otherTeamCategory || "チャット"}</div>
             </div>
           </div>
 
@@ -894,6 +939,7 @@ export default function ChatThreadPage() {
               const optimistic = isOptimisticMessageId(m.id);
               const prev = i > 0 ? messages[i - 1] : null;
               const showDate = !prev || !sameDate(prev.created_at, m.created_at);
+              const deleted = isDeletedMessage(m);
 
               const isLatestMyMessage = mine && m.id === lastMyMessageId;
               const isRead = isReadByOther({
@@ -925,18 +971,21 @@ export default function ChatThreadPage() {
                         alignItems: mine ? "flex-end" : "flex-start",
                       }}
                     >
-                      {!mine ? (
-                        <div style={senderName}>{otherTeamName}</div>
-                      ) : null}
+                      {!mine ? <div style={senderName}>{otherTeamName}</div> : null}
 
                       <div
                         style={{
                           ...bubbleBase,
                           ...(mine ? bubbleMine : bubbleOther),
                           ...(optimistic ? bubbleSending : null),
+                          ...(deleted ? bubbleDeleted : null),
                         }}
                       >
-                        <div style={bubbleText}>{m.body}</div>
+                        <div style={bubbleText}>
+                          {deleted
+                            ? "このメッセージは削除されました"
+                            : m.body}
+                        </div>
                       </div>
 
                       <div
@@ -948,6 +997,17 @@ export default function ChatThreadPage() {
                         <span>
                           {optimistic ? "送信中…" : formatBubbleTime(m.created_at)}
                         </span>
+
+                        {mine && !optimistic && !deleted ? (
+                          <button
+                            type="button"
+                            onClick={() => deleteMessage(m.id)}
+                            disabled={deletingMessageId === m.id}
+                            style={deleteLinkBtn}
+                          >
+                            {deletingMessageId === m.id ? "削除中…" : "削除"}
+                          </button>
+                        ) : null}
 
                         {isLatestMyMessage ? (
                           <span style={readStateText}>
@@ -970,9 +1030,7 @@ export default function ChatThreadPage() {
         </div>
 
         <div style={inputArea}>
-          {sendError ? (
-            <div style={sendErrorText}>送信エラー: {sendError}</div>
-          ) : null}
+          {sendError ? <div style={sendErrorText}>送信エラー: {sendError}</div> : null}
 
           <div style={inputRow}>
             <textarea
@@ -1189,6 +1247,13 @@ const bubbleSending: React.CSSProperties = {
   opacity: 0.7,
 };
 
+const bubbleDeleted: React.CSSProperties = {
+  background: "#f3f4f6",
+  color: "#6b7280",
+  border: "1px solid #e5e7eb",
+  fontStyle: "italic",
+};
+
 const bubbleText: React.CSSProperties = {
   lineHeight: 1.7,
 };
@@ -1200,12 +1265,23 @@ const bubbleMeta: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 6,
+  flexWrap: "wrap",
 };
 
 const readStateText: React.CSSProperties = {
   fontSize: 11,
   color: "#4b5563",
   fontWeight: 700,
+};
+
+const deleteLinkBtn: React.CSSProperties = {
+  border: "none",
+  background: "transparent",
+  color: "#991b1b",
+  fontSize: 11,
+  fontWeight: 700,
+  cursor: "pointer",
+  padding: 0,
 };
 
 const inputArea: React.CSSProperties = {
