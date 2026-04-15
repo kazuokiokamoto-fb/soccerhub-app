@@ -272,6 +272,9 @@ export default function ChatThreadPage() {
   const [notificationPermission, setNotificationPermission] =
     useState<NotificationPermission | "unsupported">("default");
 
+  const [actionSheetMessageId, setActionSheetMessageId] = useState<string>("");
+  const longPressTimerRef = useRef<number | null>(null);
+
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const chatBodyRef = useRef<HTMLDivElement | null>(null);
 
@@ -313,6 +316,29 @@ export default function ChatThreadPage() {
       }
     });
   };
+
+  function clearLongPressTimer() {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }
+
+  function canOpenActionSheet(m: Msg) {
+    if (m.sender_id !== meId) return false;
+    if (isOptimisticMessageId(m.id)) return false;
+    if (isDeletedForEveryone(m) || isDeletedOnlyForSender(m)) return false;
+    if (deletingMessageId) return false;
+    return true;
+  }
+
+  function startLongPress(messageId: string) {
+    clearLongPressTimer();
+    longPressTimerRef.current = window.setTimeout(() => {
+      setActionSheetMessageId(messageId);
+      longPressTimerRef.current = null;
+    }, 450);
+  }
 
   async function refreshUnifiedBadge() {
     if (!meId) return;
@@ -415,7 +441,6 @@ export default function ChatThreadPage() {
     setMyTeamId(resolvedMyTeamId);
 
     const ownedTeamIds = new Set(ownedTeams.map((t) => t.id).filter(Boolean));
-
     const teamIds = typedMemberRows.map((r) => r.team_id as string).filter(Boolean);
 
     const otherMemberRow =
@@ -660,6 +685,12 @@ export default function ChatThreadPage() {
     };
   }, [authLoading, meId, threadId, isMember, otherTeamName]);
 
+  useEffect(() => {
+    return () => {
+      clearLongPressTimer();
+    };
+  }, []);
+
   const send = async () => {
     setSendError("");
 
@@ -814,11 +845,13 @@ export default function ChatThreadPage() {
     setDeletingMessageId(messageId);
 
     try {
+      const updatedAt = nowIso();
+
       const { error } = await supabase
         .from("chat_messages")
         .update({
           deleted_by_sender: true,
-          updated_at: nowIso(),
+          updated_at: updatedAt,
         })
         .eq("id", messageId)
         .eq("sender_id", meId);
@@ -831,11 +864,13 @@ export default function ChatThreadPage() {
             ? {
                 ...m,
                 deleted_by_sender: true,
-                updated_at: nowIso(),
+                updated_at: updatedAt,
               }
             : m
         )
       );
+
+      setActionSheetMessageId("");
     } catch (e: any) {
       console.error("deleteForMe error:", e);
       alert(`削除に失敗しました: ${e?.message ?? "unknown error"}`);
@@ -885,37 +920,13 @@ export default function ChatThreadPage() {
             : m
         )
       );
+
+      setActionSheetMessageId("");
     } catch (e: any) {
       console.error("deleteForEveryone error:", e);
       alert(`送信取消に失敗しました: ${e?.message ?? "unknown error"}`);
     } finally {
       setDeletingMessageId("");
-    }
-  };
-
-  const openDeleteMenu = async (messageId: string) => {
-    if (!messageId || deletingMessageId) return;
-
-    const target = messages.find((m) => m.id === messageId);
-    if (!target) return;
-    if (target.sender_id !== meId) return;
-    if (isOptimisticMessageId(target.id)) return;
-    if (isDeletedForEveryone(target) || isDeletedOnlyForSender(target)) return;
-
-    const choice = window.prompt(
-      "削除方法を選んでください。\n\n1: 自分だけ削除\n2: 送信取消（全員）\n\nキャンセル: 何もしない",
-      "1"
-    );
-
-    if (choice === "1") {
-      await deleteForMe(messageId);
-      return;
-    }
-
-    if (choice === "2") {
-      const ok = window.confirm("このメッセージを全員の画面から削除しますか？");
-      if (!ok) return;
-      await deleteForEveryone(messageId);
     }
   };
 
@@ -1024,6 +1035,7 @@ export default function ChatThreadPage() {
               const prev = i > 0 ? visibleMessages[i - 1] : null;
               const showDate = !prev || !sameDate(prev.created_at, m.created_at);
               const deletedForEveryone = isDeletedForEveryone(m);
+              const canAction = canOpenActionSheet(m);
 
               const isLatestMyMessage = mine && m.id === lastMyMessageId;
               const isRead = isReadByOther({
@@ -1058,11 +1070,41 @@ export default function ChatThreadPage() {
                       {!mine ? <div style={senderName}>{otherTeamName}</div> : null}
 
                       <div
+                        role={canAction ? "button" : undefined}
+                        tabIndex={canAction ? 0 : -1}
+                        onContextMenu={
+                          canAction
+                            ? (e) => {
+                                e.preventDefault();
+                                setActionSheetMessageId(m.id);
+                              }
+                            : undefined
+                        }
+                        onTouchStart={
+                          canAction
+                            ? () => {
+                                startLongPress(m.id);
+                              }
+                            : undefined
+                        }
+                        onTouchEnd={canAction ? clearLongPressTimer : undefined}
+                        onTouchMove={canAction ? clearLongPressTimer : undefined}
+                        onTouchCancel={canAction ? clearLongPressTimer : undefined}
+                        onMouseDown={
+                          canAction
+                            ? () => {
+                                startLongPress(m.id);
+                              }
+                            : undefined
+                        }
+                        onMouseUp={canAction ? clearLongPressTimer : undefined}
+                        onMouseLeave={canAction ? clearLongPressTimer : undefined}
                         style={{
                           ...bubbleBase,
                           ...(mine ? bubbleMine : bubbleOther),
                           ...(optimistic ? bubbleSending : null),
                           ...(deletedForEveryone ? bubbleDeleted : null),
+                          ...(canAction ? bubbleActionable : null),
                         }}
                       >
                         <div style={bubbleText}>
@@ -1081,17 +1123,6 @@ export default function ChatThreadPage() {
                         <span>
                           {optimistic ? "送信中…" : formatBubbleTime(m.created_at)}
                         </span>
-
-                        {mine && !optimistic && !deletedForEveryone ? (
-                          <button
-                            type="button"
-                            onClick={() => void openDeleteMenu(m.id)}
-                            disabled={deletingMessageId === m.id}
-                            style={deleteLinkBtn}
-                          >
-                            {deletingMessageId === m.id ? "処理中…" : "削除"}
-                          </button>
-                        ) : null}
 
                         {isLatestMyMessage ? (
                           <span style={readStateText}>
@@ -1142,6 +1173,50 @@ export default function ChatThreadPage() {
           </div>
         </div>
       </section>
+
+      {actionSheetMessageId ? (
+        <>
+          <div
+            style={sheetBackdrop}
+            onClick={() => setActionSheetMessageId("")}
+          />
+
+          <div style={sheetWrap}>
+            <div style={sheetPanel}>
+              <button
+                type="button"
+                style={sheetDangerButton}
+                onClick={() => void deleteForEveryone(actionSheetMessageId)}
+                disabled={!!deletingMessageId}
+              >
+                {deletingMessageId === actionSheetMessageId
+                  ? "処理中…"
+                  : "送信取消（全員）"}
+              </button>
+
+              <button
+                type="button"
+                style={sheetButton}
+                onClick={() => void deleteForMe(actionSheetMessageId)}
+                disabled={!!deletingMessageId}
+              >
+                {deletingMessageId === actionSheetMessageId
+                  ? "処理中…"
+                  : "自分だけ削除"}
+              </button>
+
+              <button
+                type="button"
+                style={sheetCancelButton}
+                onClick={() => setActionSheetMessageId("")}
+                disabled={!!deletingMessageId}
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
     </main>
   );
 }
@@ -1338,6 +1413,12 @@ const bubbleDeleted: React.CSSProperties = {
   fontStyle: "italic",
 };
 
+const bubbleActionable: React.CSSProperties = {
+  cursor: "pointer",
+  WebkitTouchCallout: "none",
+  userSelect: "none",
+};
+
 const bubbleText: React.CSSProperties = {
   lineHeight: 1.7,
 };
@@ -1356,16 +1437,6 @@ const readStateText: React.CSSProperties = {
   fontSize: 11,
   color: "#4b5563",
   fontWeight: 700,
-};
-
-const deleteLinkBtn: React.CSSProperties = {
-  border: "none",
-  background: "transparent",
-  color: "#991b1b",
-  fontSize: 11,
-  fontWeight: 700,
-  cursor: "pointer",
-  padding: 0,
 };
 
 const inputArea: React.CSSProperties = {
@@ -1410,4 +1481,68 @@ const sendErrorText: React.CSSProperties = {
   color: "#991b1b",
   fontSize: 12,
   whiteSpace: "pre-wrap",
+};
+
+const sheetBackdrop: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.28)",
+  zIndex: 1000,
+};
+
+const sheetWrap: React.CSSProperties = {
+  position: "fixed",
+  left: 0,
+  right: 0,
+  bottom: 0,
+  zIndex: 1001,
+  padding: 12,
+};
+
+const sheetPanel: React.CSSProperties = {
+  maxWidth: 720,
+  margin: "0 auto",
+  background: "#f3f4f6",
+  borderRadius: 18,
+  overflow: "hidden",
+  boxShadow: "0 -8px 30px rgba(0,0,0,0.18)",
+  display: "grid",
+  gap: 8,
+  padding: 8,
+};
+
+const sheetButton: React.CSSProperties = {
+  width: "100%",
+  minHeight: 54,
+  border: "none",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#111827",
+  fontSize: 17,
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const sheetDangerButton: React.CSSProperties = {
+  width: "100%",
+  minHeight: 54,
+  border: "none",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#dc2626",
+  fontSize: 17,
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const sheetCancelButton: React.CSSProperties = {
+  width: "100%",
+  minHeight: 54,
+  border: "none",
+  borderRadius: 14,
+  background: "#ffffff",
+  color: "#111827",
+  fontSize: 17,
+  fontWeight: 900,
+  cursor: "pointer",
 };
