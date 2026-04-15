@@ -263,10 +263,10 @@ const topHeadLeft: React.CSSProperties = {
 };
 
 const topTitle: React.CSSProperties = {
-  fontSize: 22,
+  fontSize: 20,
   fontWeight: 900,
   color: "#16391f",
-  lineHeight: 1.3,
+  lineHeight: 1.25,
 };
 
 const summaryBar: React.CSSProperties = {
@@ -274,7 +274,7 @@ const summaryBar: React.CSSProperties = {
   marginBottom: 12,
   padding: "14px 16px",
   borderRadius: 14,
-  background: "#eef6f0",
+  background: "#f7fbf8",
   border: "1px solid #dce9df",
   display: "flex",
   justifyContent: "space-between",
@@ -284,10 +284,9 @@ const summaryBar: React.CSSProperties = {
 };
 
 const summaryLeft: React.CSSProperties = {
-  fontSize: 14,
-  fontWeight: 800,
-  color: "#2f5d3a",
-  lineHeight: 1.7,
+  fontSize: 13,
+  color: "#3b6a49",
+  lineHeight: 1.55,
 };
 
 const summaryRight: React.CSSProperties = {

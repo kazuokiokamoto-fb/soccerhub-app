@@ -1236,7 +1236,7 @@ export default function HomeCalendar(props: {
                     className="sh-btn sh-btn--primary"
                     onClick={openMySchedulePage}
                   >
-                    一覧
+                    予定一覧
                   </button>
                 ) : null}
               </div>
