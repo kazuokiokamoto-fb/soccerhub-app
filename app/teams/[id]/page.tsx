@@ -41,8 +41,10 @@ function levelToRank(level?: number | null) {
 }
 
 function teamStrengthLabel(team: TeamRow) {
-  if (team.strength_rank) return team.strength_rank;
-  return levelToRank(team.level);
+  if (team.strength_rank && String(team.strength_rank).trim()) {
+    return String(team.strength_rank).trim();
+  }
+  return levelToRank(team.level) || "未設定";
 }
 
 function teamCategories(team: TeamRow) {
@@ -53,6 +55,60 @@ function teamCategories(team: TeamRow) {
     return [team.category];
   }
   return [];
+}
+
+function teamAreaText(team: TeamRow) {
+  const joined = [team.prefecture, team.city, team.town]
+    .filter(Boolean)
+    .join("・");
+
+  return joined || team.area || "未設定";
+}
+
+function transportationText(team: TeamRow) {
+  const items: string[] = [];
+  items.push(team.has_ground ? "グラウンドあり" : "グラウンドなし");
+
+  const bike = String(team.bike_parking ?? "").trim();
+  const cap = String(team.bike_parking_capacity ?? "").trim();
+
+  if (bike) {
+    items.push(cap ? `駐輪場 ${bike} / ${cap}` : `駐輪場 ${bike}`);
+  }
+
+  return items.join(" / ") || "未設定";
+}
+
+function uniformText(team: TeamRow) {
+  return [team.uniform_main, team.uniform_sub].filter(Boolean).join(" / ") || "未設定";
+}
+
+function buildGeminiPrompt(team: TeamRow) {
+  const categoryText =
+    teamCategories(team).length > 0
+      ? teamCategories(team)
+          .map((v) => categoryLabel(v) || v)
+          .join(" / ")
+      : "未設定";
+
+  return `少年サッカー・キッズサッカーのチーム情報を調べたいです。
+以下の条件をもとに、日本語で簡潔に整理してください。
+
+チーム名: ${team.name ?? "未設定"}
+カテゴリ: ${categoryText}
+活動エリア: ${teamAreaText(team)}
+強さ: ${teamStrengthLabel(team)}
+交通手段・受入情報: ${transportationText(team)}
+所属人数: ${team.member_count ?? "未設定"}
+ユニフォーム: ${uniformText(team)}
+
+知りたいこと:
+・このチームがどんなチームか
+・このカテゴリでの活動傾向
+・対戦前に確認すると良いこと
+・一般的に想定されるレベル感や特徴
+
+不明な情報は推測しすぎず、「不明」と明記してください。`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -118,6 +174,7 @@ export default function TeamDetailPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [team, setTeam] = useState<TeamRow | null>(null);
+  const [chatLoading, setChatLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -203,6 +260,72 @@ export default function TeamDetailPage() {
 
   const mine = !!myUserId && !!team && team.owner_id === myUserId;
   const categories = team ? teamCategories(team) : [];
+  const canOpenChat = !!team && !!myUserId && !mine;
+
+  const openChat = async () => {
+    try {
+      if (!myUserId) {
+        window.location.href = "/login";
+        return;
+      }
+
+      if (!team?.id) return;
+
+      if (team.owner_id === myUserId) {
+        alert("自分のチームにはチャットできません");
+        return;
+      }
+
+      setChatLoading(true);
+
+      const { data: myTeams, error: myTeamsError } = await supabase
+        .from("teams")
+        .select("id")
+        .eq("owner_id", myUserId)
+        .limit(1);
+
+      if (myTeamsError) throw myTeamsError;
+
+      const myTeamId = myTeams?.[0]?.id;
+      if (!myTeamId) {
+        alert("先に自分のチームを登録してください");
+        window.location.href = "/teams/new";
+        return;
+      }
+
+      const { data: threadId, error: threadError } = await supabase.rpc(
+        "rpc_get_or_create_dm_thread",
+        {
+          my_team_id: myTeamId,
+          other_team_id: team.id,
+        }
+      );
+
+      if (threadError) throw threadError;
+      if (!threadId) throw new Error("チャットスレッドを作成できませんでした");
+
+      window.location.href = `/chat/${threadId}?from=team-detail`;
+    } catch (e: any) {
+      console.error("[team detail] open chat error:", e);
+      alert(`チャットを開けませんでした: ${e?.message ?? "unknown error"}`);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const openGeminiSearch = async () => {
+    if (!team) return;
+
+    const prompt = buildGeminiPrompt(team);
+
+    try {
+      await navigator.clipboard.writeText(prompt);
+      alert("Gemini用の検索文をコピーしました。Geminiに貼り付けてください。");
+    } catch (e) {
+      console.error("[team detail] copy gemini prompt error:", e);
+      window.prompt("この検索文をコピーしてGeminiに貼り付けてください。", prompt);
+    }
+  };
 
   return (
     <main style={{ maxWidth: 980, margin: "0 auto", padding: 16 }}>
@@ -243,65 +366,92 @@ export default function TeamDetailPage() {
           </div>
         </div>
       ) : !team ? (
-        <div style={emptyBox}>
-          チームが見つかりませんでした。
-        </div>
+        <div style={emptyBox}>チームが見つかりませんでした。</div>
       ) : (
-        <section style={card}>
-          <div style={headRow}>
-            <div style={titleWrap}>
-              <div style={teamName}>{team.name || "チーム名未設定"}</div>
-              {mine ? <span style={mineBadge}>自分のチーム</span> : null}
+        <>
+          <section style={card}>
+            <div style={headRow}>
+              <div style={titleWrap}>
+                <div style={teamName}>{team.name || "チーム名未設定"}</div>
+                {mine ? <span style={mineBadge}>自分のチーム</span> : null}
+              </div>
+
+              <div style={rankBadge}>強さ {teamStrengthLabel(team)}</div>
             </div>
 
-            <div style={rankBadge}>
-              強さ {teamStrengthLabel(team) || "未設定"}
-            </div>
-          </div>
+            <div style={metaGrid}>
+              <div style={metaRow}>
+                <strong>カテゴリ：</strong>
+                {categories.length > 0
+                  ? categories.map((v) => categoryLabel(v) || v).join(" / ")
+                  : "未設定"}
+              </div>
 
-          <div style={metaGrid}>
-            <div style={metaRow}>
-              <strong>カテゴリ：</strong>
-              {categories.length > 0
-                ? categories.map((v) => categoryLabel(v) || v).join(" / ")
-                : "未設定"}
-            </div>
+              <div style={metaRow}>
+                <strong>エリア：</strong>
+                {teamAreaText(team)}
+              </div>
 
-            <div style={metaRow}>
-              <strong>エリア：</strong>
-              {[team.prefecture, team.city, team.town].filter(Boolean).join("・") ||
-                team.area ||
-                "未設定"}
-            </div>
+              <div style={metaRow}>
+                <strong>グラウンド：</strong>
+                {team.has_ground ? "あり" : "なし"}
+              </div>
 
-            <div style={metaRow}>
-              <strong>グラウンド：</strong>
-              {team.has_ground ? "あり" : "なし"}
-            </div>
+              <div style={metaRow}>
+                <strong>駐輪場：</strong>
+                {team.bike_parking || "不明"}
+                {team.bike_parking_capacity ? ` / ${team.bike_parking_capacity}` : ""}
+              </div>
 
-            <div style={metaRow}>
-              <strong>駐輪場：</strong>
-              {team.bike_parking || "不明"}
-              {team.bike_parking_capacity ? ` / ${team.bike_parking_capacity}` : ""}
-            </div>
+              <div style={metaRow}>
+                <strong>所属人数：</strong>
+                {team.member_count ?? "未設定"}
+              </div>
 
-            <div style={metaRow}>
-              <strong>所属人数：</strong>
-              {team.member_count ?? "未設定"}
-            </div>
+              <div style={metaRow}>
+                <strong>ユニフォーム：</strong>
+                {uniformText(team)}
+              </div>
 
-            <div style={metaRow}>
-              <strong>ユニフォーム：</strong>
-              {[team.uniform_main, team.uniform_sub].filter(Boolean).join(" / ") ||
-                "未設定"}
-            </div>
+              <div style={metaRow}>
+                <strong>メモ：</strong>
+                {team.note || "未設定"}
+              </div>
 
-            <div style={metaRow}>
-              <strong>メモ：</strong>
-              {team.note || "未設定"}
+              {!mine ? (
+                <div style={geminiBox}>
+                  <div style={geminiTitle}>Geminiによるチーム情報</div>
+                  <div style={geminiText}>
+                    Gemini用の検索文を確認してからコピーできます。
+                  </div>
+
+                  <div style={{ marginTop: 10 }}>
+                    <button
+                      type="button"
+                      className="sh-btn"
+                      onClick={openGeminiSearch}
+                    >
+                      Geminiでこのチームを調べる
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
-          </div>
-        </section>
+          </section>
+
+          {!mine ? (
+            <div style={bottomActionRow}>
+              <button
+                type="button"
+                className="sh-btn sh-btn--primary"
+                onClick={openChat}
+                disabled={!canOpenChat || chatLoading}
+              >
+                {chatLoading ? "チャット準備中…" : "チャットで連絡"}
+              </button>
+            </div>
+          ) : null}
+        </>
       )}
     </main>
   );
@@ -415,4 +565,30 @@ const metaRow: React.CSSProperties = {
   color: "#374151",
   lineHeight: 1.8,
   fontSize: 15,
+};
+
+const geminiBox: React.CSSProperties = {
+  marginTop: 8,
+  paddingTop: 12,
+  display: "grid",
+  gap: 6,
+};
+
+const geminiTitle: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 800,
+  color: "#6b7280",
+  lineHeight: 1.4,
+};
+
+const geminiText: React.CSSProperties = {
+  fontSize: 15,
+  color: "#374151",
+  lineHeight: 1.8,
+};
+
+const bottomActionRow: React.CSSProperties = {
+  marginTop: 20,
+  display: "flex",
+  justifyContent: "flex-end",
 };
