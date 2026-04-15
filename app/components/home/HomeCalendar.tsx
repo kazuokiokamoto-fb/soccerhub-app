@@ -1140,7 +1140,7 @@ export default function HomeCalendar(props: {
   );
 
   const totalTeamCountText = useMemo(() => {
-    return `チーム総数：${allTeams.length}件`;
+    return `登録チーム総数：${allTeams.length}件`;
   }, [allTeams.length]);
 
   const totalOpenSlotCountText = useMemo(() => {
