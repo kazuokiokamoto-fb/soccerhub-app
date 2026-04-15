@@ -8,13 +8,7 @@ import { useAuth } from "@/app/lib/auth";
 import { categoryLabel } from "@/app/lib/categories";
 import TeamProfileCard, {
   TeamProfileCardRow,
-  teamAreaText,
-  teamStrengthLabel,
-  teamStrengthShortDescription,
-  uniformText,
 } from "@/app/teams/components/TeamProfileCard";
-import { MatchHelpModals } from "@/app/match/components/MatchHelpModals";
-import { STRENGTH_GUIDES } from "@/app/match/constants/strengthGuides";
 
 type SlotRow = {
   id: string;
@@ -96,30 +90,6 @@ function buildGroundLabel(params: {
   return String(slot?.area_text ?? slot?.area ?? "未設定");
 }
 
-function buildGeminiPrompt(params: {
-  team: TeamRow | null | undefined;
-  categoryText: string;
-}) {
-  return `少年サッカー・キッズサッカーの対戦相手チームについて調べたいです。
-以下の条件をもとに、日本語で簡潔に整理してください。
-
-チーム名: ${params.team?.name ?? "未設定"}
-カテゴリ: ${params.categoryText}
-活動エリア: ${teamAreaText(params.team)}
-強さ: ${teamStrengthLabel(params.team)}
-強さの目安: ${teamStrengthShortDescription(params.team)}
-所属人数: ${params.team?.member_count ?? "未設定"}
-ユニフォーム: ${uniformText(params.team)}
-
-知りたいこと:
-・このチームがどんなチームか
-・このカテゴリでの活動傾向
-・対戦前に確認すると良いこと
-・一般的に想定されるレベル感や特徴
-
-不明な情報は推測しすぎず、「不明」と明記してください。`;
-}
-
 export default function MatchDetailPage() {
   const params = useParams();
   const { user, loading: authLoading } = useAuth();
@@ -130,13 +100,8 @@ export default function MatchDetailPage() {
   const [slot, setSlot] = useState<SlotRow | null>(null);
   const [opponentTeam, setOpponentTeam] = useState<TeamRow | null>(null);
   const [venue, setVenue] = useState<VenueRow | null>(null);
-  const [myTeamIds, setMyTeamIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
-
-  const [showGeminiModal, setShowGeminiModal] = useState(false);
-  const [copiedGemini, setCopiedGemini] = useState(false);
-  const [showStrengthHelp, setShowStrengthHelp] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -165,7 +130,6 @@ export default function MatchDetailPage() {
         }
 
         if (!active) return;
-        setMyTeamIds(mine);
 
         const { data: slotData, error: slotError } = await supabase
           .from("match_slots")
@@ -262,14 +226,6 @@ export default function MatchDetailPage() {
     };
   }, [slotId, myUserId, authLoading]);
 
-  const canOpenChat = useMemo(() => {
-    if (!opponentTeam?.id) return false;
-    if (!myUserId) return false;
-    if (!myTeamIds.length) return false;
-    if (opponentTeam.owner_id === myUserId) return false;
-    return true;
-  }, [opponentTeam?.id, opponentTeam?.owner_id, myUserId, myTeamIds]);
-
   const groundLabel = useMemo(() => {
     return buildGroundLabel({ venue, slot });
   }, [venue, slot]);
@@ -281,63 +237,6 @@ export default function MatchDetailPage() {
   const categoryTextForOpponent = useMemo(() => {
     return categoryLabel(slot?.category || "") || slot?.category || "未設定";
   }, [slot]);
-
-  const geminiPrompt = useMemo(() => {
-    return buildGeminiPrompt({
-      team: opponentTeam,
-      categoryText: categoryTextForOpponent,
-    });
-  }, [opponentTeam, categoryTextForOpponent]);
-
-  const openChat = async () => {
-    try {
-      if (!myUserId) {
-        window.location.href = "/login";
-        return;
-      }
-
-      if (!opponentTeam?.id) return;
-
-      if (!myTeamIds.length) {
-        alert("先に自分のチームを登録してください");
-        window.location.href = "/teams/new";
-        return;
-      }
-
-      const myTeamId = myTeamIds[0];
-
-      const { data: threadId, error: threadError } = await supabase.rpc(
-        "rpc_get_or_create_dm_thread",
-        {
-          my_team_id: myTeamId,
-          other_team_id: opponentTeam.id,
-        }
-      );
-
-      if (threadError) throw threadError;
-      if (!threadId) throw new Error("チャットスレッドを作成できませんでした");
-
-      window.location.href = `/chat/${threadId}?from=match_detail&slotId=${slotId}`;
-    } catch (e: any) {
-      console.error("[match detail] open chat error:", e);
-      alert(`チャットを開けません。\n\n${e?.message ?? "unknown error"}`);
-    }
-  };
-
-  const copyGeminiPrompt = async () => {
-    try {
-      await navigator.clipboard.writeText(geminiPrompt);
-      setCopiedGemini(true);
-      window.setTimeout(() => setCopiedGemini(false), 2000);
-    } catch (e) {
-      console.error("[match detail] clipboard error:", e);
-      alert("コピーに失敗しました。検索文を手動で選択してコピーしてください。");
-    }
-  };
-
-  const openGemini = () => {
-    window.open("https://gemini.google.com/", "_blank", "noopener,noreferrer");
-  };
 
   if (loading) {
     return (
@@ -370,158 +269,93 @@ export default function MatchDetailPage() {
   }
 
   return (
-    <>
-      <main style={pageWrap}>
-        <AppTabNav />
+    <main style={pageWrap}>
+      <AppTabNav />
 
-        <div style={titleRow}>
-          <h1 style={pageTitle}>試合詳細</h1>
+      <div style={titleRow}>
+        <h1 style={pageTitle}>試合詳細</h1>
 
-          <button
-            type="button"
-            className="sh-btn"
-            onClick={() => {
-              window.location.href = "/match/my-schedule";
-            }}
-          >
-            予定一覧
-          </button>
-        </div>
+        <button
+          type="button"
+          className="sh-btn"
+          onClick={() => {
+            window.location.href = "/match/my-schedule";
+          }}
+        >
+          予定一覧
+        </button>
+      </div>
 
-        <section style={card}>
-          <div style={sectionTitle}>試合情報</div>
+      <section style={card}>
+        <div style={sectionTitle}>試合情報</div>
 
-          <div style={detailList}>
+        <div style={detailList}>
+          <div style={detailRow}>
+            <span style={icon}>📅</span>
+            <span>{slot.date || "未設定"}</span>
+          </div>
+
+          <div style={detailRow}>
+            <span style={icon}>⏰</span>
+            <span>
+              {slot.start_time?.slice(0, 5) || "--:--"}〜
+              {slot.end_time?.slice(0, 5) || "--:--"}
+            </span>
+          </div>
+
+          <div style={detailRow}>
+            <span style={icon}>📍</span>
+            <span>{slot.area_text || slot.area || "未設定"}</span>
+          </div>
+
+          <div style={detailRow}>
+            <span style={icon}>🏷</span>
+            <span>{categoryTextForOpponent}</span>
+          </div>
+
+          <div style={detailRowTop}>
+            <span style={icon}>🏟</span>
+            <span>{groundLabel}</span>
+          </div>
+
+          {mapUrl ? (
             <div style={detailRow}>
-              <span style={icon}>📅</span>
-              <span>{slot.date || "未設定"}</span>
+              <span style={icon}>🗺️</span>
+              <a href={mapUrl} target="_blank" rel="noreferrer" style={mapLink}>
+                Googleマップで見る
+              </a>
             </div>
+          ) : null}
 
-            <div style={detailRow}>
-              <span style={icon}>⏰</span>
-              <span>
-                {slot.start_time?.slice(0, 5) || "--:--"}〜
-                {slot.end_time?.slice(0, 5) || "--:--"}
-              </span>
-            </div>
+          <div style={detailRow}>
+            <span style={icon}>📌</span>
+            <span>{slot.is_closed ? "現在は締切" : "受付中"}</span>
+          </div>
 
-            <div style={detailRow}>
-              <span style={icon}>📍</span>
-              <span>{slot.area_text || slot.area || "未設定"}</span>
-            </div>
-
-            <div style={detailRow}>
-              <span style={icon}>🏷</span>
-              <span>{categoryTextForOpponent}</span>
-            </div>
-
+          {slot.note ? (
             <div style={detailRowTop}>
-              <span style={icon}>🏟</span>
-              <span>{groundLabel}</span>
+              <span style={icon}>📝</span>
+              <span>{slot.note}</span>
             </div>
-
-            {mapUrl ? (
-              <div style={detailRow}>
-                <span style={icon}>🗺️</span>
-                <a href={mapUrl} target="_blank" rel="noreferrer" style={mapLink}>
-                  Googleマップで見る
-                </a>
-              </div>
-            ) : null}
-
-            <div style={detailRow}>
-              <span style={icon}>📌</span>
-              <span>{slot.is_closed ? "現在は締切" : "受付中"}</span>
-            </div>
-
-            {slot.note ? (
-              <div style={detailRowTop}>
-                <span style={icon}>📝</span>
-                <span>{slot.note}</span>
-              </div>
-            ) : null}
-          </div>
-        </section>
-
-        {opponentTeam ? (
-          <TeamProfileCard
-            title="相手チーム詳細"
-            team={opponentTeam}
-            categoryTextOverride={categoryTextForOpponent}
-            showAddressDetail={true}
-            showGeminiSection={true}
-            onOpenGeminiSearch={() => setShowGeminiModal(true)}
-            onOpenStrengthHelp={() => setShowStrengthHelp(true)}
-          />
-        ) : null}
-
-        {canOpenChat ? (
-          <div style={bottomActionRow}>
-            <button
-              type="button"
-              className="sh-btn sh-btn--primary"
-              onClick={openChat}
-            >
-              チャットで連絡
-            </button>
-          </div>
-        ) : null}
-      </main>
-
-      {showGeminiModal ? (
-        <div style={modalOverlay} onClick={() => setShowGeminiModal(false)}>
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={modalTitle}>Gemini検索文</div>
-
-            <div style={modalText}>
-              下の文章をコピーして、Geminiに貼り付けて使ってください。
-            </div>
-
-            <textarea value={geminiPrompt} readOnly style={promptTextarea} />
-
-            <div style={copiedText}>
-              {copiedGemini ? "コピーしました" : "そのままコピーして使えます"}
-            </div>
-
-            <div style={modalActionRow}>
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={copyGeminiPrompt}
-              >
-                コピー
-              </button>
-
-              <button
-                type="button"
-                className="sh-btn sh-btn--primary"
-                onClick={openGemini}
-              >
-                Geminiを開く
-              </button>
-            </div>
-
-            <div style={modalCloseRow}>
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={() => setShowGeminiModal(false)}
-              >
-                閉じる
-              </button>
-            </div>
-          </div>
+          ) : null}
         </div>
-      ) : null}
+      </section>
 
-      <MatchHelpModals
-        showStrengthHelp={showStrengthHelp}
-        showCalendarHelp={false}
-        onCloseStrengthHelp={() => setShowStrengthHelp(false)}
-        onCloseCalendarHelp={() => {}}
-        strengthGuides={STRENGTH_GUIDES}
-      />
-    </>
+      {opponentTeam ? (
+        <TeamProfileCard
+          title="相手チーム詳細"
+          team={opponentTeam}
+          myUserId={myUserId}
+          categoryTextOverride={categoryTextForOpponent}
+          showAddressDetail={true}
+          showGeminiSection={true}
+          showChatButton={true}
+          showStrengthHelpButton={true}
+          chatFrom="match_detail"
+          chatSlotId={slotId}
+        />
+      ) : null}
+    </main>
   );
 }
 
@@ -599,12 +433,6 @@ const mapLink: React.CSSProperties = {
   textDecoration: "underline",
 };
 
-const bottomActionRow: React.CSSProperties = {
-  marginTop: 20,
-  display: "flex",
-  justifyContent: "flex-end",
-};
-
 const loadingBox: React.CSSProperties = {
   marginTop: 16,
   padding: 20,
@@ -628,72 +456,4 @@ const errorBox: React.CSSProperties = {
 const errorTitle: React.CSSProperties = {
   fontWeight: 900,
   marginBottom: 4,
-};
-
-const modalOverlay: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0, 0, 0, 0.45)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: 16,
-  zIndex: 1000,
-};
-
-const modalCard: React.CSSProperties = {
-  width: "100%",
-  maxWidth: 720,
-  background: "#fff",
-  borderRadius: 18,
-  border: "1px solid #dce9df",
-  padding: 16,
-  boxShadow: "0 20px 40px rgba(0,0,0,0.18)",
-  display: "grid",
-  gap: 12,
-};
-
-const modalTitle: React.CSSProperties = {
-  fontSize: 20,
-  fontWeight: 900,
-  color: "#16391f",
-  lineHeight: 1.3,
-};
-
-const modalText: React.CSSProperties = {
-  fontSize: 14,
-  color: "#4b5563",
-  lineHeight: 1.7,
-};
-
-const promptTextarea: React.CSSProperties = {
-  width: "100%",
-  minHeight: 260,
-  borderRadius: 14,
-  border: "1px solid #dce9df",
-  padding: 14,
-  fontSize: 14,
-  lineHeight: 1.7,
-  color: "#1c2b22",
-  background: "#f9fbfa",
-  resize: "vertical",
-  fontFamily: "inherit",
-};
-
-const copiedText: React.CSSProperties = {
-  fontSize: 13,
-  color: "#166534",
-  lineHeight: 1.5,
-};
-
-const modalActionRow: React.CSSProperties = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-  justifyContent: "flex-end",
-};
-
-const modalCloseRow: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "flex-end",
 };

@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
@@ -9,43 +8,9 @@ import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import TeamProfileCard, {
   TeamProfileCardRow,
-  teamAreaText,
-  teamCategories,
-  teamStrengthLabel,
-  uniformText,
 } from "@/app/teams/components/TeamProfileCard";
-import { categoryLabel } from "@/app/lib/categories";
-import { MatchHelpModals } from "@/app/match/components/MatchHelpModals";
-import { STRENGTH_GUIDES } from "@/app/match/constants/strengthGuides";
 
 type TeamRow = TeamProfileCardRow;
-
-function buildGeminiPrompt(team: TeamRow) {
-  const categoryText =
-    teamCategories(team).length > 0
-      ? teamCategories(team)
-          .map((v) => categoryLabel(v) || v)
-          .join(" / ")
-      : "未設定";
-
-  return `少年サッカー・キッズサッカーのチーム情報を調べたいです。
-以下の条件をもとに、日本語で簡潔に整理してください。
-
-チーム名: ${team.name ?? "未設定"}
-カテゴリ: ${categoryText}
-活動エリア: ${teamAreaText(team)}
-強さ: ${teamStrengthLabel(team)}
-所属人数: ${team.member_count ?? "未設定"}
-ユニフォーム: ${uniformText(team)}
-
-知りたいこと:
-・このチームがどんなチームか
-・このカテゴリでの活動傾向
-・対戦前に確認すると良いこと
-・一般的に想定されるレベル感や特徴
-
-不明な情報は推測しすぎず、「不明」と明記してください。`;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -80,6 +45,7 @@ function toTeamRow(value: unknown): TeamRow | null {
     prefecture: toNullableString(value.prefecture),
     city: toNullableString(value.city),
     town: toNullableString(value.town),
+    address_detail: toNullableString(value.address_detail),
     member_count: toNullableNumber(value.member_count),
     uniform_main: toNullableString(value.uniform_main),
     uniform_sub: toNullableString(value.uniform_sub),
@@ -103,8 +69,6 @@ export default function TeamDetailPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [team, setTeam] = useState<TeamRow | null>(null);
-  const [chatLoading, setChatLoading] = useState(false);
-  const [showStrengthHelp, setShowStrengthHelp] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -137,6 +101,7 @@ export default function TeamDetailPage() {
               "prefecture",
               "city",
               "town",
+              "address_detail",
               "member_count",
               "uniform_main",
               "uniform_sub",
@@ -186,165 +151,61 @@ export default function TeamDetailPage() {
   }, [teamId]);
 
   const mine = !!myUserId && !!team && team.owner_id === myUserId;
-  const canOpenChat = !!team && !!myUserId && !mine;
-
-  const openChat = async () => {
-    try {
-      if (!myUserId) {
-        window.location.href = "/login";
-        return;
-      }
-
-      if (!team?.id) return;
-
-      if (team.owner_id === myUserId) {
-        alert("自分のチームにはチャットできません");
-        return;
-      }
-
-      setChatLoading(true);
-
-      const { data: myTeams, error: myTeamsError } = await supabase
-        .from("teams")
-        .select("id")
-        .eq("owner_id", myUserId)
-        .limit(1);
-
-      if (myTeamsError) throw myTeamsError;
-
-      const myTeamId = myTeams?.[0]?.id;
-      if (!myTeamId) {
-        alert("先に自分のチームを登録してください");
-        window.location.href = "/teams/new";
-        return;
-      }
-
-      const { data: threadId, error: threadError } = await supabase.rpc(
-        "rpc_get_or_create_dm_thread",
-        {
-          my_team_id: myTeamId,
-          other_team_id: team.id,
-        }
-      );
-
-      if (threadError) throw threadError;
-      if (!threadId) throw new Error("チャットスレッドを作成できませんでした");
-
-      window.location.href = `/chat/${threadId}?from=team-detail`;
-    } catch (e: any) {
-      console.error("[team detail] open chat error:", e);
-      alert(`チャットを開けませんでした: ${e?.message ?? "unknown error"}`);
-    } finally {
-      setChatLoading(false);
-    }
-  };
-
-  const openGeminiSearch = async () => {
-    if (!team) return;
-
-    const prompt = buildGeminiPrompt(team);
-
-    try {
-      await navigator.clipboard.writeText(prompt);
-      alert("Gemini用の検索文をコピーしました。Geminiに貼り付けてください。");
-    } catch (e) {
-      console.error("[team detail] copy gemini prompt error:", e);
-      window.prompt(
-        "この検索文をコピーしてGeminiに貼り付けてください。",
-        prompt
-      );
-    }
-  };
 
   return (
-    <>
-      <main style={{ maxWidth: 980, margin: "0 auto", padding: 16 }}>
-        <AppTabNav />
+    <main style={pageWrap}>
+      <AppTabNav />
 
-        <AppHero
-          icon="👥"
-          title="チーム詳細"
-          desc="登録チームのプロフィールを確認できます。"
-        />
-
-        <div style={topRow}>
-          <Link href="/teams" className="sh-btn">
-            チーム一覧
-          </Link>
-
-          {mine && team ? (
-            <Link
-              href={`/teams/${team.id}/edit`}
-              className="sh-btn sh-btn--primary"
-            >
-              チーム編集
-            </Link>
-          ) : null}
-        </div>
-
-        {loading || authLoading ? (
-          <div style={loadingBox}>読み込み中…</div>
-        ) : loadError ? (
-          <div style={errorBox}>
-            <div style={errorTitle}>読み込みエラー</div>
-            <div>{loadError}</div>
-            <div style={{ marginTop: 10 }}>
-              <button
-                type="button"
-                className="sh-btn sh-btn--primary"
-                onClick={() => window.location.reload()}
-              >
-                再読み込み
-              </button>
-            </div>
-          </div>
-        ) : !team ? (
-          <div style={emptyBox}>チームが見つかりませんでした。</div>
-        ) : (
-          <>
-            <TeamProfileCard
-              team={team}
-              title="チーム詳細"
-              mine={mine}
-              onOpenStrengthHelp={() => setShowStrengthHelp(true)}
-              onOpenGeminiSearch={!mine ? openGeminiSearch : undefined}
-              showGeminiSection={!mine}
-            />
-
-            {!mine ? (
-              <div style={bottomActionRow}>
-                <button
-                  type="button"
-                  className="sh-btn sh-btn--primary"
-                  onClick={openChat}
-                  disabled={!canOpenChat || chatLoading}
-                >
-                  {chatLoading ? "チャット準備中…" : "チャットで連絡"}
-                </button>
-              </div>
-            ) : null}
-          </>
-        )}
-      </main>
-
-      <MatchHelpModals
-        showStrengthHelp={showStrengthHelp}
-        showCalendarHelp={false}
-        onCloseStrengthHelp={() => setShowStrengthHelp(false)}
-        onCloseCalendarHelp={() => {}}
-        strengthGuides={STRENGTH_GUIDES}
+      <AppHero
+        icon="👥"
+        title="チーム詳細"
+        desc="登録チームのプロフィールを確認できます。"
       />
-    </>
+
+      {loading || authLoading ? (
+        <div style={loadingBox}>読み込み中…</div>
+      ) : loadError ? (
+        <div style={errorBox}>
+          <div style={errorTitle}>読み込みエラー</div>
+          <div>{loadError}</div>
+
+          <div style={{ marginTop: 10 }}>
+            <button
+              type="button"
+              className="sh-btn sh-btn--primary"
+              onClick={() => window.location.reload()}
+            >
+              再読み込み
+            </button>
+          </div>
+        </div>
+      ) : !team ? (
+        <div style={emptyBox}>チームが見つかりませんでした。</div>
+      ) : (
+        <TeamProfileCard
+          title="チーム詳細"
+          team={team}
+          myUserId={myUserId}
+          backHref="/teams"
+          backLabel="← チーム一覧へ戻る"
+          showBackButton
+          editHref={`/teams/${team.id}/edit`}
+          showEditButton
+          showGeminiSection={!mine}
+          showChatButton={!mine}
+          showStrengthHelpButton
+          showAddressDetail={false}
+          chatFrom="team-detail"
+        />
+      )}
+    </main>
   );
 }
 
-const topRow: React.CSSProperties = {
-  marginTop: 12,
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 10,
-  flexWrap: "wrap",
+const pageWrap: React.CSSProperties = {
+  maxWidth: 980,
+  margin: "0 auto",
+  padding: 16,
 };
 
 const loadingBox: React.CSSProperties = {
@@ -382,10 +243,4 @@ const emptyBox: React.CSSProperties = {
   color: "#666",
   lineHeight: 1.8,
   textAlign: "center",
-};
-
-const bottomActionRow: React.CSSProperties = {
-  marginTop: 20,
-  display: "flex",
-  justifyContent: "flex-end",
 };

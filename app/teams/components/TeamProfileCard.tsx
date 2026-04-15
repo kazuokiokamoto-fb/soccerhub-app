@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useMemo, useState } from "react";
+import { supabase } from "@/app/lib/supabase";
 import { categoryLabel } from "@/app/lib/categories";
 
 export type TeamProfileCardRow = {
@@ -90,120 +91,340 @@ export function uniformText(team?: TeamProfileCardRow | null) {
   );
 }
 
+function buildGeminiPrompt(team?: TeamProfileCardRow | null, categoryTextOverride?: string) {
+  return `少年サッカー・キッズサッカーのチーム情報を調べたいです。
+以下の条件をもとに、日本語で簡潔に整理してください。
+
+チーム名: ${team?.name ?? "未設定"}
+カテゴリ: ${categoryTextOverride || teamCategoryText(team)}
+活動エリア: ${teamAreaText(team)}
+強さ: ${teamStrengthLabel(team)}
+レベル感: ${teamStrengthShortDescription(team)}
+所属人数: ${
+    team?.member_count != null ? `${team.member_count}人` : "未設定"
+  }
+ユニフォーム: ${uniformText(team)}
+
+知りたいこと:
+・このチームがどんなチームか
+・このカテゴリでの活動傾向
+・対戦前に確認すると良いこと
+・一般的に想定されるレベル感や特徴
+
+不明な情報は推測しすぎず、「不明」と明記してください。`;
+}
+
 export type TeamProfileCardProps = {
   title?: string;
   team: TeamProfileCardRow;
-  mine?: boolean;
+  myUserId?: string;
+  backHref?: string;
+  backLabel?: string;
+  showBackButton?: boolean;
+  editHref?: string;
+  showEditButton?: boolean;
   categoryTextOverride?: string;
   showAddressDetail?: boolean;
   showGeminiSection?: boolean;
-  onOpenGeminiSearch?: () => void;
-  onOpenStrengthHelp?: () => void;
+  showChatButton?: boolean;
+  showStrengthHelpButton?: boolean;
+  chatFrom?: string;
+  chatSlotId?: string;
 };
 
 export default function TeamProfileCard(props: TeamProfileCardProps) {
   const {
     title = "チーム詳細",
     team,
-    mine = false,
+    myUserId = "",
+    backHref,
+    backLabel = "← 戻る",
+    showBackButton = false,
+    editHref,
+    showEditButton = false,
     categoryTextOverride,
     showAddressDetail = true,
-    showGeminiSection = false,
-    onOpenGeminiSearch,
-    onOpenStrengthHelp,
+    showGeminiSection = true,
+    showChatButton = true,
+    showStrengthHelpButton = true,
+    chatFrom = "team-detail",
+    chatSlotId = "",
   } = props;
 
+  const mine = !!myUserId && team.owner_id === myUserId;
+  const canOpenChat = !!myUserId && !mine;
+
+  const [chatLoading, setChatLoading] = useState(false);
+  const [showStrengthHelp, setShowStrengthHelp] = useState(false);
+  const [copiedGemini, setCopiedGemini] = useState(false);
+
+  const geminiPrompt = useMemo(
+    () => buildGeminiPrompt(team, categoryTextOverride),
+    [team, categoryTextOverride]
+  );
+
+  const copyGeminiPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(geminiPrompt);
+      setCopiedGemini(true);
+      window.setTimeout(() => setCopiedGemini(false), 2000);
+    } catch (e) {
+      console.error("[TeamProfileCard] copyGeminiPrompt error:", e);
+      alert("コピーに失敗しました。");
+    }
+  };
+
+  const openGeminiSearch = async () => {
+    try {
+      await navigator.clipboard.writeText(geminiPrompt);
+      setCopiedGemini(true);
+    } catch (e) {
+      console.error("[TeamProfileCard] openGeminiSearch copy error:", e);
+    }
+
+    window.open("https://gemini.google.com/", "_blank", "noopener,noreferrer");
+  };
+
+  const openChat = async () => {
+    try {
+      if (!myUserId) {
+        window.location.href = "/login";
+        return;
+      }
+
+      if (!team?.id) return;
+
+      if (mine) {
+        alert("自分のチームにはチャットできません");
+        return;
+      }
+
+      setChatLoading(true);
+
+      const { data: myTeams, error: myTeamsError } = await supabase
+        .from("teams")
+        .select("id")
+        .eq("owner_id", myUserId)
+        .limit(1);
+
+      if (myTeamsError) throw myTeamsError;
+
+      const myTeamId = myTeams?.[0]?.id;
+      if (!myTeamId) {
+        alert("先に自分のチームを登録してください");
+        window.location.href = "/teams/new";
+        return;
+      }
+
+      const { data: threadId, error: threadError } = await supabase.rpc(
+        "rpc_get_or_create_dm_thread",
+        {
+          my_team_id: myTeamId,
+          other_team_id: team.id,
+        }
+      );
+
+      if (threadError) throw threadError;
+      if (!threadId) throw new Error("チャットスレッドを作成できませんでした");
+
+      const qs = new URLSearchParams();
+      if (chatFrom) qs.set("from", chatFrom);
+      if (chatSlotId) qs.set("slotId", chatSlotId);
+
+      const query = qs.toString();
+      window.location.href = query
+        ? `/chat/${threadId}?${query}`
+        : `/chat/${threadId}`;
+    } catch (e: any) {
+      console.error("[TeamProfileCard] openChat error:", e);
+      alert(`チャットを開けませんでした: ${e?.message ?? "unknown error"}`);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
   return (
-    <section style={card}>
-      <div style={sectionTitle}>{title}</div>
+    <>
+      {showBackButton || (showEditButton && mine) ? (
+        <div style={topRow}>
+          {showBackButton && backHref ? (
+            <a href={backHref} className="sh-btn">
+              {backLabel}
+            </a>
+          ) : (
+            <div />
+          )}
 
-      <div style={teamNameRow}>
-        <div style={teamName}>{team.name || "未設定"}</div>
-        {mine ? <span style={mineBadge}>自分のチーム</span> : null}
-      </div>
+          {showEditButton && mine && editHref ? (
+            <a href={editHref} className="sh-btn sh-btn--primary">
+              チーム編集
+            </a>
+          ) : null}
+        </div>
+      ) : null}
 
-      <div style={teamMetaGrid}>
-        <div style={teamMetaItem}>
-          <div style={metaLabel}>カテゴリ</div>
-          <div style={metaValue}>
-            {categoryTextOverride || teamCategoryText(team)}
-          </div>
+      <section style={card}>
+        <div style={sectionTitle}>{title}</div>
+
+        <div style={teamNameRow}>
+          <div style={teamName}>{team.name || "未設定"}</div>
+          {mine ? <span style={mineBadge}>自分のチーム</span> : null}
         </div>
 
-        <div style={teamMetaItem}>
-          <div style={metaLabel}>強さ</div>
-          <div style={strengthValueRow}>
-            <span style={strengthValueMain}>{teamStrengthLabel(team)}</span>
-            <span style={strengthValueSub}>
-              {teamStrengthShortDescription(team)}
-            </span>
-
-            {onOpenStrengthHelp ? (
-              <button
-                type="button"
-                aria-label="強さの説明を見る"
-                onClick={onOpenStrengthHelp}
-                style={helpButton}
-              >
-                ?
-              </button>
-            ) : null}
-          </div>
-        </div>
-
-        <div style={teamMetaItem}>
-          <div style={metaLabel}>エリア</div>
-          <div style={metaValue}>{teamAreaText(team)}</div>
-        </div>
-
-        <div style={teamMetaItem}>
-          <div style={metaLabel}>チーム人数</div>
-          <div style={metaValue}>
-            {team.member_count != null ? `${team.member_count}人` : "未設定"}
-          </div>
-        </div>
-
-        <div style={teamMetaItem}>
-          <div style={metaLabel}>ユニフォーム</div>
-          <div style={metaValue}>{uniformText(team)}</div>
-        </div>
-
-        {showAddressDetail && team.address_detail ? (
+        <div style={teamMetaGrid}>
           <div style={teamMetaItem}>
-            <div style={metaLabel}>住所補足</div>
-            <div style={metaValue}>{team.address_detail}</div>
-          </div>
-        ) : null}
-
-        {team.note ? (
-          <div style={teamMetaItem}>
-            <div style={metaLabel}>チームメモ</div>
-            <div style={metaValue}>{team.note}</div>
-          </div>
-        ) : null}
-
-        {showGeminiSection ? (
-          <div style={teamMetaItem}>
-            <div style={metaLabel}>Geminiによるチーム情報</div>
+            <div style={metaLabel}>カテゴリ</div>
             <div style={metaValue}>
-              Gemini用の検索文を確認してからコピーできます。
+              {categoryTextOverride || teamCategoryText(team)}
+            </div>
+          </div>
+
+          <div style={teamMetaItem}>
+            <div style={metaLabel}>強さ</div>
+            <div style={strengthValueRow}>
+              <span style={strengthValueMain}>{teamStrengthLabel(team)}</span>
+              <span style={strengthValueSub}>
+                {teamStrengthShortDescription(team)}
+              </span>
+
+              {showStrengthHelpButton ? (
+                <button
+                  type="button"
+                  aria-label="強さの説明を見る"
+                  onClick={() => setShowStrengthHelp(true)}
+                  style={helpButton}
+                >
+                  ?
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div style={teamMetaItem}>
+            <div style={metaLabel}>エリア</div>
+            <div style={metaValue}>{teamAreaText(team)}</div>
+          </div>
+
+          <div style={teamMetaItem}>
+            <div style={metaLabel}>チーム人数</div>
+            <div style={metaValue}>
+              {team.member_count != null ? `${team.member_count}人` : "未設定"}
+            </div>
+          </div>
+
+          <div style={teamMetaItem}>
+            <div style={metaLabel}>ユニフォーム</div>
+            <div style={metaValue}>{uniformText(team)}</div>
+          </div>
+
+          {showAddressDetail && team.address_detail ? (
+            <div style={teamMetaItem}>
+              <div style={metaLabel}>住所補足</div>
+              <div style={metaValue}>{team.address_detail}</div>
+            </div>
+          ) : null}
+
+          {team.note ? (
+            <div style={teamMetaItem}>
+              <div style={metaLabel}>チームメモ</div>
+              <div style={metaValue}>{team.note}</div>
+            </div>
+          ) : null}
+
+          {showGeminiSection && !mine ? (
+            <div style={teamMetaItem}>
+              <div style={metaLabel}>Geminiによるチーム情報</div>
+              <div style={metaValue}>
+                Gemini用の検索文をコピーして、そのままGeminiを開けます。
+              </div>
+
+              <div style={geminiActionRow}>
+                <button
+                  type="button"
+                  className="sh-btn"
+                  onClick={copyGeminiPrompt}
+                >
+                  {copiedGemini ? "コピー済み" : "検索文をコピー"}
+                </button>
+
+                <button
+                  type="button"
+                  className="sh-btn sh-btn--primary"
+                  onClick={openGeminiSearch}
+                >
+                  Geminiでこのチームを調べる
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      {showChatButton && canOpenChat ? (
+        <div style={bottomActionRow}>
+          <button
+            type="button"
+            className="sh-btn sh-btn--primary"
+            onClick={openChat}
+            disabled={chatLoading}
+          >
+            {chatLoading ? "チャット準備中…" : "チャットで連絡"}
+          </button>
+        </div>
+      ) : null}
+
+      {showStrengthHelp ? (
+        <div style={modalOverlay} onClick={() => setShowStrengthHelp(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <div style={modalTitle}>強さの目安</div>
+
+            <div style={guideList}>
+              <div style={guideItem}>
+                <strong>SS</strong>
+                <span>全国・地域トップ級</span>
+              </div>
+              <div style={guideItem}>
+                <strong>S</strong>
+                <span>都・県リーグ上位</span>
+              </div>
+              <div style={guideItem}>
+                <strong>A</strong>
+                <span>都・県リーグ1・2部</span>
+              </div>
+              <div style={guideItem}>
+                <strong>B</strong>
+                <span>地域リーグ・育成中心</span>
+              </div>
+              <div style={guideItem}>
+                <strong>C</strong>
+                <span>交流・入門中心</span>
+              </div>
             </div>
 
-            <div style={{ marginTop: 8 }}>
+            <div style={modalCloseRow}>
               <button
                 type="button"
                 className="sh-btn"
-                onClick={onOpenGeminiSearch}
+                onClick={() => setShowStrengthHelp(false)}
               >
-                Geminiでこのチームを調べる
+                閉じる
               </button>
             </div>
           </div>
-        ) : null}
-      </div>
-    </section>
+        </div>
+      ) : null}
+    </>
   );
 }
+
+const topRow: React.CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+};
 
 const card: React.CSSProperties = {
   marginTop: 16,
@@ -304,4 +525,66 @@ const helpButton: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   padding: 0,
+};
+
+const geminiActionRow: React.CSSProperties = {
+  marginTop: 8,
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const bottomActionRow: React.CSSProperties = {
+  marginTop: 20,
+  display: "flex",
+  justifyContent: "flex-end",
+};
+
+const modalOverlay: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.45)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
+  zIndex: 1000,
+};
+
+const modalCard: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 520,
+  background: "#fff",
+  borderRadius: 18,
+  border: "1px solid #dce9df",
+  padding: 16,
+  boxShadow: "0 20px 40px rgba(0,0,0,0.18)",
+  display: "grid",
+  gap: 12,
+};
+
+const modalTitle: React.CSSProperties = {
+  fontSize: 20,
+  fontWeight: 900,
+  color: "#16391f",
+  lineHeight: 1.3,
+};
+
+const guideList: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+};
+
+const guideItem: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  alignItems: "center",
+  fontSize: 15,
+  color: "#1c2b22",
+  lineHeight: 1.7,
+};
+
+const modalCloseRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
 };
