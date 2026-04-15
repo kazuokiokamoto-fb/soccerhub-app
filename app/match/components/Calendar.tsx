@@ -267,8 +267,6 @@ const topHeadLeft: React.CSSProperties = {
 
 const topTitle: React.CSSProperties = {
   fontSize: 20,
-  fontWeight: 900,
-  color: "#16391f",
   lineHeight: 1.25,
 };
 
