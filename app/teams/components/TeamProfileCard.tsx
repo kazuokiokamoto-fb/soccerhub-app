@@ -91,7 +91,10 @@ export function uniformText(team?: TeamProfileCardRow | null) {
   );
 }
 
-function buildGeminiPrompt(team?: TeamProfileCardRow | null, categoryTextOverride?: string) {
+function buildGeminiPrompt(
+  team?: TeamProfileCardRow | null,
+  categoryTextOverride?: string
+) {
   return `少年サッカー・キッズサッカーのチーム情報を調べたいです。
 以下の条件をもとに、日本語で簡潔に整理してください。
 
@@ -130,6 +133,7 @@ export type TeamProfileCardProps = {
   showStrengthHelpButton?: boolean;
   chatFrom?: string;
   chatSlotId?: string;
+  chatDate?: string;
 };
 
 export default function TeamProfileCard(props: TeamProfileCardProps) {
@@ -149,6 +153,7 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
     showStrengthHelpButton = true,
     chatFrom = "team-detail",
     chatSlotId = "",
+    chatDate = "",
   } = props;
 
   const mine = !!myUserId && team.owner_id === myUserId;
@@ -182,7 +187,7 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
       console.error("[TeamProfileCard] openGeminiSearch copy error:", e);
     }
 
-    window.open("https://gemini.google.com/", "_blank", "noopener,noreferrer");
+    window.location.href = "https://gemini.google.com/";
   };
 
   const openChat = async () => {
@@ -230,6 +235,7 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
       const qs = new URLSearchParams();
       if (chatFrom) qs.set("from", chatFrom);
       if (chatSlotId) qs.set("slotId", chatSlotId);
+      if (chatDate) qs.set("date", chatDate);
 
       const query = qs.toString();
       window.location.href = query
