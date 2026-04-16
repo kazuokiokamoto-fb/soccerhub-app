@@ -162,6 +162,7 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
   const [chatLoading, setChatLoading] = useState(false);
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
   const [copiedGemini, setCopiedGemini] = useState(false);
+  const [showGeminiModal, setShowGeminiModal] = useState(false);
 
   const geminiPrompt = useMemo(
     () => buildGeminiPrompt(team, categoryTextOverride),
@@ -173,19 +174,17 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
       await navigator.clipboard.writeText(geminiPrompt);
       setCopiedGemini(true);
       window.setTimeout(() => setCopiedGemini(false), 2000);
+      return true;
     } catch (e) {
       console.error("[TeamProfileCard] copyGeminiPrompt error:", e);
       alert("コピーに失敗しました。");
+      return false;
     }
   };
 
-  const openGeminiSearch = async () => {
-    try {
-      await navigator.clipboard.writeText(geminiPrompt);
-      setCopiedGemini(true);
-    } catch (e) {
-      console.error("[TeamProfileCard] openGeminiSearch copy error:", e);
-    }
+  const openGeminiAfterCopy = async () => {
+    const ok = await copyGeminiPrompt();
+    if (!ok) return;
 
     window.location.href = "https://gemini.google.com/";
   };
@@ -270,7 +269,20 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
       ) : null}
 
       <section style={card}>
-        <div style={sectionTitle}>{title}</div>
+        <div style={headerRow}>
+          <div style={sectionTitle}>{title}</div>
+
+          {showChatButton && canOpenChat ? (
+            <button
+              type="button"
+              className="sh-btn sh-btn--primary"
+              onClick={openChat}
+              disabled={chatLoading}
+            >
+              {chatLoading ? "チャット準備中…" : "チャットで連絡"}
+            </button>
+          ) : null}
+        </div>
 
         <div style={teamNameRow}>
           <div style={teamName}>{team.name || "未設定"}</div>
@@ -341,22 +353,14 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
             <div style={teamMetaItem}>
               <div style={metaLabel}>Geminiによるチーム情報</div>
               <div style={metaValue}>
-                Gemini用の検索文をコピーして、そのままGeminiを開けます。
+                先に検索文を確認してから、コピーしてGeminiへ進めます。
               </div>
 
               <div style={geminiActionRow}>
                 <button
                   type="button"
-                  className="sh-btn"
-                  onClick={copyGeminiPrompt}
-                >
-                  {copiedGemini ? "コピー済み" : "検索文をコピー"}
-                </button>
-
-                <button
-                  type="button"
                   className="sh-btn sh-btn--primary"
-                  onClick={openGeminiSearch}
+                  onClick={() => setShowGeminiModal(true)}
                 >
                   Geminiでこのチームを調べる
                 </button>
@@ -366,16 +370,53 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
         </div>
       </section>
 
-      {showChatButton && canOpenChat ? (
-        <div style={bottomActionRow}>
-          <button
-            type="button"
-            className="sh-btn sh-btn--primary"
-            onClick={openChat}
-            disabled={chatLoading}
-          >
-            {chatLoading ? "チャット準備中…" : "チャットで連絡"}
-          </button>
+      {showGeminiModal ? (
+        <div style={modalOverlay} onClick={() => setShowGeminiModal(false)}>
+          <div style={modalCardWide} onClick={(e) => e.stopPropagation()}>
+            <div style={modalTitle}>Gemini検索文</div>
+
+            <div style={modalText}>
+              下の文章をコピーして、そのままGeminiに進めます。
+            </div>
+
+            <textarea
+              value={geminiPrompt}
+              readOnly
+              style={promptTextarea}
+            />
+
+            <div style={copiedText}>
+              {copiedGemini ? "コピーしました" : "内容を確認してから進めます"}
+            </div>
+
+            <div style={modalActionRow}>
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={copyGeminiPrompt}
+              >
+                検索文をコピー
+              </button>
+
+              <button
+                type="button"
+                className="sh-btn sh-btn--primary"
+                onClick={openGeminiAfterCopy}
+              >
+                コピーしてGeminiを開く
+              </button>
+            </div>
+
+            <div style={modalCloseRow}>
+              <button
+                type="button"
+                className="sh-btn"
+                onClick={() => setShowGeminiModal(false)}
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -438,6 +479,14 @@ const card: React.CSSProperties = {
   borderRadius: 18,
   border: "1px solid #dce9df",
   background: "#fff",
+};
+
+const headerRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
 };
 
 const sectionTitle: React.CSSProperties = {
@@ -540,12 +589,6 @@ const geminiActionRow: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
-const bottomActionRow: React.CSSProperties = {
-  marginTop: 20,
-  display: "flex",
-  justifyContent: "flex-end",
-};
-
 const modalOverlay: React.CSSProperties = {
   position: "fixed",
   inset: 0,
@@ -569,11 +612,50 @@ const modalCard: React.CSSProperties = {
   gap: 12,
 };
 
+const modalCardWide: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 720,
+  background: "#fff",
+  borderRadius: 18,
+  border: "1px solid #dce9df",
+  padding: 16,
+  boxShadow: "0 20px 40px rgba(0,0,0,0.18)",
+  display: "grid",
+  gap: 12,
+};
+
 const modalTitle: React.CSSProperties = {
   fontSize: 20,
   fontWeight: 900,
   color: "#16391f",
   lineHeight: 1.3,
+};
+
+const modalText: React.CSSProperties = {
+  fontSize: 14,
+  color: "#4b5563",
+  lineHeight: 1.7,
+};
+
+const promptTextarea: React.CSSProperties = {
+  width: "100%",
+  minHeight: 260,
+  borderRadius: 14,
+  border: "1px solid #dce9df",
+  padding: 14,
+  fontSize: 14,
+  lineHeight: 1.7,
+  color: "#1c2b22",
+  background: "#f9fbfa",
+  resize: "vertical",
+  fontFamily: "inherit",
+  boxSizing: "border-box",
+};
+
+const copiedText: React.CSSProperties = {
+  fontSize: 13,
+  color: "#166534",
+  lineHeight: 1.5,
 };
 
 const guideList: React.CSSProperties = {
@@ -588,6 +670,13 @@ const guideItem: React.CSSProperties = {
   fontSize: 15,
   color: "#1c2b22",
   lineHeight: 1.7,
+};
+
+const modalActionRow: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
 };
 
 const modalCloseRow: React.CSSProperties = {
