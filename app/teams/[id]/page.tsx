@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
 import AppHero from "@/app/components/AppHero";
@@ -53,8 +53,51 @@ function toTeamRow(value: unknown): TeamRow | null {
   };
 }
 
+function buildBackLink(params: {
+  from: string | null;
+  slotId: string | null;
+  date: string | null;
+}) {
+  const { from, slotId, date } = params;
+
+  if (from === "match-calendar") {
+    const qs = new URLSearchParams();
+    if (date) qs.set("date", date);
+    if (slotId) qs.set("slotId", slotId);
+
+    return {
+      href: qs.toString() ? `/match?${qs.toString()}` : "/match",
+      label: "← カレンダーへ戻る",
+      chatFrom: "match-calendar",
+    };
+  }
+
+  if (from === "match_detail") {
+    if (slotId) {
+      return {
+        href: `/match/${slotId}`,
+        label: "← 試合詳細へ戻る",
+        chatFrom: "match_detail",
+      };
+    }
+
+    return {
+      href: "/match/my-schedule",
+      label: "← 予定一覧へ戻る",
+      chatFrom: "match_detail",
+    };
+  }
+
+  return {
+    href: "/teams",
+    label: "← チーム一覧へ戻る",
+    chatFrom: "team-detail",
+  };
+}
+
 export default function TeamDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
 
   const teamId = useMemo(() => {
@@ -65,6 +108,14 @@ export default function TeamDetailPage() {
   }, [params]);
 
   const myUserId = user?.id ?? "";
+
+  const from = searchParams.get("from");
+  const slotId = searchParams.get("slotId");
+  const date = searchParams.get("date");
+
+  const backConfig = useMemo(() => {
+    return buildBackLink({ from, slotId, date });
+  }, [from, slotId, date]);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -186,8 +237,8 @@ export default function TeamDetailPage() {
           title="チーム詳細"
           team={team}
           myUserId={myUserId}
-          backHref="/teams"
-          backLabel="← チーム一覧へ戻る"
+          backHref={backConfig.href}
+          backLabel={backConfig.label}
           showBackButton
           editHref={`/teams/${team.id}/edit`}
           showEditButton
@@ -195,7 +246,7 @@ export default function TeamDetailPage() {
           showChatButton={!mine}
           showStrengthHelpButton
           showAddressDetail={false}
-          chatFrom="team-detail"
+          chatFrom={backConfig.chatFrom}
         />
       )}
     </main>
