@@ -1070,8 +1070,6 @@ export default function ChatThreadPage() {
                       justifyContent: mine ? "flex-end" : "flex-start",
                     }}
                   >
-                    {!mine ? <div style={avatarCircle}>⚽</div> : null}
-
                     <div
                       style={{
                         ...bubbleWrap,
