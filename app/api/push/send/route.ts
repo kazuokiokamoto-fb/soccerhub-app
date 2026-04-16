@@ -1,16 +1,7 @@
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-webpush.setVapidDetails(
-  "mailto:your@email.com",
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
+export const runtime = "nodejs";
 
 type PushSendBody = {
   userId: string;
@@ -33,10 +24,52 @@ type ChatMessageRow = {
   deleted_for_everyone?: boolean | null;
 };
 
-function isVisibleMessage(message: ChatMessageRow) {
-  if (message.deleted_at) return false;
-  if (message.deleted_for_everyone === true) return false;
-  return true;
+function getEnvOrThrow() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+
+  if (!supabaseUrl) {
+    throw new Error("Missing env: NEXT_PUBLIC_SUPABASE_URL");
+  }
+  if (!serviceRoleKey) {
+    throw new Error("Missing env: SUPABASE_SERVICE_ROLE_KEY");
+  }
+  if (!vapidPublicKey) {
+    throw new Error("Missing env: NEXT_PUBLIC_VAPID_PUBLIC_KEY");
+  }
+  if (!vapidPrivateKey) {
+    throw new Error("Missing env: VAPID_PRIVATE_KEY");
+  }
+
+  return {
+    supabaseUrl,
+    serviceRoleKey,
+    vapidPublicKey,
+    vapidPrivateKey,
+  };
+}
+
+function createSupabaseAdmin() {
+  const { supabaseUrl, serviceRoleKey } = getEnvOrThrow();
+
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
+
+function ensureWebPushConfigured() {
+  const { vapidPublicKey, vapidPrivateKey } = getEnvOrThrow();
+
+  webpush.setVapidDetails(
+    "mailto:your@email.com",
+    vapidPublicKey,
+    vapidPrivateKey
+  );
 }
 
 // =========================
@@ -44,6 +77,8 @@ function isVisibleMessage(message: ChatMessageRow) {
 // 自分が最後に送ったスレッドは未読にしない
 // =========================
 async function getUnreadChatCount(userId: string) {
+  const supabase = createSupabaseAdmin();
+
   const { data: memberRows, error: memberErr } = await supabase
     .from("chat_members")
     .select("thread_id,last_read_at")
@@ -71,13 +106,18 @@ async function getUnreadChatCount(userId: string) {
     return 0;
   }
 
+  const messages = ((msgRows ?? []) as ChatMessageRow[]).filter((m) => {
+    if (!m) return false;
+    if (m.deleted_at) return false;
+    if (m.deleted_for_everyone === true) return false;
+    return true;
+  });
+
   const latestByThread = new Map<string, ChatMessageRow>();
 
-  for (const raw of (msgRows ?? []) as ChatMessageRow[]) {
-    if (!isVisibleMessage(raw)) continue;
-
-    if (!latestByThread.has(raw.thread_id)) {
-      latestByThread.set(raw.thread_id, raw);
+  for (const m of messages) {
+    if (!latestByThread.has(m.thread_id)) {
+      latestByThread.set(m.thread_id, m);
     }
   }
 
@@ -87,7 +127,7 @@ async function getUnreadChatCount(userId: string) {
     const latest = latestByThread.get(member.thread_id);
     if (!latest?.created_at) continue;
 
-    // ✅ 自分が最後に送ったメッセージなら未読にしない
+    // 自分が最後に送ったスレッドは未読にしない
     if (latest.sender_id === userId) continue;
 
     if (!member.last_read_at) {
@@ -109,21 +149,20 @@ async function getUnreadChatCount(userId: string) {
 // 必要なら今後ここで通知やオファーも合算
 async function getUnifiedBadgeCount(userId: string) {
   const unreadChatCount = await getUnreadChatCount(userId);
-  return Math.max(0, unreadChatCount);
+  return unreadChatCount;
 }
 
 export async function POST(req: Request) {
   try {
+    ensureWebPushConfigured();
+    const supabase = createSupabaseAdmin();
+
     const json = (await req.json()) as PushSendBody;
 
-    const userId =
-      typeof json?.userId === "string" ? json.userId.trim() : "";
-    const title =
-      typeof json?.title === "string" ? json.title.trim() : "";
-    const body =
-      typeof json?.body === "string" ? json.body.trim() : "";
-    const url =
-      typeof json?.url === "string" && json.url.trim() ? json.url.trim() : "/";
+    const userId = json?.userId;
+    const title = json?.title;
+    const body = json?.body;
+    const url = json?.url || "/";
 
     if (!userId || !title || !body) {
       return Response.json(
@@ -194,9 +233,10 @@ export async function POST(req: Request) {
       badgeCount,
     });
   } catch (e: any) {
+    console.error("push route error:", e);
     return Response.json(
       { error: e?.message ?? "invalid request" },
-      { status: 400 }
+      { status: 500 }
     );
   }
 }
