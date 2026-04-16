@@ -23,23 +23,6 @@ function isVisibleMessage(message: ChatMessageRow) {
   return true;
 }
 
-export async function getUnreadNotificationCount(userId: string) {
-  if (!userId) return 0;
-
-  const { count, error } = await supabase
-    .from("notifications")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("is_read", false);
-
-  if (error) {
-    console.error("getUnreadNotificationCount error:", error);
-    return 0;
-  }
-
-  return Math.max(0, count ?? 0);
-}
-
 export async function getUnreadChatCount(userId: string) {
   if (!userId) return 0;
 
@@ -72,7 +55,9 @@ export async function getUnreadChatCount(userId: string) {
     return 0;
   }
 
-  const messages = ((msgRows ?? []) as ChatMessageRow[]).filter(isVisibleMessage);
+  const messages = ((msgRows ?? []) as ChatMessageRow[]).filter(
+    isVisibleMessage
+  );
 
   const latestByThread = new Map<string, ChatMessageRow>();
 
@@ -107,15 +92,10 @@ export async function getUnreadChatCount(userId: string) {
   return Math.max(0, unread);
 }
 
+// いまは「統一バッジ」= チャット未読数のみ
 export async function getUnifiedBadgeCount(userId: string) {
   if (!userId) return 0;
-
-  const [notificationUnread, chatUnread] = await Promise.all([
-    getUnreadNotificationCount(userId),
-    getUnreadChatCount(userId),
-  ]);
-
-  return Math.max(0, notificationUnread + chatUnread);
+  return getUnreadChatCount(userId);
 }
 
 export async function syncAppBadge(count: number) {

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import { categoryLabel } from "@/app/lib/categories";
-import { getUnifiedBadgeCount, syncAppBadge } from "@/app/lib/badge";
+import { getUnreadChatCount, syncAppBadge } from "@/app/lib/badge";
 
 type Msg = {
   id: string;
@@ -346,18 +346,17 @@ export default function ChatThreadPage() {
     }, 450);
   }
 
-  async function refreshUnifiedBadge() {
+  async function refreshChatBadge() {
     if (!meId) return;
 
     try {
-      const total = await getUnifiedBadgeCount(meId);
+      const total = await getUnreadChatCount(meId);
       await syncAppBadge(total);
     } catch (e) {
-      console.error("refreshUnifiedBadge error:", e);
+      console.error("refreshChatBadge error:", e);
     }
 
     window.dispatchEvent(new Event("badge-updated"));
-    window.dispatchEvent(new Event("notifications-updated"));
   }
 
   const markRead = async () => {
@@ -377,7 +376,7 @@ export default function ChatThreadPage() {
         return;
       }
 
-      await refreshUnifiedBadge();
+      await refreshChatBadge();
     } catch (e) {
       console.error("markRead failed:", e);
     }
@@ -540,7 +539,7 @@ export default function ChatThreadPage() {
 
   useEffect(() => {
     if (!meId) return;
-    void refreshUnifiedBadge();
+    void refreshChatBadge();
   }, [meId]);
 
   useEffect(() => {
@@ -667,7 +666,7 @@ export default function ChatThreadPage() {
               notifyIncomingMessage(row.body);
               await markRead();
             } else {
-              await refreshUnifiedBadge();
+              await refreshChatBadge();
             }
           }
 
@@ -676,7 +675,7 @@ export default function ChatThreadPage() {
             setMessages((prev) =>
               prev.map((m) => (m.id === row.id ? { ...m, ...row } : m))
             );
-            await refreshUnifiedBadge();
+            await refreshChatBadge();
           }
         }
       )
@@ -698,7 +697,7 @@ export default function ChatThreadPage() {
           if (row.user_id && row.user_id !== meId) {
             setOtherLastReadAt(row.last_read_at ?? null);
           } else if (row.user_id === meId) {
-            await refreshUnifiedBadge();
+            await refreshChatBadge();
           }
         }
       )
@@ -808,56 +807,37 @@ export default function ChatThreadPage() {
     });
 
     if (otherUserId) {
-      const notificationTitle = "新着チャット";
-      const notificationBody =
-        body.length > 40 ? `${body.slice(0, 40)}…` : body;
-
-      const notificationUrl = `/chat/${threadId}${
+      const pushTitle = "新着チャット";
+      const pushBody = body.length > 40 ? `${body.slice(0, 40)}…` : body;
+      const pushUrl = `/chat/${threadId}${
         carriedQueryString ? `?${carriedQueryString}` : ""
       }`;
 
-      const { error: notificationErr } = await supabase
-        .from("notifications")
-        .insert({
-          user_id: otherUserId,
-          type: "chat_message",
-          title: notificationTitle,
-          body: notificationBody,
-          target_url: notificationUrl,
-          is_read: false,
-          related_thread_id: threadId,
-          related_team_id: resolvedSendTeamId,
+      try {
+        const pushRes = await fetch("/api/push/send", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId: otherUserId,
+            title: pushTitle,
+            body: pushBody,
+            url: pushUrl,
+          }),
         });
 
-      if (notificationErr) {
-        console.error("notification insert error:", notificationErr);
-      } else {
-        try {
-          const pushRes = await fetch("/api/push/send", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              userId: otherUserId,
-              title: notificationTitle,
-              body: notificationBody,
-              url: notificationUrl,
-            }),
-          });
-
-          if (!pushRes.ok) {
-            const pushJson = await pushRes.json().catch(() => null);
-            console.error("push send error:", pushJson ?? pushRes.statusText);
-          }
-        } catch (e) {
-          console.error("push send fetch error:", e);
+        if (!pushRes.ok) {
+          const pushJson = await pushRes.json().catch(() => null);
+          console.error("push send error:", pushJson ?? pushRes.statusText);
         }
+      } catch (e) {
+        console.error("push send fetch error:", e);
       }
     }
 
     await markRead();
-    await refreshUnifiedBadge();
+    await refreshChatBadge();
     setSending(false);
   };
 
@@ -898,7 +878,7 @@ export default function ChatThreadPage() {
       );
 
       setActionSheetMessageId("");
-      await refreshUnifiedBadge();
+      await refreshChatBadge();
     } catch (e: any) {
       console.error("deleteForMe error:", e);
       alert(`削除に失敗しました: ${e?.message ?? "unknown error"}`);
@@ -950,7 +930,7 @@ export default function ChatThreadPage() {
       );
 
       setActionSheetMessageId("");
-      await refreshUnifiedBadge();
+      await refreshChatBadge();
     } catch (e: any) {
       console.error("deleteForEveryone error:", e);
       alert(`送信取消に失敗しました: ${e?.message ?? "unknown error"}`);

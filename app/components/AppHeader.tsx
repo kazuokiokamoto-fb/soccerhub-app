@@ -5,7 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/app/lib/auth";
-import { supabase } from "@/app/lib/supabase";
 import { getUnreadChatCount, syncAppBadge } from "@/app/lib/badge";
 
 export default function AppHeader() {
@@ -14,7 +13,6 @@ export default function AppHeader() {
   const { user, loading, signOut } = useAuth();
 
   const [busy, setBusy] = useState(false);
-  const [chatUnreadCount, setChatUnreadCount] = useState(0);
   const headerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -46,85 +44,67 @@ export default function AppHeader() {
 
   useEffect(() => {
     if (!user?.id) {
-      setChatUnreadCount(0);
-      syncAppBadge(0);
+      void syncAppBadge(0);
       return;
     }
 
-    loadChatUnread(user.id);
+    let alive = true;
 
-    const channels = [
-      supabase
-        .channel(`header-chat-members:${user.id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "chat_members",
-          },
-          () => {
-            loadChatUnread(user.id);
-          }
-        )
-        .subscribe(),
+    const loadBadge = async () => {
+      try {
+        const total = await getUnreadChatCount(user.id);
+        if (!alive) return;
+        await syncAppBadge(total);
+      } catch (e) {
+        console.error("AppHeader loadBadge error:", e);
+      }
+    };
 
-      supabase
-        .channel(`header-chat-messages:${user.id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "chat_messages",
-          },
-          () => {
-            loadChatUnread(user.id);
-          }
-        )
-        .subscribe(),
-    ];
+    void loadBadge();
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        loadChatUnread(user.id);
+        void loadBadge();
       }
     };
 
     const onBadgeUpdated = () => {
-      loadChatUnread(user.id);
+      void loadBadge();
     };
 
+    window.addEventListener("focus", onBadgeUpdated);
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("badge-updated", onBadgeUpdated);
     window.addEventListener("notifications-updated", onBadgeUpdated);
 
     return () => {
+      alive = false;
+      window.removeEventListener("focus", onBadgeUpdated);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("badge-updated", onBadgeUpdated);
       window.removeEventListener("notifications-updated", onBadgeUpdated);
-      channels.forEach((ch) => supabase.removeChannel(ch));
     };
   }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
-    loadChatUnread(user.id);
-  }, [pathname, user?.id]);
 
-  async function loadChatUnread(userId: string) {
-    try {
-      const total = await getUnreadChatCount(userId);
-      setChatUnreadCount(total);
-      await syncAppBadge(total);
-    } catch (e) {
-      console.error("loadChatUnread error:", e);
-    }
-  }
+    const run = async () => {
+      try {
+        const total = await getUnreadChatCount(user.id);
+        await syncAppBadge(total);
+      } catch (e) {
+        console.error("AppHeader pathname sync error:", e);
+      }
+    };
+
+    void run();
+  }, [pathname, user?.id]);
 
   const onLogout = async () => {
     if (busy) return;
     setBusy(true);
+
     try {
       await signOut();
       await syncAppBadge(0);
@@ -157,15 +137,6 @@ export default function AppHeader() {
         </Link>
 
         <nav className="smh-nav">
-          {pathname !== "/login" && (
-            <Link href="/chat" className="smh-bell" aria-label="チャット">
-              💬
-              {chatUnreadCount > 0 ? (
-                <span className="smh-bellBadge">{chatUnreadCount}</span>
-              ) : null}
-            </Link>
-          )}
-
           {loading ? (
             <span className="smh-user">...</span>
           ) : user ? (
