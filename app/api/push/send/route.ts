@@ -8,8 +8,8 @@ const supabase = createClient(
 
 webpush.setVapidDetails(
   "mailto:your@email.com",
-  "BFISQsrF1NiWyt3PN2ru0Xvykn2QxVwn1M1pjeYuVT3JSLtjd3uz7NSWdB1i8RqkKAQ2j7HTYAh_wa5sLkvLk24",
-  "Vka2kVY_V5x6p_uIZ_lFKh5zYvlwrUys8cIq17fApuw"
+  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+  process.env.VAPID_PRIVATE_KEY!
 );
 
 type PushSendBody = {
@@ -19,8 +19,29 @@ type PushSendBody = {
   url?: string;
 };
 
+type ChatMemberRow = {
+  thread_id: string;
+  last_read_at: string | null;
+};
+
+type ChatMessageRow = {
+  id: string;
+  thread_id: string;
+  sender_id: string | null;
+  created_at: string;
+  deleted_at?: string | null;
+  deleted_for_everyone?: boolean | null;
+};
+
+function isVisibleMessage(message: ChatMessageRow) {
+  if (message.deleted_at) return false;
+  if (message.deleted_for_everyone === true) return false;
+  return true;
+}
+
 // =========================
-// 🔥 チャット未読数を算出
+// チャット未読数を算出
+// 自分が最後に送ったスレッドは未読にしない
 // =========================
 async function getUnreadChatCount(userId: string) {
   const { data: memberRows, error: memberErr } = await supabase
@@ -33,28 +54,30 @@ async function getUnreadChatCount(userId: string) {
     return 0;
   }
 
-  const members = memberRows ?? [];
-  const threadIds = members.map((x: any) => x.thread_id).filter(Boolean);
+  const members = (memberRows ?? []) as ChatMemberRow[];
+  const threadIds = members.map((x) => x.thread_id).filter(Boolean);
 
   if (threadIds.length === 0) return 0;
 
   const { data: msgRows, error: msgErr } = await supabase
     .from("chat_messages")
-    .select("id,thread_id,created_at")
+    .select("id,thread_id,sender_id,created_at,deleted_at,deleted_for_everyone")
     .in("thread_id", threadIds)
     .order("created_at", { ascending: false })
-    .limit(2000);
+    .limit(3000);
 
   if (msgErr) {
     console.error("chat unread message error:", msgErr);
     return 0;
   }
 
-  const latestByThread = new Map<string, any>();
+  const latestByThread = new Map<string, ChatMessageRow>();
 
-  for (const m of msgRows ?? []) {
-    if (!latestByThread.has(m.thread_id)) {
-      latestByThread.set(m.thread_id, m);
+  for (const raw of (msgRows ?? []) as ChatMessageRow[]) {
+    if (!isVisibleMessage(raw)) continue;
+
+    if (!latestByThread.has(raw.thread_id)) {
+      latestByThread.set(raw.thread_id, raw);
     }
   }
 
@@ -63,6 +86,9 @@ async function getUnreadChatCount(userId: string) {
   for (const member of members) {
     const latest = latestByThread.get(member.thread_id);
     if (!latest?.created_at) continue;
+
+    // ✅ 自分が最後に送ったメッセージなら未読にしない
+    if (latest.sender_id === userId) continue;
 
     if (!member.last_read_at) {
       unread += 1;
@@ -80,14 +106,24 @@ async function getUnreadChatCount(userId: string) {
   return unread;
 }
 
+// 必要なら今後ここで通知やオファーも合算
+async function getUnifiedBadgeCount(userId: string) {
+  const unreadChatCount = await getUnreadChatCount(userId);
+  return Math.max(0, unreadChatCount);
+}
+
 export async function POST(req: Request) {
   try {
     const json = (await req.json()) as PushSendBody;
 
-    const userId = json?.userId;
-    const title = json?.title;
-    const body = json?.body;
-    const url = json?.url || "/";
+    const userId =
+      typeof json?.userId === "string" ? json.userId.trim() : "";
+    const title =
+      typeof json?.title === "string" ? json.title.trim() : "";
+    const body =
+      typeof json?.body === "string" ? json.body.trim() : "";
+    const url =
+      typeof json?.url === "string" && json.url.trim() ? json.url.trim() : "/";
 
     if (!userId || !title || !body) {
       return Response.json(
@@ -96,12 +132,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // =========================
-    // 🔥 チャット未読数を取得（統一）
-    // =========================
-    const badgeCount = await getUnreadChatCount(userId);
+    const badgeCount = await getUnifiedBadgeCount(userId);
 
-    // push購読取得
     const { data: subscriptions, error } = await supabase
       .from("push_subscriptions")
       .select("id, endpoint, p256dh, auth")
@@ -120,9 +152,6 @@ export async function POST(req: Request) {
       });
     }
 
-    // =========================
-    // 🔥 payload（統一済み）
-    // =========================
     const payload = JSON.stringify({
       title,
       body,

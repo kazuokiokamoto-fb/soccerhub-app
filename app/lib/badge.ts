@@ -11,7 +11,17 @@ type ChatMessageRow = {
   id: string;
   thread_id: string;
   created_at: string;
+  sender_id: string | null;
+  deleted_at?: string | null;
+  deleted_for_everyone?: boolean | null;
 };
+
+function isVisibleMessage(message: ChatMessageRow) {
+  if (!message) return false;
+  if (message.deleted_at) return false;
+  if (message.deleted_for_everyone === true) return false;
+  return true;
+}
 
 export async function getUnreadNotificationCount(userId: string) {
   if (!userId) return 0;
@@ -27,7 +37,7 @@ export async function getUnreadNotificationCount(userId: string) {
     return 0;
   }
 
-  return count ?? 0;
+  return Math.max(0, count ?? 0);
 }
 
 export async function getUnreadChatCount(userId: string) {
@@ -50,22 +60,25 @@ export async function getUnreadChatCount(userId: string) {
 
   const { data: msgRows, error: msgErr } = await supabase
     .from("chat_messages")
-    .select("id,thread_id,created_at")
+    .select(
+      "id,thread_id,created_at,sender_id,deleted_at,deleted_for_everyone"
+    )
     .in("thread_id", threadIds)
     .order("created_at", { ascending: false })
-    .limit(2000);
+    .limit(3000);
 
   if (msgErr) {
     console.error("getUnreadChatCount message error:", msgErr);
     return 0;
   }
 
-  const messages = (msgRows ?? []) as ChatMessageRow[];
+  const messages = ((msgRows ?? []) as ChatMessageRow[]).filter(isVisibleMessage);
+
   const latestByThread = new Map<string, ChatMessageRow>();
 
-  for (const m of messages) {
-    if (!latestByThread.has(m.thread_id)) {
-      latestByThread.set(m.thread_id, m);
+  for (const message of messages) {
+    if (!latestByThread.has(message.thread_id)) {
+      latestByThread.set(message.thread_id, message);
     }
   }
 
@@ -74,6 +87,9 @@ export async function getUnreadChatCount(userId: string) {
   for (const member of members) {
     const latest = latestByThread.get(member.thread_id);
     if (!latest?.created_at) continue;
+
+    // 自分が最後に送ったスレッドは未読にしない
+    if (latest.sender_id === userId) continue;
 
     if (!member.last_read_at) {
       unread += 1;
@@ -88,7 +104,7 @@ export async function getUnreadChatCount(userId: string) {
     }
   }
 
-  return unread;
+  return Math.max(0, unread);
 }
 
 export async function getUnifiedBadgeCount(userId: string) {
@@ -99,7 +115,7 @@ export async function getUnifiedBadgeCount(userId: string) {
     getUnreadChatCount(userId),
   ]);
 
-  return notificationUnread + chatUnread;
+  return Math.max(0, notificationUnread + chatUnread);
 }
 
 export async function syncAppBadge(count: number) {

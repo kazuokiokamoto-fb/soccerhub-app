@@ -61,13 +61,26 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                  navigator.serviceWorker.register('/sw.js')
-                    .then(reg => console.log('SW registered', reg))
-                    .catch(err => console.log('SW error', err));
-                });
-              }
+              (function () {
+                if (!("serviceWorker" in navigator)) return;
+
+                async function registerServiceWorker() {
+                  try {
+                    const reg = await navigator.serviceWorker.register("/sw.js");
+                    console.log("SW registered", reg);
+
+                    try {
+                      await reg.update();
+                    } catch (e) {
+                      console.log("SW update skipped", e);
+                    }
+                  } catch (err) {
+                    console.log("SW error", err);
+                  }
+                }
+
+                window.addEventListener("load", registerServiceWorker);
+              })();
             `,
           }}
         />

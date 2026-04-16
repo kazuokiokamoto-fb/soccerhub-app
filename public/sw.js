@@ -10,28 +10,42 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   const targetUrl =
-    event.notification?.data?.url &&
+    event.notification &&
+    event.notification.data &&
     typeof event.notification.data.url === "string"
       ? event.notification.data.url
       : "/";
 
   event.waitUntil(
-    self.clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then((clients) => {
-        for (const client of clients) {
-          if ("focus" in client) {
-            if ("navigate" in client) {
-              client.navigate(targetUrl);
-            }
-            return client.focus();
-          }
-        }
+    (async () => {
+      const clients = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
 
-        if (self.clients.openWindow) {
-          return self.clients.openWindow(targetUrl);
+      for (const client of clients) {
+        try {
+          const clientUrl = new URL(client.url);
+          const target = new URL(targetUrl, self.location.origin);
+
+          if (clientUrl.origin === target.origin) {
+            if ("navigate" in client) {
+              await client.navigate(target.href);
+            }
+            if ("focus" in client) {
+              await client.focus();
+            }
+            return;
+          }
+        } catch (e) {
+          console.error("notificationclick client handling error:", e);
         }
-      })
+      }
+
+      if (self.clients.openWindow) {
+        await self.clients.openWindow(targetUrl);
+      }
+    })()
   );
 });
 
@@ -48,11 +62,24 @@ self.addEventListener("push", (event) => {
       const parsed = event.data.json();
 
       data = {
-        title: parsed.title || "サカまっち",
-        body: parsed.body || "新しい通知があります",
-        url: parsed.url || "/",
+        title:
+          typeof parsed?.title === "string" && parsed.title.trim()
+            ? parsed.title
+            : "サカまっち",
+        body:
+          typeof parsed?.body === "string" && parsed.body.trim()
+            ? parsed.body
+            : "新しい通知があります",
+        url:
+          typeof parsed?.url === "string" && parsed.url.trim()
+            ? parsed.url
+            : "/",
         badgeCount:
-          typeof parsed.badgeCount === "number" ? parsed.badgeCount : 0,
+          typeof parsed?.badgeCount === "number" &&
+          Number.isFinite(parsed.badgeCount) &&
+          parsed.badgeCount > 0
+            ? parsed.badgeCount
+            : 0,
       };
     }
   } catch (e) {
@@ -61,24 +88,20 @@ self.addEventListener("push", (event) => {
 
   event.waitUntil(
     (async () => {
-      // =========================
-      // ① iOS バッジ対応
-      // =========================
       try {
-        if ("setAppBadge" in navigator) {
+        const nav = self.navigator;
+
+        if ("setAppBadge" in nav) {
           if (data.badgeCount > 0) {
-            await navigator.setAppBadge(data.badgeCount);
-          } else if ("clearAppBadge" in navigator) {
-            await navigator.clearAppBadge();
+            await nav.setAppBadge(data.badgeCount);
+          } else if ("clearAppBadge" in nav) {
+            await nav.clearAppBadge();
           }
         }
       } catch (e) {
         console.error("badge update error:", e);
       }
 
-      // =========================
-      // ② Android対応（通知で擬似バッジ）
-      // =========================
       const displayBody =
         data.badgeCount > 0
           ? `${data.body}\n（未読${data.badgeCount}件）`
@@ -88,11 +111,8 @@ self.addEventListener("push", (event) => {
         body: displayBody,
         icon: "/icon-192.png",
         badge: "/icon-192.png",
-
-        // 👇 Androidで「上書き通知」にする
         tag: "sakamachi-notification",
         renotify: true,
-
         data: {
           url: data.url,
           badgeCount: data.badgeCount,

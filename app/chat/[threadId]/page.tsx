@@ -283,7 +283,13 @@ export default function ChatThreadPage() {
   }, [messages, meId]);
 
   const canSend = useMemo(() => {
-    return !!meId && !!threadId && isMember && text.trim().length > 0 && !sending;
+    return (
+      !!meId &&
+      !!threadId &&
+      isMember &&
+      text.trim().length > 0 &&
+      !sending
+    );
   }, [meId, threadId, isMember, text, sending]);
 
   const lastMyMessageId = useMemo(() => {
@@ -427,7 +433,9 @@ export default function ChatThreadPage() {
     if (memberErr) console.error(memberErr);
     if (ownedTeamsErr) console.error(ownedTeamsErr);
 
-    const typedMemberRows = ((memberRows ?? []) as ChatMemberRow[]).filter(Boolean);
+    const typedMemberRows = ((memberRows ?? []) as ChatMemberRow[]).filter(
+      Boolean
+    );
     const ownedTeams = ((ownedTeamsRows ?? []) as TeamMini[]).filter(Boolean);
 
     setMemberRowsState(typedMemberRows);
@@ -441,10 +449,13 @@ export default function ChatThreadPage() {
     setMyTeamId(resolvedMyTeamId);
 
     const ownedTeamIds = new Set(ownedTeams.map((t) => t.id).filter(Boolean));
-    const teamIds = typedMemberRows.map((r) => r.team_id as string).filter(Boolean);
+    const teamIds = typedMemberRows
+      .map((r) => r.team_id as string)
+      .filter(Boolean);
 
     const otherMemberRow =
-      typedMemberRows.find((r) => r.user_id && r.user_id !== currentMeId) ?? null;
+      typedMemberRows.find((r) => r.user_id && r.user_id !== currentMeId) ??
+      null;
 
     const otherUserIdValue = otherMemberRow?.user_id ?? "";
     setOtherUserId(otherUserIdValue);
@@ -469,7 +480,9 @@ export default function ChatThreadPage() {
       if (teamRow) {
         const team = teamRow as TeamMini;
         setOtherTeamName(team.name ?? "相手チーム");
-        setOtherTeamCategory(categoryLabel(team.category) || team.category || "");
+        setOtherTeamCategory(
+          categoryLabel(team.category) || team.category || ""
+        );
       } else {
         setOtherTeamName("相手チーム");
         setOtherTeamCategory("");
@@ -524,6 +537,11 @@ export default function ChatThreadPage() {
     }
     setNotificationPermission(Notification.permission);
   }, []);
+
+  useEffect(() => {
+    if (!meId) return;
+    void refreshUnifiedBadge();
+  }, [meId]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -622,7 +640,9 @@ export default function ChatThreadPage() {
 
             setMessages((prev) => {
               if (prev.some((m) => m.id === row.id)) {
-                return prev.filter((m) => !String(m.id).startsWith("optimistic-"));
+                return prev.filter(
+                  (m) => !String(m.id).startsWith("optimistic-")
+                );
               }
 
               const withoutOptimistic = prev.filter(
@@ -646,6 +666,8 @@ export default function ChatThreadPage() {
             if (row.sender_id && row.sender_id !== meId) {
               notifyIncomingMessage(row.body);
               await markRead();
+            } else {
+              await refreshUnifiedBadge();
             }
           }
 
@@ -654,6 +676,7 @@ export default function ChatThreadPage() {
             setMessages((prev) =>
               prev.map((m) => (m.id === row.id ? { ...m, ...row } : m))
             );
+            await refreshUnifiedBadge();
           }
         }
       )
@@ -674,6 +697,8 @@ export default function ChatThreadPage() {
 
           if (row.user_id && row.user_id !== meId) {
             setOtherLastReadAt(row.last_read_at ?? null);
+          } else if (row.user_id === meId) {
+            await refreshUnifiedBadge();
           }
         }
       )
@@ -784,7 +809,8 @@ export default function ChatThreadPage() {
 
     if (otherUserId) {
       const notificationTitle = "新着チャット";
-      const notificationBody = body.length > 40 ? `${body.slice(0, 40)}…` : body;
+      const notificationBody =
+        body.length > 40 ? `${body.slice(0, 40)}…` : body;
 
       const notificationUrl = `/chat/${threadId}${
         carriedQueryString ? `?${carriedQueryString}` : ""
@@ -831,6 +857,7 @@ export default function ChatThreadPage() {
     }
 
     await markRead();
+    await refreshUnifiedBadge();
     setSending(false);
   };
 
@@ -871,6 +898,7 @@ export default function ChatThreadPage() {
       );
 
       setActionSheetMessageId("");
+      await refreshUnifiedBadge();
     } catch (e: any) {
       console.error("deleteForMe error:", e);
       alert(`削除に失敗しました: ${e?.message ?? "unknown error"}`);
@@ -922,6 +950,7 @@ export default function ChatThreadPage() {
       );
 
       setActionSheetMessageId("");
+      await refreshUnifiedBadge();
     } catch (e: any) {
       console.error("deleteForEveryone error:", e);
       alert(`送信取消に失敗しました: ${e?.message ?? "unknown error"}`);
@@ -956,7 +985,9 @@ export default function ChatThreadPage() {
               このチャットを見るにはログインが必要です。
               <div style={{ marginTop: 12 }}>
                 <Link
-                  href={`/login?redirect=${encodeURIComponent(loginRedirectPath)}`}
+                  href={`/login?redirect=${encodeURIComponent(
+                    loginRedirectPath
+                  )}`}
                   className="sh-btn sh-btn--primary"
                 >
                   ログインする
@@ -1145,7 +1176,9 @@ export default function ChatThreadPage() {
         </div>
 
         <div style={inputArea}>
-          {sendError ? <div style={sendErrorText}>送信エラー: {sendError}</div> : null}
+          {sendError ? (
+            <div style={sendErrorText}>送信エラー: {sendError}</div>
+          ) : null}
 
           <div style={inputRow}>
             <textarea

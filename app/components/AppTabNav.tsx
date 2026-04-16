@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/app/lib/auth";
+import { getUnifiedBadgeCount, syncAppBadge } from "@/app/lib/badge";
 
 const TABS = [
   { href: "/", label: "ホーム" },
@@ -28,12 +30,82 @@ function isActive(pathname: string, href: string) {
 
 export default function AppTabNav() {
   const pathname = usePathname() || "/";
+  const { user, loading } = useAuth();
+  const meId = user?.id ?? "";
+
+  const [badgeCount, setBadgeCount] = useState(0);
+
+  const chatBadgeText = useMemo(() => {
+    if (badgeCount <= 0) return "";
+    if (badgeCount > 99) return "99+";
+    return String(badgeCount);
+  }, [badgeCount]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (!meId) {
+      setBadgeCount(0);
+      void syncAppBadge(0);
+      return;
+    }
+
+    let alive = true;
+
+    const syncAll = async () => {
+      try {
+        const total = await getUnifiedBadgeCount(meId);
+        if (!alive) return;
+
+        setBadgeCount(total);
+        await syncAppBadge(total);
+      } catch (e) {
+        console.error("AppTabNav badge sync error:", e);
+      }
+    };
+
+    void syncAll();
+
+    const intervalId = window.setInterval(() => {
+      void syncAll();
+    }, 15000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void syncAll();
+      }
+    };
+
+    const handleFocus = () => {
+      void syncAll();
+    };
+
+    const handleBadgeUpdated = () => {
+      void syncAll();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("badge-updated", handleBadgeUpdated);
+    window.addEventListener("notifications-updated", handleBadgeUpdated);
+
+    return () => {
+      alive = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("badge-updated", handleBadgeUpdated);
+      window.removeEventListener("notifications-updated", handleBadgeUpdated);
+    };
+  }, [meId, loading]);
 
   return (
     <nav style={wrap} aria-label="メインナビゲーション">
       <div style={tabRow}>
         {TABS.map((tab) => {
           const active = isActive(pathname, tab.href);
+          const isChatTab = tab.href === "/chat";
+          const showBadge = isChatTab && badgeCount > 0;
 
           return (
             <Link
@@ -44,7 +116,13 @@ export default function AppTabNav() {
                 ...(active ? tabActive : tabInactive),
               }}
             >
-              {tab.label}
+              <span style={tabInner}>
+                <span style={tabLabel}>{tab.label}</span>
+
+                {showBadge ? (
+                  <span style={badge}>{chatBadgeText}</span>
+                ) : null}
+              </span>
             </Link>
           );
         })}
@@ -88,4 +166,35 @@ const tabActive: React.CSSProperties = {
 const tabInactive: React.CSSProperties = {
   background: "#fff",
   color: "#23412c",
+};
+
+const tabInner: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 6,
+  minWidth: 0,
+  maxWidth: "100%",
+};
+
+const tabLabel: React.CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const badge: React.CSSProperties = {
+  minWidth: 18,
+  height: 18,
+  padding: "0 5px",
+  borderRadius: 999,
+  background: "#dc2626",
+  color: "#fff",
+  fontSize: 11,
+  fontWeight: 900,
+  lineHeight: "18px",
+  textAlign: "center",
+  flexShrink: 0,
+  boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
 };
