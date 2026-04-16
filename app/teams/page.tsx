@@ -72,6 +72,23 @@ function toTeamRows(value: unknown): TeamRow[] {
   return value.map((row) => row as TeamRow);
 }
 
+function compareTeamsForList(a: TeamRow, b: TeamRow, myUserId: string) {
+  const aMine = !!myUserId && a.owner_id === myUserId;
+  const bMine = !!myUserId && b.owner_id === myUserId;
+
+  if (aMine !== bMine) {
+    return aMine ? 1 : -1;
+  }
+
+  const aName = String(a.name ?? "").trim();
+  const bName = String(b.name ?? "").trim();
+
+  const byName = aName.localeCompare(bName, "ja");
+  if (byName !== 0) return byName;
+
+  return String(a.id).localeCompare(String(b.id), "ja");
+}
+
 function TeamsPageInner() {
   const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
@@ -235,7 +252,7 @@ function TeamsPageInner() {
   ]);
 
   const filteredTeams = useMemo(() => {
-    return teams.filter((team) => {
+    const matched = teams.filter((team) => {
       const categories = teamCategories(team);
 
       if (filters.categoryFilter.length > 0) {
@@ -318,7 +335,9 @@ function TeamsPageInner() {
 
       return true;
     });
-  }, [teams, filters]);
+
+    return [...matched].sort((a, b) => compareTeamsForList(a, b, myUserId));
+  }, [teams, filters, myUserId]);
 
   const filterSummaryText = useMemo(() => {
     const parts: string[] = [];
