@@ -1165,6 +1165,11 @@ export default function ChatThreadPage() {
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={onKeyDown}
+              onFocus={() => {
+                setTimeout(() => {
+                  scrollToBottom(false);
+                }, 120);
+              }}
               placeholder="メッセージを入力"
               style={textareaStyle}
               disabled={!meId || !isMember || sending}
@@ -1238,8 +1243,9 @@ const pageWrap: React.CSSProperties = {
   padding: 12,
   maxWidth: 860,
   margin: "0 auto",
-  height: "100dvh",
   boxSizing: "border-box",
+  height: "calc(100dvh - var(--app-header-height, 0px))",
+  minHeight: "calc(100dvh - var(--app-header-height, 0px))",
 };
 
 const chatPanel: React.CSSProperties = {
@@ -1249,7 +1255,7 @@ const chatPanel: React.CSSProperties = {
   overflow: "hidden",
   display: "grid",
   gridTemplateRows: "auto 1fr auto",
-  height: "calc(100dvh - 24px)",
+  height: "100%",
   minHeight: 0,
 };
 
@@ -1324,8 +1330,9 @@ const notifyBadgeGranted: React.CSSProperties = {
 const chatBody: React.CSSProperties = {
   minHeight: 0,
   overflowY: "auto",
-  padding: 14,
+  padding: "14px 14px 20px",
   background: "linear-gradient(180deg, #eef8f0 0%, #f8fcf9 100%)",
+  WebkitOverflowScrolling: "touch",
 };
 
 const messageList: React.CSSProperties = {
@@ -1455,7 +1462,7 @@ const readStateText: React.CSSProperties = {
 const inputArea: React.CSSProperties = {
   borderTop: "1px solid #e5ece7",
   background: "#fff",
-  padding: 12,
+  padding: "12px 12px calc(12px + env(safe-area-inset-bottom))",
   display: "grid",
   gap: 8,
 };
@@ -1475,9 +1482,10 @@ const textareaStyle: React.CSSProperties = {
   borderRadius: 18,
   border: "1px solid #d1d5db",
   background: "#fff",
-  resize: "vertical",
-  fontSize: 14,
+  resize: "none",
+  fontSize: 16,
   lineHeight: 1.6,
+  WebkitAppearance: "none",
 };
 
 const sendButton: React.CSSProperties = {
