@@ -47,6 +47,13 @@ function LoginPageInner() {
     );
   }, [isLineInAppBrowser]);
 
+  const buildAuthCallbackUrl = () => {
+    if (typeof window === "undefined") return undefined;
+    return `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(
+      redirectPath
+    )}`;
+  };
+
   const handleGoogleLogin = async () => {
     setMessage("");
 
@@ -66,23 +73,31 @@ function LoginPageInner() {
 
     setLoadingGoogle(true);
 
-    const redirectTo =
-      typeof window !== "undefined"
-        ? `${window.location.origin}${redirectPath}`
-        : undefined;
+    const redirectTo = buildAuthCallbackUrl();
 
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo,
+        queryParams: {
+          prompt: "select_account",
+        },
       },
     });
 
-    setLoadingGoogle(false);
-
     if (error) {
+      setLoadingGoogle(false);
       setMessage(`Googleログインに失敗しました: ${error.message}`);
+      return;
     }
+
+    if (!data?.url) {
+      setLoadingGoogle(false);
+      setMessage("GoogleログインURLの取得に失敗しました。");
+      return;
+    }
+
+    window.location.assign(data.url);
   };
 
   const handleLogin = async () => {
@@ -118,10 +133,7 @@ function LoginPageInner() {
     setLoadingSignup(true);
     setMessage("");
 
-    const emailRedirectTo =
-      typeof window !== "undefined"
-        ? `${window.location.origin}${redirectPath}`
-        : undefined;
+    const emailRedirectTo = buildAuthCallbackUrl();
 
     const { error } = await supabase.auth.signUp({
       email,

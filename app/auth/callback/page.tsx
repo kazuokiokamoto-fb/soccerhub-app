@@ -4,10 +4,6 @@ import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function normalizeRedirect(input: string | null | undefined) {
   if (!input) return "/";
   if (!input.startsWith("/")) return "/";
@@ -26,26 +22,34 @@ function AuthCallbackInner() {
       const redirect = normalizeRedirect(sp.get("redirect"));
 
       try {
-        // まずURL上の認証情報をセッションへ反映
-        // OAuthの戻り直後に安定しやすくするため
-        await supabase.auth.getSession();
+        const currentUrl = window.location.href;
 
-        // セッション確定待ち
-        for (let i = 0; i < 12; i++) {
-          const { data, error } = await supabase.auth.getSession();
+        // Google OAuthの code を session に交換する
+        const { error } = await supabase.auth.exchangeCodeForSession(currentUrl);
 
-          if (!mounted) return;
+        if (!mounted) return;
 
-          if (!error && data.session) {
-            router.replace(redirect);
-            router.refresh();
-            return;
-          }
-
-          await sleep(200);
+        if (error) {
+          console.error("exchangeCodeForSession error:", error);
+          router.replace(`/login?redirect=${encodeURIComponent(redirect)}`);
+          router.refresh();
+          return;
         }
 
-        router.replace(`/login?redirect=${encodeURIComponent(redirect)}`);
+        // 念のため session を確認
+        const { data: sessionData, error: sessionError } =
+          await supabase.auth.getSession();
+
+        if (!mounted) return;
+
+        if (sessionError || !sessionData.session) {
+          console.error("getSession after exchange error:", sessionError);
+          router.replace(`/login?redirect=${encodeURIComponent(redirect)}`);
+          router.refresh();
+          return;
+        }
+
+        router.replace(redirect);
         router.refresh();
       } catch (e) {
         console.error("auth callback error:", e);
@@ -55,7 +59,7 @@ function AuthCallbackInner() {
       }
     };
 
-    run();
+    void run();
 
     return () => {
       mounted = false;
