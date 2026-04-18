@@ -6,223 +6,70 @@ import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import { categoryLabel } from "@/app/lib/categories";
 import { getUnreadChatCount, syncAppBadge } from "@/app/lib/badge";
-
-type Msg = {
-  id: string;
-  thread_id: string;
-  sender_id: string | null;
-  sender_team_id: string | null;
-  body: string | null;
-  created_at: string;
-  updated_at?: string | null;
-  deleted_at?: string | null;
-  deleted_by_sender?: boolean;
-  deleted_for_everyone?: boolean;
-};
-
-type TeamMini = {
-  id: string;
-  name: string | null;
-  category?: string | null;
-};
-
-type ChatMemberRow = {
-  thread_id: string;
-  user_id?: string | null;
-  team_id?: string | null;
-  last_read_at: string | null;
-};
-
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function formatBubbleTime(dt?: string | null) {
-  if (!dt) return "";
-  try {
-    const d = new Date(dt);
-    return d.toLocaleString("ja-JP", {
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
-  }
-}
-
-function formatDateDivider(dt?: string | null) {
-  if (!dt) return "";
-  try {
-    const d = new Date(dt);
-    return d.toLocaleDateString("ja-JP", {
-      year: "numeric",
-      month: "numeric",
-      day: "numeric",
-      weekday: "short",
-    });
-  } catch {
-    return "";
-  }
-}
-
-function formatReadTime(dt?: string | null) {
-  if (!dt) return "";
-  try {
-    const d = new Date(dt);
-    return d.toLocaleTimeString("ja-JP", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
-  }
-}
-
-function sameDate(a?: string | null, b?: string | null) {
-  if (!a || !b) return false;
-  const da = new Date(a);
-  const db = new Date(b);
-  return (
-    da.getFullYear() === db.getFullYear() &&
-    da.getMonth() === db.getMonth() &&
-    da.getDate() === db.getDate()
-  );
-}
-
-function buildQueryString(params: {
-  from?: string | null;
-  slotId?: string | null;
-  date?: string | null;
-}) {
-  const qs = new URLSearchParams();
-
-  if (params.from) qs.set("from", params.from);
-  if (params.slotId) qs.set("slotId", params.slotId);
-  if (params.date) qs.set("date", params.date);
-
-  return qs.toString();
-}
-
-function getBackLink(params: {
-  from?: string | null;
-  slotId?: string | null;
-  date?: string | null;
-}) {
-  const { from, slotId, date } = params;
-
-  switch (from) {
-    case "home": {
-      const qs = new URLSearchParams();
-      if (date) qs.set("date", date);
-      if (slotId) qs.set("slotId", slotId);
-
-      return {
-        href: qs.toString() ? `/?${qs.toString()}` : "/",
-        label: "← ホームに戻る",
-      };
-    }
-
-    case "match-calendar": {
-      const qs = new URLSearchParams();
-      if (date) qs.set("date", date);
-      if (slotId) qs.set("slotId", slotId);
-
-      return {
-        href: qs.toString() ? `/match?${qs.toString()}` : "/match",
-        label: "← 試合を探すに戻る",
-      };
-    }
-
-    case "sent-offers":
-      return {
-        href: "/match/status/offers",
-        label: "← 送ったオファーへ",
-      };
-
-    case "received-offers":
-      return {
-        href: "/match/status/offers-received",
-        label: "← 届いたオファーへ",
-      };
-
-    case "chat-list":
-      return {
-        href: "/chat",
-        label: "← 一覧",
-      };
-
-    default:
-      return {
-        href: "/chat",
-        label: "← 一覧",
-      };
-  }
-}
-
-function resolveMyTeamId(params: {
-  meId: string;
-  memberRows: ChatMemberRow[];
-  ownedTeams: TeamMini[];
-}) {
-  const { meId, memberRows, ownedTeams } = params;
-
-  const ownedTeamIds = new Set(ownedTeams.map((t) => t.id).filter(Boolean));
-
-  const myOwnMemberRow = memberRows.find(
-    (r) => r.user_id === meId && r.team_id && ownedTeamIds.has(r.team_id)
-  );
-  if (myOwnMemberRow?.team_id) {
-    return myOwnMemberRow.team_id;
-  }
-
-  const matchedMemberTeamId = memberRows.find(
-    (r) => r.team_id && ownedTeamIds.has(r.team_id)
-  )?.team_id;
-  if (matchedMemberTeamId) {
-    return matchedMemberTeamId;
-  }
-
-  if (ownedTeams.length === 1) {
-    return ownedTeams[0].id;
-  }
-
-  return ownedTeams[0]?.id ?? "";
-}
-
-function isOptimisticMessageId(id?: string | null) {
-  return String(id ?? "").startsWith("optimistic-");
-}
-
-function isReadByOther(params: {
-  messageCreatedAt?: string | null;
-  otherLastReadAt?: string | null;
-}) {
-  const { messageCreatedAt, otherLastReadAt } = params;
-  if (!messageCreatedAt || !otherLastReadAt) return false;
-
-  try {
-    return (
-      new Date(otherLastReadAt).getTime() >=
-      new Date(messageCreatedAt).getTime()
-    );
-  } catch {
-    return false;
-  }
-}
-
-function isDeletedForEveryone(m: Msg) {
-  return !!m.deleted_for_everyone || !!m.deleted_at;
-}
-
-function isDeletedOnlyForSender(m: Msg) {
-  return !!m.deleted_by_sender && !m.deleted_for_everyone;
-}
-
-function shouldHideForMe(m: Msg, meId: string) {
-  return m.sender_id === meId && isDeletedOnlyForSender(m);
-}
+import {
+  type Msg,
+  type TeamMini,
+  type ChatMemberRow,
+  nowIso,
+  formatBubbleTime,
+  formatDateDivider,
+  formatReadTime,
+  sameDate,
+  buildQueryString,
+  getBackLink,
+  resolveMyTeamId,
+  isOptimisticMessageId,
+  isReadByOther,
+  isDeletedForEveryone,
+  isDeletedOnlyForSender,
+  shouldHideForMe,
+} from "./chat-thread.utils";
+import {
+  pageWrap,
+  chatPanel,
+  authLoadingBox,
+  panelHeader,
+  headerLeft,
+  titleWrap,
+  headerRight,
+  threadTitle,
+  threadSubTitle,
+  notifyBadgeGranted,
+  chatBody,
+  messageList,
+  notMemberBox,
+  dateDividerWrap,
+  dateDivider,
+  bubbleRow,
+  bubbleWrap,
+  senderName,
+  bubbleBase,
+  bubbleMine,
+  bubbleOther,
+  bubbleSending,
+  bubbleDeleted,
+  bubbleActionable,
+  bubbleText,
+  bubbleMeta,
+  bubbleMetaMine,
+  bubbleMetaOther,
+  bubbleMineRow,
+  bubbleMetaSide,
+  bubbleMetaTime,
+  readStateText,
+  inputArea,
+  inputRow,
+  textareaStyle,
+  sendButton,
+  inputHint,
+  sendErrorText,
+  sheetBackdrop,
+  sheetWrap,
+  sheetPanel,
+  sheetButton,
+  sheetDangerButton,
+  sheetCancelButton,
+} from "./chat-thread.styles";
 
 export default function ChatThreadPage() {
   const params = useParams<{ threadId: string }>();
@@ -291,18 +138,6 @@ export default function ChatThreadPage() {
       !sending
     );
   }, [meId, threadId, isMember, text, sending]);
-
-  const lastMyMessageId = useMemo(() => {
-    const lastMyMessage = [...visibleMessages]
-      .filter((m) => m.sender_id === meId)
-      .sort((a, b) => {
-        const at = new Date(a.created_at ?? 0).getTime();
-        const bt = new Date(b.created_at ?? 0).getTime();
-        return bt - at;
-      })[0];
-
-    return lastMyMessage?.id ?? "";
-  }, [visibleMessages, meId]);
 
   const scrollToBottom = (smooth = true) => {
     requestAnimationFrame(() => {
@@ -1047,8 +882,6 @@ export default function ChatThreadPage() {
               const showDate = !prev || !sameDate(prev.created_at, m.created_at);
               const deletedForEveryone = isDeletedForEveryone(m);
               const canAction = canOpenActionSheet(m);
-
-              const isLatestMyMessage = mine && m.id === lastMyMessageId;
               const isRead = isReadByOther({
                 messageCreatedAt: m.created_at,
                 otherLastReadAt,
@@ -1078,67 +911,121 @@ export default function ChatThreadPage() {
                     >
                       {!mine ? <div style={senderName}>{otherTeamName}</div> : null}
 
-                      <div
-                        role={canAction ? "button" : undefined}
-                        tabIndex={canAction ? 0 : -1}
-                        onContextMenu={
-                          canAction
-                            ? (e) => {
-                                e.preventDefault();
-                                setActionSheetMessageId(m.id);
-                              }
-                            : undefined
-                        }
-                        onTouchStart={
-                          canAction
-                            ? () => {
-                                startLongPress(m.id);
-                              }
-                            : undefined
-                        }
-                        onTouchEnd={canAction ? clearLongPressTimer : undefined}
-                        onTouchMove={canAction ? clearLongPressTimer : undefined}
-                        onTouchCancel={canAction ? clearLongPressTimer : undefined}
-                        onMouseDown={
-                          canAction
-                            ? () => {
-                                startLongPress(m.id);
-                              }
-                            : undefined
-                        }
-                        onMouseUp={canAction ? clearLongPressTimer : undefined}
-                        onMouseLeave={canAction ? clearLongPressTimer : undefined}
-                        style={{
-                          ...bubbleBase,
-                          ...(mine ? bubbleMine : bubbleOther),
-                          ...(optimistic ? bubbleSending : null),
-                          ...(deletedForEveryone ? bubbleDeleted : null),
-                          ...(canAction ? bubbleActionable : null),
-                        }}
-                      >
-                        <div style={bubbleText}>
-                          {deletedForEveryone
-                            ? "このメッセージは削除されました"
-                            : m.body}
+                      {mine ? (
+                        <div style={bubbleMineRow}>
+                          <div style={bubbleMetaSide}>
+                            {isRead && !optimistic ? (
+                              <span style={readStateText}>既読</span>
+                            ) : null}
+                            <span style={bubbleMetaTime}>
+                              {optimistic ? "送信中…" : formatBubbleTime(m.created_at)}
+                            </span>
+                          </div>
+
+                          <div
+                            role={canAction ? "button" : undefined}
+                            tabIndex={canAction ? 0 : -1}
+                            onContextMenu={
+                              canAction
+                                ? (e) => {
+                                    e.preventDefault();
+                                    setActionSheetMessageId(m.id);
+                                  }
+                                : undefined
+                            }
+                            onTouchStart={
+                              canAction
+                                ? () => {
+                                    startLongPress(m.id);
+                                  }
+                                : undefined
+                            }
+                            onTouchEnd={canAction ? clearLongPressTimer : undefined}
+                            onTouchMove={canAction ? clearLongPressTimer : undefined}
+                            onTouchCancel={canAction ? clearLongPressTimer : undefined}
+                            onMouseDown={
+                              canAction
+                                ? () => {
+                                    startLongPress(m.id);
+                                  }
+                                : undefined
+                            }
+                            onMouseUp={canAction ? clearLongPressTimer : undefined}
+                            onMouseLeave={canAction ? clearLongPressTimer : undefined}
+                            style={{
+                              ...bubbleBase,
+                              ...bubbleMine,
+                              ...(optimistic ? bubbleSending : null),
+                              ...(deletedForEveryone ? bubbleDeleted : null),
+                              ...(canAction ? bubbleActionable : null),
+                            }}
+                          >
+                            <div style={bubbleText}>
+                              {deletedForEveryone
+                                ? "このメッセージは削除されました"
+                                : m.body}
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <>
+                          <div
+                            role={canAction ? "button" : undefined}
+                            tabIndex={canAction ? 0 : -1}
+                            onContextMenu={
+                              canAction
+                                ? (e) => {
+                                    e.preventDefault();
+                                    setActionSheetMessageId(m.id);
+                                  }
+                                : undefined
+                            }
+                            onTouchStart={
+                              canAction
+                                ? () => {
+                                    startLongPress(m.id);
+                                  }
+                                : undefined
+                            }
+                            onTouchEnd={canAction ? clearLongPressTimer : undefined}
+                            onTouchMove={canAction ? clearLongPressTimer : undefined}
+                            onTouchCancel={canAction ? clearLongPressTimer : undefined}
+                            onMouseDown={
+                              canAction
+                                ? () => {
+                                    startLongPress(m.id);
+                                  }
+                                : undefined
+                            }
+                            onMouseUp={canAction ? clearLongPressTimer : undefined}
+                            onMouseLeave={canAction ? clearLongPressTimer : undefined}
+                            style={{
+                              ...bubbleBase,
+                              ...bubbleOther,
+                              ...(optimistic ? bubbleSending : null),
+                              ...(deletedForEveryone ? bubbleDeleted : null),
+                              ...(canAction ? bubbleActionable : null),
+                            }}
+                          >
+                            <div style={bubbleText}>
+                              {deletedForEveryone
+                                ? "このメッセージは削除されました"
+                                : m.body}
+                            </div>
+                          </div>
 
-                      <div
-                        style={{
-                          ...bubbleMeta,
-                          justifyContent: mine ? "flex-end" : "flex-start",
-                        }}
-                      >
-                        <span>
-                          {optimistic ? "送信中…" : formatBubbleTime(m.created_at)}
-                        </span>
-
-                        {isLatestMyMessage && isRead && !optimistic ? (
-                          <span style={readStateText}>
-                            既読 {formatReadTime(otherLastReadAt)}
-                          </span>
-                        ) : null}
-                      </div>
+                          <div
+                            style={{
+                              ...bubbleMeta,
+                              ...bubbleMetaOther,
+                            }}
+                          >
+                            <span>
+                              {optimistic ? "送信中…" : formatBubbleTime(m.created_at)}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </React.Fragment>
@@ -1232,332 +1119,3 @@ export default function ChatThreadPage() {
     </main>
   );
 }
-
-const pageWrap: React.CSSProperties = {
-  padding: 12,
-  maxWidth: 860,
-  margin: "0 auto",
-  boxSizing: "border-box",
-  height: "calc(100dvh - var(--app-header-height, 0px))",
-  minHeight: "calc(100dvh - var(--app-header-height, 0px))",
-};
-
-const chatPanel: React.CSSProperties = {
-  border: "1px solid #e5ece7",
-  borderRadius: 20,
-  background: "#f6fbf7",
-  overflow: "hidden",
-  display: "grid",
-  gridTemplateRows: "auto 1fr auto",
-  height: "100%",
-  minHeight: 0,
-};
-
-const authLoadingBox: React.CSSProperties = {
-  display: "grid",
-  placeItems: "center",
-  minHeight: 240,
-  padding: 24,
-  color: "#666",
-  background: "#fff",
-};
-
-const panelHeader: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 12,
-  padding: 12,
-  borderBottom: "1px solid #e5ece7",
-  background: "#ffffff",
-  position: "sticky",
-  top: 0,
-  zIndex: 2,
-  flexWrap: "wrap",
-};
-
-const headerLeft: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  minWidth: 0,
-  flexWrap: "wrap",
-};
-
-const titleWrap: React.CSSProperties = {
-  minWidth: 0,
-};
-
-const headerRight: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 8,
-  flexWrap: "wrap",
-};
-
-const threadTitle: React.CSSProperties = {
-  fontSize: 18,
-  fontWeight: 900,
-  color: "#16391f",
-  lineHeight: 1.3,
-};
-
-const threadSubTitle: React.CSSProperties = {
-  fontSize: 12,
-  color: "#6b7280",
-  marginTop: 2,
-};
-
-const notifyBadgeGranted: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 32,
-  padding: "0 10px",
-  borderRadius: 999,
-  background: "#dcfce7",
-  color: "#166534",
-  fontSize: 12,
-  fontWeight: 900,
-};
-
-const chatBody: React.CSSProperties = {
-  minHeight: 0,
-  overflowY: "auto",
-  padding: "14px 14px 20px",
-  background: "linear-gradient(180deg, #eef8f0 0%, #f8fcf9 100%)",
-  WebkitOverflowScrolling: "touch",
-};
-
-const messageList: React.CSSProperties = {
-  display: "grid",
-  gap: 10,
-};
-
-const notMemberBox: React.CSSProperties = {
-  padding: 16,
-  borderRadius: 14,
-  background: "#fff",
-  border: "1px solid #e5ece7",
-  color: "#991b1b",
-  lineHeight: 1.8,
-};
-
-const dateDividerWrap: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "center",
-  margin: "4px 0 2px",
-};
-
-const dateDivider: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: "4px 10px",
-  borderRadius: 999,
-  background: "rgba(0,0,0,0.08)",
-  color: "#374151",
-  fontSize: 12,
-  fontWeight: 700,
-};
-
-const bubbleRow: React.CSSProperties = {
-  display: "flex",
-  gap: 8,
-  alignItems: "flex-end",
-};
-
-const avatarCircle: React.CSSProperties = {
-  width: 32,
-  height: 32,
-  borderRadius: 999,
-  background: "#ffffff",
-  border: "1px solid #d9e8dd",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  flexShrink: 0,
-  fontSize: 16,
-};
-
-const bubbleWrap: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 4,
-  maxWidth: "78%",
-};
-
-const senderName: React.CSSProperties = {
-  fontSize: 11,
-  color: "#6b7280",
-  paddingLeft: 4,
-};
-
-const bubbleBase: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 18,
-  lineHeight: 1.6,
-  fontSize: 14,
-  whiteSpace: "pre-wrap",
-  wordBreak: "break-word",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
-};
-
-const bubbleMine: React.CSSProperties = {
-  background: "#8de17a",
-  color: "#17311b",
-  borderTopRightRadius: 6,
-};
-
-const bubbleOther: React.CSSProperties = {
-  background: "#ffffff",
-  color: "#111827",
-  border: "1px solid #e5e7eb",
-  borderTopLeftRadius: 6,
-};
-
-const bubbleSending: React.CSSProperties = {
-  opacity: 0.7,
-};
-
-const bubbleDeleted: React.CSSProperties = {
-  background: "#f3f4f6",
-  color: "#6b7280",
-  border: "1px solid #e5e7eb",
-  fontStyle: "italic",
-};
-
-const bubbleActionable: React.CSSProperties = {
-  cursor: "pointer",
-  WebkitTouchCallout: "none",
-  userSelect: "none",
-};
-
-const bubbleText: React.CSSProperties = {
-  lineHeight: 1.7,
-};
-
-const bubbleMeta: React.CSSProperties = {
-  fontSize: 11,
-  color: "#6b7280",
-  padding: "0 4px",
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  flexWrap: "wrap",
-};
-
-const readStateText: React.CSSProperties = {
-  fontSize: 11,
-  color: "#4b5563",
-  fontWeight: 700,
-};
-
-const inputArea: React.CSSProperties = {
-  borderTop: "1px solid #e5ece7",
-  background: "#fff",
-  padding: "12px 12px calc(12px + env(safe-area-inset-bottom))",
-  display: "grid",
-  gap: 8,
-};
-
-const inputRow: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr auto",
-  gap: 8,
-  alignItems: "end",
-};
-
-const textareaStyle: React.CSSProperties = {
-  width: "100%",
-  minHeight: 48,
-  maxHeight: 140,
-  padding: "12px 14px",
-  borderRadius: 18,
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  resize: "none",
-  fontSize: 16,
-  lineHeight: 1.6,
-  WebkitAppearance: "none",
-};
-
-const sendButton: React.CSSProperties = {
-  minWidth: 72,
-  alignSelf: "stretch",
-};
-
-const inputHint: React.CSSProperties = {
-  fontSize: 11,
-  color: "#6b7280",
-};
-
-const sendErrorText: React.CSSProperties = {
-  color: "#991b1b",
-  fontSize: 12,
-  whiteSpace: "pre-wrap",
-};
-
-const sheetBackdrop: React.CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(0,0,0,0.28)",
-  zIndex: 1000,
-};
-
-const sheetWrap: React.CSSProperties = {
-  position: "fixed",
-  left: 0,
-  right: 0,
-  bottom: 0,
-  zIndex: 1001,
-  padding: 12,
-};
-
-const sheetPanel: React.CSSProperties = {
-  maxWidth: 720,
-  margin: "0 auto",
-  background: "#f3f4f6",
-  borderRadius: 18,
-  overflow: "hidden",
-  boxShadow: "0 -8px 30px rgba(0,0,0,0.18)",
-  display: "grid",
-  gap: 8,
-  padding: 8,
-};
-
-const sheetButton: React.CSSProperties = {
-  width: "100%",
-  minHeight: 54,
-  border: "none",
-  borderRadius: 14,
-  background: "#ffffff",
-  color: "#111827",
-  fontSize: 17,
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
-const sheetDangerButton: React.CSSProperties = {
-  width: "100%",
-  minHeight: 54,
-  border: "none",
-  borderRadius: 14,
-  background: "#ffffff",
-  color: "#dc2626",
-  fontSize: 17,
-  fontWeight: 900,
-  cursor: "pointer",
-};
-
-const sheetCancelButton: React.CSSProperties = {
-  width: "100%",
-  minHeight: 54,
-  border: "none",
-  borderRadius: 14,
-  background: "#ffffff",
-  color: "#111827",
-  fontSize: 17,
-  fontWeight: 900,
-  cursor: "pointer",
-};
