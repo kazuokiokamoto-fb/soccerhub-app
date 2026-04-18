@@ -1133,13 +1133,9 @@ export default function ChatThreadPage() {
                           {optimistic ? "送信中…" : formatBubbleTime(m.created_at)}
                         </span>
 
-                        {isLatestMyMessage ? (
+                        {isLatestMyMessage && isRead && !optimistic ? (
                           <span style={readStateText}>
-                            {optimistic
-                              ? ""
-                              : isRead
-                                ? `既読 ${formatReadTime(otherLastReadAt)}`
-                                : "未読"}
+                            既読 {formatReadTime(otherLastReadAt)}
                           </span>
                         ) : null}
                       </div>
