@@ -34,6 +34,64 @@ type TeamScheduleRow = {
   updated_at: string | null;
 };
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function asNullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function toArray<T>(
+  value: unknown,
+  mapper: (v: unknown) => T | null
+): T[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(mapper).filter((v): v is T => v !== null);
+}
+
+function toTeamScheduleRow(value: unknown): TeamScheduleRow | null {
+  const r = asRecord(value);
+  if (!r) return null;
+
+  const id = asString(r.id);
+  const team_id = asString(r.team_id);
+
+  if (!id || !team_id) return null;
+
+  const rawStatus = asNullableString(r.status);
+  const status: ScheduleStatus =
+    rawStatus === "confirmed" ? "confirmed" : "draft";
+
+  return {
+    id,
+    team_id,
+    category: asNullableString(r.category),
+    opponent: asNullableString(r.opponent),
+    strength: asNullableString(r.strength),
+    date: asNullableString(r.date),
+    venue_name: asNullableString(r.venue_name),
+    address: asNullableString(r.address),
+    meetup_time: asNullableString(r.meetup_time),
+    dissolve_time: asNullableString(r.dissolve_time),
+    start_time: asNullableString(r.start_time),
+    end_time: asNullableString(r.end_time),
+    parking: asNullableString(r.parking),
+    belongings: asNullableString(r.belongings),
+    note: asNullableString(r.note),
+    thread_id: asNullableString(r.thread_id),
+    status,
+    google_event_id: asNullableString(r.google_event_id),
+    created_at: asNullableString(r.created_at),
+    updated_at: asNullableString(r.updated_at),
+  };
+}
+
 function ymdToday() {
   const now = new Date();
   const y = now.getFullYear();
@@ -119,7 +177,13 @@ export default function MySchedulePage() {
 
         if (myTeamsError) throw myTeamsError;
 
-        const myTeamIds = ((myTeamsRaw ?? []) as TeamIdRow[]).map((row) => row.id);
+        const myTeamIds = toArray(myTeamsRaw, (row): TeamIdRow | null => {
+          const r = asRecord(row);
+          if (!r) return null;
+          const id = asString(r.id);
+          if (!id) return null;
+          return { id };
+        }).map((row) => row.id);
 
         if (myTeamIds.length === 0) {
           if (active) {
@@ -165,7 +229,7 @@ export default function MySchedulePage() {
 
         if (error) throw error;
 
-        const rows = (data ?? []) as TeamScheduleRow[];
+        const rows = toArray(data, toTeamScheduleRow);
         const mapped = rows.map(toTeamSchedule);
 
         if (!active) return;
@@ -252,7 +316,9 @@ export default function MySchedulePage() {
 
                       <span
                         style={
-                          item.status === "confirmed" ? confirmedBadge : draftBadge
+                          item.status === "confirmed"
+                            ? confirmedBadge
+                            : draftBadge
                         }
                       >
                         {statusLabel(item.status)}
@@ -284,11 +350,23 @@ export default function MySchedulePage() {
                       </div>
                     </div>
 
-                    {(item.parking || item.belongings || item.note) ? (
+                    {item.parking || item.belongings || item.note ? (
                       <div style={extraInfo} className="ui-meta">
-                        {item.parking ? <div><b>駐輪場・駐車場</b>：{item.parking}</div> : null}
-                        {item.belongings ? <div><b>持ち物</b>：{item.belongings}</div> : null}
-                        {item.note ? <div><b>備考</b>：{item.note}</div> : null}
+                        {item.parking ? (
+                          <div>
+                            <b>駐輪場・駐車場</b>：{item.parking}
+                          </div>
+                        ) : null}
+                        {item.belongings ? (
+                          <div>
+                            <b>持ち物</b>：{item.belongings}
+                          </div>
+                        ) : null}
+                        {item.note ? (
+                          <div>
+                            <b>備考</b>：{item.note}
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
 
