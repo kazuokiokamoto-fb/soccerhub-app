@@ -5,16 +5,33 @@ import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
-import { categoryLabel } from "@/app/lib/categories";
+import type { TeamSchedule, ScheduleStatus } from "@/app/lib/types";
 
-type ScheduleRow = {
-  slotId: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  areaText: string;
-  categoryText: string;
-  role: "host" | "guest";
+type TeamIdRow = {
+  id: string;
+};
+
+type TeamScheduleRow = {
+  id: string;
+  team_id: string;
+  category: string | null;
+  opponent: string | null;
+  strength: string | null;
+  date: string | null;
+  venue_name: string | null;
+  address: string | null;
+  meetup_time: string | null;
+  dissolve_time: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  parking: string | null;
+  belongings: string | null;
+  note: string | null;
+  thread_id: string | null;
+  status: ScheduleStatus | null;
+  google_event_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 function ymdToday() {
@@ -34,12 +51,47 @@ function formatDateLabel(ymd: string) {
   return `${m}/${d}（${week}）`;
 }
 
+function formatTime(v?: string | null) {
+  if (!v) return "";
+  return String(v).slice(0, 5);
+}
+
+function statusLabel(status?: ScheduleStatus | null) {
+  if (status === "confirmed") return "確定";
+  return "下書き";
+}
+
+function toTeamSchedule(row: TeamScheduleRow): TeamSchedule {
+  return {
+    id: row.id,
+    teamId: row.team_id,
+    category: row.category ?? "",
+    opponent: row.opponent ?? "",
+    strength: row.strength,
+    date: row.date ?? "",
+    venueName: row.venue_name,
+    address: row.address,
+    meetupTime: row.meetup_time,
+    dissolveTime: row.dissolve_time,
+    startTime: row.start_time,
+    endTime: row.end_time,
+    parking: row.parking,
+    belongings: row.belongings,
+    note: row.note,
+    threadId: row.thread_id,
+    status: row.status === "confirmed" ? "confirmed" : "draft",
+    googleEventId: row.google_event_id,
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  };
+}
+
 export default function MySchedulePage() {
   const { user, loading: authLoading } = useAuth();
   const userId = user?.id ?? "";
 
   const [loading, setLoading] = useState(true);
-  const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
+  const [schedules, setSchedules] = useState<TeamSchedule[]>([]);
   const [errorText, setErrorText] = useState("");
 
   useEffect(() => {
@@ -67,9 +119,7 @@ export default function MySchedulePage() {
 
         if (myTeamsError) throw myTeamsError;
 
-        const myTeamIds = ((myTeamsRaw ?? []) as Array<{ id: string }>).map(
-          (row) => row.id
-        );
+        const myTeamIds = ((myTeamsRaw ?? []) as TeamIdRow[]).map((row) => row.id);
 
         if (myTeamIds.length === 0) {
           if (active) {
@@ -81,101 +131,45 @@ export default function MySchedulePage() {
 
         const today = ymdToday();
 
-        const { data: hostedSlotsRaw, error: hostedSlotsError } = await supabase
-          .from("match_slots")
+        const { data, error } = await supabase
+          .from("team_schedules")
           .select(
-            "id, date, start_time, end_time, area, area_text, category, host_team_id"
+            [
+              "id",
+              "team_id",
+              "category",
+              "opponent",
+              "strength",
+              "date",
+              "venue_name",
+              "address",
+              "meetup_time",
+              "dissolve_time",
+              "start_time",
+              "end_time",
+              "parking",
+              "belongings",
+              "note",
+              "thread_id",
+              "status",
+              "google_event_id",
+              "created_at",
+              "updated_at",
+            ].join(",")
           )
-          .in("host_team_id", myTeamIds)
+          .in("team_id", myTeamIds)
           .gte("date", today)
           .order("date", { ascending: true })
           .order("start_time", { ascending: true })
-          .limit(100);
+          .limit(200);
 
-        if (hostedSlotsError) throw hostedSlotsError;
+        if (error) throw error;
 
-        const hostedSlots = (hostedSlotsRaw ?? []) as any[];
-        const hostedSlotIds = hostedSlots.map((slot) => slot.id);
-
-        let hostedAcceptedSlotIds: string[] = [];
-        if (hostedSlotIds.length > 0) {
-          const { data: hostedAcceptedRaw } = await supabase
-            .from("match_requests")
-            .select("slot_id")
-            .in("slot_id", hostedSlotIds)
-            .eq("status", "accepted");
-
-          hostedAcceptedSlotIds = Array.from(
-            new Set((hostedAcceptedRaw ?? []).map((r: any) => r.slot_id))
-          );
-        }
-
-        const { data: requesterAcceptedRaw } = await supabase
-          .from("match_requests")
-          .select("slot_id, requester_team_id")
-          .in("requester_team_id", myTeamIds)
-          .eq("status", "accepted");
-
-        const requesterSlotIds = Array.from(
-          new Set((requesterAcceptedRaw ?? []).map((r: any) => r.slot_id))
-        ).filter((id) => !hostedSlotIds.includes(id));
-
-        let requesterSlots: any[] = [];
-        if (requesterSlotIds.length > 0) {
-          const { data } = await supabase
-            .from("match_slots")
-            .select(
-              "id, date, start_time, end_time, area, area_text, category, host_team_id"
-            )
-            .in("id", requesterSlotIds)
-            .gte("date", today)
-            .order("date", { ascending: true })
-            .order("start_time", { ascending: true });
-
-          requesterSlots = data ?? [];
-        }
-
-        const hostedItems: ScheduleRow[] = hostedSlots
-          .filter((s) => hostedAcceptedSlotIds.includes(s.id))
-          .map((s) => ({
-            slotId: s.id,
-            date: s.date || "",
-            startTime: s.start_time || "",
-            endTime: s.end_time || "",
-            areaText: s.area_text ?? s.area ?? "未設定",
-            categoryText:
-              categoryLabel(s.category || "") || s.category || "未設定",
-            role: "host",
-          }));
-
-        const requesterItems: ScheduleRow[] = requesterSlots.map((s) => ({
-          slotId: s.id,
-          date: s.date || "",
-          startTime: s.start_time || "",
-          endTime: s.end_time || "",
-          areaText: s.area_text ?? s.area ?? "未設定",
-          categoryText:
-            categoryLabel(s.category || "") || s.category || "未設定",
-          role: "guest",
-        }));
-
-        const merged = [...hostedItems, ...requesterItems].sort((a, b) =>
-          `${a.date} ${a.startTime}`.localeCompare(
-            `${b.date} ${b.startTime}`
-          )
-        );
-
-        const deduped: ScheduleRow[] = [];
-        const seen = new Set<string>();
-
-        for (const item of merged) {
-          if (seen.has(item.slotId)) continue;
-          seen.add(item.slotId);
-          deduped.push(item);
-        }
+        const rows = (data ?? []) as TeamScheduleRow[];
+        const mapped = rows.map(toTeamSchedule);
 
         if (!active) return;
-        setSchedules(deduped);
+        setSchedules(mapped);
       } catch (e: any) {
         console.error(e);
         if (!active) return;
@@ -194,11 +188,13 @@ export default function MySchedulePage() {
   }, [authLoading, userId]);
 
   const groupedSchedules = useMemo(() => {
-    const map = new Map<string, ScheduleRow[]>();
+    const map = new Map<string, TeamSchedule[]>();
+
     schedules.forEach((s) => {
       if (!map.has(s.date)) map.set(s.date, []);
       map.get(s.date)!.push(s);
     });
+
     return Array.from(map.entries());
   }, [schedules]);
 
@@ -209,15 +205,15 @@ export default function MySchedulePage() {
       <AppHero
         icon="🗓"
         title="マイスケジュール"
-        desc="成立済みの直近予定を一覧表示します。"
+        desc="チームの試合予定を一覧で確認できます。"
       />
 
-      {errorText && (
+      {errorText ? (
         <div style={errorBox} className="ui-card">
           <div style={errorTitle} className="ui-title">読み込みエラー</div>
           <div className="ui-body">{errorText}</div>
         </div>
-      )}
+      ) : null}
 
       {loading || authLoading ? (
         <div style={emptyBox} className="ui-meta">読み込み中…</div>
@@ -240,34 +236,67 @@ export default function MySchedulePage() {
               <div style={dateList}>
                 {items.map((item) => (
                   <button
-                    key={item.slotId}
+                    key={item.id}
                     type="button"
                     style={scheduleCard}
                     className="ui-card"
-                    onClick={() =>
-                      (window.location.href = `/match/${item.slotId}`)
-                    }
+                    onClick={() => {
+                      window.location.href = `/match/my-schedule/${item.id}`;
+                    }}
                   >
                     <div style={scheduleCardTop}>
                       <div style={timeText} className="ui-title">
-                        {item.startTime.slice(0, 5)}–
-                        {item.endTime.slice(0, 5)}
+                        {formatTime(item.startTime)}
+                        {item.endTime ? `–${formatTime(item.endTime)}` : ""}
                       </div>
 
                       <span
-                        style={item.role === "host" ? hostBadge : guestBadge}
+                        style={
+                          item.status === "confirmed" ? confirmedBadge : draftBadge
+                        }
                       >
-                        {item.role === "host" ? "主催" : "参加"}
+                        {statusLabel(item.status)}
                       </span>
                     </div>
 
-                    <div style={metaText} className="ui-body">
-                      {item.categoryText}
+                    <div style={mainInfo} className="ui-body">
+                      <div>
+                        <b>カテゴリ</b>：{item.category || "未設定"}
+                      </div>
+                      <div>
+                        <b>対戦相手</b>：{item.opponent || "未設定"}
+                      </div>
+                      <div>
+                        <b>強さ</b>：{item.strength || "未設定"}
+                      </div>
                     </div>
 
-                    <div style={areaText} className="ui-meta">
-                      {item.areaText}
+                    <div style={subInfo} className="ui-meta">
+                      <div>
+                        <b>会場名</b>：{item.venueName || "未設定"}
+                      </div>
+                      <div>
+                        <b>住所</b>：{item.address || "未設定"}
+                      </div>
+                      <div>
+                        <b>集合</b>：{formatTime(item.meetupTime) || "未設定"}　
+                        <b>解散</b>：{formatTime(item.dissolveTime) || "未設定"}
+                      </div>
                     </div>
+
+                    {(item.parking || item.belongings || item.note) ? (
+                      <div style={extraInfo} className="ui-meta">
+                        {item.parking ? <div><b>駐輪場・駐車場</b>：{item.parking}</div> : null}
+                        {item.belongings ? <div><b>持ち物</b>：{item.belongings}</div> : null}
+                        {item.note ? <div><b>備考</b>：{item.note}</div> : null}
+                      </div>
+                    ) : null}
+
+                    {item.threadId ? (
+                      <div style={threadText} className="ui-meta">
+                        元チャットあり
+                      </div>
+                    ) : null}
                   </button>
                 ))}
               </div>
@@ -326,34 +355,61 @@ const scheduleCard: React.CSSProperties = {
   padding: 14,
   borderRadius: 14,
   cursor: "pointer",
+  border: "1px solid #e5e7eb",
+  background: "#fff",
 };
 
 const scheduleCardTop: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
+  gap: 12,
 };
 
 const timeText: React.CSSProperties = {
   fontSize: 16,
 };
 
-const metaText: React.CSSProperties = {
+const mainInfo: React.CSSProperties = {
+  marginTop: 10,
+  display: "grid",
+  gap: 4,
+  lineHeight: 1.7,
+};
+
+const subInfo: React.CSSProperties = {
   marginTop: 8,
+  display: "grid",
+  gap: 4,
+  lineHeight: 1.7,
 };
 
-const areaText: React.CSSProperties = {
-  marginTop: 4,
+const extraInfo: React.CSSProperties = {
+  marginTop: 8,
+  display: "grid",
+  gap: 4,
+  lineHeight: 1.7,
+  paddingTop: 8,
+  borderTop: "1px solid #eef2f7",
 };
 
-const hostBadge: React.CSSProperties = {
+const threadText: React.CSSProperties = {
+  marginTop: 10,
+  color: "#166534",
+};
+
+const confirmedBadge: React.CSSProperties = {
   padding: "2px 8px",
   borderRadius: 999,
-  background: "#ecfdf3",
+  background: "#dcfce7",
+  color: "#166534",
+  fontWeight: 700,
 };
 
-const guestBadge: React.CSSProperties = {
+const draftBadge: React.CSSProperties = {
   padding: "2px 8px",
   borderRadius: 999,
-  background: "#eef6f0",
+  background: "#f3f4f6",
+  color: "#4b5563",
+  fontWeight: 700,
 };
