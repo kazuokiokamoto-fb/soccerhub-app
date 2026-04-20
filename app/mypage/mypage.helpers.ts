@@ -1,3 +1,4 @@
+import { categoryLabel, categoryLabels } from "@/app/lib/categories";
 import type { ScheduleStatus } from "@/app/lib/types";
 import type { TeamRow } from "./mypage.types";
 
@@ -66,10 +67,11 @@ export function categoryText(team?: TeamRow | null) {
   if (!team) return "未設定";
 
   if (Array.isArray(team.categories) && team.categories.length > 0) {
-    return team.categories.join(" / ");
+    const labels = categoryLabels(team.categories);
+    return labels.length > 0 ? labels.join(" / ") : team.categories.join(" / ");
   }
 
-  return team.category || "未設定";
+  return categoryLabel(team.category) || team.category || "未設定";
 }
 
 export function categoryMetaEntries(
@@ -81,11 +83,11 @@ export function categoryMetaEntries(
     return [];
   }
 
-    return Object.entries(team.category_meta).filter(
-      ([key]) => Boolean(key)
-    ) as Array<
-      [string, { strength_rank?: string | null; member_count?: number | null }]
-    >;
+  return Object.entries(team.category_meta).filter(
+    ([key]) => Boolean(key)
+  ) as Array<
+    [string, { strength_rank?: string | null; member_count?: number | null }]
+  >;
 }
 
 export function fmtTime(v?: string | null) {
