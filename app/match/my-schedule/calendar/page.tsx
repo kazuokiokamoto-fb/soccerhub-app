@@ -1,38 +1,115 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
-import type { TeamSchedule, ScheduleStatus } from "@/app/lib/types";
 
 type TeamIdRow = {
   id: string;
 };
 
-type TeamScheduleRow = {
+type MatchSlotRow = {
   id: string;
-  team_id: string;
-  category: string | null;
-  opponent: string | null;
-  strength: string | null;
-  date: string | null;
-  venue_name: string | null;
-  address: string | null;
-  meetup_time: string | null;
-  dissolve_time: string | null;
+  host_team_id: string;
+  date: string;
   start_time: string | null;
   end_time: string | null;
-  parking: string | null;
-  belongings: string | null;
-  note: string | null;
-  thread_id: string | null;
-  status: ScheduleStatus | null;
-  google_event_id: string | null;
-  created_at: string | null;
-  updated_at: string | null;
+  area: string | null;
+  area_text: string | null;
+  category: string | null;
+  is_closed: boolean | null;
 };
+
+type MatchRequestRow = {
+  id: string;
+  slot_id: string;
+  requester_team_id: string;
+  status: "pending" | "accepted" | "rejected" | "cancelled";
+};
+
+type DaySummary = {
+  total: number;
+  confirmed: number;
+  draft: number;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function asNullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function asBooleanOrNull(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
+function toArray<T>(
+  value: unknown,
+  mapper: (v: unknown) => T | null
+): T[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(mapper).filter((v): v is T => v !== null);
+}
+
+function toTeamIdRow(value: unknown): TeamIdRow | null {
+  const r = asRecord(value);
+  if (!r) return null;
+  const id = asString(r.id);
+  if (!id) return null;
+  return { id };
+}
+
+function toMatchSlotRow(value: unknown): MatchSlotRow | null {
+  const r = asRecord(value);
+  if (!r) return null;
+
+  const id = asString(r.id);
+  const host_team_id = asString(r.host_team_id);
+  const date = asString(r.date);
+
+  if (!id || !host_team_id || !date) return null;
+
+  return {
+    id,
+    host_team_id,
+    date,
+    start_time: asNullableString(r.start_time),
+    end_time: asNullableString(r.end_time),
+    area: asNullableString(r.area),
+    area_text: asNullableString(r.area_text),
+    category: asNullableString(r.category),
+    is_closed: asBooleanOrNull(r.is_closed),
+  };
+}
+
+function toMatchRequestRow(value: unknown): MatchRequestRow | null {
+  const r = asRecord(value);
+  if (!r) return null;
+
+  const id = asString(r.id);
+  const slot_id = asString(r.slot_id);
+  const requester_team_id = asString(r.requester_team_id);
+  const status = asString(r.status) as MatchRequestRow["status"];
+
+  if (!id || !slot_id || !requester_team_id || !status) return null;
+
+  return {
+    id,
+    slot_id,
+    requester_team_id,
+    status,
+  };
+}
 
 function ymdToday() {
   const now = new Date();
@@ -44,31 +121,6 @@ function ymdToday() {
 
 function formatMonthLabel(date: Date) {
   return `${date.getFullYear()}年${date.getMonth() + 1}月`;
-}
-
-function toTeamSchedule(row: TeamScheduleRow): TeamSchedule {
-  return {
-    id: row.id,
-    teamId: row.team_id,
-    category: row.category ?? "",
-    opponent: row.opponent ?? "",
-    strength: row.strength,
-    date: row.date ?? "",
-    venueName: row.venue_name,
-    address: row.address,
-    meetupTime: row.meetup_time,
-    dissolveTime: row.dissolve_time,
-    startTime: row.start_time,
-    endTime: row.end_time,
-    parking: row.parking,
-    belongings: row.belongings,
-    note: row.note,
-    threadId: row.thread_id,
-    status: row.status === "confirmed" ? "confirmed" : "draft",
-    googleEventId: row.google_event_id,
-    createdAt: row.created_at ?? "",
-    updatedAt: row.updated_at ?? "",
-  };
 }
 
 function buildMonthCells(baseDate: Date) {
@@ -108,7 +160,7 @@ export default function MyScheduleCalendarPage() {
   const userId = user?.id ?? "";
 
   const [loading, setLoading] = useState(true);
-  const [schedules, setSchedules] = useState<TeamSchedule[]>([]);
+  const [summaries, setSummaries] = useState<Map<string, DaySummary>>(new Map());
   const [errorText, setErrorText] = useState("");
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
@@ -123,7 +175,7 @@ export default function MyScheduleCalendarPage() {
 
       if (!userId) {
         if (active) {
-          setSchedules([]);
+          setSummaries(new Map());
           setLoading(false);
         }
         return;
@@ -140,59 +192,127 @@ export default function MyScheduleCalendarPage() {
 
         if (myTeamsError) throw myTeamsError;
 
-        const myTeamIds = ((myTeamsRaw ?? []) as TeamIdRow[]).map((row) => row.id);
+        const myTeamIds = toArray(myTeamsRaw, toTeamIdRow).map((row) => row.id);
 
         if (myTeamIds.length === 0) {
           if (active) {
-            setSchedules([]);
+            setSummaries(new Map());
             setLoading(false);
           }
           return;
         }
 
-        const { data, error } = await supabase
-          .from("team_schedules")
-          .select(
-            [
-              "id",
-              "team_id",
-              "category",
-              "opponent",
-              "strength",
-              "date",
-              "venue_name",
-              "address",
-              "meetup_time",
-              "dissolve_time",
-              "start_time",
-              "end_time",
-              "parking",
-              "belongings",
-              "note",
-              "thread_id",
-              "status",
-              "google_event_id",
-              "created_at",
-              "updated_at",
-            ].join(",")
-          )
-          .in("team_id", myTeamIds)
-          .gte("date", ymdToday())
+        const year = currentMonth.getFullYear();
+        const month = currentMonth.getMonth();
+        const start = new Date(year, month, 1);
+        const end = new Date(year, month + 1, 1);
+
+        const startStr = `${start.getFullYear()}-${String(
+          start.getMonth() + 1
+        ).padStart(2, "0")}-01`;
+        const endStr = `${end.getFullYear()}-${String(
+          end.getMonth() + 1
+        ).padStart(2, "0")}-01`;
+
+        const { data: hostedSlotsRaw, error: hostedSlotsError } = await supabase
+          .from("match_slots")
+          .select("id,host_team_id,date,start_time,end_time,area,area_text,category,is_closed")
+          .in("host_team_id", myTeamIds)
+          .gte("date", startStr)
+          .lt("date", endStr)
           .order("date", { ascending: true })
-          .order("start_time", { ascending: true })
-          .limit(500);
+          .order("start_time", { ascending: true });
 
-        if (error) throw error;
+        if (hostedSlotsError) throw hostedSlotsError;
 
-        const rows = (data ?? []) as unknown as TeamScheduleRow[];
-        const mapped = rows.map(toTeamSchedule);
+        const hostedSlots = toArray(hostedSlotsRaw, toMatchSlotRow);
+        const hostedSlotIds = hostedSlots.map((slot) => slot.id);
+
+        let hostedAcceptedRequests: MatchRequestRow[] = [];
+        if (hostedSlotIds.length > 0) {
+          const { data: hostedAcceptedRaw, error: hostedAcceptedError } =
+            await supabase
+              .from("match_requests")
+              .select("id,slot_id,requester_team_id,status")
+              .in("slot_id", hostedSlotIds)
+              .eq("status", "accepted");
+
+          if (hostedAcceptedError) throw hostedAcceptedError;
+          hostedAcceptedRequests = toArray(hostedAcceptedRaw, toMatchRequestRow);
+        }
+
+        const hostedAcceptedBySlotId = new Map<string, MatchRequestRow>();
+        for (const req of hostedAcceptedRequests) {
+          if (!hostedAcceptedBySlotId.has(req.slot_id)) {
+            hostedAcceptedBySlotId.set(req.slot_id, req);
+          }
+        }
+
+        const { data: requesterAcceptedRaw, error: requesterAcceptedError } =
+          await supabase
+            .from("match_requests")
+            .select("id,slot_id,requester_team_id,status")
+            .in("requester_team_id", myTeamIds)
+            .eq("status", "accepted");
+
+        if (requesterAcceptedError) throw requesterAcceptedError;
+
+        const requesterAccepted = toArray(
+          requesterAcceptedRaw,
+          toMatchRequestRow
+        );
+
+        const requesterSlotIds = Array.from(
+          new Set(requesterAccepted.map((row) => row.slot_id))
+        ).filter((id) => !hostedSlotIds.includes(id));
+
+        let requesterSlots: MatchSlotRow[] = [];
+        if (requesterSlotIds.length > 0) {
+          const { data: requesterSlotsRaw, error: requesterSlotsError } =
+            await supabase
+              .from("match_slots")
+              .select("id,host_team_id,date,start_time,end_time,area,area_text,category,is_closed")
+              .in("id", requesterSlotIds)
+              .gte("date", startStr)
+              .lt("date", endStr)
+              .order("date", { ascending: true })
+              .order("start_time", { ascending: true });
+
+          if (requesterSlotsError) throw requesterSlotsError;
+          requesterSlots = toArray(requesterSlotsRaw, toMatchSlotRow);
+        }
+
+        const merged = [...hostedSlots, ...requesterSlots];
+        const map = new Map<string, DaySummary>();
+        const seen = new Set<string>();
+
+        for (const slot of merged) {
+          if (seen.has(slot.id)) continue;
+          seen.add(slot.id);
+
+          const current = map.get(slot.date) ?? {
+            total: 0,
+            confirmed: 0,
+            draft: 0,
+          };
+
+          current.total += 1;
+
+          if (hostedAcceptedBySlotId.has(slot.id) || requesterSlotIds.includes(slot.id)) {
+            current.confirmed += 1;
+          } else {
+            current.draft += 1;
+          }
+
+          map.set(slot.date, current);
+        }
 
         if (!active) return;
-        setSchedules(mapped);
+        setSummaries(map);
       } catch (e: any) {
         console.error(e);
         if (!active) return;
-        setSchedules([]);
+        setSummaries(new Map());
         setErrorText(e?.message ?? "予定の取得に失敗しました");
       } finally {
         if (active) setLoading(false);
@@ -204,46 +324,13 @@ export default function MyScheduleCalendarPage() {
     return () => {
       active = false;
     };
-  }, [authLoading, userId]);
+  }, [authLoading, userId, currentMonth]);
 
   const monthCells = useMemo(() => buildMonthCells(currentMonth), [currentMonth]);
 
-  const scheduleMap = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        total: number;
-        confirmed: number;
-        draft: number;
-      }
-    >();
-
-    for (const item of schedules) {
-      if (!item.date) continue;
-
-      const current = map.get(item.date) ?? {
-        total: 0,
-        confirmed: 0,
-        draft: 0,
-      };
-
-      current.total += 1;
-
-      if (item.status === "confirmed") {
-        current.confirmed += 1;
-      } else {
-        current.draft += 1;
-      }
-
-      map.set(item.date, current);
-    }
-
-    return map;
-  }, [schedules]);
-
   const monthHasAnySchedule = useMemo(() => {
-    return monthCells.some((cell) => cell.ymd && scheduleMap.has(cell.ymd));
-  }, [monthCells, scheduleMap]);
+    return monthCells.some((cell) => cell.ymd && summaries.has(cell.ymd));
+  }, [monthCells, summaries]);
 
   return (
     <main style={pageWrap}>
@@ -254,6 +341,12 @@ export default function MyScheduleCalendarPage() {
         title="カレンダー"
         desc="予定を月表示で確認できます。決定と下書きを色分け表示します。"
       />
+
+      <div style={topNavWrap}>
+        <Link href="/match/my-schedule" className="sh-btn sh-btn--primary">
+          予定一覧へ
+        </Link>
+      </div>
 
       {errorText ? (
         <div style={errorBox} className="ui-card">
@@ -329,8 +422,7 @@ export default function MyScheduleCalendarPage() {
                 return <div key={`blank-${idx}`} style={blankCell} />;
               }
 
-              const summary = scheduleMap.get(cell.ymd);
-              const hasSchedule = !!summary;
+              const summary = summaries.get(cell.ymd);
               const isToday = cell.ymd === ymdToday();
 
               return (
@@ -340,7 +432,7 @@ export default function MyScheduleCalendarPage() {
                   style={{
                     ...dayCell,
                     ...(isToday ? todayCell : null),
-                    ...(hasSchedule ? clickableCell : null),
+                    ...(summary ? clickableCell : null),
                   }}
                   onClick={() => {
                     window.location.href = `/match/my-schedule?date=${cell.ymd}`;
@@ -348,7 +440,6 @@ export default function MyScheduleCalendarPage() {
                 >
                   <div style={dayCellTop}>
                     <span style={dayNumber}>{cell.day}</span>
-
                     {summary ? (
                       <span style={countBadge}>{summary.total}件</span>
                     ) : null}
@@ -359,7 +450,6 @@ export default function MyScheduleCalendarPage() {
                       {summary.confirmed > 0 ? (
                         <span style={confirmedChip}>決 {summary.confirmed}</span>
                       ) : null}
-
                       {summary.draft > 0 ? (
                         <span style={draftChip}>下 {summary.draft}</span>
                       ) : null}
@@ -389,6 +479,13 @@ const pageWrap: React.CSSProperties = {
   maxWidth: 980,
   margin: "0 auto",
   padding: 16,
+};
+
+const topNavWrap: React.CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
 };
 
 const errorBox: React.CSSProperties = {

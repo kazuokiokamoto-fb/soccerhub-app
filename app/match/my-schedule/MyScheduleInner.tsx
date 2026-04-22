@@ -1,38 +1,56 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
 import { useSearchParams } from "next/navigation";
-import type { TeamSchedule, ScheduleStatus } from "@/app/lib/types";
+import { categoryLabel } from "@/app/lib/categories";
 
 type TeamIdRow = {
   id: string;
 };
 
-type TeamScheduleRow = {
+type MatchSlotRow = {
   id: string;
-  team_id: string;
-  category: string | null;
-  opponent: string | null;
-  strength: string | null;
-  date: string | null;
-  venue_name: string | null;
-  address: string | null;
-  meetup_time: string | null;
-  dissolve_time: string | null;
+  host_team_id: string;
+  date: string;
   start_time: string | null;
   end_time: string | null;
+  area: string | null;
+  area_text: string | null;
+  category: string | null;
+  is_closed: boolean | null;
+};
+
+type MatchRequestRow = {
+  id: string;
+  slot_id: string;
+  requester_team_id: string;
+  status: "pending" | "accepted" | "rejected" | "cancelled";
+};
+
+type MyScheduleItem = {
+  id: string;
+  slotId: string;
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  category: string;
+  opponent: string;
+  strength: string | null;
+  venueName: string | null;
+  address: string | null;
+  meetupTime: string | null;
+  dissolveTime: string | null;
   parking: string | null;
   belongings: string | null;
   note: string | null;
-  thread_id: string | null;
-  status: ScheduleStatus | null;
-  google_event_id: string | null;
-  created_at: string | null;
-  updated_at: string | null;
+  threadId: string | null;
+  status: "confirmed" | "draft";
+  role: "host" | "guest";
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -48,6 +66,10 @@ function asNullableString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+function asBooleanOrNull(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
 function toArray<T>(
   value: unknown,
   mapper: (v: unknown) => T | null
@@ -56,40 +78,53 @@ function toArray<T>(
   return value.map(mapper).filter((v): v is T => v !== null);
 }
 
-function toTeamScheduleRow(value: unknown): TeamScheduleRow | null {
+function toTeamIdRow(value: unknown): TeamIdRow | null {
+  const r = asRecord(value);
+  if (!r) return null;
+  const id = asString(r.id);
+  if (!id) return null;
+  return { id };
+}
+
+function toMatchSlotRow(value: unknown): MatchSlotRow | null {
   const r = asRecord(value);
   if (!r) return null;
 
   const id = asString(r.id);
-  const team_id = asString(r.team_id);
+  const host_team_id = asString(r.host_team_id);
+  const date = asString(r.date);
 
-  if (!id || !team_id) return null;
-
-  const rawStatus = asNullableString(r.status);
-  const status: ScheduleStatus =
-    rawStatus === "confirmed" ? "confirmed" : "draft";
+  if (!id || !host_team_id || !date) return null;
 
   return {
     id,
-    team_id,
-    category: asNullableString(r.category),
-    opponent: asNullableString(r.opponent),
-    strength: asNullableString(r.strength),
-    date: asNullableString(r.date),
-    venue_name: asNullableString(r.venue_name),
-    address: asNullableString(r.address),
-    meetup_time: asNullableString(r.meetup_time),
-    dissolve_time: asNullableString(r.dissolve_time),
+    host_team_id,
+    date,
     start_time: asNullableString(r.start_time),
     end_time: asNullableString(r.end_time),
-    parking: asNullableString(r.parking),
-    belongings: asNullableString(r.belongings),
-    note: asNullableString(r.note),
-    thread_id: asNullableString(r.thread_id),
+    area: asNullableString(r.area),
+    area_text: asNullableString(r.area_text),
+    category: asNullableString(r.category),
+    is_closed: asBooleanOrNull(r.is_closed),
+  };
+}
+
+function toMatchRequestRow(value: unknown): MatchRequestRow | null {
+  const r = asRecord(value);
+  if (!r) return null;
+
+  const id = asString(r.id);
+  const slot_id = asString(r.slot_id);
+  const requester_team_id = asString(r.requester_team_id);
+  const status = asString(r.status) as MatchRequestRow["status"];
+
+  if (!id || !slot_id || !requester_team_id || !status) return null;
+
+  return {
+    id,
+    slot_id,
+    requester_team_id,
     status,
-    google_event_id: asNullableString(r.google_event_id),
-    created_at: asNullableString(r.created_at),
-    updated_at: asNullableString(r.updated_at),
   };
 }
 
@@ -115,34 +150,23 @@ function formatTime(v?: string | null) {
   return String(v).slice(0, 5);
 }
 
-function statusLabel(status?: ScheduleStatus | null) {
-  if (status === "confirmed") return "確定";
-  return "下書き";
+function statusLabel(status?: "confirmed" | "draft" | null) {
+  return status === "confirmed" ? "確定" : "下書き";
 }
 
-function toTeamSchedule(row: TeamScheduleRow): TeamSchedule {
-  return {
-    id: row.id,
-    teamId: row.team_id,
-    category: row.category ?? "",
-    opponent: row.opponent ?? "",
-    strength: row.strength,
-    date: row.date ?? "",
-    venueName: row.venue_name,
-    address: row.address,
-    meetupTime: row.meetup_time,
-    dissolveTime: row.dissolve_time,
-    startTime: row.start_time,
-    endTime: row.end_time,
-    parking: row.parking,
-    belongings: row.belongings,
-    note: row.note,
-    threadId: row.thread_id,
-    status: row.status === "confirmed" ? "confirmed" : "draft",
-    googleEventId: row.google_event_id,
-    createdAt: row.created_at ?? "",
-    updatedAt: row.updated_at ?? "",
-  };
+function teamStrengthLabel(team: any) {
+  if (!team) return null;
+  if (typeof team.strength_rank === "string" && team.strength_rank.trim()) {
+    return team.strength_rank;
+  }
+
+  const level = Number(team.level ?? 0);
+  if (!Number.isFinite(level)) return null;
+  if (level >= 9) return "SS";
+  if (level >= 7) return "S";
+  if (level >= 5) return "A";
+  if (level >= 3) return "B";
+  return "C";
 }
 
 export default function MyScheduleInner() {
@@ -153,7 +177,7 @@ export default function MyScheduleInner() {
   const selectedDate = searchParams.get("date");
 
   const [loading, setLoading] = useState(true);
-  const [schedules, setSchedules] = useState<TeamSchedule[]>([]);
+  const [schedules, setSchedules] = useState<MyScheduleItem[]>([]);
   const [errorText, setErrorText] = useState("");
 
   useEffect(() => {
@@ -181,13 +205,7 @@ export default function MyScheduleInner() {
 
         if (myTeamsError) throw myTeamsError;
 
-        const myTeamIds = toArray(myTeamsRaw, (row): TeamIdRow | null => {
-          const r = asRecord(row);
-          if (!r) return null;
-          const id = asString(r.id);
-          if (!id) return null;
-          return { id };
-        }).map((row) => row.id);
+        const myTeamIds = toArray(myTeamsRaw, toTeamIdRow).map((row) => row.id);
 
         if (myTeamIds.length === 0) {
           if (active) {
@@ -197,52 +215,173 @@ export default function MyScheduleInner() {
           return;
         }
 
-        let query = supabase
-          .from("team_schedules")
-          .select(
-            [
-              "id",
-              "team_id",
-              "category",
-              "opponent",
-              "strength",
-              "date",
-              "venue_name",
-              "address",
-              "meetup_time",
-              "dissolve_time",
-              "start_time",
-              "end_time",
-              "parking",
-              "belongings",
-              "note",
-              "thread_id",
-              "status",
-              "google_event_id",
-              "created_at",
-              "updated_at",
-            ].join(",")
-          )
-          .in("team_id", myTeamIds)
+        const { data: allTeamsRaw, error: allTeamsError } = await supabase
+          .from("teams")
+          .select("id,name,level,strength_rank")
+          .order("updated_at", { ascending: false });
+
+        if (allTeamsError) throw allTeamsError;
+
+        const teamMap = new Map(
+          (Array.isArray(allTeamsRaw) ? allTeamsRaw : []).map((t: any) => [t.id, t])
+        );
+
+        const today = ymdToday();
+
+        const hostedSlotsQuery = supabase
+          .from("match_slots")
+          .select("id,host_team_id,date,start_time,end_time,area,area_text,category,is_closed")
+          .in("host_team_id", myTeamIds)
+          .gte("date", selectedDate || today)
           .order("date", { ascending: true })
           .order("start_time", { ascending: true })
           .limit(200);
 
-        if (selectedDate) {
-          query = query.eq("date", selectedDate);
-        } else {
-          query = query.gte("date", ymdToday());
+        const { data: hostedSlotsRaw, error: hostedSlotsError } =
+          selectedDate
+            ? await hostedSlotsQuery.eq("date", selectedDate)
+            : await hostedSlotsQuery;
+
+        if (hostedSlotsError) throw hostedSlotsError;
+
+        const hostedSlots = toArray(hostedSlotsRaw, toMatchSlotRow);
+        const hostedSlotIds = hostedSlots.map((slot) => slot.id);
+
+        let hostedAcceptedRequests: MatchRequestRow[] = [];
+        if (hostedSlotIds.length > 0) {
+          const { data: hostedAcceptedRaw, error: hostedAcceptedError } =
+            await supabase
+              .from("match_requests")
+              .select("id,slot_id,requester_team_id,status")
+              .in("slot_id", hostedSlotIds)
+              .eq("status", "accepted");
+
+          if (hostedAcceptedError) throw hostedAcceptedError;
+          hostedAcceptedRequests = toArray(hostedAcceptedRaw, toMatchRequestRow);
         }
 
-        const { data, error } = await query;
+        const hostedAcceptedBySlotId = new Map<string, MatchRequestRow>();
+        for (const req of hostedAcceptedRequests) {
+          if (!hostedAcceptedBySlotId.has(req.slot_id)) {
+            hostedAcceptedBySlotId.set(req.slot_id, req);
+          }
+        }
 
-        if (error) throw error;
+        const { data: requesterAcceptedRaw, error: requesterAcceptedError } =
+          await supabase
+            .from("match_requests")
+            .select("id,slot_id,requester_team_id,status")
+            .in("requester_team_id", myTeamIds)
+            .eq("status", "accepted");
 
-        const rows = toArray(data, toTeamScheduleRow);
-        const mapped = rows.map(toTeamSchedule);
+        if (requesterAcceptedError) throw requesterAcceptedError;
+
+        const requesterAccepted = toArray(
+          requesterAcceptedRaw,
+          toMatchRequestRow
+        );
+
+        const requesterSlotIds = Array.from(
+          new Set(requesterAccepted.map((row) => row.slot_id))
+        ).filter((id) => !hostedSlotIds.includes(id));
+
+        let requesterSlots: MatchSlotRow[] = [];
+        if (requesterSlotIds.length > 0) {
+          const requesterSlotsQuery = supabase
+            .from("match_slots")
+            .select("id,host_team_id,date,start_time,end_time,area,area_text,category,is_closed")
+            .in("id", requesterSlotIds)
+            .gte("date", selectedDate || today)
+            .order("date", { ascending: true })
+            .order("start_time", { ascending: true });
+
+          const { data: requesterSlotsRaw, error: requesterSlotsError } =
+            selectedDate
+              ? await requesterSlotsQuery.eq("date", selectedDate)
+              : await requesterSlotsQuery;
+
+          if (requesterSlotsError) throw requesterSlotsError;
+          requesterSlots = toArray(requesterSlotsRaw, toMatchSlotRow);
+        }
+
+        const requesterAcceptedBySlotId = new Map<string, MatchRequestRow>();
+        for (const req of requesterAccepted) {
+          if (!requesterAcceptedBySlotId.has(req.slot_id)) {
+            requesterAcceptedBySlotId.set(req.slot_id, req);
+          }
+        }
+
+        const hostedItems: MyScheduleItem[] = hostedSlots
+          .filter((slot) => hostedAcceptedBySlotId.has(slot.id))
+          .map((slot) => {
+            const acceptedReq = hostedAcceptedBySlotId.get(slot.id)!;
+            const opponentTeam = teamMap.get(acceptedReq.requester_team_id);
+
+            return {
+              id: slot.id,
+              slotId: slot.id,
+              date: slot.date,
+              startTime: slot.start_time,
+              endTime: slot.end_time,
+              category: categoryLabel(slot.category) || slot.category || "未設定",
+              opponent: opponentTeam?.name || "対戦相手未設定",
+              strength: teamStrengthLabel(opponentTeam),
+              venueName: slot.area_text || slot.area || null,
+              address: slot.area_text || slot.area || null,
+              meetupTime: null,
+              dissolveTime: null,
+              parking: null,
+              belongings: null,
+              note: null,
+              threadId: null,
+              status: "confirmed",
+              role: "host",
+            };
+          });
+
+        const requesterItems: MyScheduleItem[] = requesterSlots.map((slot) => {
+          const acceptedReq = requesterAcceptedBySlotId.get(slot.id);
+          const hostTeam = teamMap.get(slot.host_team_id);
+
+          return {
+            id: slot.id,
+            slotId: slot.id,
+            date: slot.date,
+            startTime: slot.start_time,
+            endTime: slot.end_time,
+            category: categoryLabel(slot.category) || slot.category || "未設定",
+            opponent: hostTeam?.name || "対戦相手未設定",
+            strength: teamStrengthLabel(hostTeam),
+            venueName: slot.area_text || slot.area || null,
+            address: slot.area_text || slot.area || null,
+            meetupTime: null,
+            dissolveTime: null,
+            parking: null,
+            belongings: null,
+            note: null,
+            threadId: null,
+            status: acceptedReq?.status === "accepted" ? "confirmed" : "draft",
+            role: "guest",
+          };
+        });
+
+        const merged = [...hostedItems, ...requesterItems].sort((a, b) => {
+          const aa = `${a.date} ${a.startTime ?? ""}`;
+          const bb = `${b.date} ${b.startTime ?? ""}`;
+          return aa.localeCompare(bb);
+        });
+
+        const deduped: MyScheduleItem[] = [];
+        const seen = new Set<string>();
+
+        for (const item of merged) {
+          if (seen.has(item.slotId)) continue;
+          seen.add(item.slotId);
+          deduped.push(item);
+        }
 
         if (!active) return;
-        setSchedules(mapped);
+        setSchedules(deduped);
       } catch (e: any) {
         console.error(e);
         if (!active) return;
@@ -261,7 +400,7 @@ export default function MyScheduleInner() {
   }, [authLoading, userId, selectedDate]);
 
   const groupedSchedules = useMemo(() => {
-    const map = new Map<string, TeamSchedule[]>();
+    const map = new Map<string, MyScheduleItem[]>();
 
     schedules.forEach((s) => {
       if (!map.has(s.date)) map.set(s.date, []);
@@ -288,6 +427,17 @@ export default function MyScheduleInner() {
             : "チームの試合予定を一覧で確認できます。"
         }
       />
+
+      <div style={topNavWrap}>
+        <Link href="/match/my-schedule/calendar" className="sh-btn">
+          カレンダーへ
+        </Link>
+        {selectedDate ? (
+          <Link href="/match/my-schedule" className="sh-btn sh-btn--primary">
+            全予定へ
+          </Link>
+        ) : null}
+      </div>
 
       {selectedDate ? (
         <div style={filterBar}>
@@ -330,8 +480,19 @@ export default function MyScheduleInner() {
         <section style={sectionWrap}>
           {groupedSchedules.map(([date, items]) => (
             <section key={date} style={dateSection}>
-              <div style={dateTitle} className="ui-title">
-                {formatDateLabel(date)}
+              <div style={dateTitleRow}>
+                <div style={dateTitle} className="ui-title">
+                  {formatDateLabel(date)}
+                </div>
+
+                {!selectedDate ? (
+                  <Link
+                    href={`/match/my-schedule/calendar?date=${date}`}
+                    className="sh-btn"
+                  >
+                    カレンダー
+                  </Link>
+                ) : null}
               </div>
 
               <div style={dateList}>
@@ -342,7 +503,7 @@ export default function MyScheduleInner() {
                     style={scheduleCard}
                     className="ui-card"
                     onClick={() => {
-                      window.location.href = `/match/my-schedule/${item.id}`;
+                      window.location.href = `/match/${item.slotId}`;
                     }}
                   >
                     <div style={scheduleCardTop}>
@@ -351,15 +512,21 @@ export default function MyScheduleInner() {
                         {item.endTime ? `–${formatTime(item.endTime)}` : ""}
                       </div>
 
-                      <span
-                        style={
-                          item.status === "confirmed"
-                            ? confirmedBadge
-                            : draftBadge
-                        }
-                      >
-                        {statusLabel(item.status)}
-                      </span>
+                      <div style={badgeRow}>
+                        <span
+                          style={
+                            item.status === "confirmed"
+                              ? confirmedBadge
+                              : draftBadge
+                          }
+                        >
+                          {statusLabel(item.status)}
+                        </span>
+
+                        <span style={roleBadge}>
+                          {item.role === "host" ? "主催" : "参加"}
+                        </span>
+                      </div>
                     </div>
 
                     <div style={mainInfo} className="ui-body">
@@ -376,42 +543,12 @@ export default function MyScheduleInner() {
 
                     <div style={subInfo} className="ui-meta">
                       <div>
-                        <b>会場名</b>：{item.venueName || "未設定"}
+                        <b>会場</b>：{item.venueName || "未設定"}
                       </div>
                       <div>
                         <b>住所</b>：{item.address || "未設定"}
                       </div>
-                      <div>
-                        <b>集合</b>：{formatTime(item.meetupTime) || "未設定"}　
-                        <b>解散</b>：{formatTime(item.dissolveTime) || "未設定"}
-                      </div>
                     </div>
-
-                    {item.parking || item.belongings || item.note ? (
-                      <div style={extraInfo} className="ui-meta">
-                        {item.parking ? (
-                          <div>
-                            <b>駐輪場・駐車場</b>：{item.parking}
-                          </div>
-                        ) : null}
-                        {item.belongings ? (
-                          <div>
-                            <b>持ち物</b>：{item.belongings}
-                          </div>
-                        ) : null}
-                        {item.note ? (
-                          <div>
-                            <b>備考</b>：{item.note}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    {item.threadId ? (
-                      <div style={threadText} className="ui-meta">
-                        元チャットあり
-                      </div>
-                    ) : null}
                   </button>
                 ))}
               </div>
@@ -427,6 +564,13 @@ const pageWrap: React.CSSProperties = {
   maxWidth: 980,
   margin: "0 auto",
   padding: 16,
+};
+
+const topNavWrap: React.CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
 };
 
 const filterBar: React.CSSProperties = {
@@ -474,6 +618,14 @@ const dateSection: React.CSSProperties = {
   gap: 10,
 };
 
+const dateTitleRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
 const dateTitle: React.CSSProperties = {
   fontSize: 18,
 };
@@ -500,6 +652,13 @@ const scheduleCardTop: React.CSSProperties = {
   gap: 12,
 };
 
+const badgeRow: React.CSSProperties = {
+  display: "flex",
+  gap: 6,
+  flexWrap: "wrap",
+  alignItems: "center",
+};
+
 const timeText: React.CSSProperties = {
   fontSize: 16,
 };
@@ -518,20 +677,6 @@ const subInfo: React.CSSProperties = {
   lineHeight: 1.7,
 };
 
-const extraInfo: React.CSSProperties = {
-  marginTop: 8,
-  display: "grid",
-  gap: 4,
-  lineHeight: 1.7,
-  paddingTop: 8,
-  borderTop: "1px solid #eef2f7",
-};
-
-const threadText: React.CSSProperties = {
-  marginTop: 10,
-  color: "#166534",
-};
-
 const confirmedBadge: React.CSSProperties = {
   padding: "2px 8px",
   borderRadius: 999,
@@ -545,5 +690,13 @@ const draftBadge: React.CSSProperties = {
   borderRadius: 999,
   background: "#f3f4f6",
   color: "#4b5563",
+  fontWeight: 700,
+};
+
+const roleBadge: React.CSSProperties = {
+  padding: "2px 8px",
+  borderRadius: 999,
+  background: "#eef6f0",
+  color: "#14532d",
   fontWeight: 700,
 };
