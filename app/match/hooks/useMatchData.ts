@@ -94,8 +94,13 @@ export function useMatchData(params: {
       const errors: string[] = [];
 
       if (teamsRes.error) {
-        console.error("[useMatchData] teams load error:", teamsRes.error);
-        errors.push(`teams: ${teamsRes.error.message}`);
+        console.error("[useMatchData] teams load error raw:", teamsRes.error);
+        console.error("[useMatchData] teams load error message:", teamsRes.error.message);
+        console.error("[useMatchData] teams load error details:", teamsRes.error.details);
+        console.error("[useMatchData] teams load error hint:", teamsRes.error.hint);
+        console.error("[useMatchData] teams load error code:", teamsRes.error.code);
+
+        errors.push(`teams: ${teamsRes.error.message ?? "unknown error"}`);
         setAllTeams([]);
         setMyTeams([]);
       } else {
@@ -105,8 +110,13 @@ export function useMatchData(params: {
       }
 
       if (venuesRes.error) {
-        console.error("[useMatchData] venues load error:", venuesRes.error);
-        errors.push(`venues: ${venuesRes.error.message}`);
+        console.error("[useMatchData] venues load error raw:", venuesRes.error);
+        console.error("[useMatchData] venues load error message:", venuesRes.error.message);
+        console.error("[useMatchData] venues load error details:", venuesRes.error.details);
+        console.error("[useMatchData] venues load error hint:", venuesRes.error.hint);
+        console.error("[useMatchData] venues load error code:", venuesRes.error.code);
+
+        errors.push(`venues: ${venuesRes.error.message ?? "unknown error"}`);
         setVenues([]);
       } else {
         setVenues(venuesRes.data ?? []);
@@ -174,8 +184,13 @@ export function useMatchData(params: {
       let monthSlots: any[] = [];
 
       if (slotsRes.error) {
-        console.error("[useMatchData] match_slots load error:", slotsRes.error);
-        errors.push(`match_slots: ${slotsRes.error.message}`);
+        console.error("[useMatchData] match_slots load error raw:", slotsRes.error);
+        console.error("[useMatchData] match_slots load error message:", slotsRes.error.message);
+        console.error("[useMatchData] match_slots load error details:", slotsRes.error.details);
+        console.error("[useMatchData] match_slots load error hint:", slotsRes.error.hint);
+        console.error("[useMatchData] match_slots load error code:", slotsRes.error.code);
+
+        errors.push(`match_slots: ${slotsRes.error.message ?? "unknown error"}`);
         setSlotsInMonth([]);
         setRequestsForMonth([]);
       } else {
@@ -202,11 +217,13 @@ export function useMatchData(params: {
           .in("slot_id", slotIds);
 
         if (reqsRes.error) {
-          console.error(
-            "[useMatchData] match_requests load error:",
-            reqsRes.error
-          );
-          errors.push(`match_requests: ${reqsRes.error.message}`);
+          console.error("[useMatchData] match_requests load error raw:", reqsRes.error);
+          console.error("[useMatchData] match_requests load error message:", reqsRes.error.message);
+          console.error("[useMatchData] match_requests load error details:", reqsRes.error.details);
+          console.error("[useMatchData] match_requests load error hint:", reqsRes.error.hint);
+          console.error("[useMatchData] match_requests load error code:", reqsRes.error.code);
+
+          errors.push(`match_requests: ${reqsRes.error.message ?? "unknown error"}`);
           setRequestsForMonth([]);
         } else {
           setRequestsForMonth(reqsRes.data ?? []);
