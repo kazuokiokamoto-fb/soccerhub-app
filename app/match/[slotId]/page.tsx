@@ -238,6 +238,11 @@ export default function MatchDetailPage() {
     return categoryLabel(slot?.category || "") || slot?.category || "未設定";
   }, [slot]);
 
+  const dayScheduleUrl = useMemo(() => {
+    if (!slot?.date) return "/match/my-schedule";
+    return `/match/my-schedule?date=${slot.date}`;
+  }, [slot]);
+
   if (loading) {
     return (
       <main style={pageWrap}>
@@ -275,15 +280,27 @@ export default function MatchDetailPage() {
       <div style={titleRow}>
         <h1 style={pageTitle}>試合詳細</h1>
 
-        <button
-          type="button"
-          className="sh-btn"
-          onClick={() => {
-            window.location.href = "/match/my-schedule";
-          }}
-        >
-          予定一覧
-        </button>
+        <div style={topButtonRow}>
+          <button
+            type="button"
+            className="sh-btn"
+            onClick={() => {
+              window.location.href = dayScheduleUrl;
+            }}
+          >
+            日別予定
+          </button>
+
+          <button
+            type="button"
+            className="sh-btn sh-btn--primary"
+            onClick={() => {
+              window.location.href = "/match/my-schedule";
+            }}
+          >
+            予定一覧
+          </button>
+        </div>
       </div>
 
       <section style={card}>
@@ -371,6 +388,12 @@ const titleRow: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "space-between",
   gap: 12,
+  flexWrap: "wrap",
+};
+
+const topButtonRow: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
   flexWrap: "wrap",
 };
 

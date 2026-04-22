@@ -187,7 +187,7 @@ export function CurrentStatusSection(props: {
       </div>
 
       <div style={dashboardCard}>
-        <div style={dashboardTitle}>🗓 マイスケジュール</div>
+        <div style={dashboardTitle}>🗓 予定一覧</div>
 
         <div style={dashboardScheduleInner}>
           {nextSchedule ? (
@@ -237,7 +237,7 @@ export function CurrentStatusSection(props: {
                   href="/match/my-schedule"
                   className="sh-btn sh-btn--primary"
                 >
-                  {scheduleCount > 1 ? "予定一覧" : "予定を見る"}
+                  予定一覧
                 </Link>
               </div>
             </>

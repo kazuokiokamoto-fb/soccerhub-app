@@ -691,10 +691,6 @@ export default function HomeCalendar(props: {
     window.location.href = "/match/my-schedule/calendar";
   };
 
-  const openScheduleDetail = (slotId: string) => {
-    window.location.href = `/match/${slotId}`;
-  };
-
   const goToCreatePage = (ymd: string) => {
     if (!authReady) return;
 
@@ -1196,7 +1192,7 @@ export default function HomeCalendar(props: {
 
       <section style={summaryBox} className="ui-card">
         <div style={summaryCardTop}>
-          <div style={summaryDateText} className="ui-title">マイスケジュール</div>
+          <div style={summaryDateText} className="ui-title">予定一覧</div>
         </div>
 
         <div style={summaryInnerCompactBox} className="ui-card-soft">
