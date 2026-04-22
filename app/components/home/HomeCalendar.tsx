@@ -687,6 +687,10 @@ export default function HomeCalendar(props: {
     window.location.href = "/match/my-schedule";
   };
 
+  const openMyScheduleCalendarPage = () => {
+    window.location.href = "/match/my-schedule/calendar";
+  };
+
   const openScheduleDetail = (slotId: string) => {
     window.location.href = `/match/${slotId}`;
   };
@@ -1152,7 +1156,6 @@ export default function HomeCalendar(props: {
     (monthError && monthError.includes("match_slots:"));
 
   const nextSchedule = myUpcomingSchedules[0] ?? null;
-  const hasMultipleSchedules = myUpcomingSchedules.length > 1;
 
   return (
     <section style={wrap} ref={homeTopRef}>
@@ -1224,26 +1227,44 @@ export default function HomeCalendar(props: {
                 <button
                   type="button"
                   className="sh-btn"
-                  onClick={() => openScheduleDetail(nextSchedule.slotId)}
+                  onClick={openMyScheduleCalendarPage}
                 >
-                  詳細
+                  カレンダー
                 </button>
 
-                {hasMultipleSchedules ? (
-                  <button
-                    type="button"
-                    className="sh-btn sh-btn--primary"
-                    onClick={openMySchedulePage}
-                  >
-                    予定一覧
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  className="sh-btn sh-btn--primary"
+                  onClick={openMySchedulePage}
+                >
+                  予定一覧
+                </button>
               </div>
             </>
           ) : (
-            <div style={summarySub} className="ui-meta">
-              直近の予定はありません。
-            </div>
+            <>
+              <div style={summarySub} className="ui-meta">
+                直近の予定はありません。
+              </div>
+
+              <div style={scheduleActionRowRight}>
+                <button
+                  type="button"
+                  className="sh-btn"
+                  onClick={openMyScheduleCalendarPage}
+                >
+                  カレンダー
+                </button>
+
+                <button
+                  type="button"
+                  className="sh-btn sh-btn--primary"
+                  onClick={openMySchedulePage}
+                >
+                  予定一覧
+                </button>
+              </div>
+            </>
           )}
         </div>
       </section>
