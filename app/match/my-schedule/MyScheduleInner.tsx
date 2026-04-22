@@ -223,14 +223,19 @@ export default function MyScheduleInner() {
         if (allTeamsError) throw allTeamsError;
 
         const teamMap = new Map(
-          (Array.isArray(allTeamsRaw) ? allTeamsRaw : []).map((t: any) => [t.id, t])
+          (Array.isArray(allTeamsRaw) ? allTeamsRaw : []).map((t: any) => [
+            t.id,
+            t,
+          ])
         );
 
         const today = ymdToday();
 
         const hostedSlotsQuery = supabase
           .from("match_slots")
-          .select("id,host_team_id,date,start_time,end_time,area,area_text,category,is_closed")
+          .select(
+            "id,host_team_id,date,start_time,end_time,area,area_text,category,is_closed"
+          )
           .in("host_team_id", myTeamIds)
           .gte("date", selectedDate || today)
           .order("date", { ascending: true })
@@ -257,7 +262,10 @@ export default function MyScheduleInner() {
               .eq("status", "accepted");
 
           if (hostedAcceptedError) throw hostedAcceptedError;
-          hostedAcceptedRequests = toArray(hostedAcceptedRaw, toMatchRequestRow);
+          hostedAcceptedRequests = toArray(
+            hostedAcceptedRaw,
+            toMatchRequestRow
+          );
         }
 
         const hostedAcceptedBySlotId = new Map<string, MatchRequestRow>();
@@ -289,7 +297,9 @@ export default function MyScheduleInner() {
         if (requesterSlotIds.length > 0) {
           const requesterSlotsQuery = supabase
             .from("match_slots")
-            .select("id,host_team_id,date,start_time,end_time,area,area_text,category,is_closed")
+            .select(
+              "id,host_team_id,date,start_time,end_time,area,area_text,category,is_closed"
+            )
             .in("id", requesterSlotIds)
             .gte("date", selectedDate || today)
             .order("date", { ascending: true })
@@ -323,7 +333,8 @@ export default function MyScheduleInner() {
               date: slot.date,
               startTime: slot.start_time,
               endTime: slot.end_time,
-              category: categoryLabel(slot.category) || slot.category || "未設定",
+              category:
+                categoryLabel(slot.category) || slot.category || "未設定",
               opponent: opponentTeam?.name || "対戦相手未設定",
               strength: teamStrengthLabel(opponentTeam),
               venueName: slot.area_text || slot.area || null,
@@ -349,7 +360,8 @@ export default function MyScheduleInner() {
             date: slot.date,
             startTime: slot.start_time,
             endTime: slot.end_time,
-            category: categoryLabel(slot.category) || slot.category || "未設定",
+            category:
+              categoryLabel(slot.category) || slot.category || "未設定",
             opponent: hostTeam?.name || "対戦相手未設定",
             strength: teamStrengthLabel(hostTeam),
             venueName: slot.area_text || slot.area || null,
@@ -418,23 +430,23 @@ export default function MyScheduleInner() {
         icon="🗓"
         title={
           selectedDate
-            ? `予定一覧（${formatDateLabel(selectedDate)}）`
+            ? `日別予定（${formatDateLabel(selectedDate)}）`
             : "予定一覧"
         }
         desc={
           selectedDate
-            ? "選択した日の予定を一覧で確認できます。"
+            ? "選択した日の予定を確認できます。"
             : "チームの試合予定を一覧で確認できます。"
         }
       />
 
       <div style={topNavWrap}>
         <Link href="/match/my-schedule/calendar" className="sh-btn">
-          カレンダーへ
+          カレンダー
         </Link>
         {selectedDate ? (
           <Link href="/match/my-schedule" className="sh-btn sh-btn--primary">
-            全予定へ
+            予定一覧
           </Link>
         ) : null}
       </div>
