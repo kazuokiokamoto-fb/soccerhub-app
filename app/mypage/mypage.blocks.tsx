@@ -84,7 +84,7 @@ export type NextScheduleCard = {
   opponent: string | null;
   venueName: string | null;
   address: string | null;
-  status: ScheduleStatus | null; // ←ここ修正
+  status: ScheduleStatus | null;
   threadId: string | null;
 };
 
@@ -229,14 +229,9 @@ export function CurrentStatusSection(props: {
               </div>
 
               <div style={scheduleActionRowRight}>
-                {nextSchedule.threadId ? (
-                  <Link
-                    href={`/chat/${nextSchedule.threadId}`}
-                    className="sh-btn"
-                  >
-                    元チャット
-                  </Link>
-                ) : null}
+                <Link href="/match/my-schedule/calendar" className="sh-btn">
+                  カレンダー
+                </Link>
 
                 <Link
                   href="/match/my-schedule"
@@ -247,7 +242,22 @@ export function CurrentStatusSection(props: {
               </div>
             </>
           ) : (
-            <div style={emptyScheduleText}>直近の予定はありません。</div>
+            <>
+              <div style={emptyScheduleText}>直近の予定はありません。</div>
+
+              <div style={scheduleActionRowRight}>
+                <Link href="/match/my-schedule/calendar" className="sh-btn">
+                  カレンダー
+                </Link>
+
+                <Link
+                  href="/match/my-schedule"
+                  className="sh-btn sh-btn--primary"
+                >
+                  予定一覧
+                </Link>
+              </div>
+            </>
           )}
         </div>
       </div>

@@ -5,6 +5,7 @@ import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
+import { useSearchParams } from "next/navigation";
 import type { TeamSchedule, ScheduleStatus } from "@/app/lib/types";
 
 type TeamIdRow = {
@@ -146,7 +147,10 @@ function toTeamSchedule(row: TeamScheduleRow): TeamSchedule {
 
 export default function MySchedulePage() {
   const { user, loading: authLoading } = useAuth();
+  const searchParams = useSearchParams();
+
   const userId = user?.id ?? "";
+  const selectedDate = searchParams.get("date");
 
   const [loading, setLoading] = useState(true);
   const [schedules, setSchedules] = useState<TeamSchedule[]>([]);
@@ -193,9 +197,7 @@ export default function MySchedulePage() {
           return;
         }
 
-        const today = ymdToday();
-
-        const { data, error } = await supabase
+        let query = supabase
           .from("team_schedules")
           .select(
             [
@@ -222,10 +224,17 @@ export default function MySchedulePage() {
             ].join(",")
           )
           .in("team_id", myTeamIds)
-          .gte("date", today)
           .order("date", { ascending: true })
           .order("start_time", { ascending: true })
           .limit(200);
+
+        if (selectedDate) {
+          query = query.eq("date", selectedDate);
+        } else {
+          query = query.gte("date", ymdToday());
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 
@@ -249,7 +258,7 @@ export default function MySchedulePage() {
     return () => {
       active = false;
     };
-  }, [authLoading, userId]);
+  }, [authLoading, userId, selectedDate]);
 
   const groupedSchedules = useMemo(() => {
     const map = new Map<string, TeamSchedule[]>();
@@ -268,9 +277,31 @@ export default function MySchedulePage() {
 
       <AppHero
         icon="🗓"
-        title="マイスケジュール"
-        desc="チームの試合予定を一覧で確認できます。"
+        title={selectedDate ? `予定一覧（${formatDateLabel(selectedDate)}）` : "予定一覧"}
+        desc={
+          selectedDate
+            ? "選択した日の予定を一覧で確認できます。"
+            : "チームの試合予定を一覧で確認できます。"
+        }
       />
+
+      {selectedDate ? (
+        <div style={filterBar}>
+          <div style={filterText}>
+            絞り込み中：<b>{formatDateLabel(selectedDate)}</b>
+          </div>
+
+          <button
+            type="button"
+            className="sh-btn"
+            onClick={() => {
+              window.location.href = "/match/my-schedule";
+            }}
+          >
+            絞り込み解除
+          </button>
+        </div>
+      ) : null}
 
       {errorText ? (
         <div style={errorBox} className="ui-card">
@@ -287,7 +318,9 @@ export default function MySchedulePage() {
         </div>
       ) : schedules.length === 0 ? (
         <div style={emptyBox} className="ui-meta">
-          直近の予定はありません
+          {selectedDate
+            ? "この日の予定はありません"
+            : "直近の予定はありません"}
         </div>
       ) : (
         <section style={sectionWrap}>
@@ -390,6 +423,25 @@ const pageWrap: React.CSSProperties = {
   maxWidth: 980,
   margin: "0 auto",
   padding: 16,
+};
+
+const filterBar: React.CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+  padding: 12,
+  borderRadius: 12,
+  border: "1px solid #dbeafe",
+  background: "#eff6ff",
+};
+
+const filterText: React.CSSProperties = {
+  color: "#1e3a8a",
+  fontSize: 14,
+  lineHeight: 1.6,
 };
 
 const errorBox: React.CSSProperties = {
