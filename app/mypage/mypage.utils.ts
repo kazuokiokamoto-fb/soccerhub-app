@@ -1,4 +1,8 @@
-import type { TeamSchedule, ScheduleStatus } from "@/app/lib/types";
+import type {
+  TeamSchedule,
+  ScheduleStatus,
+  OpponentType,
+} from "@/app/lib/types";
 import type {
   ProfileRow,
   TeamRow,
@@ -204,6 +208,20 @@ export function toTeamScheduleRow(value: unknown): TeamScheduleRow | null {
   const status: ScheduleStatus =
     rawStatus === "confirmed" ? "confirmed" : "draft";
 
+  const rawOpponentType = asNullableString(r.opponent_type);
+  const opponent_type: OpponentType | null =
+    rawOpponentType === "team" || rawOpponentType === "external"
+      ? rawOpponentType
+      : null;
+
+  const rawSource = asNullableString(r.source);
+  const source: "manual" | "proposal" | "chat_extract" | null =
+    rawSource === "manual" ||
+    rawSource === "proposal" ||
+    rawSource === "chat_extract"
+      ? rawSource
+      : null;
+
   return {
     id,
     team_id,
@@ -223,6 +241,14 @@ export function toTeamScheduleRow(value: unknown): TeamScheduleRow | null {
     thread_id: asNullableString(r.thread_id),
     status,
     google_event_id: asNullableString(r.google_event_id),
+
+    proposal_id: asNullableString(r.proposal_id),
+    opponent_team_id: asNullableString(r.opponent_team_id),
+    opponent_type,
+    external_opponent_name: asNullableString(r.external_opponent_name),
+    created_by_user_id: asNullableString(r.created_by_user_id),
+    source,
+
     created_at: asNullableString(r.created_at),
     updated_at: asNullableString(r.updated_at),
   };
@@ -250,6 +276,14 @@ export function toTeamSchedule(value: unknown): TeamSchedule | null {
     note: row.note ?? null,
     threadId: row.thread_id ?? null,
     status: row.status === "confirmed" ? "confirmed" : "draft",
+
+    proposalId: row.proposal_id ?? null,
+    opponentTeamId: row.opponent_team_id ?? null,
+    opponentType: row.opponent_type ?? undefined,
+    externalOpponentName: row.external_opponent_name ?? null,
+    createdByUserId: row.created_by_user_id ?? null,
+    source: row.source ?? undefined,
+
     googleEventId: row.google_event_id ?? null,
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",

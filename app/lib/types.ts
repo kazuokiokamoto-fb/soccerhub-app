@@ -71,6 +71,8 @@ export type ScheduleStatus = "draft" | "confirmed";
 
 export type AttendanceStatus = "attending" | "absent" | "pending";
 
+export type OpponentType = "team" | "external";
+
 export type TeamSchedule = {
   id: string;
 
@@ -98,6 +100,17 @@ export type TeamSchedule = {
   threadId?: string | null;
 
   status: ScheduleStatus;
+
+  proposalId?: string | null;
+
+  opponentTeamId?: string | null;
+  opponentType?: OpponentType;
+
+  externalOpponentName?: string | null;
+
+  createdByUserId?: string | null;
+
+  source?: "manual" | "proposal" | "chat_extract";
 
   googleEventId?: string | null;
 
@@ -131,4 +144,61 @@ export type TeamUser = {
   name: string;
   role: TeamUserRole;
   createdAt: string;
+};
+
+/* =========================
+   予定提案（チャット起点）
+========================= */
+
+export type ScheduleProposalStatus =
+  | "draft"
+  | "pending_approval"
+  | "approved"
+  | "rejected"
+  | "cancelled";
+
+export type ScheduleProposal = {
+  id: string;
+
+  createdByUserId: string;
+  createdByTeamId: string;
+
+  opponentType: OpponentType;
+
+  opponentTeamId?: string | null;
+
+  externalOpponentName?: string | null;
+  externalOpponentContact?: string | null;
+
+  threadId?: string | null;
+  sourceMessageId?: string | null;
+
+  status: ScheduleProposalStatus;
+
+  approvalRequestedToTeamId?: string | null;
+
+  date?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+
+  meetupTime?: string | null;
+  dissolveTime?: string | null;
+
+  venueId?: string | null;
+  venueName?: string | null;
+  address?: string | null;
+
+  category?: string | null;
+  strength?: string | null;
+  parking?: string | null;
+  belongings?: string | null;
+  note?: string | null;
+
+  extractedPayload?: any;
+
+  confirmedAt?: string | null;
+  approvedByUserId?: string | null;
+
+  createdAt: string;
+  updatedAt: string;
 };

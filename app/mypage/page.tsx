@@ -277,6 +277,12 @@ export default function MyPage() {
             "thread_id",
             "status",
             "google_event_id",
+            "proposal_id",
+            "opponent_team_id",
+            "opponent_type",
+            "external_opponent_name",
+            "created_by_user_id",
+            "source",
             "created_at",
             "updated_at",
           ].join(",")

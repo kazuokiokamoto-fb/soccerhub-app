@@ -1,4 +1,4 @@
-import type { ScheduleStatus } from "@/app/lib/types";
+import type { ScheduleStatus, OpponentType } from "@/app/lib/types";
 
 export type ProfileRow = {
   user_id: string;
@@ -97,6 +97,14 @@ export type TeamScheduleRow = {
   thread_id: string | null;
   status: ScheduleStatus | null;
   google_event_id: string | null;
+
+  proposal_id: string | null;
+  opponent_team_id: string | null;
+  opponent_type: OpponentType | null;
+  external_opponent_name: string | null;
+  created_by_user_id: string | null;
+  source: "manual" | "proposal" | "chat_extract" | null;
+
   created_at: string | null;
   updated_at: string | null;
 };
