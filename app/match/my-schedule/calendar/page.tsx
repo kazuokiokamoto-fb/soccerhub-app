@@ -216,7 +216,9 @@ export default function MyScheduleCalendarPage() {
 
         const { data: hostedSlotsRaw, error: hostedSlotsError } = await supabase
           .from("match_slots")
-          .select("id,host_team_id,date,start_time,end_time,area,area_text,category,is_closed")
+          .select(
+            "id,host_team_id,date,start_time,end_time,area,area_text,category,is_closed"
+          )
           .in("host_team_id", myTeamIds)
           .gte("date", startStr)
           .lt("date", endStr)
@@ -271,7 +273,9 @@ export default function MyScheduleCalendarPage() {
           const { data: requesterSlotsRaw, error: requesterSlotsError } =
             await supabase
               .from("match_slots")
-              .select("id,host_team_id,date,start_time,end_time,area,area_text,category,is_closed")
+              .select(
+                "id,host_team_id,date,start_time,end_time,area,area_text,category,is_closed"
+              )
               .in("id", requesterSlotIds)
               .gte("date", startStr)
               .lt("date", endStr)
@@ -298,7 +302,10 @@ export default function MyScheduleCalendarPage() {
 
           current.total += 1;
 
-          if (hostedAcceptedBySlotId.has(slot.id) || requesterSlotIds.includes(slot.id)) {
+          if (
+            hostedAcceptedBySlotId.has(slot.id) ||
+            requesterSlotIds.includes(slot.id)
+          ) {
             current.confirmed += 1;
           } else {
             current.draft += 1;
@@ -344,7 +351,7 @@ export default function MyScheduleCalendarPage() {
 
       <div style={topNavWrap}>
         <Link href="/match/my-schedule" className="sh-btn sh-btn--primary">
-          予定一覧へ
+          予定一覧
         </Link>
       </div>
 
