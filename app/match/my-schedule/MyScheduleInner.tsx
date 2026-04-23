@@ -496,15 +496,6 @@ export default function MyScheduleInner() {
                 <div style={dateTitle} className="ui-title">
                   {formatDateLabel(date)}
                 </div>
-
-                {!selectedDate ? (
-                  <Link
-                    href={`/match/my-schedule/calendar?date=${date}`}
-                    className="sh-btn"
-                  >
-                    カレンダー
-                  </Link>
-                ) : null}
               </div>
 
               <div style={dateList}>
