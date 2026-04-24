@@ -347,3 +347,135 @@ export const sheetCancelButton: React.CSSProperties = {
   fontWeight: 900,
   cursor: "pointer",
 };
+
+export const modalBackdrop: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.35)",
+  zIndex: 1100,
+};
+
+export const modalWrap: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 1101,
+  padding: 16,
+};
+
+export const modalPanel: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 520,
+  maxHeight: "calc(100dvh - 32px)",
+  overflowY: "auto",
+  background: "#ffffff",
+  borderRadius: 18,
+  padding: 16,
+  boxShadow: "0 10px 40px rgba(0,0,0,0.2)",
+  display: "grid",
+  gap: 12,
+};
+
+export const modalTitle: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#16391f",
+  lineHeight: 1.4,
+};
+
+export const modalLead: React.CSSProperties = {
+  fontSize: 13,
+  color: "#4b5563",
+  lineHeight: 1.7,
+};
+
+export const modalField: React.CSSProperties = {
+  display: "grid",
+  gap: 5,
+};
+
+export const modalLabel: React.CSSProperties = {
+  fontSize: 12,
+  color: "#6b7280",
+  fontWeight: 800,
+};
+
+export const modalInput: React.CSSProperties = {
+  width: "100%",
+  minHeight: 42,
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  fontSize: 15,
+  lineHeight: 1.5,
+  boxSizing: "border-box",
+};
+
+export const modalTextArea: React.CSSProperties = {
+  width: "100%",
+  minHeight: 82,
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  fontSize: 15,
+  lineHeight: 1.6,
+  resize: "vertical",
+  boxSizing: "border-box",
+};
+
+export const modalRow: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 8,
+};
+
+export const modalHintBox: React.CSSProperties = {
+  padding: 10,
+  borderRadius: 12,
+  background: "#f0fdf4",
+  border: "1px solid #bbf7d0",
+  color: "#166534",
+  fontSize: 12,
+  lineHeight: 1.7,
+};
+
+export const modalErrorText: React.CSSProperties = {
+  color: "#991b1b",
+  fontSize: 13,
+  lineHeight: 1.6,
+  whiteSpace: "pre-wrap",
+};
+
+export const modalActions: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  justifyContent: "flex-end",
+  marginTop: 4,
+  flexWrap: "wrap",
+};
+
+export const modalCancelButton: React.CSSProperties = {
+  minHeight: 42,
+  padding: "10px 14px",
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  color: "#111827",
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+export const modalSubmitButton: React.CSSProperties = {
+  minHeight: 42,
+  padding: "10px 14px",
+  borderRadius: 10,
+  border: "none",
+  background: "#22c55e",
+  color: "#fff",
+  fontWeight: 900,
+  cursor: "pointer",
+};
