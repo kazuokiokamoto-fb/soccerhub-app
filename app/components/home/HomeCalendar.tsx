@@ -691,6 +691,28 @@ export default function HomeCalendar(props: {
     window.location.href = "/match/my-schedule/calendar";
   };
 
+  const openManualScheduleCreatePage = () => {
+    if (!authReady) return;
+
+    if (!currentUserId) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const firstTeam = myTeams[0];
+    if (!firstTeam?.id) {
+      alert("先にチーム登録をしてください");
+      window.location.href = "/teams/new";
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set("teamId", firstTeam.id);
+    params.set("date", ymdToday());
+
+    window.location.href = `/match/my-schedule/new?${params.toString()}`;
+  };
+
   const goToCreatePage = (ymd: string) => {
     if (!authReady) return;
 
@@ -1192,12 +1214,16 @@ export default function HomeCalendar(props: {
 
       <section style={summaryBox} className="ui-card">
         <div style={summaryCardTop}>
-          <div style={summaryDateText} className="ui-title">予定一覧</div>
+          <div style={summaryDateText} className="ui-title">
+            マイスケジュール
+          </div>
         </div>
 
         <div style={summaryInnerCompactBox} className="ui-card-soft">
           {myScheduleLoading ? (
-            <div style={summarySub} className="ui-meta">予定を読み込み中…</div>
+            <div style={summarySub} className="ui-meta">
+              予定を読み込み中…
+            </div>
           ) : nextSchedule ? (
             <>
               <div style={scheduleMainRow}>
@@ -1220,6 +1246,14 @@ export default function HomeCalendar(props: {
               </div>
 
               <div style={scheduleActionRowRight}>
+                <button
+                  type="button"
+                  className="sh-btn"
+                  onClick={openManualScheduleCreatePage}
+                >
+                  予定作成
+                </button>
+
                 <button
                   type="button"
                   className="sh-btn"
@@ -1247,6 +1281,14 @@ export default function HomeCalendar(props: {
                 <button
                   type="button"
                   className="sh-btn"
+                  onClick={openManualScheduleCreatePage}
+                >
+                  予定作成
+                </button>
+
+                <button
+                  type="button"
+                  className="sh-btn"
                   onClick={openMyScheduleCalendarPage}
                 >
                   カレンダー
@@ -1267,7 +1309,9 @@ export default function HomeCalendar(props: {
 
       <section style={summaryBox} className="ui-card">
         <div style={summaryCardTop}>
-          <div style={summaryDateText} className="ui-title">チーム条件で探す</div>
+          <div style={summaryDateText} className="ui-title">
+            チーム条件で探す
+          </div>
         </div>
 
         <div style={summaryInnerCompactBox} className="ui-card-soft">
