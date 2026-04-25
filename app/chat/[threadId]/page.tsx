@@ -411,6 +411,7 @@ export default function ChatThreadPage() {
         onClose={() => chat.setScheduleModalOpen(false)}
         loading={chat.creatingProposal}
         defaultValues={chat.scheduleDefaults}
+        teamId={chat.myTeamId}
         onSubmit={(values) => void chat.createScheduleProposal(values)}
       />
     </main>
