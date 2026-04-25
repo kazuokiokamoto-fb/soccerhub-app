@@ -15,12 +15,6 @@ type MatchSlotRow = {
   id: string;
   host_team_id: string;
   date: string;
-  start_time: string | null;
-  end_time: string | null;
-  area: string | null;
-  area_text: string | null;
-  category: string | null;
-  is_closed: boolean | null;
 };
 
 type MatchRequestRow = {
@@ -28,6 +22,13 @@ type MatchRequestRow = {
   slot_id: string;
   requester_team_id: string;
   status: "pending" | "accepted" | "rejected" | "cancelled";
+};
+
+type TeamScheduleRow = {
+  id: string;
+  team_id: string;
+  date: string;
+  status: "confirmed" | "draft" | string | null;
 };
 
 type DaySummary = {
@@ -45,18 +46,7 @@ function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
-function asNullableString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
-function asBooleanOrNull(value: unknown): boolean | null {
-  return typeof value === "boolean" ? value : null;
-}
-
-function toArray<T>(
-  value: unknown,
-  mapper: (v: unknown) => T | null
-): T[] {
+function toArray<T>(value: unknown, mapper: (v: unknown) => T | null): T[] {
   if (!Array.isArray(value)) return [];
   return value.map(mapper).filter((v): v is T => v !== null);
 }
@@ -79,17 +69,7 @@ function toMatchSlotRow(value: unknown): MatchSlotRow | null {
 
   if (!id || !host_team_id || !date) return null;
 
-  return {
-    id,
-    host_team_id,
-    date,
-    start_time: asNullableString(r.start_time),
-    end_time: asNullableString(r.end_time),
-    area: asNullableString(r.area),
-    area_text: asNullableString(r.area_text),
-    category: asNullableString(r.category),
-    is_closed: asBooleanOrNull(r.is_closed),
-  };
+  return { id, host_team_id, date };
 }
 
 function toMatchRequestRow(value: unknown): MatchRequestRow | null {
@@ -103,12 +83,21 @@ function toMatchRequestRow(value: unknown): MatchRequestRow | null {
 
   if (!id || !slot_id || !requester_team_id || !status) return null;
 
-  return {
-    id,
-    slot_id,
-    requester_team_id,
-    status,
-  };
+  return { id, slot_id, requester_team_id, status };
+}
+
+function toTeamScheduleRow(value: unknown): TeamScheduleRow | null {
+  const r = asRecord(value);
+  if (!r) return null;
+
+  const id = asString(r.id);
+  const team_id = asString(r.team_id);
+  const date = asString(r.date);
+  const status = asString(r.status, "draft");
+
+  if (!id || !team_id || !date) return null;
+
+  return { id, team_id, date, status };
 }
 
 function ymdToday() {
@@ -142,10 +131,7 @@ function buildMonthCells(baseDate: Date) {
   for (let day = 1; day <= totalDays; day++) {
     const mm = String(month + 1).padStart(2, "0");
     const dd = String(day).padStart(2, "0");
-    cells.push({
-      ymd: `${year}-${mm}-${dd}`,
-      day,
-    });
+    cells.push({ ymd: `${year}-${mm}-${dd}`, day });
   }
 
   while (cells.length % 7 !== 0) {
@@ -210,20 +196,31 @@ export default function MyScheduleCalendarPage() {
         const startStr = `${start.getFullYear()}-${String(
           start.getMonth() + 1
         ).padStart(2, "0")}-01`;
+
         const endStr = `${end.getFullYear()}-${String(
           end.getMonth() + 1
         ).padStart(2, "0")}-01`;
 
+        const { data: teamSchedulesRaw, error: teamSchedulesError } =
+          await supabase
+            .from("team_schedules")
+            .select("id,team_id,date,status")
+            .in("team_id", myTeamIds)
+            .gte("date", startStr)
+            .lt("date", endStr)
+            .order("date", { ascending: true });
+
+        if (teamSchedulesError) throw teamSchedulesError;
+
+        const teamSchedules = toArray(teamSchedulesRaw, toTeamScheduleRow);
+
         const { data: hostedSlotsRaw, error: hostedSlotsError } = await supabase
           .from("match_slots")
-          .select(
-            "id,host_team_id,date,start_time,end_time,area,area_text,category,is_closed"
-          )
+          .select("id,host_team_id,date")
           .in("host_team_id", myTeamIds)
           .gte("date", startStr)
           .lt("date", endStr)
-          .order("date", { ascending: true })
-          .order("start_time", { ascending: true });
+          .order("date", { ascending: true });
 
         if (hostedSlotsError) throw hostedSlotsError;
 
@@ -243,12 +240,9 @@ export default function MyScheduleCalendarPage() {
           hostedAcceptedRequests = toArray(hostedAcceptedRaw, toMatchRequestRow);
         }
 
-        const hostedAcceptedBySlotId = new Map<string, MatchRequestRow>();
-        for (const req of hostedAcceptedRequests) {
-          if (!hostedAcceptedBySlotId.has(req.slot_id)) {
-            hostedAcceptedBySlotId.set(req.slot_id, req);
-          }
-        }
+        const hostedAcceptedBySlotId = new Set(
+          hostedAcceptedRequests.map((req) => req.slot_id)
+        );
 
         const { data: requesterAcceptedRaw, error: requesterAcceptedError } =
           await supabase
@@ -273,45 +267,51 @@ export default function MyScheduleCalendarPage() {
           const { data: requesterSlotsRaw, error: requesterSlotsError } =
             await supabase
               .from("match_slots")
-              .select(
-                "id,host_team_id,date,start_time,end_time,area,area_text,category,is_closed"
-              )
+              .select("id,host_team_id,date")
               .in("id", requesterSlotIds)
               .gte("date", startStr)
               .lt("date", endStr)
-              .order("date", { ascending: true })
-              .order("start_time", { ascending: true });
+              .order("date", { ascending: true });
 
           if (requesterSlotsError) throw requesterSlotsError;
           requesterSlots = toArray(requesterSlotsRaw, toMatchSlotRow);
         }
 
-        const merged = [...hostedSlots, ...requesterSlots];
         const map = new Map<string, DaySummary>();
         const seen = new Set<string>();
 
-        for (const slot of merged) {
-          if (seen.has(slot.id)) continue;
-          seen.add(slot.id);
-
-          const current = map.get(slot.date) ?? {
+        function addSummary(date: string, status: "confirmed" | "draft") {
+          const current = map.get(date) ?? {
             total: 0,
             confirmed: 0,
             draft: 0,
           };
 
           current.total += 1;
+          if (status === "confirmed") current.confirmed += 1;
+          else current.draft += 1;
 
-          if (
-            hostedAcceptedBySlotId.has(slot.id) ||
-            requesterSlotIds.includes(slot.id)
-          ) {
-            current.confirmed += 1;
-          } else {
-            current.draft += 1;
-          }
+          map.set(date, current);
+        }
 
-          map.set(slot.date, current);
+        for (const item of teamSchedules) {
+          if (seen.has(`team_schedule:${item.id}`)) continue;
+          seen.add(`team_schedule:${item.id}`);
+
+          addSummary(
+            item.date,
+            item.status === "confirmed" ? "confirmed" : "draft"
+          );
+        }
+
+        for (const slot of [...hostedSlots, ...requesterSlots]) {
+          if (seen.has(`slot:${slot.id}`)) continue;
+          seen.add(`slot:${slot.id}`);
+
+          const confirmed =
+            hostedAcceptedBySlotId.has(slot.id) || requesterSlotIds.includes(slot.id);
+
+          addSummary(slot.date, confirmed ? "confirmed" : "draft");
         }
 
         if (!active) return;
@@ -345,13 +345,17 @@ export default function MyScheduleCalendarPage() {
 
       <AppHero
         icon="🗓"
-        title="カレンダー"
+        title="マイスケジュール"
         desc="予定を月表示で確認できます。決定と下書きを色分け表示します。"
       />
 
       <div style={topNavWrap}>
         <Link href="/match/my-schedule" className="sh-btn sh-btn--primary">
           予定一覧
+        </Link>
+
+        <Link href="/match/my-schedule/new" className="sh-btn">
+          予定作成
         </Link>
       </div>
 
@@ -401,7 +405,7 @@ export default function MyScheduleCalendarPage() {
       <div style={legendWrap}>
         <span style={legendItem}>
           <span style={legendDotConfirmed} />
-          決
+          決定
         </span>
         <span style={legendItem}>
           <span style={legendDotDraft} />
@@ -448,22 +452,20 @@ export default function MyScheduleCalendarPage() {
                   <div style={dayCellTop}>
                     <span style={dayNumber}>{cell.day}</span>
                     {summary ? (
-                      <span style={countBadge}>{summary.total}件</span>
+                      <span style={countBadge}>{summary.total}</span>
                     ) : null}
                   </div>
 
                   {summary ? (
                     <div style={statusChipWrap}>
                       {summary.confirmed > 0 ? (
-                        <span style={confirmedChip}>決 {summary.confirmed}</span>
+                        <span style={confirmedChip}>決{summary.confirmed}</span>
                       ) : null}
                       {summary.draft > 0 ? (
-                        <span style={draftChip}>下 {summary.draft}</span>
+                        <span style={draftChip}>下{summary.draft}</span>
                       ) : null}
                     </div>
-                  ) : (
-                    <div style={emptyChipArea} />
-                  )}
+                  ) : null}
                 </button>
               );
             })}
@@ -511,33 +513,37 @@ const emptyBox: React.CSSProperties = {
 };
 
 const monthHeader: React.CSSProperties = {
-  marginTop: 14,
-  display: "flex",
-  justifyContent: "space-between",
+  marginTop: 16,
+  display: "grid",
+  gridTemplateColumns: "auto 1fr auto",
   alignItems: "center",
-  gap: 12,
-  flexWrap: "wrap",
+  gap: 8,
 };
 
 const monthTitle: React.CSSProperties = {
-  fontSize: 20,
+  fontSize: 22,
   fontWeight: 900,
   color: "#16391f",
+  textAlign: "center",
+  lineHeight: 1.2,
 };
 
 const monthNavButton: React.CSSProperties = {
   border: "1px solid #d1d5db",
   background: "#fff",
-  borderRadius: 10,
-  padding: "10px 14px",
+  borderRadius: 12,
+  padding: "9px 11px",
   cursor: "pointer",
-  fontWeight: 700,
+  fontWeight: 800,
+  fontSize: 13,
+  color: "#2563eb",
+  whiteSpace: "nowrap",
 };
 
 const legendWrap: React.CSSProperties = {
   marginTop: 12,
   display: "flex",
-  gap: 12,
+  gap: 14,
   flexWrap: "wrap",
   alignItems: "center",
 };
@@ -548,6 +554,7 @@ const legendItem: React.CSSProperties = {
   gap: 6,
   fontSize: 13,
   color: "#4b5563",
+  fontWeight: 700,
 };
 
 const legendDotConfirmed: React.CSSProperties = {
@@ -567,35 +574,37 @@ const legendDotDraft: React.CSSProperties = {
 };
 
 const calendarWrap: React.CSSProperties = {
-  marginTop: 12,
+  marginTop: 10,
   display: "grid",
   gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-  gap: 8,
+  gap: 5,
 };
 
 const weekLabel: React.CSSProperties = {
   textAlign: "center",
-  fontWeight: 800,
-  fontSize: 13,
+  fontWeight: 900,
+  fontSize: 12,
   color: "#4b5563",
-  paddingBottom: 4,
+  padding: "4px 0",
 };
 
 const blankCell: React.CSSProperties = {
-  minHeight: 92,
+  minHeight: 72,
 };
 
 const dayCell: React.CSSProperties = {
-  minHeight: 92,
+  minHeight: 72,
   border: "1px solid #e5e7eb",
   borderRadius: 14,
   background: "#fff",
-  padding: 10,
+  padding: 6,
   textAlign: "left",
   cursor: "pointer",
   display: "flex",
   flexDirection: "column",
   justifyContent: "space-between",
+  minWidth: 0,
+  overflow: "hidden",
 };
 
 const clickableCell: React.CSSProperties = {
@@ -609,60 +618,65 @@ const todayCell: React.CSSProperties = {
 const dayCellTop: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "center",
-  gap: 8,
+  alignItems: "flex-start",
+  gap: 3,
+  minWidth: 0,
 };
 
 const dayNumber: React.CSSProperties = {
   fontSize: 15,
   fontWeight: 900,
   color: "#111827",
+  lineHeight: 1,
 };
 
 const countBadge: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  minHeight: 22,
-  padding: "0 8px",
+  width: 22,
+  height: 22,
   borderRadius: 999,
   background: "#eef6f0",
   color: "#14532d",
-  fontSize: 12,
-  fontWeight: 800,
+  fontSize: 11,
+  fontWeight: 900,
+  flexShrink: 0,
 };
 
 const statusChipWrap: React.CSSProperties = {
-  display: "flex",
-  gap: 6,
-  flexWrap: "wrap",
-  marginTop: 10,
+  display: "grid",
+  gap: 3,
+  justifyItems: "end",
+  alignSelf: "stretch",
 };
 
 const confirmedChip: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
-  minHeight: 22,
-  padding: "0 8px",
+  justifyContent: "center",
+  minHeight: 20,
+  padding: "0 6px",
   borderRadius: 999,
   background: "#dcfce7",
   color: "#166534",
-  fontSize: 12,
-  fontWeight: 800,
+  fontSize: 11,
+  fontWeight: 900,
+  lineHeight: 1,
+  whiteSpace: "nowrap",
 };
 
 const draftChip: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
-  minHeight: 22,
-  padding: "0 8px",
+  justifyContent: "center",
+  minHeight: 20,
+  padding: "0 6px",
   borderRadius: 999,
   background: "#f3f4f6",
   color: "#4b5563",
-  fontSize: 12,
-  fontWeight: 800,
-};
-
-const emptyChipArea: React.CSSProperties = {
-  minHeight: 22,
+  fontSize: 11,
+  fontWeight: 900,
+  lineHeight: 1,
+  whiteSpace: "nowrap",
 };
