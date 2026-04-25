@@ -45,7 +45,9 @@ function NewMyScheduleInner() {
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [errorText, setErrorText] = useState("");
 
-  const [initialValues, setInitialValues] = useState<ScheduleFormValues>({
+  const [initialValues, setInitialValues] = useState<
+    ScheduleFormValues & { teamId?: string }
+  >({
     teamId: defaultTeamId,
     opponentName: "",
     date: defaultDate,
@@ -126,7 +128,7 @@ function NewMyScheduleInner() {
     };
   }, [authLoading, user?.id, defaultTeamId, defaultDate]);
 
-  async function save(values: ScheduleFormValues) {
+  async function save(values: ScheduleFormValues & { teamId?: string }) {
     if (!user?.id) {
       alert("ログインが必要です");
       return;
@@ -154,6 +156,26 @@ function NewMyScheduleInner() {
     const normalizedMeetup = normalizeTime(values.meetupTime);
     const normalizedDissolve = normalizeTime(values.dissolveTime);
 
+    if (values.startTime.trim() && !normalizedStart) {
+      alert("開始時間は 13:00 の形式で入力してください");
+      return;
+    }
+
+    if (values.endTime.trim() && !normalizedEnd) {
+      alert("終了時間は 15:00 の形式で入力してください");
+      return;
+    }
+
+    if (values.meetupTime.trim() && !normalizedMeetup) {
+      alert("集合時間は 12:30 の形式で入力してください");
+      return;
+    }
+
+    if (values.dissolveTime.trim() && !normalizedDissolve) {
+      alert("解散時間は 15:30 の形式で入力してください");
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -161,17 +183,17 @@ function NewMyScheduleInner() {
         team_id: values.teamId,
         category: values.category.trim() || selectedTeam?.category || "",
         opponent: values.opponentName.trim(),
-        strength: values.strength || null,
+        strength: values.strength.trim() || null,
         date: values.date,
         start_time: normalizedStart,
         end_time: normalizedEnd,
         meetup_time: normalizedMeetup,
         dissolve_time: normalizedDissolve,
-        venue_name: values.venueName || null,
-        address: values.address || null,
-        parking: values.parking || null,
-        belongings: values.belongings || null,
-        note: values.note || null,
+        venue_name: values.venueName.trim() || null,
+        address: values.address.trim() || null,
+        parking: values.parking.trim() || null,
+        belongings: values.belongings.trim() || null,
+        note: values.note.trim() || null,
         thread_id: null,
         status: "draft",
         proposal_id: null,
@@ -234,30 +256,53 @@ function NewMyScheduleInner() {
         </Link>
       </div>
 
-      {errorText && (
+      {errorText ? (
         <div style={errorBox}>
           <b>読み込みエラー</b>
           <br />
           {errorText}
         </div>
-      )}
+      ) : null}
 
-      <ScheduleForm
-        initialValues={initialValues}
-        loading={saving}
-        submitLabel="予定を保存"
-        onCancel={() => {
-          window.location.href = "/match/my-schedule";
-        }}
-        onSubmit={(values) => void save(values)}
-      />
+      <section style={formBox}>
+        {teamOptions.length === 0 ? (
+          <div style={emptyBox}>
+            予定を作成するには、先にチーム登録が必要です。
+            <div style={{ marginTop: 12 }}>
+              <Link href="/teams/new" className="sh-btn sh-btn--primary">
+                チームを登録する
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <ScheduleForm
+            initialValues={initialValues}
+            teams={teamOptions}
+            loading={saving}
+            submitLabel="予定を保存"
+            submittingLabel="保存中…"
+            onCancel={() => {
+              window.location.href = "/match/my-schedule";
+            }}
+            onSubmit={(values) => void save(values)}
+          />
+        )}
+      </section>
     </main>
   );
 }
 
 export default function NewMySchedulePage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense
+      fallback={
+        <main style={pageWrap}>
+          <AppTabNav />
+          <AppHero icon="🗓" title="予定作成" desc="予定を読み込み中です。" />
+          <div style={box}>読み込み中…</div>
+        </main>
+      }
+    >
       <NewMyScheduleInner />
     </Suspense>
   );
@@ -278,9 +323,24 @@ const box: React.CSSProperties = {
   padding: 16,
   borderRadius: 14,
   background: "#fff",
+  border: "1px solid #e5e7eb",
 };
 
 const errorBox: React.CSSProperties = {
   ...box,
   color: "#991b1b",
+  lineHeight: 1.7,
+};
+
+const formBox: React.CSSProperties = {
+  marginTop: 14,
+  padding: 16,
+  borderRadius: 16,
+  background: "#fff",
+  border: "1px solid #e5ece7",
+};
+
+const emptyBox: React.CSSProperties = {
+  lineHeight: 1.8,
+  color: "#374151",
 };

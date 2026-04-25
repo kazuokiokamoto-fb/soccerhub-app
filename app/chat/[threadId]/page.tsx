@@ -69,9 +69,11 @@ export default function ChatThreadPage() {
 
   const chat = useChatThread({
     threadId,
-    from,
-    slotId,
-    date,
+    query: {
+      from,
+      slotId,
+      date,
+    },
   });
 
   if (chat.authLoading) {
@@ -133,7 +135,7 @@ export default function ChatThreadPage() {
                 onClick={() => chat.setScheduleModalOpen(true)}
                 disabled={!chat.canCreateProposal}
               >
-                予定を作る
+                {chat.creatingProposal ? "作成中…" : "予定を作る"}
               </button>
             ) : null}
 
@@ -226,6 +228,7 @@ export default function ChatThreadPage() {
                             {isRead && !optimistic ? (
                               <span style={readStateText}>既読</span>
                             ) : null}
+
                             <span style={bubbleMetaTime}>
                               {optimistic
                                 ? "送信中…"
