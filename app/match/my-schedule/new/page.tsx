@@ -45,9 +45,7 @@ function NewMyScheduleInner() {
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [errorText, setErrorText] = useState("");
 
-  const [initialValues, setInitialValues] = useState<
-    ScheduleFormValues & { teamId?: string }
-  >({
+  const [initialValues, setInitialValues] = useState<ScheduleFormValues>({
     teamId: defaultTeamId,
     opponentName: "",
     opponentUniform: "",
@@ -129,7 +127,7 @@ function NewMyScheduleInner() {
     };
   }, [authLoading, user?.id, defaultTeamId, defaultDate]);
 
-  async function save(values: ScheduleFormValues & { teamId?: string }) {
+  async function save(values: ScheduleFormValues) {
     if (!user?.id) {
       alert("ログインが必要です");
       return;
@@ -177,6 +175,13 @@ function NewMyScheduleInner() {
       return;
     }
 
+    const noteLines = [
+      values.note.trim(),
+      values.opponentUniform.trim()
+        ? `相手ユニ色：${values.opponentUniform.trim()}`
+        : "",
+    ].filter(Boolean);
+
     setSaving(true);
 
     try {
@@ -194,7 +199,7 @@ function NewMyScheduleInner() {
         address: values.address.trim() || null,
         parking: values.parking.trim() || null,
         belongings: values.belongings.trim() || null,
-        note: values.note.trim() || null,
+        note: noteLines.length > 0 ? noteLines.join("\n") : null,
         thread_id: null,
         status: "draft",
         proposal_id: null,
