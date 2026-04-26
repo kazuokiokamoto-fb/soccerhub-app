@@ -50,6 +50,7 @@ function NewMyScheduleInner() {
   >({
     teamId: defaultTeamId,
     opponentName: "",
+    opponentUniform: "",
     date: defaultDate,
     category: "",
     startTime: "",
