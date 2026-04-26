@@ -37,6 +37,11 @@ type DaySummary = {
   draft: number;
 };
 
+type MonthCell = {
+  ymd: string | null;
+  day: number | null;
+};
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -112,19 +117,99 @@ function formatMonthLabel(date: Date) {
   return `${date.getFullYear()}年${date.getMonth() + 1}月`;
 }
 
-function buildMonthCells(baseDate: Date) {
+function parseYmd(ymd: string) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+function isPastDate(ymd: string) {
+  return ymd < ymdToday();
+}
+
+function getWeekday(ymd: string) {
+  return parseYmd(ymd).getDay();
+}
+
+function getHolidayName(ymd: string) {
+  const holidays: Record<string, string> = {
+    // 2025
+    "2025-01-01": "元日",
+    "2025-01-13": "成人の日",
+    "2025-02-11": "建国記念の日",
+    "2025-02-23": "天皇誕生日",
+    "2025-02-24": "振替休日",
+    "2025-03-20": "春分の日",
+    "2025-04-29": "昭和の日",
+    "2025-05-03": "憲法記念日",
+    "2025-05-04": "みどりの日",
+    "2025-05-05": "こどもの日",
+    "2025-05-06": "振替休日",
+    "2025-07-21": "海の日",
+    "2025-08-11": "山の日",
+    "2025-09-15": "敬老の日",
+    "2025-09-23": "秋分の日",
+    "2025-10-13": "スポーツの日",
+    "2025-11-03": "文化の日",
+    "2025-11-23": "勤労感謝の日",
+    "2025-11-24": "振替休日",
+
+    // 2026
+    "2026-01-01": "元日",
+    "2026-01-12": "成人の日",
+    "2026-02-11": "建国記念の日",
+    "2026-02-23": "天皇誕生日",
+    "2026-03-20": "春分の日",
+    "2026-04-29": "昭和の日",
+    "2026-05-03": "憲法記念日",
+    "2026-05-04": "みどりの日",
+    "2026-05-05": "こどもの日",
+    "2026-05-06": "振替休日",
+    "2026-07-20": "海の日",
+    "2026-08-11": "山の日",
+    "2026-09-21": "敬老の日",
+    "2026-09-22": "国民の休日",
+    "2026-09-23": "秋分の日",
+    "2026-10-12": "スポーツの日",
+    "2026-11-03": "文化の日",
+    "2026-11-23": "勤労感謝の日",
+
+    // 2027
+    "2027-01-01": "元日",
+    "2027-01-11": "成人の日",
+    "2027-02-11": "建国記念の日",
+    "2027-02-23": "天皇誕生日",
+    "2027-03-21": "春分の日",
+    "2027-03-22": "振替休日",
+    "2027-04-29": "昭和の日",
+    "2027-05-03": "憲法記念日",
+    "2027-05-04": "みどりの日",
+    "2027-05-05": "こどもの日",
+    "2027-07-19": "海の日",
+    "2027-08-11": "山の日",
+    "2027-09-20": "敬老の日",
+    "2027-09-23": "秋分の日",
+    "2027-10-11": "スポーツの日",
+    "2027-11-03": "文化の日",
+    "2027-11-23": "勤労感謝の日",
+  };
+
+  return holidays[ymd] ?? "";
+}
+
+function buildMonthCells(baseDate: Date): MonthCell[] {
   const year = baseDate.getFullYear();
   const month = baseDate.getMonth();
 
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
 
-  const startWeekday = firstDay.getDay();
+  // 月曜始まり：月=0, 火=1, ... 日=6
+  const startOffset = (firstDay.getDay() + 6) % 7;
   const totalDays = lastDay.getDate();
 
-  const cells: Array<{ ymd: string | null; day: number | null }> = [];
+  const cells: MonthCell[] = [];
 
-  for (let i = 0; i < startWeekday; i++) {
+  for (let i = 0; i < startOffset; i++) {
     cells.push({ ymd: null, day: null });
   }
 
@@ -309,7 +394,8 @@ export default function MyScheduleCalendarPage() {
           seen.add(`slot:${slot.id}`);
 
           const confirmed =
-            hostedAcceptedBySlotId.has(slot.id) || requesterSlotIds.includes(slot.id);
+            hostedAcceptedBySlotId.has(slot.id) ||
+            requesterSlotIds.includes(slot.id);
 
           addSummary(slot.date, confirmed ? "confirmed" : "draft");
         }
@@ -361,7 +447,9 @@ export default function MyScheduleCalendarPage() {
 
       {errorText ? (
         <div style={errorBox} className="ui-card">
-          <div style={errorTitle} className="ui-title">読み込みエラー</div>
+          <div style={errorTitle} className="ui-title">
+            読み込みエラー
+          </div>
           <div className="ui-body">{errorText}</div>
         </div>
       ) : null}
@@ -414,7 +502,9 @@ export default function MyScheduleCalendarPage() {
       </div>
 
       {loading || authLoading ? (
-        <div style={emptyBox} className="ui-meta">読み込み中…</div>
+        <div style={emptyBox} className="ui-meta">
+          読み込み中…
+        </div>
       ) : !userId ? (
         <div style={emptyBox} className="ui-meta">
           ログイン後に表示されます
@@ -422,11 +512,23 @@ export default function MyScheduleCalendarPage() {
       ) : (
         <>
           <div style={calendarWrap}>
-            {weekLabels.map((label) => (
-              <div key={label} style={weekLabel}>
-                {label}
-              </div>
-            ))}
+            {weekLabels.map((label) => {
+              const isSat = label === "土";
+              const isSun = label === "日";
+
+              return (
+                <div
+                  key={label}
+                  style={{
+                    ...weekLabel,
+                    ...(isSat ? saturdayText : null),
+                    ...(isSun ? sundayText : null),
+                  }}
+                >
+                  {label}
+                </div>
+              );
+            })}
 
             {monthCells.map((cell, idx) => {
               if (!cell.ymd || !cell.day) {
@@ -435,6 +537,12 @@ export default function MyScheduleCalendarPage() {
 
               const summary = summaries.get(cell.ymd);
               const isToday = cell.ymd === ymdToday();
+              const holidayName = getHolidayName(cell.ymd);
+              const weekday = getWeekday(cell.ymd);
+              const isSat = weekday === 6;
+              const isSun = weekday === 0;
+              const isHoliday = Boolean(holidayName);
+              const isPast = isPastDate(cell.ymd);
 
               return (
                 <button
@@ -442,15 +550,43 @@ export default function MyScheduleCalendarPage() {
                   type="button"
                   style={{
                     ...dayCell,
-                    ...(isToday ? todayCell : null),
                     ...(summary ? clickableCell : null),
+                    ...(isPast ? pastCell : null),
+                    ...(isSat && !isPast ? saturdayCell : null),
+                    ...((isSun || isHoliday) && !isPast ? sundayHolidayCell : null),
+                    ...(isToday ? todayCell : null),
                   }}
                   onClick={() => {
                     window.location.href = `/match/my-schedule?date=${cell.ymd}`;
                   }}
                 >
                   <div style={dayCellTop}>
-                    <span style={dayNumber}>{cell.day}</span>
+                    <div style={dayTitleWrap}>
+                      <span
+                        style={{
+                          ...dayNumber,
+                          ...(isPast ? pastText : null),
+                          ...(isSat && !isPast ? saturdayText : null),
+                          ...((isSun || isHoliday) && !isPast
+                            ? sundayText
+                            : null),
+                        }}
+                      >
+                        {cell.day}
+                      </span>
+
+                      {holidayName ? (
+                        <span
+                          style={{
+                            ...holidayLabel,
+                            ...(isPast ? pastText : null),
+                          }}
+                        >
+                          {holidayName}
+                        </span>
+                      ) : null}
+                    </div>
+
                     {summary ? (
                       <span style={countBadge}>{summary.total}</span>
                     ) : null}
@@ -482,7 +618,7 @@ export default function MyScheduleCalendarPage() {
   );
 }
 
-const weekLabels = ["日", "月", "火", "水", "木", "金", "土"];
+const weekLabels = ["月", "火", "水", "木", "金", "土", "日"];
 
 const pageWrap: React.CSSProperties = {
   maxWidth: 980,
@@ -615,10 +751,32 @@ const todayCell: React.CSSProperties = {
   border: "2px solid #86efac",
 };
 
+const pastCell: React.CSSProperties = {
+  background: "#f3f4f6",
+  borderColor: "#e5e7eb",
+  opacity: 0.72,
+};
+
+const saturdayCell: React.CSSProperties = {
+  background: "#eff6ff",
+  borderColor: "#bfdbfe",
+};
+
+const sundayHolidayCell: React.CSSProperties = {
+  background: "#fff1f2",
+  borderColor: "#fecdd3",
+};
+
 const dayCellTop: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "flex-start",
+  gap: 3,
+  minWidth: 0,
+};
+
+const dayTitleWrap: React.CSSProperties = {
+  display: "grid",
   gap: 3,
   minWidth: 0,
 };
@@ -628,6 +786,28 @@ const dayNumber: React.CSSProperties = {
   fontWeight: 900,
   color: "#111827",
   lineHeight: 1,
+};
+
+const holidayLabel: React.CSSProperties = {
+  fontSize: 10,
+  fontWeight: 900,
+  color: "#dc2626",
+  lineHeight: 1.15,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const saturdayText: React.CSSProperties = {
+  color: "#2563eb",
+};
+
+const sundayText: React.CSSProperties = {
+  color: "#dc2626",
+};
+
+const pastText: React.CSSProperties = {
+  color: "#9ca3af",
 };
 
 const countBadge: React.CSSProperties = {
