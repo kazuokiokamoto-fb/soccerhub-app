@@ -6,6 +6,7 @@ import { useAuth } from "@/app/lib/auth";
 import { categoryLabel } from "@/app/lib/categories";
 
 import { Calendar } from "@/app/match/components/Calendar";
+import type { CalendarItem } from "@/app/match/components/MatchCalendarBase";
 import { DaySlotList } from "@/app/match/components/DaySlotList";
 import { MatchFilterPanel } from "@/app/match/components/MatchFilterPanel";
 import { MatchHelpModals } from "@/app/match/components/MatchHelpModals";
@@ -453,6 +454,33 @@ export default function HomeCalendar(props: {
 
     return result;
   }, [filteredSlotsInMonth, getSlotStatus]);
+
+  const calendarItemsByDate = useMemo(() => {
+    const map = new Map<string, CalendarItem[]>();
+
+    for (const [ymd, summary] of dayStatusSummaryByDate.entries()) {
+      if (summary.tone === "decided") {
+        map.set(ymd, [
+          {
+            label: "決定",
+            count: summary.count,
+            tone: "decided",
+          },
+        ]);
+      } else if (summary.tone === "open") {
+        map.set(ymd, [
+          {
+            label: "募集",
+            count: summary.count,
+            tone: "open",
+          },
+        ]);
+      }
+      // 「他」は出さない
+    }
+
+    return map;
+  }, [dayStatusSummaryByDate]);
 
   const slotsOnSelectedDate = useMemo(() => {
     return filteredSlotsInMonth.filter((s: any) => s.date === selectedYmd);
@@ -1059,6 +1087,7 @@ export default function HomeCalendar(props: {
           selectedYmd={selectedYmd}
           countByDate={countByDate}
           dayStatusSummaryByDate={dayStatusSummaryByDate}
+          itemsByDate={calendarItemsByDate}
           onSelectDate={(ymd) => {
             setSelectedYmd(ymd);
             setSelectedSlotId("");
@@ -1080,7 +1109,6 @@ export default function HomeCalendar(props: {
             setRequestComment("");
           }}
           onCreateForDate={(ymd) => goToCreatePage(ymd)}
-          onOpenCalendarHelp={() => setShowCalendarHelp(true)}
           disableCreate={!authReady}
           selectedDateSummaryText={selectedDateSummaryText}
           titleText="試合日で探す"
