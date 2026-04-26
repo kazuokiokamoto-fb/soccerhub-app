@@ -54,12 +54,20 @@ const defaultValues: ScheduleFormValues = {
   note: "",
 };
 
-const CATEGORY_OPTIONS = ["U-8", "U-10", "U-12", "U-15", "一般"];
-const STRENGTH_OPTIONS = ["SS", "S", "A", "B", "C"];
+const CATEGORY_OPTIONS = ["KIDS", "U-8", "U-10", "U-12", "U-15", "一般"];
+const STRENGTH_OPTIONS = ["SS", "S", "A", "B", "C", "強め", "普通", "弱め"];
 const PARKING_OPTIONS = ["あり", "なし", "不明"];
 
 export default function ScheduleForm(props: ScheduleFormProps) {
-  const { teams = [], initialValues, loading = false, onSubmit, onCancel } = props;
+  const {
+    teams = [],
+    initialValues,
+    submitLabel = "保存",
+    submittingLabel = "保存中…",
+    loading = false,
+    onSubmit,
+    onCancel,
+  } = props;
 
   const [values, setValues] = useState<ScheduleFormValues>({
     ...defaultValues,
@@ -72,16 +80,27 @@ export default function ScheduleForm(props: ScheduleFormProps) {
   useEffect(() => {
     setValues({ ...defaultValues, ...initialValues });
 
-    const saved = localStorage.getItem("venues");
-    if (saved) setVenues(JSON.parse(saved));
+    try {
+      const saved = window.localStorage.getItem("venues");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setVenues(parsed);
+      }
+    } catch (e) {
+      console.error("venues localStorage parse error:", e);
+    }
   }, [initialValues]);
 
-  function update<K extends keyof ScheduleFormValues>(key: K, value: ScheduleFormValues[K]) {
+  function update<K extends keyof ScheduleFormValues>(
+    key: K,
+    value: ScheduleFormValues[K]
+  ) {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
   function handleTeamChange(teamId: string) {
     const selected = teams.find((t) => t.id === teamId);
+
     setValues((prev) => ({
       ...prev,
       teamId,
@@ -90,7 +109,7 @@ export default function ScheduleForm(props: ScheduleFormProps) {
   }
 
   function handleVenueSelect(name: string) {
-    const v = venues.find((v) => v.name === name);
+    const v = venues.find((item) => item.name === name);
     if (!v) return;
 
     setValues((prev) => ({
@@ -100,25 +119,58 @@ export default function ScheduleForm(props: ScheduleFormProps) {
     }));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    if (!values.teamId) return alert("チーム選択");
-    if (!values.date) return alert("日付必須");
-    if (!values.opponentName) return alert("対戦相手必須");
+    if (!values.teamId.trim()) {
+      alert("自チームを選択してください");
+      return;
+    }
+
+    if (!values.opponentName.trim()) {
+      alert("対戦相手を入力してください");
+      return;
+    }
+
+    if (!values.date.trim()) {
+      alert("日付を入力してください");
+      return;
+    }
 
     setSubmitting(true);
 
     try {
-      await onSubmit(values);
+      const trimmedValues: ScheduleFormValues = {
+        teamId: values.teamId.trim(),
+        date: values.date.trim(),
+        startTime: values.startTime.trim(),
+        endTime: values.endTime.trim(),
+        meetupTime: values.meetupTime.trim(),
+        dissolveTime: values.dissolveTime.trim(),
+        opponentName: values.opponentName.trim(),
+        opponentUniform: values.opponentUniform.trim(),
+        venueName: values.venueName.trim(),
+        address: values.address.trim(),
+        category: values.category.trim(),
+        strength: values.strength.trim(),
+        parking: values.parking.trim(),
+        belongings: values.belongings.trim(),
+        note: values.note.trim(),
+      };
 
-      if (values.venueName) {
+      await onSubmit(trimmedValues);
+
+      if (trimmedValues.venueName) {
         const updated = [
-          { name: values.venueName, address: values.address },
-          ...venues.filter((v) => v.name !== values.venueName),
-        ].slice(0, 5);
+          {
+            name: trimmedValues.venueName,
+            address: trimmedValues.address,
+          },
+          ...venues.filter((v) => v.name !== trimmedValues.venueName),
+        ].slice(0, 8);
 
-        localStorage.setItem("venues", JSON.stringify(updated));
+        setVenues(updated);
+        window.localStorage.setItem("venues", JSON.stringify(updated));
       }
     } finally {
       setSubmitting(false);
@@ -131,140 +183,303 @@ export default function ScheduleForm(props: ScheduleFormProps) {
     <form style={wrap} onSubmit={handleSubmit}>
       <div style={section}>基本情報</div>
 
-      {/* チーム */}
-      {teams.length > 0 && (
-        <Field label="自チーム">
-          <select value={values.teamId} onChange={(e) => handleTeamChange(e.target.value)} style={input}>
-            <option value="">選択</option>
+      {teams.length > 0 ? (
+        <Field label="自チーム *">
+          <select
+            value={values.teamId}
+            onChange={(e) => handleTeamChange(e.target.value)}
+            style={input}
+            disabled={disabled}
+          >
+            <option value="">選択してください</option>
             {teams.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
             ))}
           </select>
         </Field>
-      )}
+      ) : null}
 
-      <Field label="対戦相手">
-        <input value={values.opponentName} onChange={(e) => update("opponentName", e.target.value)} style={input}/>
+      <Field label="対戦相手 *">
+        <input
+          value={values.opponentName}
+          onChange={(e) => update("opponentName", e.target.value)}
+          placeholder="例：〇〇FC"
+          style={input}
+          disabled={disabled}
+        />
       </Field>
 
       <Field label="相手ユニ色">
-        <input value={values.opponentUniform} onChange={(e) => update("opponentUniform", e.target.value)} style={input}/>
+        <input
+          value={values.opponentUniform}
+          onChange={(e) => update("opponentUniform", e.target.value)}
+          placeholder="例：赤 / 白 / 青"
+          style={input}
+          disabled={disabled}
+        />
       </Field>
 
-      <Row>
+      <div style={responsiveRow}>
         <Field label="カテゴリ">
-          <select value={values.category} onChange={(e) => update("category", e.target.value)} style={input}>
-            <option value="">選択</option>
-            {CATEGORY_OPTIONS.map((c) => <option key={c}>{c}</option>)}
+          <select
+            value={values.category}
+            onChange={(e) => update("category", e.target.value)}
+            style={input}
+            disabled={disabled}
+          >
+            <option value="">選択してください</option>
+            {CATEGORY_OPTIONS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
           </select>
         </Field>
 
         <Field label="強さ">
-          <select value={values.strength} onChange={(e) => update("strength", e.target.value)} style={input}>
-            <option value="">選択</option>
-            {STRENGTH_OPTIONS.map((c) => <option key={c}>{c}</option>)}
+          <select
+            value={values.strength}
+            onChange={(e) => update("strength", e.target.value)}
+            style={input}
+            disabled={disabled}
+          >
+            <option value="">選択してください</option>
+            {STRENGTH_OPTIONS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
           </select>
         </Field>
-      </Row>
+      </div>
 
-      <Field label="日付">
-        <input type="date" value={values.date} onChange={(e) => update("date", e.target.value)} style={input}/>
+      <Field label="日付 *">
+        <input
+          type="date"
+          value={values.date}
+          onChange={(e) => update("date", e.target.value)}
+          style={input}
+          disabled={disabled}
+        />
       </Field>
 
-      <Row>
-        <Field label="開始">
-          <input type="time" value={values.startTime} onChange={(e)=>update("startTime",e.target.value)} style={input}/>
+      <div style={responsiveRow}>
+        <Field label="開始時間">
+          <input
+            type="time"
+            value={values.startTime}
+            onChange={(e) => update("startTime", e.target.value)}
+            style={input}
+            disabled={disabled}
+          />
         </Field>
-        <Field label="終了">
-          <input type="time" value={values.endTime} onChange={(e)=>update("endTime",e.target.value)} style={input}/>
-        </Field>
-      </Row>
 
-      <Row>
-        <Field label="集合">
-          <input type="time" value={values.meetupTime} onChange={(e)=>update("meetupTime",e.target.value)} style={input}/>
+        <Field label="終了時間">
+          <input
+            type="time"
+            value={values.endTime}
+            onChange={(e) => update("endTime", e.target.value)}
+            style={input}
+            disabled={disabled}
+          />
         </Field>
-        <Field label="解散">
-          <input type="time" value={values.dissolveTime} onChange={(e)=>update("dissolveTime",e.target.value)} style={input}/>
+      </div>
+
+      <div style={responsiveRow}>
+        <Field label="集合時間">
+          <input
+            type="time"
+            value={values.meetupTime}
+            onChange={(e) => update("meetupTime", e.target.value)}
+            style={input}
+            disabled={disabled}
+          />
         </Field>
-      </Row>
+
+        <Field label="解散時間">
+          <input
+            type="time"
+            value={values.dissolveTime}
+            onChange={(e) => update("dissolveTime", e.target.value)}
+            style={input}
+            disabled={disabled}
+          />
+        </Field>
+      </div>
 
       <div style={section}>会場</div>
 
-      {venues.length > 0 && (
-        <Field label="履歴">
-          <select onChange={(e)=>handleVenueSelect(e.target.value)} style={input}>
-            <option>選択</option>
-            {venues.map((v)=><option key={v.name}>{v.name}</option>)}
+      {venues.length > 0 ? (
+        <Field label="会場履歴">
+          <select
+            value=""
+            onChange={(e) => handleVenueSelect(e.target.value)}
+            style={input}
+            disabled={disabled}
+          >
+            <option value="">履歴から選択</option>
+            {venues.map((v) => (
+              <option key={v.name} value={v.name}>
+                {v.name}
+              </option>
+            ))}
           </select>
         </Field>
-      )}
+      ) : null}
 
       <Field label="会場名">
-        <input value={values.venueName} onChange={(e)=>update("venueName",e.target.value)} style={input}/>
+        <input
+          value={values.venueName}
+          onChange={(e) => update("venueName", e.target.value)}
+          placeholder="例：〇〇グラウンド"
+          style={input}
+          disabled={disabled}
+        />
       </Field>
 
       <Field label="住所">
-        <input value={values.address} onChange={(e)=>update("address",e.target.value)} style={input}/>
+        <input
+          value={values.address}
+          onChange={(e) => update("address", e.target.value)}
+          placeholder="例：東京都〇〇区〇〇"
+          style={input}
+          disabled={disabled}
+        />
       </Field>
 
-      <Field label="駐車場">
-        <select value={values.parking} onChange={(e)=>update("parking",e.target.value)} style={input}>
-          <option value="">選択</option>
-          {PARKING_OPTIONS.map((p)=><option key={p}>{p}</option>)}
+      <Field label="駐車場・駐輪場">
+        <select
+          value={values.parking}
+          onChange={(e) => update("parking", e.target.value)}
+          style={input}
+          disabled={disabled}
+        >
+          <option value="">選択してください</option>
+          {PARKING_OPTIONS.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
         </select>
       </Field>
 
+      <Field label="持ち物">
+        <input
+          value={values.belongings}
+          onChange={(e) => update("belongings", e.target.value)}
+          placeholder="例：ユニフォーム白、ボール、ビブス"
+          style={input}
+          disabled={disabled}
+        />
+      </Field>
+
       <Field label="メモ">
-        <textarea value={values.note} onChange={(e)=>update("note",e.target.value)} style={textarea}/>
+        <textarea
+          value={values.note}
+          onChange={(e) => update("note", e.target.value)}
+          placeholder="共有事項や注意点"
+          style={textarea}
+          disabled={disabled}
+        />
       </Field>
 
       <div style={actions}>
-        {onCancel && <button type="button" onClick={onCancel}>キャンセル</button>}
-        <button type="submit">{submitting ? "保存中…" : "保存"}</button>
+        {onCancel ? (
+          <button
+            type="button"
+            className="sh-btn"
+            onClick={onCancel}
+            disabled={disabled}
+          >
+            キャンセル
+          </button>
+        ) : null}
+
+        <button
+          type="submit"
+          className="sh-btn sh-btn--primary"
+          disabled={disabled}
+        >
+          {disabled ? submittingLabel : submitLabel}
+        </button>
       </div>
     </form>
   );
 }
 
-/* UI */
-const wrap = { display:"grid", gap:16 };
-const section = { fontWeight:900, fontSize:16 };
-const input = {
-  width:"100%",
-  padding:12,
-  borderRadius:12,
-  border:"1px solid #ccc",
-  boxSizing:"border-box",
-  minWidth:0,
-};
-const textarea = { ...input, minHeight:100 };
+function Field(props: { label: string; children: React.ReactNode }) {
+  const { label, children } = props;
 
-const actions = {
-  display:"flex",
-  justifyContent:"flex-end",
-  gap:10,
-};
-
-/* components */
-function Field({label, children}:{label:string, children:React.ReactNode}) {
   return (
-    <div style={{display:"grid", gap:4}}>
-      <div style={{fontSize:12, fontWeight:700}}>{label}</div>
+    <label style={field}>
+      <span style={labelStyle}>{label}</span>
       {children}
-    </div>
+    </label>
   );
 }
 
-function Row({children}:{children:React.ReactNode}) {
-  return (
-    <div style={{
-      display:"grid",
-      gridTemplateColumns:"1fr 1fr",
-      gap:10,
-      minWidth:0,
-    }}>
-      {children}
-    </div>
-  );
-}
+const wrap: React.CSSProperties = {
+  display: "grid",
+  gap: 14,
+  width: "100%",
+  maxWidth: "100%",
+  overflowX: "hidden",
+};
+
+const section: React.CSSProperties = {
+  fontWeight: 900,
+  fontSize: 18,
+  color: "#16391f",
+  marginTop: 4,
+};
+
+const field: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+  minWidth: 0,
+};
+
+const labelStyle: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 800,
+  color: "#374151",
+};
+
+const responsiveRow: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+  gap: 10,
+  minWidth: 0,
+  width: "100%",
+};
+
+const input: React.CSSProperties = {
+  width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
+  minHeight: 48,
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  fontSize: 16,
+  boxSizing: "border-box",
+  WebkitAppearance: "none",
+};
+
+const textarea: React.CSSProperties = {
+  ...input,
+  minHeight: 104,
+  resize: "vertical",
+  lineHeight: 1.7,
+};
+
+const actions: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 10,
+  flexWrap: "wrap",
+  marginTop: 4,
+};
