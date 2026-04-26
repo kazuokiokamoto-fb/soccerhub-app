@@ -226,9 +226,19 @@ const cell: React.CSSProperties = {
   height: 80,
   border: "1px solid #eee",
   borderRadius: 10,
-  padding: 4,
+  padding: 8,
   textAlign: "left",
   background: "#fff",
+  cursor: "pointer",
+
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-start",
+  justifyContent: "flex-start",
+
+  gap: 3,
+  minWidth: 0,
+  overflow: "hidden",
 };
 
 const cellPast: React.CSSProperties = {
@@ -251,5 +261,6 @@ const holidayText: React.CSSProperties = {
 
 const itemText: React.CSSProperties = {
   fontSize: 10,
-  fontWeight: 700,
+  fontWeight: 900,
+  lineHeight: 1.25,
 };

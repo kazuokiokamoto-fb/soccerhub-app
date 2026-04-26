@@ -6,6 +6,14 @@ import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
+import {
+  MatchCalendarBase,
+  type CalendarItem,
+} from "@/app/match/components/MatchCalendarBase";
+import {
+  buildCalendarCells,
+  toMonthKey,
+} from "@/app/match/utils/date";
 
 type TeamIdRow = {
   id: string;
@@ -35,11 +43,6 @@ type DaySummary = {
   total: number;
   confirmed: number;
   draft: number;
-};
-
-type MonthCell = {
-  ymd: string | null;
-  day: number | null;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -111,119 +114,6 @@ function ymdToday() {
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
-
-function formatMonthLabel(date: Date) {
-  return `${date.getFullYear()}年${date.getMonth() + 1}月`;
-}
-
-function parseYmd(ymd: string) {
-  const [y, m, d] = ymd.split("-").map(Number);
-  return new Date(y, (m || 1) - 1, d || 1);
-}
-
-function isPastDate(ymd: string) {
-  return ymd < ymdToday();
-}
-
-function getWeekday(ymd: string) {
-  return parseYmd(ymd).getDay();
-}
-
-function getHolidayName(ymd: string) {
-  const holidays: Record<string, string> = {
-    // 2025
-    "2025-01-01": "元日",
-    "2025-01-13": "成人の日",
-    "2025-02-11": "建国記念の日",
-    "2025-02-23": "天皇誕生日",
-    "2025-02-24": "振替休日",
-    "2025-03-20": "春分の日",
-    "2025-04-29": "昭和の日",
-    "2025-05-03": "憲法記念日",
-    "2025-05-04": "みどりの日",
-    "2025-05-05": "こどもの日",
-    "2025-05-06": "振替休日",
-    "2025-07-21": "海の日",
-    "2025-08-11": "山の日",
-    "2025-09-15": "敬老の日",
-    "2025-09-23": "秋分の日",
-    "2025-10-13": "スポーツの日",
-    "2025-11-03": "文化の日",
-    "2025-11-23": "勤労感謝の日",
-    "2025-11-24": "振替休日",
-
-    // 2026
-    "2026-01-01": "元日",
-    "2026-01-12": "成人の日",
-    "2026-02-11": "建国記念の日",
-    "2026-02-23": "天皇誕生日",
-    "2026-03-20": "春分の日",
-    "2026-04-29": "昭和の日",
-    "2026-05-03": "憲法記念日",
-    "2026-05-04": "みどりの日",
-    "2026-05-05": "こどもの日",
-    "2026-05-06": "振替休日",
-    "2026-07-20": "海の日",
-    "2026-08-11": "山の日",
-    "2026-09-21": "敬老の日",
-    "2026-09-22": "国民の休日",
-    "2026-09-23": "秋分の日",
-    "2026-10-12": "スポーツの日",
-    "2026-11-03": "文化の日",
-    "2026-11-23": "勤労感謝の日",
-
-    // 2027
-    "2027-01-01": "元日",
-    "2027-01-11": "成人の日",
-    "2027-02-11": "建国記念の日",
-    "2027-02-23": "天皇誕生日",
-    "2027-03-21": "春分の日",
-    "2027-03-22": "振替休日",
-    "2027-04-29": "昭和の日",
-    "2027-05-03": "憲法記念日",
-    "2027-05-04": "みどりの日",
-    "2027-05-05": "こどもの日",
-    "2027-07-19": "海の日",
-    "2027-08-11": "山の日",
-    "2027-09-20": "敬老の日",
-    "2027-09-23": "秋分の日",
-    "2027-10-11": "スポーツの日",
-    "2027-11-03": "文化の日",
-    "2027-11-23": "勤労感謝の日",
-  };
-
-  return holidays[ymd] ?? "";
-}
-
-function buildMonthCells(baseDate: Date): MonthCell[] {
-  const year = baseDate.getFullYear();
-  const month = baseDate.getMonth();
-
-  const firstDay = new Date(year, month, 1);
-  const lastDay = new Date(year, month + 1, 0);
-
-  // 月曜始まり：月=0, 火=1, ... 日=6
-  const startOffset = (firstDay.getDay() + 6) % 7;
-  const totalDays = lastDay.getDate();
-
-  const cells: MonthCell[] = [];
-
-  for (let i = 0; i < startOffset; i++) {
-    cells.push({ ymd: null, day: null });
-  }
-
-  for (let day = 1; day <= totalDays; day++) {
-    const mm = String(month + 1).padStart(2, "0");
-    const dd = String(day).padStart(2, "0");
-    cells.push({ ymd: `${year}-${mm}-${dd}`, day });
-  }
-
-  while (cells.length % 7 !== 0) {
-    cells.push({ ymd: null, day: null });
-  }
-
-  return cells;
 }
 
 export default function MyScheduleCalendarPage() {
@@ -419,11 +309,46 @@ export default function MyScheduleCalendarPage() {
     };
   }, [authLoading, userId, currentMonth]);
 
-  const monthCells = useMemo(() => buildMonthCells(currentMonth), [currentMonth]);
+  const calendarCells = useMemo(
+    () => buildCalendarCells(currentMonth),
+    [currentMonth]
+  );
+
+  const monthKey = useMemo(() => toMonthKey(currentMonth), [currentMonth]);
+
+  const calendarItemsByDate = useMemo(() => {
+    const map = new Map<string, CalendarItem[]>();
+
+    for (const [ymd, summary] of summaries.entries()) {
+      const items: CalendarItem[] = [];
+
+      if (summary.confirmed > 0) {
+        items.push({
+          label: "決定",
+          count: summary.confirmed,
+          tone: "decided",
+        });
+      }
+
+      if (summary.draft > 0) {
+        items.push({
+          label: "交渉",
+          count: summary.draft,
+          tone: "negotiating",
+        });
+      }
+
+      if (items.length > 0) {
+        map.set(ymd, items);
+      }
+    }
+
+    return map;
+  }, [summaries]);
 
   const monthHasAnySchedule = useMemo(() => {
-    return monthCells.some((cell) => cell.ymd && summaries.has(cell.ymd));
-  }, [monthCells, summaries]);
+    return summaries.size > 0;
+  }, [summaries]);
 
   return (
     <main style={pageWrap}>
@@ -432,7 +357,7 @@ export default function MyScheduleCalendarPage() {
       <AppHero
         icon="🗓"
         title="マイスケジュール"
-        desc="予定を月表示で確認できます。決定と下書きを色分け表示します。"
+        desc="予定を月表示で確認できます。決定と交渉を色分け表示します。"
       />
 
       <div style={topNavWrap}>
@@ -454,53 +379,6 @@ export default function MyScheduleCalendarPage() {
         </div>
       ) : null}
 
-      <div style={monthHeader}>
-        <button
-          type="button"
-          style={monthNavButton}
-          onClick={() =>
-            setCurrentMonth(
-              new Date(
-                currentMonth.getFullYear(),
-                currentMonth.getMonth() - 1,
-                1
-              )
-            )
-          }
-        >
-          ← 前月
-        </button>
-
-        <div style={monthTitle}>{formatMonthLabel(currentMonth)}</div>
-
-        <button
-          type="button"
-          style={monthNavButton}
-          onClick={() =>
-            setCurrentMonth(
-              new Date(
-                currentMonth.getFullYear(),
-                currentMonth.getMonth() + 1,
-                1
-              )
-            )
-          }
-        >
-          次月 →
-        </button>
-      </div>
-
-      <div style={legendWrap}>
-        <span style={legendItem}>
-          <span style={legendDotConfirmed} />
-          決定
-        </span>
-        <span style={legendItem}>
-          <span style={legendDotDraft} />
-          下書き
-        </span>
-      </div>
-
       {loading || authLoading ? (
         <div style={emptyBox} className="ui-meta">
           読み込み中…
@@ -511,101 +389,48 @@ export default function MyScheduleCalendarPage() {
         </div>
       ) : (
         <>
-          <div style={calendarWrap}>
-            {weekLabels.map((label) => {
-              const isSat = label === "土";
-              const isSun = label === "日";
+          <section style={calendarCard}>
+            <div style={calendarTitle}>マイスケジュール</div>
 
-              return (
-                <div
-                  key={label}
-                  style={{
-                    ...weekLabel,
-                    ...(isSat ? saturdayText : null),
-                    ...(isSun ? sundayText : null),
-                  }}
-                >
-                  {label}
-                </div>
-              );
-            })}
+            <div style={legendWrap}>
+              <span style={legendItem}>
+                <span style={legendDotConfirmed} />
+                決定
+              </span>
+              <span style={legendItem}>
+                <span style={legendDotNegotiating} />
+                交渉
+              </span>
+            </div>
 
-            {monthCells.map((cell, idx) => {
-              if (!cell.ymd || !cell.day) {
-                return <div key={`blank-${idx}`} style={blankCell} />;
+            <MatchCalendarBase
+              monthKey={monthKey}
+              cells={calendarCells}
+              selectedYmd={ymdToday()}
+              itemsByDate={calendarItemsByDate}
+              onSelectDate={(ymd) => {
+                window.location.href = `/match/my-schedule?date=${ymd}`;
+              }}
+              onPrevMonth={() =>
+                setCurrentMonth(
+                  new Date(
+                    currentMonth.getFullYear(),
+                    currentMonth.getMonth() - 1,
+                    1
+                  )
+                )
               }
-
-              const summary = summaries.get(cell.ymd);
-              const isToday = cell.ymd === ymdToday();
-              const holidayName = getHolidayName(cell.ymd);
-              const weekday = getWeekday(cell.ymd);
-              const isSat = weekday === 6;
-              const isSun = weekday === 0;
-              const isHoliday = Boolean(holidayName);
-              const isPast = isPastDate(cell.ymd);
-
-              return (
-                <button
-                  key={cell.ymd}
-                  type="button"
-                  style={{
-                    ...dayCell,
-                    ...(summary ? clickableCell : null),
-                    ...(isPast ? pastCell : null),
-                    ...(isSat && !isPast ? saturdayCell : null),
-                    ...((isSun || isHoliday) && !isPast ? sundayHolidayCell : null),
-                    ...(isToday ? todayCell : null),
-                  }}
-                  onClick={() => {
-                    window.location.href = `/match/my-schedule?date=${cell.ymd}`;
-                  }}
-                >
-                  <div style={dayCellTop}>
-                    <div style={dayTitleWrap}>
-                      <span
-                        style={{
-                          ...dayNumber,
-                          ...(isPast ? pastText : null),
-                          ...(isSat && !isPast ? saturdayText : null),
-                          ...((isSun || isHoliday) && !isPast
-                            ? sundayText
-                            : null),
-                        }}
-                      >
-                        {cell.day}
-                      </span>
-
-                      {holidayName ? (
-                        <span
-                          style={{
-                            ...holidayLabel,
-                            ...(isPast ? pastText : null),
-                          }}
-                        >
-                          {holidayName}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {summary ? (
-                      <span style={countBadge}>{summary.total}</span>
-                    ) : null}
-                  </div>
-
-                  {summary ? (
-                    <div style={statusChipWrap}>
-                      {summary.confirmed > 0 ? (
-                        <span style={confirmedChip}>決{summary.confirmed}</span>
-                      ) : null}
-                      {summary.draft > 0 ? (
-                        <span style={draftChip}>下{summary.draft}</span>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
+              onNextMonth={() =>
+                setCurrentMonth(
+                  new Date(
+                    currentMonth.getFullYear(),
+                    currentMonth.getMonth() + 1,
+                    1
+                  )
+                )
+              }
+            />
+          </section>
 
           {!monthHasAnySchedule ? (
             <div style={emptyBox} className="ui-meta">
@@ -617,8 +442,6 @@ export default function MyScheduleCalendarPage() {
     </main>
   );
 }
-
-const weekLabels = ["月", "火", "水", "木", "金", "土", "日"];
 
 const pageWrap: React.CSSProperties = {
   maxWidth: 980,
@@ -648,36 +471,24 @@ const emptyBox: React.CSSProperties = {
   textAlign: "center",
 };
 
-const monthHeader: React.CSSProperties = {
+const calendarCard: React.CSSProperties = {
   marginTop: 16,
-  display: "grid",
-  gridTemplateColumns: "auto 1fr auto",
-  alignItems: "center",
-  gap: 8,
+  padding: "12px 14px",
+  border: "1px solid #dce9df",
+  borderRadius: 14,
+  background: "#fff",
 };
 
-const monthTitle: React.CSSProperties = {
-  fontSize: 22,
+const calendarTitle: React.CSSProperties = {
+  fontSize: 20,
   fontWeight: 900,
   color: "#16391f",
-  textAlign: "center",
-  lineHeight: 1.2,
-};
-
-const monthNavButton: React.CSSProperties = {
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  borderRadius: 12,
-  padding: "9px 11px",
-  cursor: "pointer",
-  fontWeight: 800,
-  fontSize: 13,
-  color: "#2563eb",
-  whiteSpace: "nowrap",
+  lineHeight: 1.25,
 };
 
 const legendWrap: React.CSSProperties = {
-  marginTop: 12,
+  marginTop: 8,
+  marginBottom: 8,
   display: "flex",
   gap: 14,
   flexWrap: "wrap",
@@ -697,166 +508,14 @@ const legendDotConfirmed: React.CSSProperties = {
   width: 10,
   height: 10,
   borderRadius: 999,
-  background: "#22c55e",
+  background: "#16a34a",
   display: "inline-block",
 };
 
-const legendDotDraft: React.CSSProperties = {
+const legendDotNegotiating: React.CSSProperties = {
   width: 10,
   height: 10,
   borderRadius: 999,
-  background: "#9ca3af",
+  background: "#f97316",
   display: "inline-block",
-};
-
-const calendarWrap: React.CSSProperties = {
-  marginTop: 10,
-  display: "grid",
-  gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-  gap: 5,
-};
-
-const weekLabel: React.CSSProperties = {
-  textAlign: "center",
-  fontWeight: 900,
-  fontSize: 12,
-  color: "#4b5563",
-  padding: "4px 0",
-};
-
-const blankCell: React.CSSProperties = {
-  minHeight: 72,
-};
-
-const dayCell: React.CSSProperties = {
-  minHeight: 72,
-  border: "1px solid #e5e7eb",
-  borderRadius: 14,
-  background: "#fff",
-  padding: 6,
-  textAlign: "left",
-  cursor: "pointer",
-  display: "flex",
-  flexDirection: "column",
-  justifyContent: "space-between",
-  minWidth: 0,
-  overflow: "hidden",
-};
-
-const clickableCell: React.CSSProperties = {
-  boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-};
-
-const todayCell: React.CSSProperties = {
-  border: "2px solid #86efac",
-};
-
-const pastCell: React.CSSProperties = {
-  background: "#f3f4f6",
-  borderColor: "#e5e7eb",
-  opacity: 0.72,
-};
-
-const saturdayCell: React.CSSProperties = {
-  background: "#eff6ff",
-  borderColor: "#bfdbfe",
-};
-
-const sundayHolidayCell: React.CSSProperties = {
-  background: "#fff1f2",
-  borderColor: "#fecdd3",
-};
-
-const dayCellTop: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 3,
-  minWidth: 0,
-};
-
-const dayTitleWrap: React.CSSProperties = {
-  display: "grid",
-  gap: 3,
-  minWidth: 0,
-};
-
-const dayNumber: React.CSSProperties = {
-  fontSize: 15,
-  fontWeight: 900,
-  color: "#111827",
-  lineHeight: 1,
-};
-
-const holidayLabel: React.CSSProperties = {
-  fontSize: 10,
-  fontWeight: 900,
-  color: "#dc2626",
-  lineHeight: 1.15,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const saturdayText: React.CSSProperties = {
-  color: "#2563eb",
-};
-
-const sundayText: React.CSSProperties = {
-  color: "#dc2626",
-};
-
-const pastText: React.CSSProperties = {
-  color: "#9ca3af",
-};
-
-const countBadge: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  width: 22,
-  height: 22,
-  borderRadius: 999,
-  background: "#eef6f0",
-  color: "#14532d",
-  fontSize: 11,
-  fontWeight: 900,
-  flexShrink: 0,
-};
-
-const statusChipWrap: React.CSSProperties = {
-  display: "grid",
-  gap: 3,
-  justifyItems: "end",
-  alignSelf: "stretch",
-};
-
-const confirmedChip: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 20,
-  padding: "0 6px",
-  borderRadius: 999,
-  background: "#dcfce7",
-  color: "#166534",
-  fontSize: 11,
-  fontWeight: 900,
-  lineHeight: 1,
-  whiteSpace: "nowrap",
-};
-
-const draftChip: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  minHeight: 20,
-  padding: "0 6px",
-  borderRadius: 999,
-  background: "#f3f4f6",
-  color: "#4b5563",
-  fontSize: 11,
-  fontWeight: 900,
-  lineHeight: 1,
-  whiteSpace: "nowrap",
 };
