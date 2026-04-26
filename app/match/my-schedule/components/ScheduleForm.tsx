@@ -16,6 +16,7 @@ export type ScheduleFormValues = {
   meetupTime: string;
   dissolveTime: string;
   opponentName: string;
+  opponentUniform: string; // ★追加
   venueName: string;
   address: string;
   category: string;
@@ -43,6 +44,7 @@ const defaultValues: ScheduleFormValues = {
   meetupTime: "",
   dissolveTime: "",
   opponentName: "",
+  opponentUniform: "",
   venueName: "",
   address: "",
   category: "",
@@ -51,6 +53,10 @@ const defaultValues: ScheduleFormValues = {
   belongings: "",
   note: "",
 };
+
+const CATEGORY_OPTIONS = ["U-8", "U-10", "U-12", "U-15", "一般"];
+const STRENGTH_OPTIONS = ["SS", "S", "A", "B", "C"];
+const PARKING_OPTIONS = ["あり", "なし", "不明"];
 
 export default function ScheduleForm(props: ScheduleFormProps) {
   const {
@@ -68,6 +74,10 @@ export default function ScheduleForm(props: ScheduleFormProps) {
     ...initialValues,
   });
 
+  const [venues, setVenues] = useState<
+    { name: string; address: string }[]
+  >([]);
+
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -75,16 +85,16 @@ export default function ScheduleForm(props: ScheduleFormProps) {
       ...defaultValues,
       ...initialValues,
     });
+
+    const saved = localStorage.getItem("venues");
+    if (saved) setVenues(JSON.parse(saved));
   }, [initialValues]);
 
   function update<K extends keyof ScheduleFormValues>(
     key: K,
     value: ScheduleFormValues[K]
   ) {
-    setValues((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+    setValues((prev) => ({ ...prev, [key]: value }));
   }
 
   function handleTeamChange(teamId: string) {
@@ -97,46 +107,38 @@ export default function ScheduleForm(props: ScheduleFormProps) {
     }));
   }
 
+  function handleVenueSelect(name: string) {
+    const v = venues.find((v) => v.name === name);
+    if (!v) return;
+
+    setValues((prev) => ({
+      ...prev,
+      venueName: v.name,
+      address: v.address,
+    }));
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    if (submitting || loading) return;
-
-    if (!values.teamId.trim()) {
-      alert("自チームを選択してください");
-      return;
-    }
-
-    if (!values.date.trim()) {
-      alert("日付を入力してください");
-      return;
-    }
-
-    if (!values.opponentName.trim()) {
-      alert("対戦相手を入力してください");
-      return;
-    }
+    if (!values.teamId) return alert("チーム選択");
+    if (!values.date) return alert("日付必須");
+    if (!values.opponentName) return alert("対戦相手必須");
 
     setSubmitting(true);
 
     try {
-      await onSubmit({
-        ...values,
-        teamId: values.teamId.trim(),
-        date: values.date.trim(),
-        startTime: values.startTime.trim(),
-        endTime: values.endTime.trim(),
-        meetupTime: values.meetupTime.trim(),
-        dissolveTime: values.dissolveTime.trim(),
-        opponentName: values.opponentName.trim(),
-        venueName: values.venueName.trim(),
-        address: values.address.trim(),
-        category: values.category.trim(),
-        strength: values.strength.trim(),
-        parking: values.parking.trim(),
-        belongings: values.belongings.trim(),
-        note: values.note.trim(),
-      });
+      await onSubmit(values);
+
+      // 会場保存
+      if (values.venueName) {
+        const updated = [
+          { name: values.venueName, address: values.address },
+          ...venues.filter((v) => v.name !== values.venueName),
+        ].slice(0, 5);
+
+        localStorage.setItem("venues", JSON.stringify(updated));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -148,266 +150,144 @@ export default function ScheduleForm(props: ScheduleFormProps) {
     <form style={formWrap} onSubmit={handleSubmit}>
       <div style={sectionTitle}>基本情報</div>
 
-      <div style={fieldGrid}>
-        {teams.length > 0 ? (
-          <label style={field}>
-            <span style={label}>自チーム *</span>
-            <select
-              value={values.teamId}
-              onChange={(e) => handleTeamChange(e.target.value)}
-              style={input}
-              disabled={disabled}
-            >
-              <option value="">選択してください</option>
-              {teams.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
+      {/* チーム */}
+      {teams.length > 0 && (
+        <select
+          value={values.teamId}
+          onChange={(e) => handleTeamChange(e.target.value)}
+          style={input}
+        >
+          <option value="">チーム選択</option>
+          {teams.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+      )}
 
-        <label style={field}>
-          <span style={label}>日付 *</span>
-          <input
-            type="date"
-            value={values.date}
-            onChange={(e) => update("date", e.target.value)}
-            style={input}
-            disabled={disabled}
-          />
-        </label>
+      {/* 対戦相手 */}
+      <input
+        placeholder="対戦相手"
+        value={values.opponentName}
+        onChange={(e) => update("opponentName", e.target.value)}
+        style={input}
+      />
 
-        <div style={twoColumn}>
-          <label style={field}>
-            <span style={label}>開始時間</span>
-            <input
-              type="time"
-              value={values.startTime}
-              onChange={(e) => update("startTime", e.target.value)}
-              style={input}
-              disabled={disabled}
-            />
-          </label>
+      {/* ユニ色 */}
+      <input
+        placeholder="相手ユニ色（例：赤）"
+        value={values.opponentUniform}
+        onChange={(e) => update("opponentUniform", e.target.value)}
+        style={input}
+      />
 
-          <label style={field}>
-            <span style={label}>終了時間</span>
-            <input
-              type="time"
-              value={values.endTime}
-              onChange={(e) => update("endTime", e.target.value)}
-              style={input}
-              disabled={disabled}
-            />
-          </label>
-        </div>
+      {/* カテゴリ */}
+      <select
+        value={values.category}
+        onChange={(e) => update("category", e.target.value)}
+        style={input}
+      >
+        <option value="">カテゴリ</option>
+        {CATEGORY_OPTIONS.map((c) => (
+          <option key={c}>{c}</option>
+        ))}
+      </select>
 
-        <div style={twoColumn}>
-          <label style={field}>
-            <span style={label}>集合時間</span>
-            <input
-              type="time"
-              value={values.meetupTime}
-              onChange={(e) => update("meetupTime", e.target.value)}
-              style={input}
-              disabled={disabled}
-            />
-          </label>
+      {/* 強さ */}
+      <select
+        value={values.strength}
+        onChange={(e) => update("strength", e.target.value)}
+        style={input}
+      >
+        <option value="">強さ</option>
+        {STRENGTH_OPTIONS.map((c) => (
+          <option key={c}>{c}</option>
+        ))}
+      </select>
 
-          <label style={field}>
-            <span style={label}>解散時間</span>
-            <input
-              type="time"
-              value={values.dissolveTime}
-              onChange={(e) => update("dissolveTime", e.target.value)}
-              style={input}
-              disabled={disabled}
-            />
-          </label>
-        </div>
+      {/* 日付 */}
+      <input
+        type="date"
+        value={values.date}
+        onChange={(e) => update("date", e.target.value)}
+        style={input}
+      />
 
-        <label style={field}>
-          <span style={label}>対戦相手 *</span>
-          <input
-            type="text"
-            value={values.opponentName}
-            onChange={(e) => update("opponentName", e.target.value)}
-            placeholder="例：〇〇FC / 外部チーム名"
-            style={input}
-            disabled={disabled}
-          />
-        </label>
-      </div>
+      {/* 時間 */}
+      <input type="time" value={values.startTime} onChange={(e)=>update("startTime",e.target.value)} style={input}/>
+      <input type="time" value={values.endTime} onChange={(e)=>update("endTime",e.target.value)} style={input}/>
+      <input type="time" value={values.meetupTime} onChange={(e)=>update("meetupTime",e.target.value)} style={input}/>
+      <input type="time" value={values.dissolveTime} onChange={(e)=>update("dissolveTime",e.target.value)} style={input}/>
 
-      <div style={sectionTitle}>会場・条件</div>
+      <div style={sectionTitle}>会場</div>
 
-      <div style={fieldGrid}>
-        <label style={field}>
-          <span style={label}>会場名</span>
-          <input
-            type="text"
-            value={values.venueName}
-            onChange={(e) => update("venueName", e.target.value)}
-            placeholder="例：〇〇グラウンド"
-            style={input}
-            disabled={disabled}
-          />
-        </label>
+      {/* 会場選択 */}
+      {venues.length > 0 && (
+        <select
+          onChange={(e) => handleVenueSelect(e.target.value)}
+          style={input}
+        >
+          <option>履歴から選択</option>
+          {venues.map((v) => (
+            <option key={v.name}>{v.name}</option>
+          ))}
+        </select>
+      )}
 
-        <label style={field}>
-          <span style={label}>住所</span>
-          <input
-            type="text"
-            value={values.address}
-            onChange={(e) => update("address", e.target.value)}
-            placeholder="例：東京都〇〇区〇〇"
-            style={input}
-            disabled={disabled}
-          />
-        </label>
+      <input
+        placeholder="会場名"
+        value={values.venueName}
+        onChange={(e) => update("venueName", e.target.value)}
+        style={input}
+      />
 
-        <div style={twoColumn}>
-          <label style={field}>
-            <span style={label}>カテゴリ</span>
-            <input
-              type="text"
-              value={values.category}
-              onChange={(e) => update("category", e.target.value)}
-              placeholder="例：U-12"
-              style={input}
-              disabled={disabled}
-            />
-          </label>
+      <input
+        placeholder="住所"
+        value={values.address}
+        onChange={(e) => update("address", e.target.value)}
+        style={input}
+      />
 
-          <label style={field}>
-            <span style={label}>相手の強さ</span>
-            <input
-              type="text"
-              value={values.strength}
-              onChange={(e) => update("strength", e.target.value)}
-              placeholder="例：A / B / 強め"
-              style={input}
-              disabled={disabled}
-            />
-          </label>
-        </div>
+      <select
+        value={values.parking}
+        onChange={(e) => update("parking", e.target.value)}
+        style={input}
+      >
+        <option value="">駐車場</option>
+        {PARKING_OPTIONS.map((p) => (
+          <option key={p}>{p}</option>
+        ))}
+      </select>
 
-        <label style={field}>
-          <span style={label}>駐車場・駐輪場</span>
-          <input
-            type="text"
-            value={values.parking}
-            onChange={(e) => update("parking", e.target.value)}
-            placeholder="例：駐車場あり / 駐輪場あり"
-            style={input}
-            disabled={disabled}
-          />
-        </label>
-
-        <label style={field}>
-          <span style={label}>持ち物</span>
-          <input
-            type="text"
-            value={values.belongings}
-            onChange={(e) => update("belongings", e.target.value)}
-            placeholder="例：ユニフォーム白、ボール、ビブス"
-            style={input}
-            disabled={disabled}
-          />
-        </label>
-
-        <label style={field}>
-          <span style={label}>メモ</span>
-          <textarea
-            value={values.note}
-            onChange={(e) => update("note", e.target.value)}
-            placeholder="チャット内容から補足したいことなど"
-            style={textarea}
-            disabled={disabled}
-          />
-        </label>
-      </div>
+      <textarea
+        placeholder="メモ"
+        value={values.note}
+        onChange={(e) => update("note", e.target.value)}
+        style={textarea}
+      />
 
       <div style={actions}>
-        {onCancel ? (
-          <button
-            type="button"
-            className="sh-btn"
-            onClick={onCancel}
-            disabled={disabled}
-          >
+        {onCancel && (
+          <button type="button" onClick={onCancel}>
             キャンセル
           </button>
-        ) : null}
-
-        <button
-          type="submit"
-          className="sh-btn sh-btn--primary"
-          disabled={disabled}
-        >
-          {submitting || loading ? submittingLabel : submitLabel}
+        )}
+        <button type="submit">
+          {submitting ? submittingLabel : submitLabel}
         </button>
       </div>
     </form>
   );
 }
 
-const formWrap: React.CSSProperties = {
-  display: "grid",
-  gap: 16,
-};
-
-const sectionTitle: React.CSSProperties = {
-  fontSize: 16,
-  fontWeight: 900,
-  color: "#16391f",
-  lineHeight: 1.4,
-};
-
-const fieldGrid: React.CSSProperties = {
-  display: "grid",
-  gap: 12,
-};
-
-const twoColumn: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: 10,
-};
-
-const field: React.CSSProperties = {
-  display: "grid",
-  gap: 5,
-};
-
-const label: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 800,
-  color: "#4b5563",
-};
-
-const input: React.CSSProperties = {
+const formWrap = { display: "grid", gap: 10 };
+const sectionTitle = { fontWeight: "bold", marginTop: 10 };
+const input = {
   width: "100%",
-  minHeight: 42,
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  fontSize: 15,
-  boxSizing: "border-box",
+  padding: 10,
+  borderRadius: 10,
+  border: "1px solid #ccc",
 };
-
-const textarea: React.CSSProperties = {
-  ...input,
-  minHeight: 96,
-  resize: "vertical",
-  lineHeight: 1.7,
-};
-
-const actions: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "flex-end",
-  gap: 8,
-  flexWrap: "wrap",
-};
+const textarea = { ...input, minHeight: 80 };
+const actions = { display: "flex", gap: 10, justifyContent: "flex-end" };
