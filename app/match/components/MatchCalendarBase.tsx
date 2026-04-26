@@ -163,7 +163,9 @@ export function MatchCalendarBase(props: {
               </div>
 
               {holiday && (
-                <div style={holidayText}>{holiday}</div>
+                <div style={holidayText} title={holiday}>
+                  {holiday.length > 3 ? `${holiday.slice(0, 2)}...` : holiday}
+                </div>
               )}
 
               {items.map((it, i) => (
@@ -223,7 +225,7 @@ const grid: React.CSSProperties = {
 };
 
 const cell: React.CSSProperties = {
-  height: 80,
+  height: 88,
   border: "1px solid #eee",
   borderRadius: 10,
   padding: 8,
