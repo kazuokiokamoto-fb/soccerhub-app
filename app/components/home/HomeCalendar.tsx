@@ -1374,7 +1374,6 @@ export default function HomeCalendar(props: {
             setRequestComment("");
           }}
           onCreateForDate={(ymd) => goToCreatePage(ymd)}
-          onOpenCalendarHelp={() => setShowCalendarHelp(true)}
           disableCreate={!authReady}
           selectedDateSummaryText={selectedDateSummaryText}
           titleText="試合日で探す"
