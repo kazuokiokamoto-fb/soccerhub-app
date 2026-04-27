@@ -714,7 +714,7 @@ export default function MatchDetailPage() {
                 window.location.href = `/teams/${attendanceTeamId}/message?slotId=${slotId}`;
               }}
             >
-              このチームに連絡
+              メンバーへ連絡
             </button>
           </div>
 

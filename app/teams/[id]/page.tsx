@@ -62,7 +62,7 @@ function buildBackLink(params: {
   date: string | null;
 }) {
   const { from, slotId, date } = params;
-  
+
   if (from === "mypage") {
     return {
       href: "/mypage",
@@ -293,7 +293,7 @@ export default function TeamDetailPage() {
 
               <div style={memberPanelActions}>
                 <Link
-                  href={`/match/my-schedule`}
+                  href="/match/my-schedule"
                   className="sh-btn sh-btn--primary"
                 >
                   マイスケジュール
@@ -323,28 +323,6 @@ export default function TeamDetailPage() {
             showAddressDetail={false}
             chatFrom={backConfig.chatFrom}
           />
-
-          <section style={teamActionBox}>
-            <button
-              type="button"
-              className="sh-btn sh-btn--primary"
-              onClick={() => {
-                window.location.href = `/teams/${team.id}/message`;
-              }}
-            >
-              チーム連絡
-            </button>
-
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={() => {
-                window.location.href = `/teams/${team.id}/members`;
-              }}
-            >
-              メンバー管理
-            </button>
-          </section>
         </>
       )}
     </main>
@@ -430,15 +408,4 @@ const memberPanelActions: React.CSSProperties = {
   gap: 8,
   flexWrap: "wrap",
   marginLeft: "auto",
-};
-
-const teamActionBox: React.CSSProperties = {
-  marginTop: 14,
-  padding: 14,
-  borderRadius: 16,
-  border: "1px solid #dce9df",
-  background: "#fff",
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
 };
