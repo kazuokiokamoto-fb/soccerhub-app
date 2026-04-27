@@ -355,7 +355,6 @@ function MatchCreatePageInner() {
     <>
       <main style={pageWrap}>
         <AppTabNav />
-        <PageBackNav current="募集する" />
 
         <AppHero
           icon="🗓️"
