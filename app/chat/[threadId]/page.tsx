@@ -75,7 +75,7 @@ export default function ChatThreadPage() {
       slotId,
       date,
       teamId,
-    },
+    } as any,
   });
 
   if (chat.authLoading) {
@@ -124,7 +124,9 @@ export default function ChatThreadPage() {
             <div style={titleWrap}>
               <div style={threadTitle}>{chat.otherTeamName}</div>
               <div style={threadSubTitle}>
-                {chat.otherTeamCategory || "チャット"}
+                {chat.isTeamChat
+                  ? "チーム内チャット"
+                  : chat.otherTeamCategory || "チャット"}
               </div>
             </div>
           </div>
@@ -260,13 +262,15 @@ export default function ChatThreadPage() {
                       }}
                     >
                       {!mine ? (
-                        <div style={senderName}>{chat.otherTeamName}</div>
+                        <div style={senderName}>
+                          {chat.isTeamChat ? "メンバー" : chat.otherTeamName}
+                        </div>
                       ) : null}
 
                       {mine ? (
                         <div style={bubbleMineRow}>
                           <div style={bubbleMetaSide}>
-                            {isRead && !optimistic ? (
+                            {isRead && !optimistic && !chat.isTeamChat ? (
                               <span style={readStateText}>既読</span>
                             ) : null}
 
