@@ -28,6 +28,7 @@ export type ChatQueryParams = {
   from?: string | null;
   slotId?: string | null;
   date?: string | null;
+  teamId?: string | null;
 };
 
 export type BackLink = {
@@ -104,12 +105,13 @@ export function buildQueryString(params: ChatQueryParams) {
   if (params.from) qs.set("from", params.from);
   if (params.slotId) qs.set("slotId", params.slotId);
   if (params.date) qs.set("date", params.date);
+  if (params.teamId) qs.set("teamId", params.teamId);
 
   return qs.toString();
 }
 
 export function getBackLink(params: ChatQueryParams): BackLink {
-  const { from, slotId, date } = params;
+  const { from, slotId, date, teamId } = params;
 
   switch (from) {
     case "home": {
@@ -123,6 +125,12 @@ export function getBackLink(params: ChatQueryParams): BackLink {
       };
     }
 
+    case "team-message":
+      return {
+        href: teamId ? `/teams/${teamId}` : "/chat",
+        label: "← チーム詳細へ戻る",
+      };
+
     case "match-calendar": {
       const qs = new URLSearchParams();
       if (date) qs.set("date", date);
@@ -133,6 +141,12 @@ export function getBackLink(params: ChatQueryParams): BackLink {
         label: "← 試合を探すに戻る",
       };
     }
+
+    case "match_detail":
+      return {
+        href: slotId ? `/match/${slotId}` : "/match/my-schedule",
+        label: "← 試合詳細へ戻る",
+      };
 
     case "sent-offers":
       return {
@@ -172,20 +186,14 @@ export function resolveMyTeamId(params: {
   const myOwnMemberRow = memberRows.find(
     (r) => r.user_id === meId && r.team_id && ownedTeamIds.has(r.team_id)
   );
-  if (myOwnMemberRow?.team_id) {
-    return myOwnMemberRow.team_id;
-  }
+  if (myOwnMemberRow?.team_id) return myOwnMemberRow.team_id;
 
   const matchedMemberTeamId = memberRows.find(
     (r) => r.team_id && ownedTeamIds.has(r.team_id)
   )?.team_id;
-  if (matchedMemberTeamId) {
-    return matchedMemberTeamId;
-  }
+  if (matchedMemberTeamId) return matchedMemberTeamId;
 
-  if (ownedTeams.length === 1) {
-    return ownedTeams[0].id;
-  }
+  if (ownedTeams.length === 1) return ownedTeams[0].id;
 
   return ownedTeams[0]?.id ?? "";
 }
@@ -222,10 +230,6 @@ export function isDeletedOnlyForSender(m: Msg) {
 export function shouldHideForMe(m: Msg, meId: string) {
   return m.sender_id === meId && isDeletedOnlyForSender(m);
 }
-
-// ================================
-// 予定抽出系（追加）
-// ================================
 
 function pad2(v: number) {
   return String(v).padStart(2, "0");
@@ -356,9 +360,7 @@ export function extractScheduleCandidatesFromMessages(
       }
     }
 
-    if (foundDate && foundStartTime && foundEndTime && foundVenueName) {
-      break;
-    }
+    if (foundDate && foundStartTime && foundEndTime && foundVenueName) break;
   }
 
   return {
