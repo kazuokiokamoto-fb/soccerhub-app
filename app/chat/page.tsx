@@ -181,6 +181,7 @@ export default function ChatListPage() {
   const [teamChats, setTeamChats] = useState<TeamMini[]>([]);
   const [threads, setThreads] = useState<ThreadRow[]>([]);
   const [loadError, setLoadError] = useState("");
+  const [teamChatOpen, setTeamChatOpen] = useState(false);
 
   const mountedRef = useRef(true);
   const loadingRef = useRef(false);
@@ -475,44 +476,56 @@ export default function ChatListPage() {
       ) : (
         <>
           <section style={sectionBox}>
-            <div style={listTitle}>チーム内チャット</div>
+            <button
+              type="button"
+              style={accordionHeader}
+              onClick={() => setTeamChatOpen((prev) => !prev)}
+              aria-expanded={teamChatOpen}
+            >
+              <span style={accordionTitle}>チーム内チャット</span>
+              <span style={accordionMeta}>
+                {teamChats.length}件 {teamChatOpen ? "▲ 閉じる" : "▼ 開く"}
+              </span>
+            </button>
 
-            {teamChats.length === 0 ? (
-              <div style={miniEmptyBox}>所属チームがありません。</div>
-            ) : (
-              <div style={listWrap}>
-                {teamChats.map((team, index) => (
-                  <Link
-                    key={team.id}
-                    href={`/teams/${team.id}/message`}
-                    style={{
-                      ...threadCard,
-                      borderBottom:
-                        index === teamChats.length - 1
-                          ? "none"
-                          : "1px solid #edf1ee",
-                    }}
-                  >
-                    <div style={avatar}>{buildInitial(team.name)}</div>
+            {teamChatOpen ? (
+              teamChats.length === 0 ? (
+                <div style={miniEmptyBox}>所属チームがありません。</div>
+              ) : (
+                <div style={listWrap}>
+                  {teamChats.map((team, index) => (
+                    <Link
+                      key={team.id}
+                      href={`/teams/${team.id}/message`}
+                      style={{
+                        ...threadCard,
+                        borderBottom:
+                          index === teamChats.length - 1
+                            ? "none"
+                            : "1px solid #edf1ee",
+                      }}
+                    >
+                      <div style={avatar}>{buildInitial(team.name)}</div>
 
-                    <div style={threadMain}>
-                      <div style={threadTopRow}>
-                        <div style={threadNameRow}>
-                          <div style={threadName}>
-                            {team.name || "チーム未設定"}
+                      <div style={threadMain}>
+                        <div style={threadTopRow}>
+                          <div style={threadNameRow}>
+                            <div style={threadName}>
+                              {team.name || "チーム未設定"}
+                            </div>
+                            {team.category ? (
+                              <div style={threadCategory}>{team.category}</div>
+                            ) : null}
                           </div>
-                          {team.category ? (
-                            <div style={threadCategory}>{team.category}</div>
-                          ) : null}
                         </div>
-                      </div>
 
-                      <div style={threadBody}>チームメンバーへの連絡</div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
+                        <div style={threadBody}>チームメンバーへの連絡</div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )
+            ) : null}
           </section>
 
           <section style={sectionBox}>
@@ -630,6 +643,33 @@ const listTitle: React.CSSProperties = {
   marginBottom: 8,
 };
 
+const accordionHeader: React.CSSProperties = {
+  width: "100%",
+  border: "1px solid #dce9df",
+  background: "#f7fbf8",
+  borderRadius: 16,
+  padding: "14px 16px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  cursor: "pointer",
+  textAlign: "left",
+};
+
+const accordionTitle: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#16391f",
+};
+
+const accordionMeta: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 900,
+  color: "#166534",
+  whiteSpace: "nowrap",
+};
+
 const listWrap: React.CSSProperties = {
   display: "grid",
   gap: 0,
@@ -744,6 +784,7 @@ const emptyBox: React.CSSProperties = {
 };
 
 const miniEmptyBox: React.CSSProperties = {
+  marginTop: 8,
   padding: 16,
   borderRadius: 16,
   border: "1px solid #e5ece7",

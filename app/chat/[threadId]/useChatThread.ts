@@ -44,16 +44,24 @@ export function useChatThread(params: {
   const from = params.query?.from ?? params.from ?? null;
   const slotId = params.query?.slotId ?? params.slotId ?? null;
   const date = params.query?.date ?? params.date ?? null;
+  const teamId = (params.query as any)?.teamId ?? null;
+  const isTeamChat = from === "team-message" || !!teamId;
 
   const backLink = useMemo(
     () => getBackLink({ from, slotId, date }),
     [from, slotId, date]
   );
 
-  const carriedQueryString = useMemo(
-    () => buildQueryString({ from, slotId, date }),
-    [from, slotId, date]
-  );
+  const carriedQueryString = useMemo(() => {
+    const qs = new URLSearchParams();
+
+    if (from) qs.set("from", from);
+    if (slotId) qs.set("slotId", slotId);
+    if (date) qs.set("date", date);
+    if (teamId) qs.set("teamId", teamId);
+
+    return qs.toString();
+  }, [from, slotId, date, teamId]);
 
   const loginRedirectPath = useMemo(() => {
     const qs = carriedQueryString ? `?${carriedQueryString}` : "";
@@ -123,8 +131,15 @@ export function useChatThread(params: {
   }, [meId, threadId, isMember, text, sending]);
 
   const canCreateProposal = useMemo(() => {
-    return !!meId && !!threadId && !!myTeamId && isMember && !creatingProposal;
-  }, [meId, threadId, myTeamId, isMember, creatingProposal]);
+    return (
+      !isTeamChat &&
+      !!meId &&
+      !!threadId &&
+      !!myTeamId &&
+      isMember &&
+      !creatingProposal
+    );
+  }, [isTeamChat, meId, threadId, myTeamId, isMember, creatingProposal]);
 
   function scrollToBottom(smooth = true) {
     requestAnimationFrame(() => {
@@ -308,6 +323,32 @@ export function useChatThread(params: {
         );
       } else {
         setOtherTeamName("相手チーム");
+        setOtherTeamCategory("");
+      }
+    } else if (isTeamChat) {
+      const targetTeamId = teamId || resolvedMyTeamId;
+
+      if (targetTeamId) {
+        const { data: teamRow, error: teamErr } = await supabase
+          .from("teams")
+          .select("id,name,category")
+          .eq("id", targetTeamId)
+          .maybeSingle();
+
+        if (teamErr) console.error(teamErr);
+
+        if (teamRow) {
+          const team = teamRow as TeamMini;
+          setOtherTeamName(team.name ?? "チーム内チャット");
+          setOtherTeamCategory(
+            categoryLabel(team.category) || team.category || "チーム内チャット"
+          );
+        } else {
+          setOtherTeamName("チーム内チャット");
+          setOtherTeamCategory("");
+        }
+      } else {
+        setOtherTeamName("チーム内チャット");
         setOtherTeamCategory("");
       }
     } else {
@@ -856,6 +897,8 @@ export function useChatThread(params: {
     from,
     slotId,
     date,
+    teamId,
+    isTeamChat,
 
     backLink,
     carriedQueryString,
