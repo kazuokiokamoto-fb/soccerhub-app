@@ -358,13 +358,10 @@ export default function ChatListPage() {
 
         let isUnread = false;
         if (last?.created_at) {
-          if (!myLastReadAt) {
-            isUnread = true;
-          } else {
-            isUnread =
-              new Date(last.created_at).getTime() >
+          isUnread = !myLastReadAt
+            ? true
+            : new Date(last.created_at).getTime() >
               new Date(myLastReadAt).getTime();
-          }
         }
 
         const base: ThreadRow = {
@@ -395,7 +392,8 @@ export default function ChatListPage() {
             const current = internalThreadByTeamId.get(internalTeamId);
             const currentTime =
               current?.lastMessageAt ?? current?.updated_at ?? current?.created_at ?? "";
-            const nextTime = base.lastMessageAt ?? base.updated_at ?? base.created_at ?? "";
+            const nextTime =
+              base.lastMessageAt ?? base.updated_at ?? base.created_at ?? "";
 
             if (!current || nextTime > currentTime) {
               internalThreadByTeamId.set(internalTeamId, base);
@@ -506,15 +504,6 @@ export default function ChatListPage() {
         </div>
       ) : null}
 
-      <div style={summaryBox}>
-        <div style={summaryTitle}>チャット一覧</div>
-        <div style={summaryText}>
-          {authLoading || loading
-            ? "読み込み中…"
-            : `自チーム未読 ${teamUnreadTotal}件 / 他チーム未読 ${battleUnreadTotal}件`}
-        </div>
-      </div>
-
       {authLoading || loading ? (
         <div style={emptyBox}>読み込み中…</div>
       ) : !meId ? (
@@ -522,10 +511,7 @@ export default function ChatListPage() {
           ログインが必要です。
           <br />
           <div style={{ marginTop: 12 }}>
-            <Link
-              href="/login?redirect=/chat"
-              className="sh-btn sh-btn--primary"
-            >
+            <Link href="/login?redirect=/chat" className="sh-btn sh-btn--primary">
               ログインする
             </Link>
           </div>
@@ -547,10 +533,20 @@ export default function ChatListPage() {
               }}
               onClick={() => setActiveTab("team")}
             >
-              自チーム
-              {teamUnreadTotal > 0 ? (
-                <span style={tabUnreadBadge}>{teamUnreadTotal}</span>
-              ) : null}
+              <span style={tabInner}>
+                自チーム
+                {teamUnreadTotal > 0 ? (
+                  <span
+                    style={
+                      activeTab === "team"
+                        ? tabUnreadBadgeActive
+                        : tabUnreadBadge
+                    }
+                  >
+                    {teamUnreadTotal}
+                  </span>
+                ) : null}
+              </span>
             </button>
 
             <button
@@ -561,10 +557,20 @@ export default function ChatListPage() {
               }}
               onClick={() => setActiveTab("battle")}
             >
-              他チーム
-              {battleUnreadTotal > 0 ? (
-                <span style={tabUnreadBadge}>{battleUnreadTotal}</span>
-              ) : null}
+              <span style={tabInner}>
+                他チーム
+                {battleUnreadTotal > 0 ? (
+                  <span
+                    style={
+                      activeTab === "battle"
+                        ? tabUnreadBadgeActive
+                        : tabUnreadBadge
+                    }
+                  >
+                    {battleUnreadTotal}
+                  </span>
+                ) : null}
+              </span>
             </button>
           </div>
 
@@ -713,73 +719,59 @@ const errorTitle: React.CSSProperties = {
   marginBottom: 4,
 };
 
-const summaryBox: React.CSSProperties = {
-  marginTop: 12,
-  marginBottom: 12,
-  padding: "12px 14px",
-  borderRadius: 14,
-  border: "1px solid #e5ece7",
-  background: "#fff",
-};
-
-const summaryTitle: React.CSSProperties = {
-  fontSize: 14,
-  fontWeight: 900,
-  color: "#1f5d30",
-};
-
-const summaryText: React.CSSProperties = {
-  marginTop: 4,
-  fontSize: 12,
-  color: "#66756d",
-};
-
 const tabWrap: React.CSSProperties = {
   marginTop: 14,
   display: "grid",
   gridTemplateColumns: "1fr 1fr",
-  gap: 10,
-  padding: 6,
+  gap: 8,
+  padding: 4,
   borderRadius: 999,
   border: "1px solid #dce9df",
-  background: "#f7fbf8",
+  background: "#edf5ef",
 };
 
 const tabButton: React.CSSProperties = {
-  minHeight: 54,
+  minHeight: 52,
   borderRadius: 999,
-  border: "1px solid #dce9df",
-  background: "#fff",
-  color: "#16391f",
-  fontSize: 16,
+  border: "none",
+  background: "#edf5ef",
+  color: "#145c2a",
+  fontSize: 15,
   fontWeight: 900,
   cursor: "pointer",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 8,
-  boxShadow: "0 1px 0 rgba(20, 92, 42, 0.04)",
 };
 
 const tabButtonActive: React.CSSProperties = {
   background: "#145c2a",
-  borderColor: "#145c2a",
   color: "#fff",
-  boxShadow: "0 8px 18px rgba(20, 92, 42, 0.18)",
+  boxShadow: "0 4px 12px rgba(20,92,42,0.25)",
+};
+
+const tabInner: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
 };
 
 const tabUnreadBadge: React.CSSProperties = {
-  minWidth: 22,
-  height: 22,
-  padding: "0 7px",
+  minWidth: 20,
+  height: 20,
+  padding: "0 6px",
   borderRadius: 999,
   background: "#ef4444",
   color: "#fff",
-  fontSize: 12,
+  fontSize: 11,
   fontWeight: 900,
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
+};
+
+const tabUnreadBadgeActive: React.CSSProperties = {
+  ...tabUnreadBadge,
+  background: "#fff",
+  color: "#145c2a",
 };
 
 const sectionBox: React.CSSProperties = {
