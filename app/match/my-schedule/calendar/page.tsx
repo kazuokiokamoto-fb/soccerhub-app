@@ -10,13 +10,14 @@ import {
   MatchCalendarBase,
   type CalendarItem,
 } from "@/app/match/components/MatchCalendarBase";
-import {
-  buildCalendarCells,
-  toMonthKey,
-} from "@/app/match/utils/date";
+import { buildCalendarCells, toMonthKey } from "@/app/match/utils/date";
 
 type TeamIdRow = {
   id: string;
+};
+
+type TeamMemberRow = {
+  team_id: string;
 };
 
 type MatchSlotRow = {
@@ -62,9 +63,21 @@ function toArray<T>(value: unknown, mapper: (v: unknown) => T | null): T[] {
 function toTeamIdRow(value: unknown): TeamIdRow | null {
   const r = asRecord(value);
   if (!r) return null;
+
   const id = asString(r.id);
   if (!id) return null;
+
   return { id };
+}
+
+function toTeamMemberRow(value: unknown): TeamMemberRow | null {
+  const r = asRecord(value);
+  if (!r) return null;
+
+  const team_id = asString(r.team_id);
+  if (!team_id) return null;
+
+  return { team_id };
 }
 
 function toMatchSlotRow(value: unknown): MatchSlotRow | null {
@@ -146,14 +159,29 @@ export default function MyScheduleCalendarPage() {
       setErrorText("");
 
       try {
-        const { data: myTeamsRaw, error: myTeamsError } = await supabase
+        const { data: ownerTeamsRaw, error: ownerTeamsError } = await supabase
           .from("teams")
           .select("id")
           .eq("owner_id", userId);
 
-        if (myTeamsError) throw myTeamsError;
+        if (ownerTeamsError) throw ownerTeamsError;
 
-        const myTeamIds = toArray(myTeamsRaw, toTeamIdRow).map((row) => row.id);
+        const { data: memberTeamsRaw, error: memberTeamsError } = await supabase
+          .from("team_members")
+          .select("team_id")
+          .eq("user_id", userId);
+
+        if (memberTeamsError) throw memberTeamsError;
+
+        const ownerTeamIds = toArray(ownerTeamsRaw, toTeamIdRow).map(
+          (row) => row.id
+        );
+
+        const memberTeamIds = toArray(memberTeamsRaw, toTeamMemberRow).map(
+          (row) => row.team_id
+        );
+
+        const myTeamIds = Array.from(new Set([...ownerTeamIds, ...memberTeamIds]));
 
         if (myTeamIds.length === 0) {
           if (active) {
@@ -165,6 +193,7 @@ export default function MyScheduleCalendarPage() {
 
         const year = currentMonth.getFullYear();
         const month = currentMonth.getMonth();
+
         const start = new Date(year, month, 1);
         const end = new Date(year, month + 1, 1);
 
@@ -202,39 +231,43 @@ export default function MyScheduleCalendarPage() {
         const hostedSlots = toArray(hostedSlotsRaw, toMatchSlotRow);
         const hostedSlotIds = hostedSlots.map((slot) => slot.id);
 
-        let hostedAcceptedRequests: MatchRequestRow[] = [];
+        let hostedRequests: MatchRequestRow[] = [];
         if (hostedSlotIds.length > 0) {
-          const { data: hostedAcceptedRaw, error: hostedAcceptedError } =
+          const { data: hostedRequestsRaw, error: hostedRequestsError } =
             await supabase
               .from("match_requests")
               .select("id,slot_id,requester_team_id,status")
               .in("slot_id", hostedSlotIds)
-              .eq("status", "accepted");
+              .in("status", ["pending", "accepted"]);
 
-          if (hostedAcceptedError) throw hostedAcceptedError;
-          hostedAcceptedRequests = toArray(hostedAcceptedRaw, toMatchRequestRow);
+          if (hostedRequestsError) throw hostedRequestsError;
+          hostedRequests = toArray(hostedRequestsRaw, toMatchRequestRow);
         }
 
-        const hostedAcceptedBySlotId = new Set(
-          hostedAcceptedRequests.map((req) => req.slot_id)
-        );
+        const hostedRequestBySlotId = new Map<string, MatchRequestRow>();
+        for (const req of hostedRequests) {
+          const current = hostedRequestBySlotId.get(req.slot_id);
+          if (!current || req.status === "accepted") {
+            hostedRequestBySlotId.set(req.slot_id, req);
+          }
+        }
 
-        const { data: requesterAcceptedRaw, error: requesterAcceptedError } =
+        const { data: requesterRequestsRaw, error: requesterRequestsError } =
           await supabase
             .from("match_requests")
             .select("id,slot_id,requester_team_id,status")
             .in("requester_team_id", myTeamIds)
-            .eq("status", "accepted");
+            .in("status", ["pending", "accepted"]);
 
-        if (requesterAcceptedError) throw requesterAcceptedError;
+        if (requesterRequestsError) throw requesterRequestsError;
 
-        const requesterAccepted = toArray(
-          requesterAcceptedRaw,
+        const requesterRequests = toArray(
+          requesterRequestsRaw,
           toMatchRequestRow
         );
 
         const requesterSlotIds = Array.from(
-          new Set(requesterAccepted.map((row) => row.slot_id))
+          new Set(requesterRequests.map((row) => row.slot_id))
         ).filter((id) => !hostedSlotIds.includes(id));
 
         let requesterSlots: MatchSlotRow[] = [];
@@ -252,6 +285,14 @@ export default function MyScheduleCalendarPage() {
           requesterSlots = toArray(requesterSlotsRaw, toMatchSlotRow);
         }
 
+        const requesterRequestBySlotId = new Map<string, MatchRequestRow>();
+        for (const req of requesterRequests) {
+          const current = requesterRequestBySlotId.get(req.slot_id);
+          if (!current || req.status === "accepted") {
+            requesterRequestBySlotId.set(req.slot_id, req);
+          }
+        }
+
         const map = new Map<string, DaySummary>();
         const seen = new Set<string>();
 
@@ -263,15 +304,20 @@ export default function MyScheduleCalendarPage() {
           };
 
           current.total += 1;
-          if (status === "confirmed") current.confirmed += 1;
-          else current.draft += 1;
+
+          if (status === "confirmed") {
+            current.confirmed += 1;
+          } else {
+            current.draft += 1;
+          }
 
           map.set(date, current);
         }
 
         for (const item of teamSchedules) {
-          if (seen.has(`team_schedule:${item.id}`)) continue;
-          seen.add(`team_schedule:${item.id}`);
+          const seenKey = `team_schedule:${item.id}`;
+          if (seen.has(seenKey)) continue;
+          seen.add(seenKey);
 
           addSummary(
             item.date,
@@ -279,15 +325,24 @@ export default function MyScheduleCalendarPage() {
           );
         }
 
-        for (const slot of [...hostedSlots, ...requesterSlots]) {
-          if (seen.has(`slot:${slot.id}`)) continue;
-          seen.add(`slot:${slot.id}`);
+        for (const slot of hostedSlots) {
+          const seenKey = `host:${slot.id}`;
+          if (seen.has(seenKey)) continue;
+          seen.add(seenKey);
 
-          const confirmed =
-            hostedAcceptedBySlotId.has(slot.id) ||
-            requesterSlotIds.includes(slot.id);
+          const req = hostedRequestBySlotId.get(slot.id);
+          addSummary(slot.date, req?.status === "accepted" ? "confirmed" : "draft");
+        }
 
-          addSummary(slot.date, confirmed ? "confirmed" : "draft");
+        for (const slot of requesterSlots) {
+          const req = requesterRequestBySlotId.get(slot.id);
+          const requesterTeamId = req?.requester_team_id ?? "";
+
+          const seenKey = `guest:${slot.id}:${requesterTeamId}`;
+          if (seen.has(seenKey)) continue;
+          seen.add(seenKey);
+
+          addSummary(slot.date, req?.status === "accepted" ? "confirmed" : "draft");
         }
 
         if (!active) return;
@@ -346,9 +401,7 @@ export default function MyScheduleCalendarPage() {
     return map;
   }, [summaries]);
 
-  const monthHasAnySchedule = useMemo(() => {
-    return summaries.size > 0;
-  }, [summaries]);
+  const monthHasAnySchedule = useMemo(() => summaries.size > 0, [summaries]);
 
   return (
     <main style={pageWrap}>

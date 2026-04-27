@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
@@ -11,6 +12,8 @@ import TeamProfileCard, {
 } from "@/app/teams/components/TeamProfileCard";
 
 type TeamRow = TeamProfileCardRow;
+
+type MyMemberRole = "owner" | "coach" | "member" | "";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -120,6 +123,7 @@ export default function TeamDetailPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [team, setTeam] = useState<TeamRow | null>(null);
+  const [myRole, setMyRole] = useState<MyMemberRole>("");
 
   useEffect(() => {
     let active = true;
@@ -128,6 +132,7 @@ export default function TeamDetailPage() {
       if (!teamId) {
         if (!active) return;
         setTeam(null);
+        setMyRole("");
         setLoadError("チームIDが不正です");
         setLoading(false);
         return;
@@ -162,14 +167,13 @@ export default function TeamDetailPage() {
           .eq("id", teamId)
           .maybeSingle();
 
-        if (error) {
-          throw error;
-        }
+        if (error) throw error;
 
         if (!active) return;
 
         if (!data) {
           setTeam(null);
+          setMyRole("");
           setLoadError("チームが見つかりません");
           return;
         }
@@ -177,15 +181,42 @@ export default function TeamDetailPage() {
         const nextTeam = toTeamRow(data);
         if (!nextTeam) {
           setTeam(null);
+          setMyRole("");
           setLoadError("チームデータの形式が不正です");
           return;
         }
 
+        let nextRole: MyMemberRole = "";
+
+        if (myUserId && nextTeam.owner_id === myUserId) {
+          nextRole = "owner";
+        } else if (myUserId) {
+          const { data: memberRaw, error: memberError } = await supabase
+            .from("team_members")
+            .select("role")
+            .eq("team_id", teamId)
+            .eq("user_id", myUserId)
+            .maybeSingle();
+
+          if (memberError) throw memberError;
+
+          const role =
+            isRecord(memberRaw) && typeof memberRaw.role === "string"
+              ? memberRaw.role
+              : "";
+
+          if (role === "coach" || role === "member" || role === "owner") {
+            nextRole = role;
+          }
+        }
+
         setTeam(nextTeam);
+        setMyRole(nextRole);
       } catch (e: any) {
         console.error("[team detail] load error:", e);
         if (!active) return;
         setTeam(null);
+        setMyRole("");
         setLoadError(e?.message ?? "チーム詳細の取得に失敗しました");
       } finally {
         if (active) {
@@ -199,9 +230,11 @@ export default function TeamDetailPage() {
     return () => {
       active = false;
     };
-  }, [teamId]);
+  }, [teamId, myUserId]);
 
   const mine = !!myUserId && !!team && team.owner_id === myUserId;
+  const canManageMembers = myRole === "owner" || myRole === "coach";
+  const isTeamMember = !!myRole;
 
   return (
     <main style={pageWrap}>
@@ -233,21 +266,78 @@ export default function TeamDetailPage() {
       ) : !team ? (
         <div style={emptyBox}>チームが見つかりませんでした。</div>
       ) : (
-        <TeamProfileCard
-          title="チーム詳細"
-          team={team}
-          myUserId={myUserId}
-          backHref={backConfig.href}
-          backLabel={backConfig.label}
-          showBackButton
-          editHref={`/teams/${team.id}/edit`}
-          showEditButton
-          showGeminiSection={!mine}
-          showChatButton={!mine}
-          showStrengthHelpButton
-          showAddressDetail={false}
-          chatFrom={backConfig.chatFrom}
-        />
+        <>
+          {isTeamMember ? (
+            <section style={memberPanel}>
+              <div style={memberPanelText}>
+                <div style={memberPanelTitle}>チーム内メニュー</div>
+                <div style={memberPanelDesc}>
+                  あなたの権限：
+                  <b>
+                    {myRole === "owner"
+                      ? "管理者"
+                      : myRole === "coach"
+                        ? "コーチ"
+                        : "メンバー"}
+                  </b>
+                </div>
+              </div>
+
+              <div style={memberPanelActions}>
+                <Link
+                  href={`/match/my-schedule`}
+                  className="sh-btn sh-btn--primary"
+                >
+                  マイスケジュール
+                </Link>
+
+                {canManageMembers ? (
+                  <Link href={`/teams/${team.id}/members`} className="sh-btn">
+                    メンバー管理
+                  </Link>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          <TeamProfileCard
+            title="チーム詳細"
+            team={team}
+            myUserId={myUserId}
+            backHref={backConfig.href}
+            backLabel={backConfig.label}
+            showBackButton
+            editHref={`/teams/${team.id}/edit`}
+            showEditButton
+            showGeminiSection={!mine}
+            showChatButton={!mine}
+            showStrengthHelpButton
+            showAddressDetail={false}
+            chatFrom={backConfig.chatFrom}
+          />
+
+          <section style={teamActionBox}>
+            <button
+              type="button"
+              className="sh-btn sh-btn--primary"
+              onClick={() => {
+                window.location.href = `/teams/${team.id}/message`;
+              }}
+            >
+              チーム連絡
+            </button>
+
+            <button
+              type="button"
+              className="sh-btn"
+              onClick={() => {
+                window.location.href = `/teams/${team.id}/members`;
+              }}
+            >
+              メンバー管理
+            </button>
+          </section>
+        </>
       )}
     </main>
   );
@@ -294,4 +384,53 @@ const emptyBox: React.CSSProperties = {
   color: "#666",
   lineHeight: 1.8,
   textAlign: "center",
+};
+
+const memberPanel: React.CSSProperties = {
+  marginTop: 14,
+  marginBottom: 14,
+  padding: 14,
+  borderRadius: 16,
+  border: "1px solid #dce9df",
+  background: "#f7fbf8",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const memberPanelText: React.CSSProperties = {
+  display: "grid",
+  gap: 4,
+};
+
+const memberPanelTitle: React.CSSProperties = {
+  fontSize: 16,
+  fontWeight: 900,
+  color: "#16391f",
+};
+
+const memberPanelDesc: React.CSSProperties = {
+  fontSize: 13,
+  color: "#3b6a49",
+  lineHeight: 1.5,
+};
+
+const memberPanelActions: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginLeft: "auto",
+};
+
+const teamActionBox: React.CSSProperties = {
+  marginTop: 14,
+  padding: 14,
+  borderRadius: 16,
+  border: "1px solid #dce9df",
+  background: "#fff",
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
 };
