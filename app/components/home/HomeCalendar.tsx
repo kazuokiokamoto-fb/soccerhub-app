@@ -1165,7 +1165,12 @@ export default function HomeCalendar(props: {
   }, [allTeams.length]);
 
   const totalOpenSlotCountText = useMemo(() => {
-    const count = slotsInMonth.filter((slot: any) => !slot.is_closed).length;
+    const today = ymdToday();
+
+    const count = slotsInMonth.filter((slot: any) => {
+      return !slot.is_closed && slot.date >= today;
+    }).length;
+
     return `試合募集中：${count}件`;
   }, [slotsInMonth]);
 
