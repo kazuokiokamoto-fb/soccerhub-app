@@ -739,10 +739,14 @@ const tabWrap: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr",
   gap: 10,
+  padding: 6,
+  borderRadius: 999,
+  border: "1px solid #dce9df",
+  background: "#f7fbf8",
 };
 
 const tabButton: React.CSSProperties = {
-  minHeight: 52,
+  minHeight: 54,
   borderRadius: 999,
   border: "1px solid #dce9df",
   background: "#fff",
@@ -754,12 +758,14 @@ const tabButton: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   gap: 8,
+  boxShadow: "0 1px 0 rgba(20, 92, 42, 0.04)",
 };
 
 const tabButtonActive: React.CSSProperties = {
   background: "#145c2a",
   borderColor: "#145c2a",
   color: "#fff",
+  boxShadow: "0 8px 18px rgba(20, 92, 42, 0.18)",
 };
 
 const tabUnreadBadge: React.CSSProperties = {
