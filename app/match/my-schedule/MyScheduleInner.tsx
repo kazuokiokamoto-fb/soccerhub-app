@@ -806,6 +806,31 @@ export default function MyScheduleInner() {
                         </div>
                       </button>
 
+                      <div style={attendanceActionRow}>
+                        <button
+                          type="button"
+                          className="sh-btn sh-btn--primary"
+                          onClick={() => {
+                            const ok = window.confirm("この予定の出欠確認をチームチャットに送りますか？");
+                            if (!ok) return;
+
+                            window.location.href = `/chat/team/${item.teamId}?from=attendance&slotId=${item.slotId}&teamId=${item.teamId}`;
+                          }}
+                        >
+                          出欠
+                        </button>
+
+                        <button
+                          type="button"
+                          className="sh-btn"
+                          onClick={() => {
+                            window.location.href = `/chat/team/${item.teamId}?from=my-schedule&slotId=${item.slotId}&teamId=${item.teamId}`;
+                          }}
+                        >
+                          チャット
+                        </button>
+                      </div>
+
                       <div style={attendanceBox}>
                         <div style={attendanceTitle}>
                           自分の出欠：{attendanceLabel(attendance)}
@@ -1174,4 +1199,11 @@ const summaryPillTotal: React.CSSProperties = {
   color: "#3730a3",
   fontSize: 12,
   fontWeight: 900,
+};
+
+const attendanceActionRow: React.CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
 };

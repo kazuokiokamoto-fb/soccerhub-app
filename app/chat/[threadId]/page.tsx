@@ -66,6 +66,7 @@ export default function ChatThreadPage() {
   const from = searchParams.get("from");
   const slotId = searchParams.get("slotId");
   const date = searchParams.get("date");
+  const teamId = searchParams.get("teamId");
 
   const chat = useChatThread({
     threadId,
@@ -73,6 +74,7 @@ export default function ChatThreadPage() {
       from,
       slotId,
       date,
+      teamId,
     },
   });
 
@@ -128,7 +130,7 @@ export default function ChatThreadPage() {
           </div>
 
           <div style={headerRight}>
-            {chat.isMember ? (
+            {chat.isMember && !chat.isTeamChat ? (
               <button
                 type="button"
                 className="sh-btn"
@@ -139,7 +141,7 @@ export default function ChatThreadPage() {
               </button>
             ) : null}
 
-            {chat.otherTeamId ? (
+            {chat.otherTeamId && !chat.isTeamChat ? (
               <Link
                 href={`/teams/${chat.otherTeamId}${
                   chat.carriedQueryString ? `?${chat.carriedQueryString}` : ""
@@ -165,6 +167,45 @@ export default function ChatThreadPage() {
         </header>
 
         <div ref={chat.chatBodyRef} style={chatBody}>
+          {chat.showAttendanceButtons ? (
+            <div style={attendanceBox}>
+              <div style={attendanceTitle}>この予定の出欠</div>
+
+              <div style={attendanceButtonRow}>
+                <button
+                  type="button"
+                  className="sh-btn sh-btn--primary"
+                  onClick={() => void chat.updateAttendance("attend")}
+                  disabled={chat.savingAttendance}
+                >
+                  参加
+                </button>
+
+                <button
+                  type="button"
+                  className="sh-btn"
+                  onClick={() => void chat.updateAttendance("maybe")}
+                  disabled={chat.savingAttendance}
+                >
+                  未定
+                </button>
+
+                <button
+                  type="button"
+                  className="sh-btn"
+                  onClick={() => void chat.updateAttendance("absent")}
+                  disabled={chat.savingAttendance}
+                >
+                  不参加
+                </button>
+              </div>
+
+              <div style={attendanceCurrent}>
+                現在の回答：{chat.myAttendanceLabel || "未回答"}
+              </div>
+            </div>
+          ) : null}
+
           {chat.loading ? <p style={{ color: "#666" }}>読み込み中…</p> : null}
 
           {!chat.loading && !chat.isMember ? (
@@ -406,14 +447,44 @@ export default function ChatThreadPage() {
         </>
       ) : null}
 
-      <ChatScheduleModal
-        open={chat.scheduleModalOpen}
-        onClose={() => chat.setScheduleModalOpen(false)}
-        loading={chat.creatingProposal}
-        defaultValues={chat.scheduleDefaults}
-        teamId={chat.myTeamId}
-        onSubmit={(values) => void chat.createScheduleProposal(values)}
-      />
+      {!chat.isTeamChat ? (
+        <ChatScheduleModal
+          open={chat.scheduleModalOpen}
+          onClose={() => chat.setScheduleModalOpen(false)}
+          loading={chat.creatingProposal}
+          defaultValues={chat.scheduleDefaults}
+          teamId={chat.myTeamId}
+          onSubmit={(values) => void chat.createScheduleProposal(values)}
+        />
+      ) : null}
     </main>
   );
 }
+
+const attendanceBox: React.CSSProperties = {
+  margin: "0 0 12px",
+  padding: 12,
+  borderRadius: 14,
+  border: "1px solid #dce9df",
+  background: "#f7fbf8",
+};
+
+const attendanceTitle: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 900,
+  color: "#16391f",
+  marginBottom: 8,
+};
+
+const attendanceButtonRow: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const attendanceCurrent: React.CSSProperties = {
+  marginTop: 8,
+  fontSize: 13,
+  color: "#3b6a49",
+  fontWeight: 800,
+};
