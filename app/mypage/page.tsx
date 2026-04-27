@@ -7,52 +7,20 @@ import AppTabNav from "@/app/components/AppTabNav";
 import PushPermissionButton from "@/app/components/PushPermissionButton";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
-import type { TeamSchedule } from "@/app/lib/types";
 
-import type {
-  ProfileRow,
-  TeamRow,
-  MatchSlotRow,
-  MatchRequestRow,
-  MatchOfferRow,
-  ChatMemberRow,
-  ChatMessageRow,
-  NextScheduleCard,
-  Toast,
-} from "./mypage.types";
+import type { ProfileRow, TeamRow, Toast } from "./mypage.types";
 
 import {
   isMissingColumnError,
   rankLabel,
   areaText,
   categoryText,
-  categoryMetaEntries,
-  fmtTime,
-  formatScheduleDate,
-  toDateTimeMs,
-  scheduleStatusLabel,
-  ymdToday,
   toArray,
 } from "./mypage.helpers";
 
-import {
-  toProfileRow,
-  toTeamRow,
-  toMatchSlotRow,
-  toMatchRequestRow,
-  toMatchOfferRow,
-  toChatMemberRow,
-  toChatMessageRow,
-  toTeamSchedule,
-} from "./mypage.utils";
+import { toProfileRow, toTeamRow } from "./mypage.utils";
 
-import {
-  DashboardLinkRow,
-  CurrentStatusSection,
-  AccountSection,
-  NotificationSection,
-  TeamSection,
-} from "./mypage.blocks";
+import { AccountSection, NotificationSection } from "./mypage.blocks";
 
 import {
   pageWrap,
@@ -71,22 +39,55 @@ import {
   toastClose,
 } from "./mypage.styles";
 
+type TeamRole = "owner" | "coach" | "member";
+
+type TeamMemberRow = {
+  team_id: string;
+  role: TeamRole;
+};
+
+function isTeamRole(value: string): value is TeamRole {
+  return value === "owner" || value === "coach" || value === "member";
+}
+
+function roleLabel(role?: TeamRole | null) {
+  if (role === "owner") return "管理者";
+  if (role === "coach") return "コーチ";
+  if (role === "member") return "メンバー";
+  return "未設定";
+}
+
+function toTeamMemberRow(value: unknown): TeamMemberRow | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const r = value as Record<string, unknown>;
+  const teamId = typeof r.team_id === "string" ? r.team_id : "";
+  const roleRaw = typeof r.role === "string" ? r.role : "";
+
+  if (!teamId || !isTeamRole(roleRaw)) return null;
+
+  return {
+    team_id: teamId,
+    role: roleRaw,
+  };
+}
+
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
 export default function MyPage() {
   const { user, loading: authLoading } = useAuth();
 
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [roleByTeamId, setRoleByTeamId] = useState<Map<string, TeamRole>>(
+    new Map()
+  );
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
   const [deletingTeamId, setDeletingTeamId] = useState("");
   const [loadError, setLoadError] = useState("");
-
-  const [openCount, setOpenCount] = useState(0);
-  const [receivedOfferCount, setReceivedOfferCount] = useState(0);
-  const [sentOfferCount, setSentOfferCount] = useState(0);
-  const [unreadTotal, setUnreadTotal] = useState(0);
-  const [nextSchedule, setNextSchedule] = useState<NextScheduleCard | null>(null);
-  const [scheduleCount, setScheduleCount] = useState(0);
 
   const loadRunningRef = useRef(false);
   const mountedRef = useRef(true);
@@ -102,7 +103,33 @@ export default function MyPage() {
     [user]
   );
 
-  const mainTeam = useMemo(() => teams[0] ?? null, [teams]);
+  const loadTeamsByIds = useCallback(async (teamIds: string[]) => {
+    if (teamIds.length === 0) return [];
+
+    const primaryRes = await supabase
+      .from("teams")
+      .select(
+        "id,owner_id,name,category,categories,level,strength_rank,area,prefecture,city,town,has_ground,category_meta,uniform_main,uniform_sub,uniform_gk,note,updated_at"
+      )
+      .in("id", teamIds)
+      .order("updated_at", { ascending: false });
+
+    if (primaryRes.error && isMissingColumnError(primaryRes.error)) {
+      const fallbackRes = await supabase
+        .from("teams")
+        .select(
+          "id,owner_id,name,category,categories,level,strength_rank,area,prefecture,city,town,has_ground,uniform_main,uniform_sub,note,updated_at"
+        )
+        .in("id", teamIds)
+        .order("updated_at", { ascending: false });
+
+      if (fallbackRes.error) throw fallbackRes.error;
+      return toArray(fallbackRes.data, toTeamRow);
+    }
+
+    if (primaryRes.error) throw primaryRes.error;
+    return toArray(primaryRes.data, toTeamRow);
+  }, []);
 
   const load = useCallback(async () => {
     if (authLoading || loadRunningRef.current) return;
@@ -113,12 +140,7 @@ export default function MyPage() {
       if (mountedRef.current) {
         setProfile(null);
         setTeams([]);
-        setOpenCount(0);
-        setReceivedOfferCount(0);
-        setSentOfferCount(0);
-        setUnreadTotal(0);
-        setNextSchedule(null);
-        setScheduleCount(0);
+        setRoleByTeamId(new Map());
         setLoadError("");
         setLoading(false);
       }
@@ -140,294 +162,60 @@ export default function MyPage() {
         .eq("user_id", userId)
         .maybeSingle();
 
-      const primaryTeamsPromise = supabase
+      const ownerTeamsPromise = supabase
         .from("teams")
-        .select(
-          "id,owner_id,name,category,categories,level,strength_rank,area,prefecture,city,town,has_ground,category_meta,uniform_main,uniform_sub,uniform_gk,note"
-        )
+        .select("id")
         .eq("owner_id", userId)
         .order("updated_at", { ascending: false });
 
-      const [{ data: profileRaw, error: profileErr }, primaryTeamsRes] =
-        await Promise.all([profilePromise, primaryTeamsPromise]);
+      const memberTeamsPromise = supabase
+        .from("team_members")
+        .select("team_id,role")
+        .eq("user_id", userId);
 
-      if (profileErr) {
-        console.error("[mypage] profile error:", profileErr);
+      const [
+        { data: profileRaw, error: profileErr },
+        { data: ownerTeamsRaw, error: ownerTeamsErr },
+        { data: memberTeamsRaw, error: memberTeamsErr },
+      ] = await Promise.all([
+        profilePromise,
+        ownerTeamsPromise,
+        memberTeamsPromise,
+      ]);
+
+      if (profileErr) console.error("[mypage] profile error:", profileErr);
+      if (ownerTeamsErr) throw ownerTeamsErr;
+      if (memberTeamsErr) throw memberTeamsErr;
+
+      const ownerTeamIds = Array.isArray(ownerTeamsRaw)
+        ? ownerTeamsRaw
+            .map((row: any) => String(row.id ?? ""))
+            .filter(Boolean)
+        : [];
+
+      const memberRows = toArray(memberTeamsRaw, toTeamMemberRow);
+      const memberTeamIds = memberRows.map((row) => row.team_id);
+
+      const allTeamIds = uniqueStrings([...ownerTeamIds, ...memberTeamIds]);
+
+      const nextRoleByTeamId = new Map<string, TeamRole>();
+
+      for (const id of ownerTeamIds) {
+        nextRoleByTeamId.set(id, "owner");
       }
+
+      for (const row of memberRows) {
+        if (!nextRoleByTeamId.has(row.team_id)) {
+          nextRoleByTeamId.set(row.team_id, row.role);
+        }
+      }
+
+      const loadedTeams = await loadTeamsByIds(allTeamIds);
 
       if (mountedRef.current) {
         setProfile(toProfileRow(profileRaw));
-      }
-
-      let loadedTeams: TeamRow[] = [];
-
-      if (primaryTeamsRes.error && isMissingColumnError(primaryTeamsRes.error)) {
-        const fallbackTeamsRes = await supabase
-          .from("teams")
-          .select(
-            "id,owner_id,name,category,categories,level,strength_rank,area,prefecture,city,town,has_ground,uniform_main,uniform_sub,note"
-          )
-          .eq("owner_id", userId)
-          .order("updated_at", { ascending: false });
-
-        if (fallbackTeamsRes.error) {
-          throw fallbackTeamsRes.error;
-        }
-
-        loadedTeams = toArray(fallbackTeamsRes.data, toTeamRow);
-      } else if (primaryTeamsRes.error) {
-        throw primaryTeamsRes.error;
-      } else {
-        loadedTeams = toArray(primaryTeamsRes.data, toTeamRow);
-      }
-
-      if (mountedRef.current) {
         setTeams(loadedTeams);
-      }
-
-      const myTeamIds = loadedTeams.map((t) => t.id).filter(Boolean);
-
-      if (myTeamIds.length === 0) {
-        if (mountedRef.current) {
-          setOpenCount(0);
-          setReceivedOfferCount(0);
-          setSentOfferCount(0);
-          setUnreadTotal(0);
-          setNextSchedule(null);
-          setScheduleCount(0);
-          setLoading(false);
-        }
-        loadRunningRef.current = false;
-        return;
-      }
-
-      const { data: mySlotsRaw, error: slotErr } = await supabase
-        .from("match_slots")
-        .select(
-          "id,host_team_id,date,start_time,end_time,area,area_text,category,is_closed,created_at"
-        )
-        .in("host_team_id", myTeamIds);
-
-      if (slotErr) {
-        console.error("[mypage] match_slots error:", slotErr);
-      }
-
-      const mySlotRows: MatchSlotRow[] = toArray(mySlotsRaw, toMatchSlotRow);
-      const mySlotIds = mySlotRows.map((s) => s.id).filter(Boolean);
-
-      if (mountedRef.current) {
-        setOpenCount(mySlotRows.filter((s) => !s.is_closed).length);
-      }
-
-      const outgoingReqPromise = supabase
-        .from("match_requests")
-        .select(
-          "id,slot_id,requester_team_id,requester_user_id,status,comment,created_at"
-        )
-        .in("requester_team_id", myTeamIds);
-
-      const incomingReqPromise =
-        mySlotIds.length > 0
-          ? supabase
-              .from("match_requests")
-              .select(
-                "id,slot_id,requester_team_id,requester_user_id,status,comment,created_at"
-              )
-              .in("slot_id", mySlotIds)
-          : Promise.resolve({ data: [], error: null });
-
-      const sentOffersPromise = supabase
-        .from("match_offers")
-        .select(
-          "id,slot_id,from_user_id,from_team_id,to_team_id,status,message,created_at"
-        )
-        .in("from_team_id", myTeamIds);
-
-      const receivedOffersPromise = supabase
-        .from("match_offers")
-        .select(
-          "id,slot_id,from_user_id,from_team_id,to_team_id,status,message,created_at"
-        )
-        .in("to_team_id", myTeamIds);
-
-      const chatMembersPromise = supabase
-        .from("chat_members")
-        .select("thread_id,last_read_at")
-        .eq("user_id", userId);
-
-      const schedulesPromise = supabase
-        .from("team_schedules")
-        .select(
-          [
-            "id",
-            "team_id",
-            "category",
-            "opponent",
-            "strength",
-            "date",
-            "venue_name",
-            "address",
-            "meetup_time",
-            "dissolve_time",
-            "start_time",
-            "end_time",
-            "parking",
-            "belongings",
-            "note",
-            "thread_id",
-            "status",
-            "google_event_id",
-            "proposal_id",
-            "opponent_team_id",
-            "opponent_type",
-            "external_opponent_name",
-            "created_by_user_id",
-            "source",
-            "created_at",
-            "updated_at",
-          ].join(",")
-        )
-        .in("team_id", myTeamIds)
-        .gte("date", ymdToday())
-        .order("date", { ascending: true })
-        .order("start_time", { ascending: true });
-
-      const [
-        { data: outgoingRequestsRaw, error: outgoingReqErr },
-        { data: incomingRequestsRaw, error: incomingReqErr },
-        { data: sentOffersRaw, error: sentOffersErr },
-        { data: receivedOffersRaw, error: receivedOffersErr },
-        { data: memberRowsRaw, error: memberErr },
-        { data: schedulesRaw, error: schedulesErr },
-      ] = await Promise.all([
-        outgoingReqPromise,
-        incomingReqPromise,
-        sentOffersPromise,
-        receivedOffersPromise,
-        chatMembersPromise,
-        schedulesPromise,
-      ]);
-
-      if (outgoingReqErr) console.error("[mypage] outgoingReq error:", outgoingReqErr);
-      if (incomingReqErr) console.error("[mypage] incomingReq error:", incomingReqErr);
-      if (sentOffersErr) console.error("[mypage] sentOffers error:", sentOffersErr);
-      if (receivedOffersErr) {
-        console.error("[mypage] receivedOffers error:", receivedOffersErr);
-      }
-      if (memberErr) console.error("[mypage] chat_members error:", memberErr);
-      if (schedulesErr) console.error("[mypage] team_schedules error:", schedulesErr);
-
-      const outgoingRequestRows: MatchRequestRow[] = toArray(
-        outgoingRequestsRaw,
-        toMatchRequestRow
-      );
-      const incomingRequestRows: MatchRequestRow[] = toArray(
-        incomingRequestsRaw,
-        toMatchRequestRow
-      );
-      const sentOfferRows: MatchOfferRow[] = toArray(sentOffersRaw, toMatchOfferRow);
-      const receivedOfferRows: MatchOfferRow[] = toArray(
-        receivedOffersRaw,
-        toMatchOfferRow
-      );
-
-      const pendingReceivedOffers =
-        receivedOfferRows.filter((o) => o.status === "pending").length +
-        incomingRequestRows.filter(
-          (r) => r.status === "pending" && !myTeamIds.includes(r.requester_team_id)
-        ).length;
-
-      const pendingSentOffers =
-        sentOfferRows.filter((o) => o.status === "pending").length +
-        outgoingRequestRows.filter((r) => r.status === "pending").length;
-
-      if (mountedRef.current) {
-        setReceivedOfferCount(pendingReceivedOffers);
-        setSentOfferCount(pendingSentOffers);
-      }
-
-      const myMemberRows: ChatMemberRow[] = toArray(memberRowsRaw, toChatMemberRow);
-      const threadIds = myMemberRows.map((r) => r.thread_id).filter(Boolean);
-
-      if (threadIds.length > 0) {
-        const { data: msgRowsRaw, error: msgErr } = await supabase
-          .from("chat_messages")
-          .select("id,thread_id,body,created_at")
-          .in("thread_id", threadIds)
-          .order("created_at", { ascending: false })
-          .limit(1500);
-
-        if (msgErr) {
-          console.error("[mypage] chat_messages error:", msgErr);
-          if (mountedRef.current) setUnreadTotal(0);
-        } else {
-          const messages: ChatMessageRow[] = toArray(msgRowsRaw, toChatMessageRow);
-          const latestByThread = new Map<string, ChatMessageRow>();
-
-          for (const m of messages) {
-            if (!latestByThread.has(m.thread_id)) {
-              latestByThread.set(m.thread_id, m);
-            }
-          }
-
-          let unread = 0;
-
-          for (const member of myMemberRows) {
-            const last = latestByThread.get(member.thread_id);
-            if (!last?.created_at) continue;
-
-            if (!member.last_read_at) {
-              unread += 1;
-              continue;
-            }
-
-            if (
-              new Date(last.created_at).getTime() >
-              new Date(member.last_read_at).getTime()
-            ) {
-              unread += 1;
-            }
-          }
-
-          if (mountedRef.current) {
-            setUnreadTotal(unread);
-          }
-        }
-      } else if (mountedRef.current) {
-        setUnreadTotal(0);
-      }
-
-      const futureSchedules: TeamSchedule[] = toArray(schedulesRaw, toTeamSchedule)
-        .filter((s) => !!s.date)
-        .sort((a, b) => {
-          const aMs = toDateTimeMs(a.date, a.startTime ?? null);
-          const bMs = toDateTimeMs(b.date, b.startTime ?? null);
-          return aMs - bMs;
-        });
-
-      if (mountedRef.current) {
-        setScheduleCount(futureSchedules.length);
-      }
-
-      if (futureSchedules.length > 0) {
-        const s = futureSchedules[0];
-
-        if (mountedRef.current) {
-          setNextSchedule({
-            id: s.id,
-            date: s.date,
-            startTime: s.startTime ?? null,
-            endTime: s.endTime ?? null,
-            category: s.category ?? null,
-            opponent: s.opponent ?? null,
-            venueName: s.venueName ?? null,
-            address: s.address ?? null,
-            status: s.status ?? "draft",
-            threadId: s.threadId ?? null,
-          });
-        }
-      } else if (mountedRef.current) {
-        setNextSchedule(null);
+        setRoleByTeamId(nextRoleByTeamId);
       }
     } catch (e: any) {
       console.error("[mypage] load error:", e);
@@ -439,12 +227,10 @@ export default function MyPage() {
         });
       }
     } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
+      if (mountedRef.current) setLoading(false);
       loadRunningRef.current = false;
     }
-  }, [authLoading, user]);
+  }, [authLoading, user, loadTeamsByIds]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -482,18 +268,12 @@ export default function MyPage() {
       { label: "チャット参加情報", run: () => existsRow("chat_members", "team_id", teamId) },
       { label: "チャット送信履歴", run: () => existsRow("chat_messages", "sender_team_id", teamId) },
       { label: "チーム予定", run: () => existsRow("team_schedules", "team_id", teamId) },
+      { label: "チームメンバー", run: () => existsRow("team_members", "team_id", teamId) },
     ];
 
     for (const check of checks) {
-      try {
-        const hit = await check.run();
-        if (hit) blockers.push(check.label);
-      } catch (e: any) {
-        console.error(`delete-check failed: ${check.label}`, e);
-        throw new Error(
-          `削除前チェックに失敗しました（${check.label}）: ${e?.message ?? "unknown error"}`
-        );
-      }
+      const hit = await check.run();
+      if (hit) blockers.push(check.label);
     }
 
     return {
@@ -545,15 +325,19 @@ export default function MyPage() {
         .eq("owner_id", me.id);
 
       if (error) {
-        console.error(error);
         setToast({ type: "error", text: `チーム削除失敗: ${error.message}` });
         setDeletingTeamId("");
         return;
       }
 
       setTeams((prev) => prev.filter((t) => t.id !== team.id));
-      setToast({ type: "success", text: `✅ 「${team.name}」を削除しました` });
+      setRoleByTeamId((prev) => {
+        const next = new Map(prev);
+        next.delete(team.id);
+        return next;
+      });
 
+      setToast({ type: "success", text: `✅ 「${team.name}」を削除しました` });
       await load();
     } catch (e: any) {
       console.error(e);
@@ -573,7 +357,7 @@ export default function MyPage() {
         <AppHero
           icon="⚙️"
           title="マイページ"
-          desc="アカウント情報、試合状況、チーム情報、グラウンド情報を確認・編集できます。"
+          desc="アカウント情報、チーム情報、グラウンド情報を確認・編集できます。"
         />
         <div style={loadingBox}>Loading...</div>
       </main>
@@ -610,7 +394,7 @@ export default function MyPage() {
       <AppHero
         icon="⚙️"
         title="マイページ"
-        desc="アカウント情報、試合状況、チーム情報、グラウンド情報を確認・編集できます。"
+        desc="アカウント情報、チーム情報、グラウンド情報を確認・編集できます。"
       />
 
       {!me ? (
@@ -627,24 +411,6 @@ export default function MyPage() {
           </button>
         </div>
       ) : null}
-
-      <section style={box}>
-        <div style={sectionHead}>
-          <div style={sectionTitle}>現在の状況</div>
-        </div>
-
-        <CurrentStatusSection
-          openCount={openCount}
-          receivedOfferCount={receivedOfferCount}
-          sentOfferCount={sentOfferCount}
-          unreadTotal={unreadTotal}
-          nextSchedule={nextSchedule}
-          scheduleCount={scheduleCount}
-          formatScheduleDate={formatScheduleDate}
-          fmtTime={fmtTime}
-          scheduleStatusLabel={scheduleStatusLabel}
-        />
-      </section>
 
       <section style={box}>
         <div style={sectionHead}>
@@ -670,18 +436,105 @@ export default function MyPage() {
       <section style={box}>
         <div style={sectionHead}>
           <h2 style={sectionTitle}>チーム</h2>
+          <div style={teamTopActions}>
+            <Link href="/teams/new" className="sh-btn">
+              ＋チーム登録
+            </Link>
+            <Link href="/teams" className="sh-btn sh-btn--primary">
+              チーム編集
+            </Link>
+          </div>
         </div>
 
-        <TeamSection
-          teams={teams}
-          mainTeam={mainTeam}
-          deletingTeamId={deletingTeamId}
-          deleteTeam={deleteTeam}
-          areaText={areaText}
-          categoryText={categoryText}
-          categoryMetaEntries={categoryMetaEntries}
-          rankLabel={rankLabel}
-        />
+        <div style={teamList}>
+          {teams.length === 0 ? (
+            <div style={emptyTeamBox}>
+              まだチームが登録されていません。
+              <br />
+              先にチーム登録をしてください。
+            </div>
+          ) : (
+            teams.map((team) => {
+              const role = roleByTeamId.get(team.id);
+              const isOwner = role === "owner";
+              const deleting = deletingTeamId === team.id;
+              const categories =
+                Array.isArray(team.categories) && team.categories.length > 0
+                  ? team.categories
+                      .map((c) => String(c))
+                      .join(" / ")
+                  : String(team.category ?? "未設定");
+
+              return (
+                <div key={team.id} style={teamCard}>
+                  <div style={teamCardHead}>
+                    <div style={teamNameBlock}>
+                      <div style={teamName}>{team.name || "名称未設定"}</div>
+                      <div style={roleBadge}>{roleLabel(role)}</div>
+                    </div>
+
+                    <div style={teamActions}>
+                      <Link href={`/teams/${team.id}?from=mypage`} className="sh-btn">
+                        詳細
+                      </Link>
+
+                      {isOwner ? (
+                        <Link
+                          href={`/teams/${team.id}/edit`}
+                          className="sh-btn sh-btn--primary"
+                        >
+                          編集
+                        </Link>
+                      ) : null}
+
+                      {isOwner ? (
+                        <button
+                          type="button"
+                          className="sh-btn"
+                          onClick={() => void deleteTeam(team)}
+                          disabled={deleting}
+                          style={deleteButton}
+                        >
+                          {deleting ? "削除中…" : "削除"}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div style={teamMeta}>
+                    <div>
+                      <b>エリア：</b>
+                      {areaText(team)}
+                    </div>
+                    <div>
+                      <b>カテゴリ：</b>
+                      {categories || "未設定"}
+                    </div>
+                    <div>
+                      <b>グラウンド提供：</b>
+                      {team.has_ground ? "あり" : "なし"}
+                    </div>
+                    <div>
+                      <b>ユニフォーム：</b>
+                      {team.uniform_main || "未設定"} /{" "}
+                      {team.uniform_sub || "未設定"}
+                      {"uniform_gk" in team && (team as any).uniform_gk
+                        ? ` / GK: ${(team as any).uniform_gk}`
+                        : ""}
+                    </div>
+                  </div>
+
+                  <div style={categoryMetaBox}>
+                    <div style={categoryMetaTitle}>カテゴリ別設定</div>
+                    <div style={categoryMetaLine}>
+                      強さ：{team.strength_rank || "未設定"}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </section>
 
       <section style={box}>
@@ -706,3 +559,110 @@ export default function MyPage() {
     </main>
   );
 }
+
+const teamTopActions: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const teamList: React.CSSProperties = {
+  display: "grid",
+  gap: 14,
+};
+
+const emptyTeamBox: React.CSSProperties = {
+  padding: 18,
+  borderRadius: 16,
+  border: "1px solid #e5ece7",
+  background: "#f7fbf8",
+  color: "#4b5563",
+  lineHeight: 1.8,
+  textAlign: "center",
+};
+
+const teamCard: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 16,
+  border: "1px solid #e5e7eb",
+  background: "#fafafa",
+};
+
+const teamCardHead: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+  alignItems: "flex-start",
+};
+
+const teamNameBlock: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+  minWidth: 0,
+};
+
+const teamName: React.CSSProperties = {
+  fontSize: 22,
+  fontWeight: 900,
+  color: "#111827",
+  lineHeight: 1.3,
+};
+
+const roleBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  width: "fit-content",
+  minHeight: 28,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#dcfce7",
+  color: "#166534",
+  border: "1px solid #bbf7d0",
+  fontSize: 13,
+  fontWeight: 900,
+};
+
+const teamActions: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  alignItems: "center",
+};
+
+const deleteButton: React.CSSProperties = {
+  borderColor: "#fecaca",
+  color: "#b91c1c",
+  background: "#fff",
+};
+
+const teamMeta: React.CSSProperties = {
+  marginTop: 12,
+  display: "grid",
+  gap: 6,
+  color: "#4b5563",
+  fontSize: 14,
+  lineHeight: 1.7,
+};
+
+const categoryMetaBox: React.CSSProperties = {
+  marginTop: 12,
+  padding: 12,
+  borderRadius: 14,
+  border: "1px solid #e5e7eb",
+  background: "#fff",
+  display: "grid",
+  gap: 5,
+};
+
+const categoryMetaTitle: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 900,
+  color: "#14532d",
+};
+
+const categoryMetaLine: React.CSSProperties = {
+  fontSize: 14,
+  color: "#4b5563",
+  lineHeight: 1.6,
+};

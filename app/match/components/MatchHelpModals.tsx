@@ -125,6 +125,42 @@ export function MatchHelpModals({
                   他チームで決まった募集です。
                 </div>
               </div>
+
+              <div style={guideCard}>
+                <div style={guideTop}>
+                  <div style={calendarLegendBadgeInfo}>👥</div>
+                  <div style={guideShort}>チームメンバー管理</div>
+                </div>
+                <div style={guideTitleText}>
+                  マイページのチーム欄から「詳細」を開くと、チーム詳細ページに進めます。
+                  管理者・コーチは「メンバー管理」から招待コードを発行し、
+                  保護者やコーチをチームメンバーとして追加できます。
+                  メンバーはマイスケジュールの確認、出欠回答、チーム連絡の確認ができます。
+                </div>
+              </div>
+
+              <div style={guideCard}>
+                <div style={guideTop}>
+                  <div style={calendarLegendBadgeInfo}>✅</div>
+                  <div style={guideShort}>出欠確認</div>
+                </div>
+                <div style={guideTitleText}>
+                  試合が決まった後だけでなく、交渉中の予定でも出欠確認ができます。
+                  チームメンバーは「参加・未定・不参加」を回答でき、
+                  出欠集計は試合詳細ページで確認できます。
+                </div>
+              </div>
+
+              <div style={guideCard}>
+                <div style={guideTop}>
+                  <div style={calendarLegendBadgeInfo}>💬</div>
+                  <div style={guideShort}>チーム連絡</div>
+                </div>
+                <div style={guideTitleText}>
+                  チーム詳細ページの「チーム連絡」から、集合時間・持ち物・連絡事項などを
+                  チーム内で共有できます。
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -290,4 +326,10 @@ const calendarLegendBadgeOther: React.CSSProperties = {
   ...calendarLegendBadgeBase,
   background: "#f3f4f6",
   color: "#4b5563",
+};
+
+const calendarLegendBadgeInfo: React.CSSProperties = {
+  ...calendarLegendBadgeBase,
+  background: "#eef6f0",
+  color: "#14532d",
 };

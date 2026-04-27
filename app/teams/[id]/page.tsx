@@ -62,6 +62,14 @@ function buildBackLink(params: {
   date: string | null;
 }) {
   const { from, slotId, date } = params;
+  
+  if (from === "mypage") {
+    return {
+      href: "/mypage",
+      label: "← マイページへ戻る",
+      chatFrom: "mypage",
+    };
+  }
 
   if (from === "match-calendar") {
     const qs = new URLSearchParams();

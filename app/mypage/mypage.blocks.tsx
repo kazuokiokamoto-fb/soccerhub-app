@@ -375,7 +375,7 @@ export function TeamSection(props: {
                   </div>
 
                   <div style={cardActions}>
-                    <Link href={`/teams/${team.id}`} className="sh-btn">
+                    <Link href={`/teams/${team.id}?from=mypage`} className="sh-btn">
                       詳細
                     </Link>
                     <Link
