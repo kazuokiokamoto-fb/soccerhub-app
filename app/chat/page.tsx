@@ -592,7 +592,7 @@ export default function ChatListPage() {
                         href={
                           team.threadId
                             ? `/chat/${team.threadId}?from=team-message&teamId=${team.id}`
-                            : `/teams/${team.id}/message`
+                            : `/chat/team/${team.id}`
                         }
                         style={{
                           ...threadCard,
