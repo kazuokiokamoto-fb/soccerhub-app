@@ -128,13 +128,19 @@ export default function TeamChatRedirectPage() {
             const teamIdsInThread = uniqueValues(rows.map((row) => row.team_id));
 
             const hasOnlyThisTeam =
-              teamIdsInThread.length === 1 && teamIdsInThread[0] === teamId;
+            teamIdsInThread.length === 1 && teamIdsInThread[0] === teamId;
 
             const hasMe = rows.some((row) => row.user_id === meId);
 
-            if (hasOnlyThisTeam && hasMe) {
-              existingThreadId = threadId;
-              break;
+            const memberUserIds = uniqueValues(rows.map((row) => row.user_id));
+
+            const isSameMembers =
+            memberUserIds.length === teamUserIds.length &&
+            memberUserIds.every((id) => teamUserIds.includes(id));
+
+            if (hasOnlyThisTeam && hasMe && isSameMembers) {
+            existingThreadId = threadId;
+            break;
             }
           }
         }

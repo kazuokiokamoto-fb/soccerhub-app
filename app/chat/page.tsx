@@ -583,7 +583,7 @@ export default function ChatListPage() {
                   {teamChats.map((team, index) => {
                     const body = team.lastMessageBody
                       ? clip(team.lastMessageBody, 46)
-                      : "チームメンバーへの連絡";
+                      : "まだメッセージがありません"; // ← ここに変更
                     const time = formatLineTime(team.lastMessageAt);
 
                     return (
