@@ -335,7 +335,7 @@ function MatchCreatePageInner() {
         return;
       }
 
-      router.push(`/match?date=${slotDate}`);
+      router.push(`/match/my-schedule?date=${slotDate}`);
       router.refresh();
     } catch (e: any) {
       console.error(e);
@@ -365,17 +365,7 @@ function MatchCreatePageInner() {
 
         <section style={card}>
           <div style={formGrid}>
-            <label style={label}>
-              <span style={labelTitle}>日付</span>
-              <input
-                type="date"
-                value={slotDate}
-                onChange={(e) => setSlotDate(e.target.value)}
-                style={nativeInput}
-                disabled={saving}
-              />
-            </label>
-
+            
             <label style={label}>
               <span style={labelTitle}>ホストチーム</span>
               <select
@@ -392,6 +382,18 @@ function MatchCreatePageInner() {
               </select>
             </label>
 
+            <label style={label}>
+              <span style={labelTitle}>日付</span>
+              <input
+                type="date"
+                value={slotDate}
+                onChange={(e) => setSlotDate(e.target.value)}
+                style={nativeInput}
+                disabled={saving}
+              />
+            </label>
+
+            
             <div style={stackCols}>
               <label style={label}>
                 <span style={labelTitle}>開始</span>
@@ -601,7 +603,7 @@ function MatchCreatePageInner() {
                 {saving ? "作成中…" : "募集する"}
               </button>
 
-              <Link href="/match" className="sh-btn">
+              <Link href="/" className="sh-btn">
                 キャンセル
               </Link>
             </div>
@@ -723,7 +725,7 @@ const selectInput: React.CSSProperties = {
 const stackCols: React.CSSProperties = {
   display: "grid",
   gap: 12,
-  gridTemplateColumns: "minmax(0, 1fr)",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   width: "100%",
   minWidth: 0,
 };

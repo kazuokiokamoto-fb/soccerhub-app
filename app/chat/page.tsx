@@ -67,8 +67,10 @@ function toArray<T>(value: unknown, mapper: (v: unknown) => T | null): T[] {
 function toTeamMini(value: unknown): TeamMini | null {
   const r = asRecord(value);
   if (!r) return null;
+
   const id = asString(r.id);
   if (!id) return null;
+
   return {
     id,
     name: asNullableString(r.name),
@@ -79,9 +81,12 @@ function toTeamMini(value: unknown): TeamMini | null {
 function toThreadSummary(value: unknown): ThreadSummary | null {
   const r = asRecord(value);
   if (!r) return null;
+
   const id = asString(r.id);
   const created_at = asString(r.created_at);
+
   if (!id || !created_at) return null;
+
   return {
     id,
     created_at,
@@ -92,8 +97,10 @@ function toThreadSummary(value: unknown): ThreadSummary | null {
 function toChatMemberRow(value: unknown): ChatMemberRow | null {
   const r = asRecord(value);
   if (!r) return null;
+
   const thread_id = asString(r.thread_id);
   if (!thread_id) return null;
+
   return {
     thread_id,
     team_id: asNullableString(r.team_id),
@@ -105,9 +112,12 @@ function toChatMemberRow(value: unknown): ChatMemberRow | null {
 function toChatMessageRow(value: unknown): ChatMessageRow | null {
   const r = asRecord(value);
   if (!r) return null;
+
   const thread_id = asString(r.thread_id);
   const created_at = asString(r.created_at);
+
   if (!thread_id || !created_at) return null;
+
   return {
     thread_id,
     body: asNullableString(r.body),
@@ -168,6 +178,7 @@ export default function ChatListPage() {
   const { user, loading: authLoading } = useAuth();
 
   const [loading, setLoading] = useState(true);
+  const [teamChats, setTeamChats] = useState<TeamMini[]>([]);
   const [threads, setThreads] = useState<ThreadRow[]>([]);
   const [loadError, setLoadError] = useState("");
 
@@ -182,6 +193,7 @@ export default function ChatListPage() {
 
     if (!meId) {
       if (!mountedRef.current) return;
+      setTeamChats([]);
       setThreads([]);
       setLoadError("");
       setLoading(false);
@@ -196,20 +208,34 @@ export default function ChatListPage() {
     }
 
     try {
-      const myTeamsRes = await supabase
+      const ownerTeamsRes = await supabase
         .from("teams")
         .select("id")
         .eq("owner_id", meId);
 
-      if (myTeamsRes.error) throw myTeamsRes.error;
+      if (ownerTeamsRes.error) throw ownerTeamsRes.error;
 
-      const myTeamIds = new Set<string>(
-        toArray(myTeamsRes.data, (v) => {
-          const r = asRecord(v);
-          const id = r ? asString(r.id) : "";
-          return id || null;
-        })
-      );
+      const memberTeamsRes = await supabase
+        .from("team_members")
+        .select("team_id")
+        .eq("user_id", meId);
+
+      if (memberTeamsRes.error) throw memberTeamsRes.error;
+
+      const ownerTeamIds = toArray(ownerTeamsRes.data, (v) => {
+        const r = asRecord(v);
+        const id = r ? asString(r.id) : "";
+        return id || null;
+      });
+
+      const memberTeamIds = toArray(memberTeamsRes.data, (v) => {
+        const r = asRecord(v);
+        const id = r ? asString(r.team_id) : "";
+        return id || null;
+      });
+
+      const myTeamIdList = Array.from(new Set([...ownerTeamIds, ...memberTeamIds]));
+      const myTeamIds = new Set<string>(myTeamIdList);
 
       const myMemberRes = await supabase
         .from("chat_members")
@@ -233,32 +259,41 @@ export default function ChatListPage() {
         }
       }
 
-      if (threadIds.length === 0) {
-        if (!mountedRef.current) return;
-        setThreads([]);
-        setLoading(false);
-        loadingRef.current = false;
-        return;
+      let threadRows: ThreadSummary[] = [];
+      let memberRows: ChatMemberRow[] = [];
+      let messageRows: ChatMessageRow[] = [];
+
+      if (threadIds.length > 0) {
+        const thRes = await supabase
+          .from("chat_threads")
+          .select("id,created_at,updated_at")
+          .in("id", threadIds);
+
+        if (thRes.error) throw thRes.error;
+
+        const membersRes = await supabase
+          .from("chat_members")
+          .select("thread_id,team_id")
+          .in("thread_id", threadIds);
+
+        if (membersRes.error) throw membersRes.error;
+
+        const msgRes = await supabase
+          .from("chat_messages")
+          .select("thread_id,body,created_at")
+          .in("thread_id", threadIds)
+          .order("created_at", { ascending: false })
+          .limit(1000);
+
+        if (msgRes.error) throw msgRes.error;
+
+        threadRows = toArray(thRes.data, toThreadSummary);
+        memberRows = toArray(membersRes.data, toChatMemberRow);
+        messageRows = toArray(msgRes.data, toChatMessageRow);
       }
 
-      const thRes = await supabase
-        .from("chat_threads")
-        .select("id,created_at,updated_at")
-        .in("id", threadIds);
-
-      if (thRes.error) throw thRes.error;
-
-      const membersRes = await supabase
-        .from("chat_members")
-        .select("thread_id,team_id")
-        .in("thread_id", threadIds);
-
-      if (membersRes.error) throw membersRes.error;
-
-      const memberRows = toArray(membersRes.data, toChatMemberRow);
-
       const memberTeamsByThread = new Map<string, string[]>();
-      const allTeamIds: string[] = [];
+      const allTeamIds: string[] = [...myTeamIdList];
 
       for (const r of memberRows) {
         const tid = r.thread_id;
@@ -268,6 +303,7 @@ export default function ChatListPage() {
         if (!memberTeamsByThread.has(tid)) {
           memberTeamsByThread.set(tid, []);
         }
+
         memberTeamsByThread.get(tid)!.push(teamId);
         allTeamIds.push(teamId);
       }
@@ -288,64 +324,55 @@ export default function ChatListPage() {
         }
       }
 
-      const msgRes = await supabase
-        .from("chat_messages")
-        .select("thread_id,body,created_at")
-        .in("thread_id", threadIds)
-        .order("created_at", { ascending: false })
-        .limit(1000);
-
-      if (msgRes.error) throw msgRes.error;
-
-      const messageRows = toArray(msgRes.data, toChatMessageRow);
       const lastMsgByThread = new Map<string, ChatMessageRow>();
-
       for (const m of messageRows) {
         if (!lastMsgByThread.has(m.thread_id)) {
           lastMsgByThread.set(m.thread_id, m);
         }
       }
 
-      const threadRows = toArray(thRes.data, toThreadSummary);
+      const nextTeamChats = myTeamIdList
+        .map((id) => teamMap.get(id) ?? { id, name: "チーム未設定", category: null })
+        .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
 
-      const merged: ThreadRow[] = threadRows.map((t) => {
-        const tid = t.id;
-        const memberTeamIds = memberTeamsByThread.get(tid) ?? [];
+      const merged: ThreadRow[] = threadRows
+        .map((t) => {
+          const tid = t.id;
+          const memberTeamIds = memberTeamsByThread.get(tid) ?? [];
 
-        const otherTeamId =
-          memberTeamIds.find((id) => !myTeamIds.has(id)) ??
-          memberTeamIds[0] ??
-          null;
+          const otherTeamId =
+            memberTeamIds.find((id) => !myTeamIds.has(id)) ?? null;
 
-        const otherTeam = otherTeamId ? teamMap.get(otherTeamId) : undefined;
-        const last = lastMsgByThread.get(tid);
-        const myLastReadAt = myLastReadMap.get(tid) ?? null;
+          const otherTeam = otherTeamId ? teamMap.get(otherTeamId) : undefined;
+          const last = lastMsgByThread.get(tid);
+          const myLastReadAt = myLastReadMap.get(tid) ?? null;
 
-        let isUnread = false;
-        if (last?.created_at) {
-          if (!myLastReadAt) {
-            isUnread = true;
-          } else {
-            isUnread =
-              new Date(last.created_at).getTime() >
-              new Date(myLastReadAt).getTime();
+          let isUnread = false;
+          if (last?.created_at) {
+            if (!myLastReadAt) {
+              isUnread = true;
+            } else {
+              isUnread =
+                new Date(last.created_at).getTime() >
+                new Date(myLastReadAt).getTime();
+            }
           }
-        }
 
-        return {
-          id: t.id,
-          created_at: t.created_at,
-          updated_at: t.updated_at ?? null,
-          memberTeamIds,
-          myLastReadAt,
-          otherTeamId,
-          otherTeamName: otherTeam?.name ?? null,
-          otherTeamCategory: otherTeam?.category ?? null,
-          lastMessageBody: last?.body ?? null,
-          lastMessageAt: last?.created_at ?? null,
-          isUnread,
-        };
-      });
+          return {
+            id: t.id,
+            created_at: t.created_at,
+            updated_at: t.updated_at ?? null,
+            memberTeamIds,
+            myLastReadAt,
+            otherTeamId,
+            otherTeamName: otherTeam?.name ?? null,
+            otherTeamCategory: otherTeam?.category ?? null,
+            lastMessageBody: last?.body ?? null,
+            lastMessageAt: last?.created_at ?? null,
+            isUnread,
+          };
+        })
+        .filter((t) => !!t.otherTeamId);
 
       merged.sort((a, b) => {
         const au = a.isUnread ? 1 : 0;
@@ -358,11 +385,15 @@ export default function ChatListPage() {
       });
 
       if (!mountedRef.current) return;
+
+      setTeamChats(nextTeamChats);
       setThreads(merged);
     } catch (e: any) {
       console.error("chat page load error:", e);
       if (!mountedRef.current) return;
 
+      setTeamChats([]);
+      setThreads([]);
       setLoadError(e?.message ?? "チャット一覧の取得に失敗しました");
     } finally {
       if (mountedRef.current) {
@@ -392,7 +423,7 @@ export default function ChatListPage() {
       <AppHero
         icon="💬"
         title="チャット"
-        desc="相手チームとの連絡、日程調整、会場確認などをここでやり取りできます。"
+        desc="チーム内連絡と、対戦チームとの日程調整・会場確認ができます。"
       />
 
       {loadError ? (
@@ -416,7 +447,7 @@ export default function ChatListPage() {
         <div style={summaryText}>
           {authLoading || loading
             ? "読み込み中…"
-            : `スレッド ${threads.length}件 / 未読 ${unreadTotal}件`}
+            : `チーム内 ${teamChats.length}件 / 対戦 ${threads.length}件 / 未読 ${unreadTotal}件`}
         </div>
       </div>
 
@@ -435,66 +466,117 @@ export default function ChatListPage() {
             </Link>
           </div>
         </div>
-      ) : threads.length === 0 ? (
+      ) : teamChats.length === 0 && threads.length === 0 ? (
         <div style={emptyBox}>
           まだチャットはありません。
           <br />
-          試合申込や招待送信後に、ここへスレッドが表示されます。
+          チーム登録、試合申込、招待送信後にここへ表示されます。
         </div>
       ) : (
-        <div style={listWrap}>
-          {threads.map((t, index) => {
-            const title = t.otherTeamName || "相手チーム";
-            const category = t.otherTeamCategory || "";
-            const body = t.lastMessageBody
-              ? clip(t.lastMessageBody, 46)
-              : "まだメッセージがありません";
-            const time = formatLineTime(
-              t.lastMessageAt ?? t.updated_at ?? t.created_at
-            );
+        <>
+          <section style={sectionBox}>
+            <div style={listTitle}>チーム内チャット</div>
 
-            return (
-              <Link
-                key={t.id}
-                href={`/chat/${t.id}?from=chat-list`}
-                style={{
-                  ...threadCard,
-                  borderBottom:
-                    index === threads.length - 1
-                      ? "none"
-                      : "1px solid #edf1ee",
-                }}
-              >
-                <div style={avatar}>{buildInitial(title)}</div>
-
-                <div style={threadMain}>
-                  <div style={threadTopRow}>
-                    <div style={threadNameRow}>
-                      <div style={threadName}>{title}</div>
-                      {category ? (
-                        <div style={threadCategory}>{category}</div>
-                      ) : null}
-                    </div>
-
-                    <div style={threadMeta}>
-                      <span style={threadTime}>{time}</span>
-                      {t.isUnread ? <span style={unreadDot} /> : null}
-                    </div>
-                  </div>
-
-                  <div
+            {teamChats.length === 0 ? (
+              <div style={miniEmptyBox}>所属チームがありません。</div>
+            ) : (
+              <div style={listWrap}>
+                {teamChats.map((team, index) => (
+                  <Link
+                    key={team.id}
+                    href={`/teams/${team.id}/message`}
                     style={{
-                      ...threadBody,
-                      ...(t.isUnread ? threadBodyUnread : null),
+                      ...threadCard,
+                      borderBottom:
+                        index === teamChats.length - 1
+                          ? "none"
+                          : "1px solid #edf1ee",
                     }}
                   >
-                    {body}
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+                    <div style={avatar}>{buildInitial(team.name)}</div>
+
+                    <div style={threadMain}>
+                      <div style={threadTopRow}>
+                        <div style={threadNameRow}>
+                          <div style={threadName}>
+                            {team.name || "チーム未設定"}
+                          </div>
+                          {team.category ? (
+                            <div style={threadCategory}>{team.category}</div>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div style={threadBody}>チームメンバーへの連絡</div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section style={sectionBox}>
+            <div style={listTitle}>対戦チャット</div>
+
+            {threads.length === 0 ? (
+              <div style={miniEmptyBox}>対戦チームとのチャットはまだありません。</div>
+            ) : (
+              <div style={listWrap}>
+                {threads.map((t, index) => {
+                  const title = t.otherTeamName || "相手チーム";
+                  const category = t.otherTeamCategory || "";
+                  const body = t.lastMessageBody
+                    ? clip(t.lastMessageBody, 46)
+                    : "まだメッセージがありません";
+                  const time = formatLineTime(
+                    t.lastMessageAt ?? t.updated_at ?? t.created_at
+                  );
+
+                  return (
+                    <Link
+                      key={t.id}
+                      href={`/chat/${t.id}?from=chat-list`}
+                      style={{
+                        ...threadCard,
+                        borderBottom:
+                          index === threads.length - 1
+                            ? "none"
+                            : "1px solid #edf1ee",
+                      }}
+                    >
+                      <div style={avatar}>{buildInitial(title)}</div>
+
+                      <div style={threadMain}>
+                        <div style={threadTopRow}>
+                          <div style={threadNameRow}>
+                            <div style={threadName}>{title}</div>
+                            {category ? (
+                              <div style={threadCategory}>{category}</div>
+                            ) : null}
+                          </div>
+
+                          <div style={threadMeta}>
+                            <span style={threadTime}>{time}</span>
+                            {t.isUnread ? <span style={unreadDot} /> : null}
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            ...threadBody,
+                            ...(t.isUnread ? threadBodyUnread : null),
+                          }}
+                        >
+                          {body}
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </>
       )}
     </main>
   );
@@ -535,6 +617,17 @@ const summaryText: React.CSSProperties = {
   marginTop: 4,
   fontSize: 12,
   color: "#66756d",
+};
+
+const sectionBox: React.CSSProperties = {
+  marginTop: 14,
+};
+
+const listTitle: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: "#16391f",
+  marginBottom: 8,
 };
 
 const listWrap: React.CSSProperties = {
@@ -648,4 +741,13 @@ const emptyBox: React.CSSProperties = {
   color: "#666",
   lineHeight: 1.8,
   textAlign: "center",
+};
+
+const miniEmptyBox: React.CSSProperties = {
+  padding: 16,
+  borderRadius: 16,
+  border: "1px solid #e5ece7",
+  background: "#fff",
+  color: "#66756d",
+  lineHeight: 1.7,
 };
