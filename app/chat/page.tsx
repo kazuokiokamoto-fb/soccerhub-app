@@ -7,6 +7,8 @@ import { useAuth } from "@/app/lib/auth";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 
+type ChatTab = "team" | "battle";
+
 type TeamMini = {
   id: string;
   name: string | null;
@@ -188,7 +190,7 @@ export default function ChatListPage() {
   const [teamChats, setTeamChats] = useState<TeamChatRow[]>([]);
   const [threads, setThreads] = useState<ThreadRow[]>([]);
   const [loadError, setLoadError] = useState("");
-  const [teamChatOpen, setTeamChatOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<ChatTab>("team");
 
   const mountedRef = useRef(true);
   const loadingRef = useRef(false);
@@ -478,8 +480,6 @@ export default function ChatListPage() {
     return teamChats.reduce((sum, t) => sum + (t.isUnread ? 1 : 0), 0);
   }, [teamChats]);
 
-  const unreadTotal = teamUnreadTotal + battleUnreadTotal;
-
   return (
     <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
       <AppTabNav />
@@ -511,7 +511,7 @@ export default function ChatListPage() {
         <div style={summaryText}>
           {authLoading || loading
             ? "読み込み中…"
-            : `チーム内 ${teamChats.length}チーム / 対戦 ${threads.length}件 / 未読 ${unreadTotal}件`}
+            : `自チーム未読 ${teamUnreadTotal}件 / 他チーム未読 ${battleUnreadTotal}件`}
         </div>
       </div>
 
@@ -538,22 +538,39 @@ export default function ChatListPage() {
         </div>
       ) : (
         <>
-          <section style={sectionBox}>
+          <div style={tabWrap}>
             <button
               type="button"
-              style={accordionHeader}
-              onClick={() => setTeamChatOpen((prev) => !prev)}
-              aria-expanded={teamChatOpen}
+              style={{
+                ...tabButton,
+                ...(activeTab === "team" ? tabButtonActive : null),
+              }}
+              onClick={() => setActiveTab("team")}
             >
-              <span style={accordionTitle}>チーム内チャット</span>
-              <span style={accordionMeta}>
-                未読 {teamUnreadTotal}件 / {teamChats.length}チーム{" "}
-                {teamChatOpen ? "▲ 閉じる" : "▼ 開く"}
-              </span>
+              自チーム
+              {teamUnreadTotal > 0 ? (
+                <span style={tabUnreadBadge}>{teamUnreadTotal}</span>
+              ) : null}
             </button>
 
-            {teamChatOpen ? (
-              teamChats.length === 0 ? (
+            <button
+              type="button"
+              style={{
+                ...tabButton,
+                ...(activeTab === "battle" ? tabButtonActive : null),
+              }}
+              onClick={() => setActiveTab("battle")}
+            >
+              他チーム
+              {battleUnreadTotal > 0 ? (
+                <span style={tabUnreadBadge}>{battleUnreadTotal}</span>
+              ) : null}
+            </button>
+          </div>
+
+          {activeTab === "team" ? (
+            <section style={sectionBox}>
+              {teamChats.length === 0 ? (
                 <div style={miniEmptyBox}>所属チームがありません。</div>
               ) : (
                 <div style={listWrap}>
@@ -611,71 +628,69 @@ export default function ChatListPage() {
                     );
                   })}
                 </div>
-              )
-            ) : null}
-          </section>
+              )}
+            </section>
+          ) : (
+            <section style={sectionBox}>
+              {threads.length === 0 ? (
+                <div style={miniEmptyBox}>他チームとのチャットはまだありません。</div>
+              ) : (
+                <div style={listWrap}>
+                  {threads.map((t, index) => {
+                    const title = t.otherTeamName || "相手チーム";
+                    const category = t.otherTeamCategory || "";
+                    const body = t.lastMessageBody
+                      ? clip(t.lastMessageBody, 46)
+                      : "まだメッセージがありません";
+                    const time = formatLineTime(
+                      t.lastMessageAt ?? t.updated_at ?? t.created_at
+                    );
 
-          <section style={sectionBox}>
-            <div style={listTitle}>対戦チャット</div>
+                    return (
+                      <Link
+                        key={t.id}
+                        href={`/chat/${t.id}?from=chat-list`}
+                        style={{
+                          ...threadCard,
+                          borderBottom:
+                            index === threads.length - 1
+                              ? "none"
+                              : "1px solid #edf1ee",
+                        }}
+                      >
+                        <div style={avatar}>{buildInitial(title)}</div>
 
-            {threads.length === 0 ? (
-              <div style={miniEmptyBox}>対戦チームとのチャットはまだありません。</div>
-            ) : (
-              <div style={listWrap}>
-                {threads.map((t, index) => {
-                  const title = t.otherTeamName || "相手チーム";
-                  const category = t.otherTeamCategory || "";
-                  const body = t.lastMessageBody
-                    ? clip(t.lastMessageBody, 46)
-                    : "まだメッセージがありません";
-                  const time = formatLineTime(
-                    t.lastMessageAt ?? t.updated_at ?? t.created_at
-                  );
+                        <div style={threadMain}>
+                          <div style={threadTopRow}>
+                            <div style={threadNameRow}>
+                              <div style={threadName}>{title}</div>
+                              {category ? (
+                                <div style={threadCategory}>{category}</div>
+                              ) : null}
+                            </div>
 
-                  return (
-                    <Link
-                      key={t.id}
-                      href={`/chat/${t.id}?from=chat-list`}
-                      style={{
-                        ...threadCard,
-                        borderBottom:
-                          index === threads.length - 1
-                            ? "none"
-                            : "1px solid #edf1ee",
-                      }}
-                    >
-                      <div style={avatar}>{buildInitial(title)}</div>
-
-                      <div style={threadMain}>
-                        <div style={threadTopRow}>
-                          <div style={threadNameRow}>
-                            <div style={threadName}>{title}</div>
-                            {category ? (
-                              <div style={threadCategory}>{category}</div>
-                            ) : null}
+                            <div style={threadMeta}>
+                              <span style={threadTime}>{time}</span>
+                              {t.isUnread ? <span style={unreadDot} /> : null}
+                            </div>
                           </div>
 
-                          <div style={threadMeta}>
-                            <span style={threadTime}>{time}</span>
-                            {t.isUnread ? <span style={unreadDot} /> : null}
+                          <div
+                            style={{
+                              ...threadBody,
+                              ...(t.isUnread ? threadBodyUnread : null),
+                            }}
+                          >
+                            {body}
                           </div>
                         </div>
-
-                        <div
-                          style={{
-                            ...threadBody,
-                            ...(t.isUnread ? threadBodyUnread : null),
-                          }}
-                        >
-                          {body}
-                        </div>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </section>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
         </>
       )}
     </main>
@@ -719,42 +734,50 @@ const summaryText: React.CSSProperties = {
   color: "#66756d",
 };
 
+const tabWrap: React.CSSProperties = {
+  marginTop: 14,
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 10,
+};
+
+const tabButton: React.CSSProperties = {
+  minHeight: 52,
+  borderRadius: 999,
+  border: "1px solid #dce9df",
+  background: "#fff",
+  color: "#16391f",
+  fontSize: 16,
+  fontWeight: 900,
+  cursor: "pointer",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+};
+
+const tabButtonActive: React.CSSProperties = {
+  background: "#145c2a",
+  borderColor: "#145c2a",
+  color: "#fff",
+};
+
+const tabUnreadBadge: React.CSSProperties = {
+  minWidth: 22,
+  height: 22,
+  padding: "0 7px",
+  borderRadius: 999,
+  background: "#ef4444",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 900,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
 const sectionBox: React.CSSProperties = {
   marginTop: 14,
-};
-
-const listTitle: React.CSSProperties = {
-  fontSize: 18,
-  fontWeight: 900,
-  color: "#16391f",
-  marginBottom: 8,
-};
-
-const accordionHeader: React.CSSProperties = {
-  width: "100%",
-  border: "1px solid #dce9df",
-  background: "#f7fbf8",
-  borderRadius: 16,
-  padding: "14px 16px",
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 10,
-  cursor: "pointer",
-  textAlign: "left",
-};
-
-const accordionTitle: React.CSSProperties = {
-  fontSize: 18,
-  fontWeight: 900,
-  color: "#16391f",
-};
-
-const accordionMeta: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 900,
-  color: "#166534",
-  whiteSpace: "nowrap",
 };
 
 const listWrap: React.CSSProperties = {
