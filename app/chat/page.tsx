@@ -13,6 +13,13 @@ type TeamMini = {
   category?: string | null;
 };
 
+type TeamChatRow = TeamMini & {
+  threadId?: string | null;
+  lastMessageBody?: string | null;
+  lastMessageAt?: string | null;
+  isUnread?: boolean;
+};
+
 type ThreadSummary = {
   id: string;
   created_at: string;
@@ -178,7 +185,7 @@ export default function ChatListPage() {
   const { user, loading: authLoading } = useAuth();
 
   const [loading, setLoading] = useState(true);
-  const [teamChats, setTeamChats] = useState<TeamMini[]>([]);
+  const [teamChats, setTeamChats] = useState<TeamChatRow[]>([]);
   const [threads, setThreads] = useState<ThreadRow[]>([]);
   const [loadError, setLoadError] = useState("");
   const [teamChatOpen, setTeamChatOpen] = useState(false);
@@ -243,7 +250,7 @@ export default function ChatListPage() {
         .select("thread_id,last_read_at,created_at")
         .eq("user_id", meId)
         .order("created_at", { ascending: false })
-        .limit(200);
+        .limit(300);
 
       if (myMemberRes.error) throw myMemberRes.error;
 
@@ -284,7 +291,7 @@ export default function ChatListPage() {
           .select("thread_id,body,created_at")
           .in("thread_id", threadIds)
           .order("created_at", { ascending: false })
-          .limit(1000);
+          .limit(1500);
 
         if (msgRes.error) throw msgRes.error;
 
@@ -332,50 +339,70 @@ export default function ChatListPage() {
         }
       }
 
-      const nextTeamChats = myTeamIdList
-        .map((id) => teamMap.get(id) ?? { id, name: "チーム未設定", category: null })
-        .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
+      const internalThreadByTeamId = new Map<string, ThreadRow>();
+      const battleThreads: ThreadRow[] = [];
 
-      const merged: ThreadRow[] = threadRows
-        .map((t) => {
-          const tid = t.id;
-          const memberTeamIds = memberTeamsByThread.get(tid) ?? [];
+      for (const t of threadRows) {
+        const tid = t.id;
+        const memberTeamIds = Array.from(
+          new Set((memberTeamsByThread.get(tid) ?? []).filter(Boolean))
+        );
 
-          const otherTeamId =
-            memberTeamIds.find((id) => !myTeamIds.has(id)) ?? null;
+        const otherTeamId =
+          memberTeamIds.find((id) => !myTeamIds.has(id)) ?? null;
 
-          const otherTeam = otherTeamId ? teamMap.get(otherTeamId) : undefined;
-          const last = lastMsgByThread.get(tid);
-          const myLastReadAt = myLastReadMap.get(tid) ?? null;
+        const last = lastMsgByThread.get(tid);
+        const myLastReadAt = myLastReadMap.get(tid) ?? null;
 
-          let isUnread = false;
-          if (last?.created_at) {
-            if (!myLastReadAt) {
-              isUnread = true;
-            } else {
-              isUnread =
-                new Date(last.created_at).getTime() >
-                new Date(myLastReadAt).getTime();
-            }
+        let isUnread = false;
+        if (last?.created_at) {
+          if (!myLastReadAt) {
+            isUnread = true;
+          } else {
+            isUnread =
+              new Date(last.created_at).getTime() >
+              new Date(myLastReadAt).getTime();
           }
+        }
 
-          return {
-            id: t.id,
-            created_at: t.created_at,
-            updated_at: t.updated_at ?? null,
-            memberTeamIds,
-            myLastReadAt,
+        const base: ThreadRow = {
+          id: t.id,
+          created_at: t.created_at,
+          updated_at: t.updated_at ?? null,
+          memberTeamIds,
+          myLastReadAt,
+          lastMessageBody: last?.body ?? null,
+          lastMessageAt: last?.created_at ?? null,
+          isUnread,
+        };
+
+        if (otherTeamId) {
+          const otherTeam = teamMap.get(otherTeamId);
+
+          battleThreads.push({
+            ...base,
             otherTeamId,
             otherTeamName: otherTeam?.name ?? null,
             otherTeamCategory: otherTeam?.category ?? null,
-            lastMessageBody: last?.body ?? null,
-            lastMessageAt: last?.created_at ?? null,
-            isUnread,
-          };
-        })
-        .filter((t) => !!t.otherTeamId);
+          });
+        } else {
+          const internalTeamId =
+            memberTeamIds.find((id) => myTeamIds.has(id)) ?? "";
 
-      merged.sort((a, b) => {
+          if (internalTeamId) {
+            const current = internalThreadByTeamId.get(internalTeamId);
+            const currentTime =
+              current?.lastMessageAt ?? current?.updated_at ?? current?.created_at ?? "";
+            const nextTime = base.lastMessageAt ?? base.updated_at ?? base.created_at ?? "";
+
+            if (!current || nextTime > currentTime) {
+              internalThreadByTeamId.set(internalTeamId, base);
+            }
+          }
+        }
+      }
+
+      battleThreads.sort((a, b) => {
         const au = a.isUnread ? 1 : 0;
         const bu = b.isUnread ? 1 : 0;
         if (au !== bu) return bu - au;
@@ -385,10 +412,40 @@ export default function ChatListPage() {
         return at > bt ? -1 : 1;
       });
 
+      const nextTeamChats: TeamChatRow[] = myTeamIdList
+        .map((id) => {
+          const team = teamMap.get(id) ?? {
+            id,
+            name: "チーム未設定",
+            category: null,
+          };
+
+          const internal = internalThreadByTeamId.get(id);
+
+          return {
+            ...team,
+            threadId: internal?.id ?? null,
+            lastMessageBody: internal?.lastMessageBody ?? null,
+            lastMessageAt: internal?.lastMessageAt ?? null,
+            isUnread: !!internal?.isUnread,
+          };
+        })
+        .sort((a, b) => {
+          const au = a.isUnread ? 1 : 0;
+          const bu = b.isUnread ? 1 : 0;
+          if (au !== bu) return bu - au;
+
+          const at = a.lastMessageAt ?? "";
+          const bt = b.lastMessageAt ?? "";
+          if (at || bt) return at > bt ? -1 : 1;
+
+          return String(a.name ?? "").localeCompare(String(b.name ?? ""));
+        });
+
       if (!mountedRef.current) return;
 
       setTeamChats(nextTeamChats);
-      setThreads(merged);
+      setThreads(battleThreads);
     } catch (e: any) {
       console.error("chat page load error:", e);
       if (!mountedRef.current) return;
@@ -413,9 +470,15 @@ export default function ChatListPage() {
     };
   }, [loadThreads]);
 
-  const unreadTotal = useMemo(() => {
+  const battleUnreadTotal = useMemo(() => {
     return threads.reduce((sum, t) => sum + (t.isUnread ? 1 : 0), 0);
   }, [threads]);
+
+  const teamUnreadTotal = useMemo(() => {
+    return teamChats.reduce((sum, t) => sum + (t.isUnread ? 1 : 0), 0);
+  }, [teamChats]);
+
+  const unreadTotal = teamUnreadTotal + battleUnreadTotal;
 
   return (
     <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
@@ -448,7 +511,7 @@ export default function ChatListPage() {
         <div style={summaryText}>
           {authLoading || loading
             ? "読み込み中…"
-            : `チーム内 ${teamChats.length}件 / 対戦 ${threads.length}件 / 未読 ${unreadTotal}件`}
+            : `チーム内 ${teamChats.length}チーム / 対戦 ${threads.length}件 / 未読 ${unreadTotal}件`}
         </div>
       </div>
 
@@ -484,7 +547,8 @@ export default function ChatListPage() {
             >
               <span style={accordionTitle}>チーム内チャット</span>
               <span style={accordionMeta}>
-                {teamChats.length}件 {teamChatOpen ? "▲ 閉じる" : "▼ 開く"}
+                未読 {teamUnreadTotal}件 / {teamChats.length}チーム{" "}
+                {teamChatOpen ? "▲ 閉じる" : "▼ 開く"}
               </span>
             </button>
 
@@ -493,36 +557,59 @@ export default function ChatListPage() {
                 <div style={miniEmptyBox}>所属チームがありません。</div>
               ) : (
                 <div style={listWrap}>
-                  {teamChats.map((team, index) => (
-                    <Link
-                      key={team.id}
-                      href={`/teams/${team.id}/message`}
-                      style={{
-                        ...threadCard,
-                        borderBottom:
-                          index === teamChats.length - 1
-                            ? "none"
-                            : "1px solid #edf1ee",
-                      }}
-                    >
-                      <div style={avatar}>{buildInitial(team.name)}</div>
+                  {teamChats.map((team, index) => {
+                    const body = team.lastMessageBody
+                      ? clip(team.lastMessageBody, 46)
+                      : "チームメンバーへの連絡";
+                    const time = formatLineTime(team.lastMessageAt);
 
-                      <div style={threadMain}>
-                        <div style={threadTopRow}>
-                          <div style={threadNameRow}>
-                            <div style={threadName}>
-                              {team.name || "チーム未設定"}
+                    return (
+                      <Link
+                        key={team.id}
+                        href={
+                          team.threadId
+                            ? `/chat/${team.threadId}?from=team-message&teamId=${team.id}`
+                            : `/teams/${team.id}/message`
+                        }
+                        style={{
+                          ...threadCard,
+                          borderBottom:
+                            index === teamChats.length - 1
+                              ? "none"
+                              : "1px solid #edf1ee",
+                        }}
+                      >
+                        <div style={avatar}>{buildInitial(team.name)}</div>
+
+                        <div style={threadMain}>
+                          <div style={threadTopRow}>
+                            <div style={threadNameRow}>
+                              <div style={threadName}>
+                                {team.name || "チーム未設定"}
+                              </div>
+                              {team.category ? (
+                                <div style={threadCategory}>{team.category}</div>
+                              ) : null}
                             </div>
-                            {team.category ? (
-                              <div style={threadCategory}>{team.category}</div>
-                            ) : null}
+
+                            <div style={threadMeta}>
+                              <span style={threadTime}>{time}</span>
+                              {team.isUnread ? <span style={unreadDot} /> : null}
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              ...threadBody,
+                              ...(team.isUnread ? threadBodyUnread : null),
+                            }}
+                          >
+                            {body}
                           </div>
                         </div>
-
-                        <div style={threadBody}>チームメンバーへの連絡</div>
-                      </div>
-                    </Link>
-                  ))}
+                      </Link>
+                    );
+                  })}
                 </div>
               )
             ) : null}
