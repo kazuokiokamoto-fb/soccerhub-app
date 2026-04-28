@@ -39,9 +39,9 @@ export default function TeamChatRedirectPage() {
           return;
         }
 
-        // ⭐️ ここが超重要（RPCでスレッド作成/取得）
+        // ✅ 正しいRPC名に修正
         const { data, error } = await supabase.rpc(
-          "rpc_get_or_create_team_chat_thread",
+          "get_or_create_team_chat_thread",
           {
             p_team_id: teamId,
           }
