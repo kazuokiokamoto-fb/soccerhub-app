@@ -22,6 +22,7 @@ export default function TeamChatRedirectPage() {
       setErrorText("");
 
       try {
+        // ログインチェック
         const {
           data: { user },
           error: authError,
@@ -30,6 +31,7 @@ export default function TeamChatRedirectPage() {
         if (authError) throw authError;
 
         const meId = user?.id ?? "";
+
         if (!meId) {
           router.replace(
             `/login?redirect=${encodeURIComponent(`/chat/team/${teamId}`)}`
@@ -37,8 +39,9 @@ export default function TeamChatRedirectPage() {
           return;
         }
 
+        // ⭐️ ここが超重要（RPCでスレッド作成/取得）
         const { data, error } = await supabase.rpc(
-          "get_or_create_team_chat_thread",
+          "rpc_get_or_create_team_chat_thread",
           {
             p_team_id: teamId,
           }
@@ -54,11 +57,16 @@ export default function TeamChatRedirectPage() {
 
         if (cancelled) return;
 
-        router.replace(`/chat/${threadId}?from=team-message&teamId=${teamId}`);
+        // チャット画面へ
+        router.replace(
+          `/chat/${threadId}?from=team-message&teamId=${teamId}`
+        );
       } catch (e: any) {
         console.error("team chat redirect error:", e);
         if (!cancelled) {
-          setErrorText(e?.message ?? "チームチャットを開けませんでした。");
+          setErrorText(
+            e?.message ?? "チームチャットを開けませんでした。"
+          );
         }
       }
     }
