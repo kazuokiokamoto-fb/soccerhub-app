@@ -124,9 +124,7 @@ export default function ChatThreadPage() {
             <div style={titleWrap}>
               <div style={threadTitle}>{chat.otherTeamName}</div>
               <div style={threadSubTitle}>
-                {chat.isTeamChat
-                  ? "チーム内チャット"
-                  : chat.otherTeamCategory || "チャット"}
+                {chat.otherTeamCategory || "チャット"}
               </div>
             </div>
           </div>
@@ -262,9 +260,7 @@ export default function ChatThreadPage() {
                       }}
                     >
                       {!mine ? (
-                        <div style={senderName}>
-                          {chat.isTeamChat ? "メンバー" : chat.otherTeamName}
-                        </div>
+                        <div style={senderName}>{chat.otherTeamName}</div>
                       ) : null}
 
                       {mine ? (

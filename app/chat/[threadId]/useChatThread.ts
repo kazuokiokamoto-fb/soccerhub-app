@@ -323,7 +323,6 @@ export function useChatThread(params: {
       if (error) throw error;
 
       setMyAttendance(status);
-
       await sendAttendanceMessage(status);
     } catch (e: any) {
       console.error(e);
@@ -361,6 +360,52 @@ export function useChatThread(params: {
     setMemberRowsState(typedMemberRows);
     setMyOwnedTeams(ownedTeams);
 
+    const teamIds = typedMemberRows
+      .map((r) => r.team_id as string)
+      .filter(Boolean);
+
+    const uniqueTeamIds = Array.from(new Set(teamIds));
+
+    const otherMemberRow =
+      typedMemberRows.find((r) => r.user_id && r.user_id !== currentMeId) ??
+      null;
+
+    setOtherUserId(otherMemberRow?.user_id ?? "");
+    setOtherLastReadAt(otherMemberRow?.last_read_at ?? null);
+
+    if (isTeamChat) {
+      const targetTeamId = teamId || uniqueTeamIds[0] || "";
+
+      setMyTeamId(targetTeamId);
+      setOtherTeamId(targetTeamId);
+
+      if (targetTeamId) {
+        const { data: teamRow, error: teamErr } = await supabase
+          .from("teams")
+          .select("id,name,category")
+          .eq("id", targetTeamId)
+          .maybeSingle();
+
+        if (teamErr) console.error(teamErr);
+
+        if (teamRow) {
+          const team = teamRow as TeamMini;
+          setOtherTeamName(team.name ?? "チーム内チャット");
+          setOtherTeamCategory(
+            categoryLabel(team.category) || team.category || "チーム内チャット"
+          );
+        } else {
+          setOtherTeamName("チーム内チャット");
+          setOtherTeamCategory("");
+        }
+      } else {
+        setOtherTeamName("チーム内チャット");
+        setOtherTeamCategory("");
+      }
+
+      return;
+    }
+
     const resolvedMyTeamId = resolveMyTeamId({
       meId: currentMeId,
       memberRows: typedMemberRows,
@@ -370,17 +415,6 @@ export function useChatThread(params: {
     setMyTeamId(resolvedMyTeamId);
 
     const ownedTeamIds = new Set(ownedTeams.map((t) => t.id).filter(Boolean));
-
-    const teamIds = typedMemberRows
-      .map((r) => r.team_id as string)
-      .filter(Boolean);
-
-    const otherMemberRow =
-      typedMemberRows.find((r) => r.user_id && r.user_id !== currentMeId) ??
-      null;
-
-    setOtherUserId(otherMemberRow?.user_id ?? "");
-    setOtherLastReadAt(otherMemberRow?.last_read_at ?? null);
 
     const resolvedOtherTeamId =
       teamIds.find((id) => !ownedTeamIds.has(id)) ??
@@ -408,36 +442,23 @@ export function useChatThread(params: {
         setOtherTeamName("相手チーム");
         setOtherTeamCategory("");
       }
-    } else if (isTeamChat) {
-      const targetTeamId = teamId || resolvedMyTeamId;
-
-      if (targetTeamId) {
-        const { data: teamRow, error: teamErr } = await supabase
-          .from("teams")
-          .select("id,name,category")
-          .eq("id", targetTeamId)
-          .maybeSingle();
-
-        if (teamErr) console.error(teamErr);
-
-        if (teamRow) {
-          const team = teamRow as TeamMini;
-          setOtherTeamName(team.name ?? "チーム内チャット");
-          setOtherTeamCategory(
-            categoryLabel(team.category) || team.category || "チーム内チャット"
-          );
-        } else {
-          setOtherTeamName("チーム内チャット");
-          setOtherTeamCategory("");
-        }
-      } else {
-        setOtherTeamName("チーム内チャット");
-        setOtherTeamCategory("");
-      }
     } else {
       setOtherTeamName("相手チーム");
       setOtherTeamCategory("");
     }
+  }
+
+  function resolveSendTeamId() {
+    if (isTeamChat && teamId) return teamId;
+
+    return (
+      myTeamId ||
+      resolveMyTeamId({
+        meId,
+        memberRows: memberRowsState,
+        ownedTeams: myOwnedTeams,
+      })
+    );
   }
 
   async function insertMessage(body: string) {
@@ -446,13 +467,7 @@ export function useChatThread(params: {
     if (!threadId) return;
     if (!isMember) return;
 
-    const resolvedSendTeamId =
-      myTeamId ||
-      resolveMyTeamId({
-        meId,
-        memberRows: memberRowsState,
-        ownedTeams: myOwnedTeams,
-      });
+    const resolvedSendTeamId = resolveSendTeamId();
 
     if (!resolvedSendTeamId) {
       setSendError(
@@ -492,33 +507,6 @@ export function useChatThread(params: {
 
     scrollToBottom(true);
 
-    if (otherUserId) {
-      const pushBody = body.length > 40 ? `${body.slice(0, 40)}…` : body;
-      const pushUrl = `/chat/${threadId}${
-        carriedQueryString ? `?${carriedQueryString}` : ""
-      }`;
-
-      try {
-        const pushRes = await fetch("/api/push/send", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: otherUserId,
-            title: "新着チャット",
-            body: pushBody,
-            url: pushUrl,
-          }),
-        });
-
-        if (!pushRes.ok) {
-          const pushJson = await pushRes.json().catch(() => null);
-          console.error("push send error:", pushJson ?? pushRes.statusText);
-        }
-      } catch (e) {
-        console.error("push send fetch error:", e);
-      }
-    }
-
     await markRead();
     await refreshChatBadge();
   }
@@ -547,13 +535,7 @@ export function useChatThread(params: {
     if (!isMember) return alert("このスレッドに参加していません");
     if (sending) return;
 
-    const resolvedSendTeamId =
-      myTeamId ||
-      resolveMyTeamId({
-        meId,
-        memberRows: memberRowsState,
-        ownedTeams: myOwnedTeams,
-      });
+    const resolvedSendTeamId = resolveSendTeamId();
 
     if (!resolvedSendTeamId) {
       setSendError(
@@ -754,13 +736,7 @@ export function useChatThread(params: {
     if (!threadId) return alert("threadId がありません");
     if (!isMember) return alert("このスレッドに参加していません");
 
-    const resolvedMyTeamId =
-      myTeamId ||
-      resolveMyTeamId({
-        meId,
-        memberRows: memberRowsState,
-        ownedTeams: myOwnedTeams,
-      });
+    const resolvedMyTeamId = resolveSendTeamId();
 
     if (!resolvedMyTeamId) {
       alert("自分のチーム情報が取得できません");
@@ -928,7 +904,7 @@ export function useChatThread(params: {
       setOtherUserId("");
       setOtherLastReadAt(null);
       setSendError("");
-      setOtherTeamName("相手チーム");
+      setOtherTeamName(isTeamChat ? "チーム内チャット" : "相手チーム");
       setOtherTeamCategory("");
 
       const { data: mem, error: memErr } = await supabase
@@ -972,7 +948,7 @@ export function useChatThread(params: {
 
       await markRead();
     })();
-  }, [authLoading, meId, threadId]);
+  }, [authLoading, meId, threadId, isTeamChat]);
 
   useEffect(() => {
     if (!loading) {
