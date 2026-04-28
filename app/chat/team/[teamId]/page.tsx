@@ -5,22 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
 
-type TeamMemberRow = {
-  team_id: string;
-  user_id: string;
-  role?: string | null;
-};
-
-type ChatMemberRow = {
-  thread_id: string;
-  user_id: string | null;
-  team_id: string | null;
-};
-
-function uniqueValues(values: Array<string | null | undefined>) {
-  return Array.from(new Set(values.filter((v): v is string => !!v)));
-}
-
 export default function TeamChatRedirectPage() {
   const params = useParams<{ teamId: string }>();
   const router = useRouter();
@@ -53,126 +37,19 @@ export default function TeamChatRedirectPage() {
           return;
         }
 
-        const { data: teamRow, error: teamError } = await supabase
-          .from("teams")
-          .select("id,owner_id")
-          .eq("id", teamId)
-          .maybeSingle();
-
-        if (teamError) throw teamError;
-
-        if (!teamRow) {
-          throw new Error("チームが見つかりません。");
-        }
-
-        const ownerId = String((teamRow as any).owner_id ?? "");
-
-        const { data: memberRowsRaw, error: memberError } = await supabase
-          .from("team_members")
-          .select("team_id,user_id,role")
-          .eq("team_id", teamId);
-
-        if (memberError) throw memberError;
-
-        const memberRows = ((memberRowsRaw ?? []) as TeamMemberRow[]).filter(
-          Boolean
-        );
-
-        const teamUserIds = uniqueValues([
-          ownerId,
-          ...memberRows.map((row) => row.user_id),
-        ]);
-
-        const isAllowed = teamUserIds.includes(meId);
-
-        if (!isAllowed) {
-          throw new Error("このチームのチャットを見る権限がありません。");
-        }
-
-        const { data: existingTeamMembersRaw, error: existingMemberError } =
-          await supabase
-            .from("chat_members")
-            .select("thread_id,user_id,team_id")
-            .eq("team_id", teamId);
-
-        if (existingMemberError) throw existingMemberError;
-
-        const existingTeamMembers = (
-          (existingTeamMembersRaw ?? []) as ChatMemberRow[]
-        ).filter(Boolean);
-
-        const candidateThreadIds = uniqueValues(
-          existingTeamMembers.map((row) => row.thread_id)
-        );
-
-        let existingThreadId = "";
-
-        if (candidateThreadIds.length > 0) {
-          const { data: allCandidateMembersRaw, error: allCandidateError } =
-            await supabase
-              .from("chat_members")
-              .select("thread_id,user_id,team_id")
-              .in("thread_id", candidateThreadIds);
-
-          if (allCandidateError) throw allCandidateError;
-
-          const allCandidateMembers = (
-            (allCandidateMembersRaw ?? []) as ChatMemberRow[]
-          ).filter(Boolean);
-
-          for (const threadId of candidateThreadIds) {
-            const rows = allCandidateMembers.filter(
-              (row) => row.thread_id === threadId
-            );
-
-            const teamIdsInThread = uniqueValues(rows.map((row) => row.team_id));
-
-            const hasOnlyThisTeam =
-            teamIdsInThread.length === 1 && teamIdsInThread[0] === teamId;
-
-            const hasMe = rows.some((row) => row.user_id === meId);
-
-            const memberUserIds = uniqueValues(rows.map((row) => row.user_id));
-
-            const isSameMembers =
-            memberUserIds.length === teamUserIds.length &&
-            memberUserIds.every((id) => teamUserIds.includes(id));
-
-            if (hasOnlyThisTeam && hasMe && isSameMembers) {
-            existingThreadId = threadId;
-            break;
-            }
+        const { data, error } = await supabase.rpc(
+          "get_or_create_team_chat_thread",
+          {
+            p_team_id: teamId,
           }
-        }
+        );
 
-        let threadId = existingThreadId;
+        if (error) throw error;
+
+        const threadId = String(data ?? "");
 
         if (!threadId) {
-          const { data: threadRow, error: threadError } = await supabase
-            .from("chat_threads")
-            .insert({})
-            .select("id")
-            .single();
-
-          if (threadError) throw threadError;
-
-          threadId = String((threadRow as any)?.id ?? "");
-
-          if (!threadId) {
-            throw new Error("チームチャットの作成に失敗しました。");
-          }
-
-          const insertRows = teamUserIds.map((userId) => ({
-            thread_id: threadId,
-            user_id: userId,
-            team_id: teamId,
-          }));
-
-          const { error: insertMembersError } = await supabase
-            .from("chat_members")
-            .insert(insertRows);
-
-          if (insertMembersError) throw insertMembersError;
+          throw new Error("チームチャットの作成に失敗しました。");
         }
 
         if (cancelled) return;
