@@ -122,7 +122,9 @@ export default function ChatThreadPage() {
             </Link>
 
             <div style={titleWrap}>
-              <div style={threadTitle}>{chat.otherTeamName}</div>
+              <div style={threadTitle}>
+                {chat.otherTeamName || "チャット"}
+              </div>
               <div style={threadSubTitle}>
                 {chat.otherTeamCategory || "チャット"}
               </div>
