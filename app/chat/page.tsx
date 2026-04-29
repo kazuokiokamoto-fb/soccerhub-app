@@ -1,6 +1,13 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
@@ -190,6 +197,15 @@ function tabFromQuery(value: string | null): ChatTab {
 }
 
 export default function ChatListPage() {
+  return (
+    <Suspense fallback={<main style={{ padding: 16 }}>読み込み中…</main>}>
+      <ChatListPageInner />
+    </Suspense>
+  );
+}
+
+function ChatListPageInner() {
+  
   const { user, loading: authLoading } = useAuth();
   const searchParams = useSearchParams();
 
