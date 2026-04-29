@@ -671,7 +671,7 @@ export default function MyScheduleInner() {
         }
       />
 
-      <div style={topNavWrap}>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
         <Link href="/match/my-schedule/calendar" className="sh-btn">
           カレンダー
         </Link>

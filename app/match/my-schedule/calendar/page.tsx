@@ -413,7 +413,7 @@ export default function MyScheduleCalendarPage() {
         desc="予定を月表示で確認できます。決定と交渉を色分け表示します。"
       />
 
-      <div style={topNavWrap}>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
         <Link href="/match/my-schedule" className="sh-btn sh-btn--primary">
           予定一覧
         </Link>

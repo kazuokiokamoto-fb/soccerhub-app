@@ -256,7 +256,7 @@ function NewMyScheduleInner() {
         desc="サカまっちを使っていない相手との練習試合も登録できます。"
       />
 
-      <div style={topNav}>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
         <Link href="/match/my-schedule" className="sh-btn">
           予定一覧
         </Link>
