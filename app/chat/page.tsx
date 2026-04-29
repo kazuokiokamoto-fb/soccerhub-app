@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
 import AppHero from "@/app/components/AppHero";
@@ -183,19 +184,31 @@ function buildInitial(name?: string | null) {
   return v.slice(0, 1);
 }
 
+function tabFromQuery(value: string | null): ChatTab {
+  if (value === "other" || value === "battle") return "battle";
+  return "team";
+}
+
 export default function ChatListPage() {
   const { user, loading: authLoading } = useAuth();
+  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [teamChats, setTeamChats] = useState<TeamChatRow[]>([]);
   const [threads, setThreads] = useState<ThreadRow[]>([]);
   const [loadError, setLoadError] = useState("");
-  const [activeTab, setActiveTab] = useState<ChatTab>("team");
+  const [activeTab, setActiveTab] = useState<ChatTab>(() =>
+    tabFromQuery(searchParams.get("tab"))
+  );
 
   const mountedRef = useRef(true);
   const loadingRef = useRef(false);
 
   const meId = user?.id ?? "";
+
+  useEffect(() => {
+    setActiveTab(tabFromQuery(searchParams.get("tab")));
+  }, [searchParams]);
 
   const loadThreads = useCallback(async () => {
     if (authLoading) return;
@@ -244,7 +257,9 @@ export default function ChatListPage() {
         return id || null;
       });
 
-      const myTeamIdList = Array.from(new Set([...ownerTeamIds, ...memberTeamIds]));
+      const myTeamIdList = Array.from(
+        new Set([...ownerTeamIds, ...memberTeamIds])
+      );
       const myTeamIds = new Set<string>(myTeamIdList);
 
       const myMemberRes = await supabase
@@ -391,7 +406,10 @@ export default function ChatListPage() {
           if (internalTeamId) {
             const current = internalThreadByTeamId.get(internalTeamId);
             const currentTime =
-              current?.lastMessageAt ?? current?.updated_at ?? current?.created_at ?? "";
+              current?.lastMessageAt ??
+              current?.updated_at ??
+              current?.created_at ??
+              "";
             const nextTime =
               base.lastMessageAt ?? base.updated_at ?? base.created_at ?? "";
 
@@ -583,7 +601,7 @@ export default function ChatListPage() {
                   {teamChats.map((team, index) => {
                     const body = team.lastMessageBody
                       ? clip(team.lastMessageBody, 46)
-                      : "まだメッセージがありません"; // ← ここに変更
+                      : "まだメッセージがありません";
                     const time = formatLineTime(team.lastMessageAt);
 
                     return (
@@ -655,7 +673,7 @@ export default function ChatListPage() {
                     return (
                       <Link
                         key={t.id}
-                        href={`/chat/${t.id}?from=chat-list`}
+                        href={`/chat/${t.id}?from=chat-list&tab=other`}
                         style={{
                           ...threadCard,
                           borderBottom:
