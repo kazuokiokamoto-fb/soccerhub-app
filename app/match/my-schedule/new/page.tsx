@@ -258,7 +258,7 @@ function NewMyScheduleInner() {
 
       <div style={topNav}>
         <Link href="/match/my-schedule" className="sh-btn">
-          ← 予定一覧
+          予定一覧
         </Link>
       </div>
 
