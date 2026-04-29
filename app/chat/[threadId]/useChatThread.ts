@@ -56,7 +56,7 @@ export function useChatThread(params: {
   const slotId = params.query?.slotId ?? params.slotId ?? null;
   const date = params.query?.date ?? params.date ?? null;
   const teamId = params.query?.teamId ?? params.teamId ?? null;
-  const isTeamChat = from === "team-message" || !!teamId;
+  const isTeamChat = from === "team-message";
 
   const backLink = useMemo(
     () => getBackLink({ from, slotId, date }),
@@ -948,7 +948,7 @@ export function useChatThread(params: {
 
       await markRead();
     })();
-  }, [authLoading, meId, threadId, isTeamChat]);
+  }, [authLoading, meId, threadId, isTeamChat, teamId]);
 
   useEffect(() => {
     if (!loading) {
