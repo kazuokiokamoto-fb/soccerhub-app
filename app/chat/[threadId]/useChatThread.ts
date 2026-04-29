@@ -66,8 +66,11 @@ export function useChatThread(params: {
       };
     }
 
-    return getBackLink({ from, slotId, date });
-  }, [isTeamChat, from, slotId, date]);
+    return {
+      href: "/chat?tab=other",
+      label: "チャット一覧",
+    };
+  }, [isTeamChat]);
 
   const carriedQueryString = useMemo(() => {
     const qs = new URLSearchParams();
