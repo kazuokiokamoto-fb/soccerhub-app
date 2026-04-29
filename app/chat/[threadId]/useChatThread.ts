@@ -58,10 +58,16 @@ export function useChatThread(params: {
   const teamId = params.query?.teamId ?? params.teamId ?? null;
   const isTeamChat = from === "team-message";
 
-  const backLink = useMemo(
-    () => getBackLink({ from, slotId, date }),
-    [from, slotId, date]
-  );
+  const backLink = useMemo(() => {
+    if (isTeamChat) {
+      return {
+        href: "/chat?tab=my",
+        label: "チャット一覧",
+      };
+    }
+
+    return getBackLink({ from, slotId, date });
+  }, [isTeamChat, from, slotId, date]);
 
   const carriedQueryString = useMemo(() => {
     const qs = new URLSearchParams();
