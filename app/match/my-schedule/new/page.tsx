@@ -257,7 +257,7 @@ function NewMyScheduleInner() {
       />
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-        <Link href="/match/my-schedule" className="sh-btn">
+        <Link href="/match/my-schedule" className="sh-btn sh-btn--primary">
           予定一覧
         </Link>
       </div>
