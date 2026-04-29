@@ -143,7 +143,7 @@ export default function ChatThreadPage() {
               </button>
             ) : null}
 
-            {chat.otherTeamId && !chat.isTeamChat ? (
+            {chat.otherTeamId ? (
               <Link
                 href={`/teams/${chat.otherTeamId}${
                   chat.carriedQueryString ? `?${chat.carriedQueryString}` : ""
