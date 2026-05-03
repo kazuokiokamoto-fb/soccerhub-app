@@ -30,18 +30,10 @@ function getEnvOrThrow() {
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
 
-  if (!supabaseUrl) {
-    throw new Error("Missing env: NEXT_PUBLIC_SUPABASE_URL");
-  }
-  if (!serviceRoleKey) {
-    throw new Error("Missing env: SUPABASE_SERVICE_ROLE_KEY");
-  }
-  if (!vapidPublicKey) {
-    throw new Error("Missing env: NEXT_PUBLIC_VAPID_PUBLIC_KEY");
-  }
-  if (!vapidPrivateKey) {
-    throw new Error("Missing env: VAPID_PRIVATE_KEY");
-  }
+  if (!supabaseUrl) throw new Error("Missing env: NEXT_PUBLIC_SUPABASE_URL");
+  if (!serviceRoleKey) throw new Error("Missing env: SUPABASE_SERVICE_ROLE_KEY");
+  if (!vapidPublicKey) throw new Error("Missing env: NEXT_PUBLIC_VAPID_PUBLIC_KEY");
+  if (!vapidPrivateKey) throw new Error("Missing env: VAPID_PRIVATE_KEY");
 
   return {
     supabaseUrl,
@@ -73,43 +65,32 @@ function ensureWebPushConfigured() {
 }
 
 // =========================
-// チャット未読数を算出
-// 自分が最後に送ったスレッドは未読にしない
+// 未読数計算
 // =========================
 async function getUnreadChatCount(userId: string) {
   const supabase = createSupabaseAdmin();
 
-  const { data: memberRows, error: memberErr } = await supabase
+  const { data: memberRows } = await supabase
     .from("chat_members")
     .select("thread_id,last_read_at")
     .eq("user_id", userId);
-
-  if (memberErr) {
-    console.error("chat unread member error:", memberErr);
-    return 0;
-  }
 
   const members = (memberRows ?? []) as ChatMemberRow[];
   const threadIds = members.map((x) => x.thread_id).filter(Boolean);
 
   if (threadIds.length === 0) return 0;
 
-  const { data: msgRows, error: msgErr } = await supabase
+  const { data: msgRows } = await supabase
     .from("chat_messages")
     .select("id,thread_id,sender_id,created_at,deleted_at,deleted_for_everyone")
     .in("thread_id", threadIds)
     .order("created_at", { ascending: false })
     .limit(3000);
 
-  if (msgErr) {
-    console.error("chat unread message error:", msgErr);
-    return 0;
-  }
-
   const messages = ((msgRows ?? []) as ChatMessageRow[]).filter((m) => {
     if (!m) return false;
     if (m.deleted_at) return false;
-    if (m.deleted_for_everyone === true) return false;
+    if (m.deleted_for_everyone) return false;
     return true;
   });
 
@@ -127,11 +108,10 @@ async function getUnreadChatCount(userId: string) {
     const latest = latestByThread.get(member.thread_id);
     if (!latest?.created_at) continue;
 
-    // 自分が最後に送ったスレッドは未読にしない
     if (latest.sender_id === userId) continue;
 
     if (!member.last_read_at) {
-      unread += 1;
+      unread++;
       continue;
     }
 
@@ -139,17 +119,22 @@ async function getUnreadChatCount(userId: string) {
       new Date(latest.created_at).getTime() >
       new Date(member.last_read_at).getTime()
     ) {
-      unread += 1;
+      unread++;
     }
   }
 
   return unread;
 }
 
-// 必要なら今後ここで通知やオファーも合算
 async function getUnifiedBadgeCount(userId: string) {
-  const unreadChatCount = await getUnreadChatCount(userId);
-  return unreadChatCount;
+  return getUnreadChatCount(userId);
+}
+
+// =========================
+// ★ここが重要：遅延追加
+// =========================
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function POST(req: Request) {
@@ -170,6 +155,9 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+
+    // ★ここ追加（重要）
+    await wait(300);
 
     const badgeCount = await getUnifiedBadgeCount(userId);
 
@@ -212,12 +200,11 @@ export async function POST(req: Request) {
           },
           payload
         );
-        sent += 1;
+        sent++;
       } catch (e: any) {
         console.error("push send error:", e?.message ?? e);
 
-        const statusCode = e?.statusCode;
-        if (statusCode === 404 || statusCode === 410) {
+        if (e?.statusCode === 404 || e?.statusCode === 410) {
           await supabase
             .from("push_subscriptions")
             .delete()

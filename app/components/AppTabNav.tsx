@@ -104,8 +104,11 @@ export default function AppTabNav() {
       <div style={tabRow}>
         {TABS.map((tab) => {
           const active = isActive(pathname, tab.href);
-          const isChatTab = tab.href === "/chat";
-          const showBadge = isChatTab && badgeCount > 0;
+
+          // ★ここを修正（ホームにもバッジ表示）
+          const showBadge =
+            (tab.href === "/" || tab.href === "/chat") &&
+            badgeCount > 0;
 
           return (
             <Link

@@ -89,13 +89,11 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     (async () => {
       try {
-        const nav = self.navigator;
-
-        if ("setAppBadge" in nav) {
+        if ("setAppBadge" in self) {
           if (data.badgeCount > 0) {
-            await nav.setAppBadge(data.badgeCount);
-          } else if ("clearAppBadge" in nav) {
-            await nav.clearAppBadge();
+            await self.setAppBadge(data.badgeCount);
+          } else if ("clearAppBadge" in self) {
+            await self.clearAppBadge();
           }
         }
       } catch (e) {

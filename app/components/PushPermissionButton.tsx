@@ -90,9 +90,16 @@ export default function PushPermissionButton() {
     void checkCurrentSubscription();
   }, [supported, permission]);
 
+  // ★ 修正① Service Worker登録
+  async function ensureSW() {
+    await navigator.serviceWorker.register("/sw.js");
+    return navigator.serviceWorker.ready;
+  }
+
   async function checkCurrentSubscription() {
     try {
-      const registration = await navigator.serviceWorker.ready;
+      const registration = await ensureSW();
+
       const subscription = await registration.pushManager.getSubscription();
 
       if (!subscription?.endpoint) {
@@ -133,14 +140,12 @@ export default function PushPermissionButton() {
     if (loading) return;
 
     if (ios && !safariOnIos) {
-      alert(
-        "iPhone / iPadでは、Safariで開いてホーム画面に追加したアプリから通知設定してください。"
-      );
+      alert("Safariで開いてください");
       return;
     }
 
     if (ios && !isStandaloneMode()) {
-      alert("Safariで開いてホーム画面に追加してください");
+      alert("ホーム画面に追加してください");
       return;
     }
 
@@ -164,23 +169,22 @@ export default function PushPermissionButton() {
         return;
       }
 
-      const registration = await navigator.serviceWorker.ready;
+      // ★ 修正② Service Worker登録
+      const registration = await ensureSW();
 
       const VAPID_PUBLIC_KEY =
         "BFISQsrF1NiWyt3PN2ru0Xvykn2QxVwn1M1pjeYuVT3JSLtjd3uz7NSWdB1i8RqkKAQ2j7HTYAh_wa5sLkvLk24";
 
       const vapidKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
-        console.log("VAPID_PUBLIC_KEY", VAPID_PUBLIC_KEY);
-        console.log("VAPID length", VAPID_PUBLIC_KEY.length);
-        console.log("converted vapid key length", vapidKey.length);
 
-      const existingSubscription = await registration.pushManager.getSubscription();
+      const existingSubscription =
+        await registration.pushManager.getSubscription();
 
       const subscription =
         existingSubscription ||
         (await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: vapidKey,
+          userVisibleOnly: true,
+          applicationServerKey: vapidKey,
         }));
 
       const sub = subscription.toJSON();
@@ -212,17 +216,17 @@ export default function PushPermissionButton() {
       );
 
       if (error) {
-        console.error("push_subscriptions upsert error:", error);
-        alert(`保存失敗: ${error.message}`);
+        console.error(error);
+        alert("保存失敗");
         return;
       }
 
       setPermission("granted");
       setSubscriptionState("registered");
-      alert("この端末の通知設定が完了しました");
+      alert("通知設定完了");
     } catch (e: any) {
       console.error(e);
-      alert(e?.message ?? "通知設定に失敗しました");
+      alert(e?.message ?? "通知設定失敗");
     } finally {
       setLoading(false);
     }
@@ -230,50 +234,27 @@ export default function PushPermissionButton() {
 
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      {showIosGuide ? (
-        <div
-          style={{
-            padding: 12,
-            borderRadius: 12,
-            border: "1px solid #fde68a",
-            background: "#fffbeb",
-            color: "#92400e",
-            lineHeight: 1.7,
-            fontSize: 14,
-          }}
-        >
-          iPhone / iPadで通知を受け取るには、
-          <br />
-          <b>Safariで開いて、ホーム画面に追加</b>
-          してからご利用ください。
+      {showIosGuide && (
+        <div style={{ padding: 12, background: "#fffbeb" }}>
+          Safariで開いてホーム画面に追加してください
         </div>
-      ) : null}
+      )}
 
       {!supported ? (
-        <button type="button" className="sh-btn" disabled>
-          この環境では通知未対応
+        <button className="sh-btn" disabled>
+          未対応
         </button>
       ) : permission !== "granted" ? (
-        <button
-          type="button"
-          className="sh-btn sh-btn--primary"
-          onClick={subscribeCurrentDevice}
-          disabled={loading}
-        >
-          {loading ? "確認中…" : "通知を許可する"}
+        <button className="sh-btn sh-btn--primary" onClick={subscribeCurrentDevice}>
+          通知を許可
         </button>
       ) : subscriptionState === "registered" ? (
-        <button type="button" className="sh-btn" disabled>
-          この端末は通知設定済み
+        <button className="sh-btn" disabled>
+          設定済み
         </button>
       ) : (
-        <button
-          type="button"
-          className="sh-btn sh-btn--primary"
-          onClick={subscribeCurrentDevice}
-          disabled={loading}
-        >
-          {loading ? "登録中…" : "この端末を通知対象に登録する"}
+        <button className="sh-btn sh-btn--primary" onClick={subscribeCurrentDevice}>
+          この端末を登録
         </button>
       )}
     </div>
