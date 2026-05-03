@@ -61,6 +61,7 @@ type MyScheduleItem = {
   id: string;
   slotId: string;
   teamId: string;
+  opponentTeamId: string | null;
   date: string;
   startTime: string | null;
   endTime: string | null;
@@ -314,7 +315,6 @@ export default function MyScheduleInner() {
       if (allTeamsError) throw allTeamsError;
 
       const allTeams = Array.isArray(allTeamsRaw) ? allTeamsRaw : [];
-
       const teamMap = new Map(allTeams.map((t: any) => [t.id, t]));
 
       const today = ymdToday();
@@ -409,12 +409,14 @@ export default function MyScheduleInner() {
 
       const hostedItems: MyScheduleItem[] = hostedSlots.map((slot) => {
         const req = hostedRequestBySlotId.get(slot.id);
-        const opponentTeam = req ? teamMap.get(req.requester_team_id) : null;
+        const opponentTeamId = req?.requester_team_id ?? null;
+        const opponentTeam = opponentTeamId ? teamMap.get(opponentTeamId) : null;
 
         return {
           id: `host:${slot.id}`,
           slotId: slot.id,
           teamId: slot.host_team_id,
+          opponentTeamId,
           date: slot.date,
           startTime: slot.start_time,
           endTime: slot.end_time,
@@ -437,7 +439,8 @@ export default function MyScheduleInner() {
 
       const requesterItems: MyScheduleItem[] = requesterSlots.map((slot) => {
         const req = requesterRequestBySlotId.get(slot.id);
-        const hostTeam = teamMap.get(slot.host_team_id);
+        const hostTeamId = slot.host_team_id;
+        const hostTeam = teamMap.get(hostTeamId);
         const myRequestTeamId =
           req?.requester_team_id && myTeamIds.includes(req.requester_team_id)
             ? req.requester_team_id
@@ -447,6 +450,7 @@ export default function MyScheduleInner() {
           id: `guest:${slot.id}`,
           slotId: slot.id,
           teamId: myRequestTeamId,
+          opponentTeamId: hostTeamId,
           date: slot.date,
           startTime: slot.start_time,
           endTime: slot.end_time,
@@ -484,7 +488,9 @@ export default function MyScheduleInner() {
       }
 
       const slotIds = Array.from(new Set(deduped.map((item) => item.slotId)));
-      const relatedTeamIds = Array.from(new Set(deduped.map((item) => item.teamId)));
+      const relatedTeamIds = Array.from(
+        new Set(deduped.map((item) => item.teamId))
+      );
 
       let myAttendances: AttendanceRow[] = [];
       let allAttendances: AttendanceRow[] = [];
@@ -744,7 +750,14 @@ export default function MyScheduleInner() {
                         type="button"
                         style={cardMainButton}
                         onClick={() => {
-                          window.location.href = `/match/${item.slotId}`;
+                          const qs = new URLSearchParams();
+                          qs.set("teamId", item.teamId);
+                          if (item.opponentTeamId) {
+                            qs.set("opponentTeamId", item.opponentTeamId);
+                          }
+                          qs.set("role", item.role);
+
+                          window.location.href = `/match/${item.slotId}?${qs.toString()}`;
                         }}
                       >
                         <div style={scheduleCardTop}>
@@ -811,7 +824,9 @@ export default function MyScheduleInner() {
                           type="button"
                           className="sh-btn sh-btn--primary"
                           onClick={() => {
-                            const ok = window.confirm("この予定の出欠確認をチームチャットに送りますか？");
+                            const ok = window.confirm(
+                              "この予定の出欠確認をチームチャットに送りますか？"
+                            );
                             if (!ok) return;
 
                             window.location.href = `/chat/team/${item.teamId}?from=attendance&slotId=${item.slotId}&teamId=${item.teamId}`;
@@ -917,13 +932,6 @@ const pageWrap: React.CSSProperties = {
   maxWidth: 980,
   margin: "0 auto",
   padding: 16,
-};
-
-const topNavWrap: React.CSSProperties = {
-  marginTop: 12,
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
 };
 
 const filterBar: React.CSSProperties = {

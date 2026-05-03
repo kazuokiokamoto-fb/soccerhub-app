@@ -118,6 +118,24 @@ function displayMemberName(row: TeamMemberRow) {
   return row.display_name?.trim() || `ユーザー ${row.user_id.slice(0, 8)}`;
 }
 
+function getQueryParams() {
+  if (typeof window === "undefined") {
+    return {
+      teamId: "",
+      opponentTeamId: "",
+      role: "",
+    };
+  }
+
+  const searchParams = new URLSearchParams(window.location.search);
+
+  return {
+    teamId: searchParams.get("teamId") ?? "",
+    opponentTeamId: searchParams.get("opponentTeamId") ?? "",
+    role: searchParams.get("role") ?? "",
+  };
+}
+
 function buildMapUrl(params: {
   venue?: VenueRow | null;
   slot?: SlotRow | null;
@@ -170,7 +188,9 @@ export default function MatchDetailPage() {
   const [venue, setVenue] = useState<VenueRow | null>(null);
 
   const [attendanceTeamId, setAttendanceTeamId] = useState("");
-  const [myAttendance, setMyAttendance] = useState<AttendanceStatus | null>(null);
+  const [myAttendance, setMyAttendance] = useState<AttendanceStatus | null>(
+    null
+  );
   const [attendanceSummary, setAttendanceSummary] =
     useState<AttendanceSummary>(emptySummary());
   const [attendanceNameGroups, setAttendanceNameGroups] =
@@ -184,12 +204,15 @@ export default function MatchDetailPage() {
   const load = async () => {
     if (!slotId || authLoading) return;
 
+    const query = getQueryParams();
+    const queryTeamId = query.teamId;
+    const queryOpponentTeamId = query.opponentTeamId;
+
     setLoading(true);
     setErrorText("");
 
     try {
       let mine: string[] = [];
-      let manageable: string[] = [];
 
       if (myUserId) {
         const { data: myTeamsRaw, error: myTeamsError } = await supabase
@@ -234,16 +257,7 @@ export default function MatchDetailPage() {
         }
 
         const memberTeamIds = memberRows.map((row) => row.team_id);
-
         mine = Array.from(new Set([...ownerTeamIds, ...memberTeamIds]));
-        manageable = Array.from(
-          new Set([
-            ...ownerTeamIds,
-            ...memberRows
-              .filter((row) => row.role === "owner" || row.role === "coach")
-              .map((row) => row.team_id),
-          ])
-        );
       }
 
       const { data: slotData, error: slotError } = await supabase
@@ -293,7 +307,9 @@ export default function MatchDetailPage() {
 
       let nextAttendanceTeamId = "";
 
-      if (mine.includes(nextSlot.host_team_id)) {
+      if (queryTeamId && mine.includes(queryTeamId)) {
+        nextAttendanceTeamId = queryTeamId;
+      } else if (mine.includes(nextSlot.host_team_id)) {
         nextAttendanceTeamId = nextSlot.host_team_id;
       } else if (
         acceptedRequest?.requester_team_id &&
@@ -310,30 +326,41 @@ export default function MatchDetailPage() {
       setAttendanceTeamId(nextAttendanceTeamId);
       setCanSeeAttendanceNames(!!nextAttendanceTeamId);
 
-      let opponentTeamId = nextSlot.host_team_id;
+      let opponentTeamId = "";
 
-      const iAmHost = mine.includes(nextSlot.host_team_id);
-      const iAmRequester =
-        !!acceptedRequest &&
-        mine.includes(acceptedRequest.requester_team_id);
-
-      if (iAmHost && acceptedRequest?.requester_team_id) {
-        opponentTeamId = acceptedRequest.requester_team_id;
-      } else if (iAmRequester) {
-        opponentTeamId = nextSlot.host_team_id;
+      if (
+        queryOpponentTeamId &&
+        (!queryTeamId || queryOpponentTeamId !== queryTeamId)
+      ) {
+        opponentTeamId = queryOpponentTeamId;
       } else {
-        opponentTeamId = nextSlot.host_team_id;
+        const iAmHost = mine.includes(nextSlot.host_team_id);
+        const iAmRequester =
+          !!acceptedRequest &&
+          mine.includes(acceptedRequest.requester_team_id);
+
+        if (iAmHost && acceptedRequest?.requester_team_id) {
+          opponentTeamId = acceptedRequest.requester_team_id;
+        } else if (iAmRequester) {
+          opponentTeamId = nextSlot.host_team_id;
+        } else {
+          opponentTeamId = nextSlot.host_team_id;
+        }
       }
 
-      const { data: teamData, error: teamError } = await supabase
-        .from("teams")
-        .select("*")
-        .eq("id", opponentTeamId)
-        .single();
+      if (opponentTeamId) {
+        const { data: teamData, error: teamError } = await supabase
+          .from("teams")
+          .select("*")
+          .eq("id", opponentTeamId)
+          .maybeSingle();
 
-      if (teamError) throw teamError;
+        if (teamError) throw teamError;
 
-      setOpponentTeam((teamData ?? null) as TeamRow | null);
+        setOpponentTeam((teamData ?? null) as TeamRow | null);
+      } else {
+        setOpponentTeam(null);
+      }
 
       if (nextSlot.venue_id) {
         const { data: venueData, error: venueError } = await supabase
