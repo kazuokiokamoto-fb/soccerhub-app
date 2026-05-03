@@ -852,11 +852,11 @@ export function useChatThread(params: {
       setScheduleModalOpen(false);
 
       if (data?.id) {
-        window.location.href = `/match/schedule-proposals/${data.id}`;
+        window.location.href = "/match/my-schedule";
         return;
       }
 
-      alert("予定案を作成しました。");
+      window.location.href = "/match/my-schedule";
     } catch (e: any) {
       console.error("createScheduleProposal error:", e);
       alert(`予定作成に失敗しました: ${e?.message ?? "unknown error"}`);
