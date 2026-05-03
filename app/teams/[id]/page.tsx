@@ -60,8 +60,17 @@ function buildBackLink(params: {
   from: string | null;
   slotId: string | null;
   date: string | null;
+  threadId: string | null;
 }) {
-  const { from, slotId, date } = params;
+  const { from, slotId, date, threadId } = params;
+
+  if (from === "chat-thread" && threadId) {
+    return {
+      href: `/chat/${threadId}?from=chat-list`,
+      label: "← チャットへ戻る",
+      chatFrom: "chat-list",
+    };
+  }
 
   if (from === "mypage") {
     return {
@@ -123,10 +132,11 @@ export default function TeamDetailPage() {
   const from = searchParams.get("from");
   const slotId = searchParams.get("slotId");
   const date = searchParams.get("date");
+  const threadId = searchParams.get("threadId");
 
   const backConfig = useMemo(() => {
-    return buildBackLink({ from, slotId, date });
-  }, [from, slotId, date]);
+    return buildBackLink({ from, slotId, date, threadId });
+  }, [from, slotId, date, threadId]);
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");

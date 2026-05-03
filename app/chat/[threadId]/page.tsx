@@ -221,8 +221,8 @@ export default function ChatThreadPage() {
 
             {chat.otherTeamId ? (
               <Link
-                href={`/teams/${chat.otherTeamId}${
-                  chat.carriedQueryString ? `?${chat.carriedQueryString}` : ""
+                href={`/teams/${chat.otherTeamId}?from=chat-thread&threadId=${threadId}${
+                  chat.carriedQueryString ? `&${chat.carriedQueryString}` : ""
                 }`}
                 className="sh-btn"
               >
