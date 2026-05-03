@@ -11,7 +11,6 @@ import {
   type ChatMemberRow,
   type ChatQueryParams,
   nowIso,
-  getBackLink,
   resolveMyTeamId,
   isOptimisticMessageId,
   isReadByOther,
@@ -24,10 +23,20 @@ import {
 } from "./chat-thread.utils";
 
 export type ScheduleModalValues = {
+  teamId?: string;
   date: string;
   startTime: string;
   endTime: string;
+  meetupTime?: string;
+  dissolveTime?: string;
+  opponentName?: string;
+  opponentUniform?: string;
   venueName: string;
+  address?: string;
+  category?: string;
+  strength?: string;
+  parking?: string;
+  belongings?: string;
   note: string;
 };
 
@@ -38,6 +47,10 @@ function attendanceLabel(status?: AttendanceStatus | null) {
   if (status === "maybe") return "未定";
   if (status === "absent") return "不参加";
   return "";
+}
+
+function safeTrim(value?: string | null) {
+  return String(value ?? "").trim();
 }
 
 export function useChatThread(params: {
@@ -752,30 +765,47 @@ export function useChatThread(params: {
       return;
     }
 
-    const normalizedDate = values.date.trim()
-      ? normalizeDateCandidate(values.date.trim())
+    const normalizedDate = safeTrim(values.date)
+      ? normalizeDateCandidate(safeTrim(values.date))
       : null;
-    const normalizedStart = values.startTime.trim()
-      ? normalizeTimeCandidate(values.startTime.trim())
+    const normalizedStart = safeTrim(values.startTime)
+      ? normalizeTimeCandidate(safeTrim(values.startTime))
       : null;
-    const normalizedEnd = values.endTime.trim()
-      ? normalizeTimeCandidate(values.endTime.trim())
+    const normalizedEnd = safeTrim(values.endTime)
+      ? normalizeTimeCandidate(safeTrim(values.endTime))
       : null;
 
-    if (values.date.trim() && !normalizedDate) {
+    if (safeTrim(values.date) && !normalizedDate) {
       alert("日付形式が不正です。例: 2026-04-26");
       return;
     }
 
-    if (values.startTime.trim() && !normalizedStart) {
+    if (safeTrim(values.startTime) && !normalizedStart) {
       alert("開始時間形式が不正です。例: 13:00");
       return;
     }
 
-    if (values.endTime.trim() && !normalizedEnd) {
+    if (safeTrim(values.endTime) && !normalizedEnd) {
       alert("終了時間形式が不正です。例: 15:00");
       return;
     }
+
+    const opponentName = safeTrim(values.opponentName) || otherTeamName || "";
+    const opponentUniform = safeTrim(values.opponentUniform);
+    const strength = safeTrim(values.strength);
+    const category = safeTrim(values.category) || otherTeamCategory || "";
+    const address = safeTrim(values.address);
+    const parking = safeTrim(values.parking);
+    const belongings = safeTrim(values.belongings);
+
+    const noteLines = [
+      safeTrim(values.note),
+      opponentUniform ? `相手ユニ色：${opponentUniform}` : "",
+      strength ? `強さ：${strength}` : "",
+      address ? `住所：${address}` : "",
+      parking ? `駐車場・駐輪場：${parking}` : "",
+      belongings ? `持ち物：${belongings}` : "",
+    ].filter(Boolean);
 
     setCreatingProposal(true);
 
@@ -784,7 +814,7 @@ export function useChatThread(params: {
         created_by_user_id: meId,
         created_by_team_id: resolvedMyTeamId,
         opponent_team_id: otherTeamId || null,
-        external_opponent_name: otherTeamId ? null : otherTeamName || null,
+        external_opponent_name: otherTeamId ? null : opponentName || null,
         thread_id: threadId,
         source_message_id: scheduleDefaults.sourceMessageId || null,
         status: otherTeamId ? "pending_approval" : "draft",
@@ -792,15 +822,22 @@ export function useChatThread(params: {
         date: normalizedDate,
         start_time: normalizedStart,
         end_time: normalizedEnd,
-        venue_name: values.venueName.trim() || null,
-        category: otherTeamCategory || null,
-        note: values.note.trim() || null,
+        venue_name: safeTrim(values.venueName) || null,
+        category: category || null,
+        note: noteLines.length > 0 ? noteLines.join("\n") : null,
         extracted_payload: {
           sourceText: scheduleDefaults.sourceText,
           extractedDate: scheduleDefaults.extracted.date,
           extractedStartTime: scheduleDefaults.extracted.startTime,
           extractedEndTime: scheduleDefaults.extracted.endTime,
           extractedVenueName: scheduleDefaults.extracted.venueName,
+          opponentName,
+          opponentUniform,
+          category,
+          strength,
+          address,
+          parking,
+          belongings,
         },
       };
 

@@ -58,6 +58,51 @@ import {
   sheetCancelButton,
 } from "./chat-thread.styles";
 
+function pickLine(body: string, labels: string[]) {
+  const lines = body
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (const label of labels) {
+    const line = lines.find((l) => l.includes(label));
+    if (!line) continue;
+
+    const parts = line.split(/[:：]/);
+    if (parts.length >= 2) {
+      return parts.slice(1).join("：").trim();
+    }
+  }
+
+  return "";
+}
+
+function parseMatchApplication(body?: string | null) {
+  const text = body ?? "";
+
+  const dateTimeMatch = text.match(
+    /(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})[〜~\-–—ー−](\d{1,2}:\d{2})/
+  );
+
+  const categoryMatch =
+    text.match(/🏷\s*([^\n]+)/) ||
+    text.match(/カテゴリ\s*[:：]\s*([^\n]+)/);
+
+  const strengthMatches = Array.from(text.matchAll(/強さ\s*[:：]\s*([A-ZＳＳSABC未設定]+)/g));
+  const firstStrength = strengthMatches[0]?.[1] ?? "";
+
+  return {
+    date: dateTimeMatch?.[1] ?? "",
+    startTime: dateTimeMatch?.[2] ?? "",
+    endTime: dateTimeMatch?.[3] ?? "",
+    opponentName: pickLine(text, ["申込チーム"]),
+    wantedTeamName: pickLine(text, ["募集チーム"]),
+    opponentUniform: pickLine(text, ["相手ユニ色", "ユニ色", "ユニフォーム"]),
+    category: categoryMatch?.[1]?.trim() ?? "",
+    strength: firstStrength,
+  };
+}
+
 export default function ChatThreadPage() {
   const params = useParams<{ threadId: string }>();
   const searchParams = useSearchParams();
@@ -77,6 +122,37 @@ export default function ChatThreadPage() {
       teamId,
     } as any,
   });
+
+  const latestMatchApplicationBody = React.useMemo(() => {
+    const reversed = [...chat.visibleMessages].reverse();
+
+    const found = reversed.find((m) => {
+      const body = m.body ?? "";
+      return body.includes("試合申込") || body.includes("申込チーム");
+    });
+
+    return found?.body ?? "";
+  }, [chat.visibleMessages]);
+
+  const parsedMatchApplication = React.useMemo(() => {
+    return parseMatchApplication(latestMatchApplicationBody);
+  }, [latestMatchApplicationBody]);
+
+  const scheduleDefaultValues = React.useMemo(() => {
+    return {
+      ...chat.scheduleDefaults,
+      date: parsedMatchApplication.date || chat.scheduleDefaults.date,
+      startTime:
+        parsedMatchApplication.startTime || chat.scheduleDefaults.startTime,
+      endTime: parsedMatchApplication.endTime || chat.scheduleDefaults.endTime,
+      venueName: chat.scheduleDefaults.venueName,
+      note: chat.scheduleDefaults.note,
+      opponentName: parsedMatchApplication.opponentName,
+      opponentUniform: parsedMatchApplication.opponentUniform,
+      category: parsedMatchApplication.category,
+      strength: parsedMatchApplication.strength,
+    };
+  }, [chat.scheduleDefaults, parsedMatchApplication]);
 
   if (chat.authLoading) {
     return (
@@ -454,7 +530,7 @@ export default function ChatThreadPage() {
           open={chat.scheduleModalOpen}
           onClose={() => chat.setScheduleModalOpen(false)}
           loading={chat.creatingProposal}
-          defaultValues={chat.scheduleDefaults}
+          defaultValues={scheduleDefaultValues as any}
           teamId={chat.myTeamId}
           onSubmit={(values) => void chat.createScheduleProposal(values)}
         />

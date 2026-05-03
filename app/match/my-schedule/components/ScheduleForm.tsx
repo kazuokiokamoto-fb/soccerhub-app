@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 export type ScheduleFormTeam = {
   id: string;
@@ -54,9 +54,59 @@ const defaultValues: ScheduleFormValues = {
   note: "",
 };
 
-const CATEGORY_OPTIONS = ["KIDS", "U-8", "U-10", "U-12", "U-15", "一般"];
-const STRENGTH_OPTIONS = ["SS", "S", "A", "B", "C", "強め", "普通", "弱め"];
+const BASE_CATEGORY_OPTIONS = [
+  "キッズ",
+  "KIDS",
+  "U-8",
+  "U-10",
+  "U-12",
+  "U-15",
+  "一般",
+];
+
+const BASE_STRENGTH_OPTIONS = [
+  "SS",
+  "S",
+  "A",
+  "B",
+  "C",
+  "強め",
+  "普通",
+  "弱め",
+  "未設定",
+];
+
 const PARKING_OPTIONS = ["あり", "なし", "不明"];
+
+function normalizeTimeForInput(value?: string | null) {
+  const s = String(value ?? "").trim();
+  if (!s) return "";
+
+  const match = s.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return "";
+
+  const h = match[1].padStart(2, "0");
+  const m = match[2];
+
+  return `${h}:${m}`;
+}
+
+function mergeValues(initialValues?: Partial<ScheduleFormValues>) {
+  return {
+    ...defaultValues,
+    ...initialValues,
+    startTime: normalizeTimeForInput(initialValues?.startTime),
+    endTime: normalizeTimeForInput(initialValues?.endTime),
+    meetupTime: normalizeTimeForInput(initialValues?.meetupTime),
+    dissolveTime: normalizeTimeForInput(initialValues?.dissolveTime),
+  };
+}
+
+function buildOptions(base: string[], current?: string | null) {
+  const value = String(current ?? "").trim();
+  if (!value || base.includes(value)) return base;
+  return [value, ...base];
+}
 
 export default function ScheduleForm(props: ScheduleFormProps) {
   const {
@@ -69,17 +119,28 @@ export default function ScheduleForm(props: ScheduleFormProps) {
     onCancel,
   } = props;
 
-  const [values, setValues] = useState<ScheduleFormValues>({
-    ...defaultValues,
-    ...initialValues,
-  });
+  const [values, setValues] = useState<ScheduleFormValues>(() =>
+    mergeValues(initialValues)
+  );
 
   const [venues, setVenues] = useState<{ name: string; address: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    setValues({ ...defaultValues, ...initialValues });
+  const categoryOptions = useMemo(
+    () => buildOptions(BASE_CATEGORY_OPTIONS, values.category),
+    [values.category]
+  );
 
+  const strengthOptions = useMemo(
+    () => buildOptions(BASE_STRENGTH_OPTIONS, values.strength),
+    [values.strength]
+  );
+
+  useEffect(() => {
+    setValues(mergeValues(initialValues));
+  }, [initialValues]);
+
+  useEffect(() => {
     try {
       const saved = window.localStorage.getItem("venues");
       if (saved) {
@@ -89,7 +150,7 @@ export default function ScheduleForm(props: ScheduleFormProps) {
     } catch (e) {
       console.error("venues localStorage parse error:", e);
     }
-  }, [initialValues]);
+  }, []);
 
   function update<K extends keyof ScheduleFormValues>(
     key: K,
@@ -230,7 +291,7 @@ export default function ScheduleForm(props: ScheduleFormProps) {
             disabled={disabled}
           >
             <option value="">選択してください</option>
-            {CATEGORY_OPTIONS.map((c) => (
+            {categoryOptions.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
@@ -246,7 +307,7 @@ export default function ScheduleForm(props: ScheduleFormProps) {
             disabled={disabled}
           >
             <option value="">選択してください</option>
-            {STRENGTH_OPTIONS.map((c) => (
+            {strengthOptions.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
