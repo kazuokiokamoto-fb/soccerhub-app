@@ -214,6 +214,7 @@ function MatchCreatePageInner() {
         name,
         area: area || null,
         owner_id: meId,
+        note: "",
       })
       .select("id")
       .single();
