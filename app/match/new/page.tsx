@@ -213,6 +213,7 @@ function MatchCreatePageInner() {
       .insert({
         name,
         area: area || null,
+        owner_id: meId,
       })
       .select("id")
       .single();
