@@ -109,7 +109,7 @@ self.addEventListener("push", (event) => {
         body: displayBody,
         icon: "/icon-192.png",
         badge: "/icon-192.png",
-        tag: "sakamachi-notification",
+        tag: "sakamatch-notification",
         renotify: true,
         data: {
           url: data.url,

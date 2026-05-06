@@ -105,10 +105,7 @@ export default function AppTabNav() {
         {TABS.map((tab) => {
           const active = isActive(pathname, tab.href);
 
-          // ★ここを修正（ホームにもバッジ表示）
-          const showBadge =
-            (tab.href === "/" || tab.href === "/chat") &&
-            badgeCount > 0;
+          const showBadge = tab.href === "/chat" && badgeCount > 0;
 
           return (
             <Link
