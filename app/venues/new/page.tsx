@@ -26,13 +26,16 @@ function isMissingColumnError(err: any) {
     msg.includes("Could not find") ||
     msg.includes("schema cache") ||
     (msg.includes("column") &&
-      (msg.includes("parking_capacity") || msg.includes("bike_parking_capacity")))
+      (msg.includes("parking_capacity") ||
+        msg.includes("bike_parking_capacity") ||
+        msg.includes("owner_id")))
   );
 }
 
 export default function VenueNewPage() {
   const router = useRouter();
 
+  const [meId, setMeId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -49,8 +52,8 @@ export default function VenueNewPage() {
   const [recentVenues, setRecentVenues] = useState<RecentVenue[]>([]);
 
   const canSave = useMemo(() => {
-    return !!name.trim() && !!area.trim() && !saving && !loading;
-  }, [name, area, saving, loading]);
+    return !!name.trim() && !!area.trim() && !!meId && !saving && !loading;
+  }, [name, area, meId, saving, loading]);
 
   useEffect(() => {
     if (!toast) return;
@@ -66,6 +69,16 @@ export default function VenueNewPage() {
     setLoading(true);
 
     try {
+      const { data: authData } = await supabase.auth.getUser();
+      const uid = authData?.user?.id ?? "";
+      setMeId(uid);
+
+      if (!uid) {
+        setRecentVenues([]);
+        setLoading(false);
+        return;
+      }
+
       const primaryRes = await supabase
         .from("venues")
         .select(
@@ -88,12 +101,10 @@ export default function VenueNewPage() {
             text: `グラウンド読込失敗: ${fallbackRes.error.message}`,
           });
           setRecentVenues([]);
-          setLoading(false);
           return;
         }
 
         setRecentVenues((fallbackRes.data ?? []) as RecentVenue[]);
-        setLoading(false);
         return;
       }
 
@@ -104,7 +115,6 @@ export default function VenueNewPage() {
           text: `グラウンド読込失敗: ${primaryRes.error.message}`,
         });
         setRecentVenues([]);
-        setLoading(false);
         return;
       }
 
@@ -142,6 +152,11 @@ export default function VenueNewPage() {
       return;
     }
 
+    if (!meId) {
+      alert("ログインが必要です");
+      return;
+    }
+
     setSaving(true);
     setToast({ type: "info", text: "保存中…" });
 
@@ -160,19 +175,21 @@ export default function VenueNewPage() {
           hasBikeParking && bikeParkingCapacity.trim() !== ""
             ? Math.max(0, Number(bikeParkingCapacity) || 0)
             : null,
-        note: note.trim() || null,
+        note: note.trim() || "",
+        owner_id: meId,
       };
 
       let res = await supabase.from("venues").insert(basePayload);
 
       if (res.error && isMissingColumnError(res.error)) {
-        const fallbackPayload = {
+        const fallbackPayload: any = {
           name: name.trim(),
           area: area.trim(),
           address: address.trim() || null,
           has_parking: hasParking,
           has_bike_parking: hasBikeParking,
-          note: note.trim() || null,
+          note: note.trim() || "",
+          owner_id: meId,
         };
 
         res = await supabase.from("venues").insert(fallbackPayload);
@@ -217,8 +234,8 @@ export default function VenueNewPage() {
             ...(toast.type === "success"
               ? toastSuccess
               : toast.type === "error"
-              ? toastError
-              : toastInfo),
+                ? toastError
+                : toastInfo),
           }}
         >
           <div style={{ whiteSpace: "pre-wrap" }}>{toast.text}</div>
@@ -234,7 +251,9 @@ export default function VenueNewPage() {
       ) : null}
 
       <section style={heroBox}>
-        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900 }}>グラウンド登録</h1>
+        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 900 }}>
+          グラウンド登録
+        </h1>
         <p style={heroText}>
           募集枠作成で選べるグラウンドを登録します。
           <br />
