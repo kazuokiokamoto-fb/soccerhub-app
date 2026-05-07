@@ -103,6 +103,32 @@ function parseMatchApplication(body?: string | null) {
   };
 }
 
+function LinkifiedText({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (/^https?:\/\//.test(part)) {
+          return (
+            <a
+              key={`${part}-${index}`}
+              href={part}
+              target="_blank"
+              rel="noreferrer"
+              style={messageLink}
+            >
+              {part}
+            </a>
+          );
+        }
+
+        return <React.Fragment key={index}>{part}</React.Fragment>;
+      })}
+    </>
+  );
+}
+
 export default function ChatThreadPage() {
   const params = useParams<{ threadId: string }>();
   const searchParams = useSearchParams();
@@ -400,9 +426,11 @@ export default function ChatThreadPage() {
                             }}
                           >
                             <div style={bubbleText}>
-                              {deletedForEveryone
-                                ? "このメッセージは削除されました"
-                                : m.body}
+                              {deletedForEveryone ? (
+                                "このメッセージは削除されました"
+                              ) : (
+                                <LinkifiedText text={m.body ?? ""} />
+                              )}
                             </div>
                           </div>
                         </div>
@@ -417,9 +445,11 @@ export default function ChatThreadPage() {
                             }}
                           >
                             <div style={bubbleText}>
-                              {deletedForEveryone
-                                ? "このメッセージは削除されました"
-                                : m.body}
+                              {deletedForEveryone ? (
+                                "このメッセージは削除されました"
+                              ) : (
+                                <LinkifiedText text={m.body ?? ""} />
+                              )}
                             </div>
                           </div>
 
@@ -565,4 +595,11 @@ const attendanceCurrent: React.CSSProperties = {
   fontSize: 13,
   color: "#3b6a49",
   fontWeight: 800,
+};
+
+const messageLink: React.CSSProperties = {
+  color: "#145c2a",
+  fontWeight: 900,
+  textDecoration: "underline",
+  wordBreak: "break-all",
 };
