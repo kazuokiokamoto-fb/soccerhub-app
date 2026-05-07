@@ -1,15 +1,19 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
+import { categoryLabel } from "@/app/lib/categories";
 
 export default function TeamChatRedirectPage() {
   const params = useParams<{ teamId: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const teamId = params?.teamId ?? "";
+  const from = searchParams.get("from") ?? "";
+  const slotId = searchParams.get("slotId") ?? "";
 
   const [errorText, setErrorText] = useState("");
 
@@ -22,7 +26,6 @@ export default function TeamChatRedirectPage() {
       setErrorText("");
 
       try {
-        // ログインチェック
         const {
           data: { user },
           error: authError,
@@ -39,31 +42,33 @@ export default function TeamChatRedirectPage() {
           return;
         }
 
-        const { data: existingThread, error: existingThreadError } = await supabase
-          .from("chat_threads")
-          .select("id")
-          .eq("thread_type", "team")
-          .eq("team_a_id", teamId)
-          .is("team_b_id", null)
-          .is("slot_id", null)
-          .maybeSingle();
+        const { data: existingThread, error: existingThreadError } =
+          await supabase
+            .from("chat_threads")
+            .select("id")
+            .eq("thread_type", "team")
+            .eq("team_a_id", teamId)
+            .is("team_b_id", null)
+            .is("slot_id", null)
+            .maybeSingle();
 
         if (existingThreadError) throw existingThreadError;
 
         let threadId = String(existingThread?.id ?? "");
 
         if (!threadId) {
-          const { data: createdThread, error: createThreadError } = await supabase
-            .from("chat_threads")
-            .insert({
-              thread_type: "team",
-              slot_id: null,
-              team_a_id: teamId,
-              team_b_id: null,
-              created_by: meId,
-            })
-            .select("id")
-            .single();
+          const { data: createdThread, error: createThreadError } =
+            await supabase
+              .from("chat_threads")
+              .insert({
+                thread_type: "team",
+                slot_id: null,
+                team_a_id: teamId,
+                team_b_id: null,
+                created_by: meId,
+              })
+              .select("id")
+              .single();
 
           if (createThreadError) throw createThreadError;
 
@@ -74,18 +79,51 @@ export default function TeamChatRedirectPage() {
           throw new Error("チームチャットの作成に失敗しました。");
         }
 
+        if (from === "attendance" && slotId) {
+          const { data: slot, error: slotError } = await supabase
+            .from("match_slots")
+            .select("*")
+            .eq("id", slotId)
+            .maybeSingle();
+
+          if (slotError) throw slotError;
+
+          const detailUrl = `${window.location.origin}/match/${slotId}?teamId=${teamId}`;
+
+          const message = [
+            "【出欠確認】",
+            "",
+            `📅 ${slot?.date ?? "未設定"}`,
+            `⏰ ${slot?.start_time?.slice(0, 5) ?? "--:--"}〜${
+              slot?.end_time?.slice(0, 5) ?? "--:--"
+            }`,
+            `📍 ${slot?.area_text || slot?.area || "未設定"}`,
+            `🏷 ${categoryLabel(slot?.category || "") || slot?.category || "未設定"}`,
+            "",
+            "出欠回答をお願いします。",
+            "",
+            detailUrl,
+          ].join("\n");
+
+          const { error: insertError } = await supabase
+            .from("chat_messages")
+            .insert({
+              thread_id: threadId,
+              sender_id: meId,
+              sender_team_id: teamId,
+              body: message,
+            });
+
+          if (insertError) throw insertError;
+        }
+
         if (cancelled) return;
 
-        // チャット画面へ
-        router.replace(
-          `/chat/${threadId}?from=team-message&teamId=${teamId}`
-        );
+        router.replace(`/chat/${threadId}?from=team-message&teamId=${teamId}`);
       } catch (e: any) {
         console.error("team chat redirect error:", e);
         if (!cancelled) {
-          setErrorText(
-            e?.message ?? "チームチャットを開けませんでした。"
-          );
+          setErrorText(e?.message ?? "チームチャットを開けませんでした。");
         }
       }
     }
@@ -95,7 +133,7 @@ export default function TeamChatRedirectPage() {
     return () => {
       cancelled = true;
     };
-  }, [teamId, router]);
+  }, [teamId, from, slotId, router]);
 
   return (
     <main style={pageWrap}>
