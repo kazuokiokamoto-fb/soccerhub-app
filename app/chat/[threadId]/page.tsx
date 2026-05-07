@@ -149,6 +149,8 @@ export default function ChatThreadPage() {
     } as any,
   });
 
+  const [inputFocused, setInputFocused] = React.useState(false);
+
   const latestMatchApplicationBody = React.useMemo(() => {
     const reversed = [...chat.visibleMessages].reverse();
 
@@ -217,7 +219,8 @@ export default function ChatThreadPage() {
   return (
     <main style={pageWrap}>
       <section style={chatPanel}>
-        <header style={panelHeader}>
+        {!inputFocused ? (
+          <header style={panelHeader}>
           <div style={headerLeft}>
             <Link href={chat.backLink.href} className="sh-btn">
               {chat.backLink.label}
@@ -268,7 +271,8 @@ export default function ChatThreadPage() {
               </button>
             ) : null}
           </div>
-        </header>
+          </header>
+        ) : null}
 
         <div ref={chat.chatBodyRef} style={chatBody}>
           {chat.showAttendanceButtons ? (
@@ -483,9 +487,13 @@ export default function ChatThreadPage() {
               onChange={(e) => chat.setText(e.target.value)}
               onKeyDown={chat.onKeyDown}
               onFocus={() => {
+                setInputFocused(true);
                 setTimeout(() => {
                   chat.scrollToBottom(false);
                 }, 120);
+              }}
+              onBlur={() => {
+                setInputFocused(false);
               }}
               placeholder="メッセージを入力"
               style={textareaStyle}
