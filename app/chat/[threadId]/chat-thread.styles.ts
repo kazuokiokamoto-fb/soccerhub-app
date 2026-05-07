@@ -242,7 +242,7 @@ export const readStateText: React.CSSProperties = {
 export const inputArea: React.CSSProperties = {
   borderTop: "1px solid #e5ece7",
   background: "#fff",
-  padding: "12px 12px calc(12px + env(safe-area-inset-bottom))",
+  padding: "12px 12px calc(56px + env(safe-area-inset-bottom))",
   display: "grid",
   gap: 8,
 };
@@ -252,6 +252,9 @@ export const inputRow: React.CSSProperties = {
   gridTemplateColumns: "1fr auto",
   gap: 8,
   alignItems: "end",
+  position: "sticky",
+  bottom: 0,
+  background: "#fff",
 };
 
 export const textareaStyle: React.CSSProperties = {
