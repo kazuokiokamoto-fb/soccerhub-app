@@ -34,6 +34,10 @@ type ThreadSummary = {
   id: string;
   created_at: string;
   updated_at: string | null;
+  thread_type?: string | null;
+  team_id?: string | null;
+  team_a_id?: string | null;
+  team_b_id?: string | null;
 };
 
 type ChatMemberRow = {
@@ -108,6 +112,10 @@ function toThreadSummary(value: unknown): ThreadSummary | null {
     id,
     created_at,
     updated_at: asNullableString(r.updated_at),
+    thread_type: asNullableString(r.thread_type),
+    team_id: asNullableString(r.team_id),
+    team_a_id: asNullableString(r.team_a_id),
+    team_b_id: asNullableString(r.team_b_id),
   };
 }
 
@@ -307,7 +315,7 @@ function ChatListPageInner() {
       if (threadIds.length > 0) {
         const thRes = await supabase
           .from("chat_threads")
-          .select("id,created_at,updated_at")
+          .select("id,created_at,updated_at,thread_type,team_id,team_a_id,team_b_id")
           .in("id", threadIds);
 
         if (thRes.error) throw thRes.error;
@@ -377,6 +385,7 @@ function ChatListPageInner() {
 
       for (const t of threadRows) {
         const tid = t.id;
+        const isTeamThread = t.thread_type === "team";
         const memberTeamIds = Array.from(
           new Set((memberTeamsByThread.get(tid) ?? []).filter(Boolean))
         );
@@ -405,6 +414,31 @@ function ChatListPageInner() {
           lastMessageAt: last?.created_at ?? null,
           isUnread,
         };
+
+        if (isTeamThread && t.team_id) {
+          const team = teamMap.get(t.team_id);
+
+          const current = internalThreadByTeamId.get(t.team_id);
+          const currentTime =
+            current?.lastMessageAt ??
+            current?.updated_at ??
+            current?.created_at ??
+            "";
+          const nextTime =
+            base.lastMessageAt ?? base.updated_at ?? base.created_at ?? "";
+
+          if (!current || nextTime > currentTime) {
+            internalThreadByTeamId.set(t.team_id, {
+              ...base,
+              memberTeamIds: [t.team_id],
+              otherTeamId: t.team_id,
+              otherTeamName: team?.name ?? null,
+              otherTeamCategory: team?.category ?? null,
+            });
+          }
+
+          continue;
+        }
 
         if (otherTeamId) {
           const otherTeam = teamMap.get(otherTeamId);
