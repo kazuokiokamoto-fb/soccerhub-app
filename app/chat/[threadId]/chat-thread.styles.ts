@@ -1,11 +1,11 @@
 import React from "react";
 
 export const pageWrap: React.CSSProperties = {
-  padding: 8,
+  padding: 12,
   maxWidth: 860,
   margin: "0 auto",
   boxSizing: "border-box",
-  height: "calc(var(--chat-vh, 100dvh) - var(--app-header-height, 0px))",
+  height: "calc(100svh - var(--app-header-height, 0px))",
   minHeight: 0,
   overflow: "hidden",
 };
@@ -92,7 +92,7 @@ export const notifyBadgeGranted: React.CSSProperties = {
 export const chatBody: React.CSSProperties = {
   minHeight: 0,
   overflowY: "auto",
-  padding: "14px 14px 20px",
+  padding: "14px 14px 88px",
   background: "linear-gradient(180deg, #eef8f0 0%, #f8fcf9 100%)",
   WebkitOverflowScrolling: "touch",
 };
@@ -246,6 +246,7 @@ export const inputArea: React.CSSProperties = {
   padding: "8px 12px calc(8px + env(safe-area-inset-bottom))",
   display: "grid",
   gap: 6,
+  flexShrink: 0,
 };
 
 export const inputRow: React.CSSProperties = {
