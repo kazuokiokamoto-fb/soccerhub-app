@@ -149,8 +149,6 @@ export default function ChatThreadPage() {
     } as any,
   });
 
-  const [inputFocused, setInputFocused] = React.useState(false);
-
   const latestMatchApplicationBody = React.useMemo(() => {
     const reversed = [...chat.visibleMessages].reverse();
 
@@ -219,12 +217,7 @@ export default function ChatThreadPage() {
   return (
     <main style={pageWrap}>
       <section style={chatPanel}>
-        <header
-          style={{
-            ...panelHeader,
-            ...(inputFocused ? panelHeaderFocused : null),
-          }}
-        >
+        <header style={panelHeader}>
           <div style={headerLeft}>
             <Link href={chat.backLink.href} className="sh-btn">
               {chat.backLink.label}
@@ -240,7 +233,7 @@ export default function ChatThreadPage() {
             </div>
           </div>
 
-          <div style={{ ...headerRight, display: inputFocused ? "none" : "flex" }}>
+          <div style={headerRight}>
             {chat.isMember && !chat.isTeamChat ? (
               <button
                 type="button"
@@ -489,15 +482,6 @@ export default function ChatThreadPage() {
               value={chat.text}
               onChange={(e) => chat.setText(e.target.value)}
               onKeyDown={chat.onKeyDown}
-              onFocus={() => {
-                setInputFocused(true);
-                setTimeout(() => {
-                  chat.scrollToBottom(false);
-                }, 120);
-              }}
-              onBlur={() => {
-                setInputFocused(false);
-              }}
               placeholder="メッセージを入力"
               style={textareaStyle}
               disabled={!chat.meId || !chat.isMember || chat.sending}
@@ -613,8 +597,4 @@ const messageLink: React.CSSProperties = {
   fontWeight: 900,
   textDecoration: "underline",
   wordBreak: "break-all",
-};
-
-const panelHeaderFocused: React.CSSProperties = {
-  padding: 8,
 };
