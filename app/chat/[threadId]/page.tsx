@@ -149,6 +149,23 @@ export default function ChatThreadPage() {
     } as any,
   });
 
+  React.useEffect(() => {
+    const setVh = () => {
+      const h = window.visualViewport?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty("--chat-vh", `${h}px`);
+    };
+
+    setVh();
+
+    window.visualViewport?.addEventListener("resize", setVh);
+    window.addEventListener("resize", setVh);
+
+    return () => {
+      window.visualViewport?.removeEventListener("resize", setVh);
+      window.removeEventListener("resize", setVh);
+    };
+  }, []);
+
   const latestMatchApplicationBody = React.useMemo(() => {
     const reversed = [...chat.visibleMessages].reverse();
 
