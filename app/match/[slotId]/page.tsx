@@ -691,7 +691,37 @@ export default function MatchDetailPage() {
 
       {attendanceTeamId ? (
         <section style={card}>
-          <div style={sectionTitle}>出欠確認</div>
+          <div style={sectionHeaderRow}>
+            <div style={sectionTitle}>出欠確認</div>
+
+            <div style={teamMessageButtonWrapTop}>
+              <button
+                type="button"
+                className="sh-btn sh-btn--primary"
+                onClick={() => {
+                  const ok = window.confirm(
+                    "チームメンバー用チャットへ移動して出欠確認を送りますか？"
+                  );
+
+                  if (!ok) return;
+
+                  if (!slot || !attendanceTeamId) {
+                    alert("必要情報が不足しています");
+                    return;
+                  }
+
+                  const qs = new URLSearchParams();
+                  qs.set("from", "attendance");
+                  qs.set("slotId", slot.id);
+                  qs.set("teamId", attendanceTeamId);
+
+                  window.location.href = `/chat/team/${attendanceTeamId}?${qs.toString()}`;
+                }}
+              >
+                メンバーへ連絡
+              </button>
+            </div>
+          </div>
 
           <div style={attendanceStatusText}>
             自分の出欠：<b>{attendanceLabel(myAttendance)}</b>
@@ -738,34 +768,6 @@ export default function MatchDetailPage() {
               onClick={() => updateAttendance("absent")}
             >
               不参加
-            </button>
-          </div>
-
-          <div style={teamMessageButtonWrap}>
-            <button
-              type="button"
-              className="sh-btn sh-btn--primary"
-              onClick={() => {
-                const ok = window.confirm(
-                  "チームメンバー用チャットへ移動して出欠確認を送りますか？"
-                );
-
-                if (!ok) return;
-
-                if (!slot || !attendanceTeamId) {
-                  alert("必要情報が不足しています");
-                  return;
-                }
-
-                const qs = new URLSearchParams();
-                qs.set("from", "attendance");
-                qs.set("slotId", slot.id);
-                qs.set("teamId", attendanceTeamId);
-
-                window.location.href = `/chat/team/${attendanceTeamId}?${qs.toString()}`;
-              }}
-            >
-              メンバーへ連絡
             </button>
           </div>
 
@@ -1141,4 +1143,18 @@ const teamMessageButtonWrap: React.CSSProperties = {
   marginTop: 12,
   display: "flex",
   justifyContent: "flex-start",
+};
+
+const sectionHeaderRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const teamMessageButtonWrapTop: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  marginLeft: "auto",
 };
