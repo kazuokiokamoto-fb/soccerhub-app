@@ -219,8 +219,12 @@ export default function ChatThreadPage() {
   return (
     <main style={pageWrap}>
       <section style={chatPanel}>
-        {!inputFocused ? (
-          <header style={panelHeader}>
+        <header
+          style={{
+            ...panelHeader,
+            ...(inputFocused ? panelHeaderFocused : null),
+          }}
+        >
           <div style={headerLeft}>
             <Link href={chat.backLink.href} className="sh-btn">
               {chat.backLink.label}
@@ -236,7 +240,7 @@ export default function ChatThreadPage() {
             </div>
           </div>
 
-          <div style={headerRight}>
+          <div style={{ ...headerRight, display: inputFocused ? "none" : "flex" }}>
             {chat.isMember && !chat.isTeamChat ? (
               <button
                 type="button"
@@ -271,8 +275,7 @@ export default function ChatThreadPage() {
               </button>
             ) : null}
           </div>
-          </header>
-        ) : null}
+        </header>
 
         <div ref={chat.chatBodyRef} style={chatBody}>
           {chat.showAttendanceButtons ? (
@@ -610,4 +613,8 @@ const messageLink: React.CSSProperties = {
   fontWeight: 900,
   textDecoration: "underline",
   wordBreak: "break-all",
+};
+
+const panelHeaderFocused: React.CSSProperties = {
+  padding: 8,
 };
