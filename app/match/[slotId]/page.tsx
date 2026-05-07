@@ -745,118 +745,24 @@ export default function MatchDetailPage() {
             <button
               type="button"
               className="sh-btn sh-btn--primary"
-              onClick={async () => {
+              onClick={() => {
                 const ok = window.confirm(
-                  "チームメンバー用チャットへ出欠確認を送信しますか？"
+                  "チームメンバー用チャットへ移動して出欠確認を送りますか？"
                 );
 
-                if (!ok) return;   
+                if (!ok) return;
 
-                try {
-                  if (!slot || !attendanceTeamId || !myUserId) {
-                    alert("必要情報が不足しています");
-                    return;
-                  }
-
-                  const detailUrl = `${window.location.origin}/match/${slot.id}?teamId=${attendanceTeamId}`;
-
-                  const message = [
-                    "【出欠確認】",
-                    "",
-                    `📅 ${slot.date ?? "未設定"}`,
-                    `⏰ ${slot.start_time?.slice(0, 5) ?? "--:--"}〜${slot.end_time?.slice(0, 5) ?? "--:--"}`,
-                    `📍 ${slot.area_text || slot.area || "未設定"}`,
-                    `🏷 ${categoryTextForOpponent}`,
-                    "",
-                    "出欠回答をお願いします。",
-                    "",
-                    detailUrl,
-                  ].join("\n");
-
-                  const { data: existingThread, error: existingThreadError } =
-                    await supabase
-                      .from("chat_threads")
-                      .select("id")
-                      .eq("thread_type", "team")
-                      .eq("team_id", attendanceTeamId)
-                      .maybeSingle();
-
-                  if (existingThreadError) {
-                    throw existingThreadError;
-                  }
-
-                  let threadId = String(existingThread?.id ?? "");
-
-                  if (!threadId) {
-                    const { data: createdThread, error: createThreadError } =
-                      await supabase
-                        .from("chat_threads")
-                        .insert({
-                          thread_type: "team",
-                          team_id: attendanceTeamId,
-                          created_by: myUserId,
-                        })
-                        .select("id")
-                        .single();
-
-                    if (createThreadError) {
-                      throw createThreadError;
-                    }
-
-                    threadId = String(createdThread?.id ?? "");
-                  }
-
-                  if (!threadId) {
-                    alert("チームチャットを作成できませんでした");
-                    return;
-                  }
-
-                  const { data: memberRows } = await supabase
-                    .from("team_members")
-                    .select("user_id")
-                    .eq("team_id", attendanceTeamId);
-
-                  const memberUserIds = Array.from(
-                    new Set(
-                      [
-                        myUserId,
-                        ...(memberRows ?? []).map((r: any) =>
-                          String(r.user_id ?? "")
-                        ),
-                      ].filter(Boolean)
-                    )
-                  );
-
-                  if (memberUserIds.length > 0) {
-                    const rows = memberUserIds.map((uid) => ({
-                      thread_id: threadId,
-                      user_id: uid,
-                      team_id: attendanceTeamId,
-                    }));
-
-                    await supabase
-                      .from("chat_members")
-                      .upsert(rows, {
-                        onConflict: "thread_id,user_id",
-                      });
-                  }
-
-                  const { error: insertError } = await supabase
-                    .from("chat_messages")
-                    .insert({
-                      thread_id: threadId,
-                      sender_id: myUserId,
-                      sender_team_id: attendanceTeamId,
-                      body: message,
-                    });
-
-                  if (insertError) throw insertError;
-
-                  window.location.href = `/chat/${threadId}`;
-                } catch (e: any) {
-                  console.error(e);
-                  alert(`メッセージ送信に失敗しました: ${e?.message ?? "unknown error"}`);
+                if (!slot || !attendanceTeamId) {
+                  alert("必要情報が不足しています");
+                  return;
                 }
+
+                const qs = new URLSearchParams();
+                qs.set("from", "attendance");
+                qs.set("slotId", slot.id);
+                qs.set("teamId", attendanceTeamId);
+
+                window.location.href = `/chat/team/${attendanceTeamId}?${qs.toString()}`;
               }}
             >
               メンバーへ連絡
