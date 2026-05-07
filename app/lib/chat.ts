@@ -32,8 +32,6 @@ export async function getOrCreateThread({
       slot_id: slotId,
       team_a_id: a,
       team_b_id: b,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     })
     .select()
     .single();
