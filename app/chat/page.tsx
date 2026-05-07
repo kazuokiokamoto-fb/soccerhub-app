@@ -386,8 +386,17 @@ function ChatListPageInner() {
       for (const t of threadRows) {
         const tid = t.id;
         const isTeamThread = t.thread_type === "team";
+        const rawMemberTeamIds = memberTeamsByThread.get(tid) ?? [];
+
+        const fallbackTeamIds =
+          t.thread_type === "team" && t.team_id
+            ? [t.team_id]
+            : t.thread_type === "match"
+              ? [t.team_a_id, t.team_b_id].filter((id): id is string => !!id)
+              : [];
+
         const memberTeamIds = Array.from(
-          new Set((memberTeamsByThread.get(tid) ?? []).filter(Boolean))
+          new Set([...rawMemberTeamIds, ...fallbackTeamIds].filter(Boolean))
         );
 
         const otherTeamId =

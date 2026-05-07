@@ -33,7 +33,7 @@ export async function getOrCreateThread({
       team_a_id: a,
       team_b_id: b,
     })
-    .select()
+    .select("id")
     .single();
 
   if (error) throw error;

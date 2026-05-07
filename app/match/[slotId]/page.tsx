@@ -937,7 +937,7 @@ export default function MatchDetailPage() {
           categoryTextOverride={categoryTextForOpponent}
           showAddressDetail={true}
           showGeminiSection={true}
-          showChatButton={true}
+          showChatButton={false}
           showStrengthHelpButton={true}
           chatFrom="match_detail"
           chatSlotId={slotId}
