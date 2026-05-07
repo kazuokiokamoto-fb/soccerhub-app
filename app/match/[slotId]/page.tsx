@@ -656,6 +656,13 @@ export default function MatchDetailPage() {
             <span>{slot.area_text || slot.area || "未設定"}</span>
           </div>
 
+          {opponentTeam?.name ? (
+            <div style={detailRow}>
+              <span style={icon}>👥</span>
+              <span style={opponentTeamNameText}>{opponentTeam.name}</span>
+            </div>
+          ) : null}
+
           <div style={detailRow}>
             <span style={icon}>🏷</span>
             <span>{categoryTextForOpponent}</span>
@@ -1157,4 +1164,9 @@ const teamMessageButtonWrapTop: React.CSSProperties = {
   display: "flex",
   justifyContent: "flex-end",
   marginLeft: "auto",
+};
+
+const opponentTeamNameText: React.CSSProperties = {
+  fontWeight: 900,
+  color: "#16391f",
 };
