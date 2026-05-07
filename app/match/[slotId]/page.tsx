@@ -115,7 +115,15 @@ function emptyNameGroups(): AttendanceNameGroups {
 }
 
 function displayMemberName(row: TeamMemberRow) {
-  return row.display_name?.trim() || `ユーザー ${row.user_id.slice(0, 8)}`;
+  const name = String(row.display_name ?? "").trim();
+
+  if (name) return name;
+
+  if (row.role === "owner") {
+    return "チーム管理者";
+  }
+
+  return "メンバー";
 }
 
 function getQueryParams() {
@@ -738,6 +746,12 @@ export default function MatchDetailPage() {
               type="button"
               className="sh-btn sh-btn--primary"
               onClick={async () => {
+                const ok = window.confirm(
+                  "チームメンバー用チャットへ出欠確認を送信しますか？"
+                );
+
+                if (!ok) return;   
+
                 try {
                   if (!slot || !attendanceTeamId || !myUserId) {
                     alert("必要情報が不足しています");
@@ -759,19 +773,72 @@ export default function MatchDetailPage() {
                     detailUrl,
                   ].join("\n");
 
-                  const { data: threadData, error: threadError } = await supabase.rpc(
-                    "rpc_get_or_create_team_thread",
-                    {
-                      p_team_id: attendanceTeamId,
+                  const { data: existingThread, error: existingThreadError } =
+                    await supabase
+                      .from("chat_threads")
+                      .select("id")
+                      .eq("is_team_chat", true)
+                      .eq("team_id", attendanceTeamId)
+                      .maybeSingle();
+
+                  if (existingThreadError) {
+                    throw existingThreadError;
+                  }
+
+                  let threadId = String(existingThread?.id ?? "");
+
+                  if (!threadId) {
+                    const { data: createdThread, error: createThreadError } =
+                      await supabase
+                        .from("chat_threads")
+                        .insert({
+                          is_team_chat: true,
+                          team_id: attendanceTeamId,
+                          created_by: myUserId,
+                        })
+                        .select("id")
+                        .single();
+
+                    if (createThreadError) {
+                      throw createThreadError;
                     }
-                  );
 
-                  if (threadError) throw threadError;
+                    threadId = String(createdThread?.id ?? "");
+                  }
 
-                  const threadId = String(threadData ?? "");
                   if (!threadId) {
                     alert("チームチャットを作成できませんでした");
                     return;
+                  }
+
+                  const { data: memberRows } = await supabase
+                    .from("team_members")
+                    .select("user_id")
+                    .eq("team_id", attendanceTeamId);
+
+                  const memberUserIds = Array.from(
+                    new Set(
+                      [
+                        myUserId,
+                        ...(memberRows ?? []).map((r: any) =>
+                          String(r.user_id ?? "")
+                        ),
+                      ].filter(Boolean)
+                    )
+                  );
+
+                  if (memberUserIds.length > 0) {
+                    const rows = memberUserIds.map((uid) => ({
+                      thread_id: threadId,
+                      user_id: uid,
+                      team_id: attendanceTeamId,
+                    }));
+
+                    await supabase
+                      .from("chat_members")
+                      .upsert(rows, {
+                        onConflict: "thread_id,user_id",
+                      });
                   }
 
                   const { error: insertError } = await supabase
