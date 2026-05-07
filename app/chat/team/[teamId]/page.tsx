@@ -39,17 +39,36 @@ export default function TeamChatRedirectPage() {
           return;
         }
 
-        // ✅ 正しいRPC名に修正
-        const { data, error } = await supabase.rpc(
-          "get_or_create_team_chat_thread",
-          {
-            p_team_id: teamId,
-          }
-        );
+        const { data: existingThread, error: existingThreadError } = await supabase
+          .from("chat_threads")
+          .select("id")
+          .eq("thread_type", "team")
+          .eq("team_a_id", teamId)
+          .is("team_b_id", null)
+          .is("slot_id", null)
+          .maybeSingle();
 
-        if (error) throw error;
+        if (existingThreadError) throw existingThreadError;
 
-        const threadId = String(data ?? "");
+        let threadId = String(existingThread?.id ?? "");
+
+        if (!threadId) {
+          const { data: createdThread, error: createThreadError } = await supabase
+            .from("chat_threads")
+            .insert({
+              thread_type: "team",
+              slot_id: null,
+              team_a_id: teamId,
+              team_b_id: null,
+              created_by: meId,
+            })
+            .select("id")
+            .single();
+
+          if (createThreadError) throw createThreadError;
+
+          threadId = String(createdThread?.id ?? "");
+        }
 
         if (!threadId) {
           throw new Error("チームチャットの作成に失敗しました。");
