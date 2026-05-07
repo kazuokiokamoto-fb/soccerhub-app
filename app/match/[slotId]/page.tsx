@@ -738,7 +738,7 @@ export default function MatchDetailPage() {
               type="button"
               className="sh-btn sh-btn--primary"
               onClick={() => {
-                window.location.href = `/teams/${attendanceTeamId}/message?slotId=${slotId}`;
+                window.location.href = `/chat/team/${attendanceTeamId}?from=attendance&slotId=${slotId}&teamId=${attendanceTeamId}`;
               }}
             >
               メンバーへ連絡
