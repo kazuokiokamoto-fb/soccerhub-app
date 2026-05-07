@@ -91,7 +91,7 @@ export const notifyBadgeGranted: React.CSSProperties = {
 export const chatBody: React.CSSProperties = {
   minHeight: 0,
   overflowY: "auto",
-  padding: "14px 14px 20px",
+  padding: "14px 14px 180px",
   background: "linear-gradient(180deg, #eef8f0 0%, #f8fcf9 100%)",
   WebkitOverflowScrolling: "touch",
 };
@@ -242,7 +242,7 @@ export const readStateText: React.CSSProperties = {
 export const inputArea: React.CSSProperties = {
   borderTop: "1px solid #e5ece7",
   background: "#fff",
-  padding: "12px 12px calc(56px + env(safe-area-inset-bottom))",
+  padding: "12px 12px calc(96px + env(safe-area-inset-bottom))",
   display: "grid",
   gap: 8,
 };
@@ -252,9 +252,6 @@ export const inputRow: React.CSSProperties = {
   gridTemplateColumns: "1fr auto",
   gap: 8,
   alignItems: "end",
-  position: "sticky",
-  bottom: 0,
-  background: "#fff",
 };
 
 export const textareaStyle: React.CSSProperties = {
