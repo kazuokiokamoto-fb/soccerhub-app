@@ -1,12 +1,13 @@
 import React from "react";
 
 export const pageWrap: React.CSSProperties = {
-  padding: 12,
+  padding: 8,
   maxWidth: 860,
   margin: "0 auto",
   boxSizing: "border-box",
-  height: "calc(100dvh - var(--app-header-height, 0px))",
-  minHeight: "calc(100dvh - var(--app-header-height, 0px))",
+  height: "calc(var(--chat-vh, 100dvh) - var(--app-header-height, 0px))",
+  minHeight: 0,
+  overflow: "hidden",
 };
 
 export const chatPanel: React.CSSProperties = {
@@ -15,7 +16,7 @@ export const chatPanel: React.CSSProperties = {
   background: "#f6fbf7",
   overflow: "hidden",
   display: "grid",
-  gridTemplateRows: "auto 1fr auto",
+  gridTemplateRows: "auto minmax(0, 1fr) auto",
   height: "100%",
   minHeight: 0,
 };
@@ -91,7 +92,7 @@ export const notifyBadgeGranted: React.CSSProperties = {
 export const chatBody: React.CSSProperties = {
   minHeight: 0,
   overflowY: "auto",
-  padding: "14px 14px 120px",
+  padding: "14px 14px 20px",
   background: "linear-gradient(180deg, #eef8f0 0%, #f8fcf9 100%)",
   WebkitOverflowScrolling: "touch",
 };
