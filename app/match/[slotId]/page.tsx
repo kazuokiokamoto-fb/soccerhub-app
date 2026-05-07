@@ -737,8 +737,79 @@ export default function MatchDetailPage() {
             <button
               type="button"
               className="sh-btn sh-btn--primary"
-              onClick={() => {
-                window.location.href = `/chat/team/${attendanceTeamId}?from=attendance&slotId=${slotId}&teamId=${attendanceTeamId}`;
+              onClick={async () => {
+                try {
+                  if (!slot || !attendanceTeamId || !myUserId) {
+                    alert("必要情報が不足しています");
+                    return;
+                  }
+
+                  // =========================
+                  // スレッド取得
+                  // =========================
+                  const { data: threadData, error: threadError } = await supabase.rpc(
+                    "rpc_get_or_create_team_thread",
+                    {
+                      p_team_id: attendanceTeamId,
+                    }
+                  );
+
+                  if (threadError) {
+                    throw threadError;
+                  }
+
+                  const threadId = String(threadData ?? "");
+
+                  if (!threadId) {
+                    alert("チャットスレッド作成に失敗しました");
+                    return;
+                  }
+
+                  // =========================
+                  // メッセージ作成
+                  // =========================
+                  const detailUrl = `/match/${slot.id}?teamId=${attendanceTeamId}`;
+
+                  const message = `【出欠確認】
+
+          📅 ${slot.date ?? "未設定"}
+          ⏰ ${slot.start_time?.slice(0, 5) ?? "--:--"}〜${slot.end_time?.slice(0, 5) ?? "--:--"}
+
+          📍 ${slot.area_text || slot.area || "未設定"}
+
+          🏷 ${categoryTextForOpponent}
+
+          出欠回答をお願いします。
+
+          ${window.location.origin}${detailUrl}`;
+
+                  // =========================
+                  // チャット送信
+                  // =========================
+                  const { error: insertError } = await supabase
+                    .from("chat_messages")
+                    .insert({
+                      thread_id: threadId,
+                      sender_id: myUserId,
+                      body: message,
+                    });
+
+                  if (insertError) {
+                    throw insertError;
+                  }
+
+                  // =========================
+                  // チャットへ移動
+                  // =========================
+                  window.location.href = `/chat/${threadId}`;
+                } catch (e: any) {
+                  console.error(e);
+                  alert(
+                    `メッセージ送信に失敗しました: ${
+                      e?.message ?? "unknown error"
+                    }`
+                  );
+                }
               }}
             >
               メンバーへ連絡
