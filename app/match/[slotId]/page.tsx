@@ -777,7 +777,7 @@ export default function MatchDetailPage() {
                     await supabase
                       .from("chat_threads")
                       .select("id")
-                      .eq("is_team_chat", true)
+                      .eq("thread_type", "team")
                       .eq("team_id", attendanceTeamId)
                       .maybeSingle();
 
@@ -792,7 +792,7 @@ export default function MatchDetailPage() {
                       await supabase
                         .from("chat_threads")
                         .insert({
-                          is_team_chat: true,
+                          thread_type: "team",
                           team_id: attendanceTeamId,
                           created_by: myUserId,
                         })
