@@ -394,8 +394,16 @@ export default function TeamNewPage() {
           </div>
 
           <div style={heroAction}>
-            <Link href="/mypage" className="sh-btn">
-              マイページへ
+            <Link
+              href="/mypage"
+              className="sh-btn"
+              style={{
+                minWidth: 132,
+                whiteSpace: "nowrap",
+                textAlign: "center",
+              }}
+            >
+              マイページ
             </Link>
           </div>
         </div>
@@ -1062,4 +1070,5 @@ const heroAction: React.CSSProperties = {
   display: "flex",
   gap: 10,
   marginLeft: "auto",
+  flexShrink: 0,
 };

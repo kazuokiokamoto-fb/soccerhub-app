@@ -540,8 +540,16 @@ export default function TeamEditPage() {
           </div>
 
           <div style={heroAction}>
-            <Link href="/mypage" className="sh-btn">
-              一覧へ
+            <Link
+              href="/teams"
+              className="sh-btn"
+              style={{
+                minWidth: 110,
+                whiteSpace: "nowrap",
+                textAlign: "center",
+              }}
+            >
+              一覧
             </Link>
           </div>
         </div>
@@ -1133,4 +1141,5 @@ const heroAction: React.CSSProperties = {
   display: "flex",
   gap: 10,
   marginLeft: "auto",
+  flexShrink: 0,
 };

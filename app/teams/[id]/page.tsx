@@ -285,6 +285,15 @@ export default function TeamDetailPage() {
         <div style={emptyBox}>チームが見つかりませんでした。</div>
       ) : (
         <>
+
+          {backConfig.href ? (
+            <div style={backButtonWrap}>
+              <Link href={backConfig.href} className="sh-btn">
+                マイページ
+              </Link>
+            </div>
+          ) : null}
+
           {isTeamMember ? (
             <section style={memberPanel}>
               <div style={memberPanelText}>
@@ -324,11 +333,8 @@ export default function TeamDetailPage() {
             title="チーム詳細"
             team={team}
             myUserId={myUserId}
-            backHref={backConfig.href}
-            backLabel={backConfig.label}
-            showBackButton
             editHref={`/teams/${team.id}/edit`}
-            showEditButton={false}
+            showEditButton
             showGeminiSection={!mine}
             showChatButton={!mine}
             showStrengthHelpButton
@@ -420,4 +426,11 @@ const memberPanelActions: React.CSSProperties = {
   gap: 8,
   flexWrap: "wrap",
   marginLeft: "auto",
+};
+
+const backButtonWrap: React.CSSProperties = {
+  marginTop: 14,
+  marginBottom: 10,
+  display: "flex",
+  justifyContent: "flex-start",
 };
