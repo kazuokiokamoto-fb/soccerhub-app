@@ -383,16 +383,7 @@ export default function TeamNewPage() {
       ) : null}
 
       <section style={heroBox}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            gap: 12,
-            flexWrap: "wrap",
-            marginTop: 10,
-          }}
-        >
+        <div style={heroHeader}>
           <div>
             <h1 style={{ margin: 0, fontSize: 30, fontWeight: 900 }}>
               チーム登録
@@ -402,7 +393,7 @@ export default function TeamNewPage() {
             </p>
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={heroAction}>
             <Link href="/mypage" className="sh-btn">
               マイページへ
             </Link>
@@ -960,7 +951,6 @@ const heroHeader: React.CSSProperties = {
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: 12,
-  flexWrap: "wrap",
 };
 
 const strengthLabelRow: React.CSSProperties = {
@@ -1067,4 +1057,10 @@ const guideNote: React.CSSProperties = {
   border: "1px solid #f3d37a",
   fontWeight: 800,
   color: "#5b4700",
+};
+
+const heroAction: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  marginLeft: "auto",
 };
