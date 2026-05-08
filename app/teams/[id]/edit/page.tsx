@@ -14,6 +14,7 @@ import {
   legacyLevelToStrengthRank,
 } from "@/app/components/StrengthRankPicker";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
+import { STRENGTH_GUIDES } from "@/app/lib/strengthGuides";
 
 type Toast = { type: "success" | "error" | "info"; text: string };
 
@@ -72,6 +73,7 @@ export default function TeamEditPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [showStrengthHelp, setShowStrengthHelp] = useState(false);
 
   const [ownerId, setOwnerId] = useState<string>("");
 
@@ -529,7 +531,6 @@ export default function TeamEditPage() {
       ) : null}
 
       <section style={heroBox}>
-        <div style={heroBadge}>⚽ サカまち</div>
         <div
           style={{
             display: "flex",
@@ -638,7 +639,16 @@ export default function TeamEditPage() {
 
                       <div style={twoCols}>
                         <label style={label}>
-                          <span style={labelTitle}>強さ</span>
+                          <span style={strengthLabelRow}>
+                            <span>強さ</span>
+                            <button
+                              type="button"
+                              onClick={() => setShowStrengthHelp(true)}
+                              style={strengthHelpButton}
+                            >
+                              ?
+                            </button>
+                          </span>
                           <select
                             className="sh-select"
                             value={profile?.strength_rank ?? "A"}
@@ -813,7 +823,42 @@ export default function TeamEditPage() {
             </Link>
           </div>
         </div>
-      </section>
+    </section>
+
+    {showStrengthHelp ? (
+      <div style={modalOverlay} onClick={() => setShowStrengthHelp(false)}>
+        <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+          <div style={modalHeader}>
+            <div style={modalTitle}>強さの説明</div>
+            <button
+              type="button"
+              className="sh-btn"
+              onClick={() => setShowStrengthHelp(false)}
+            >
+              閉じる
+            </button>
+          </div>
+
+          <div style={guideList}>
+            {STRENGTH_GUIDES.map((guide) => (
+              <div key={guide.rank} style={guideCard}>
+                <div style={guideHeader}>
+                  <span style={guideRank}>{guide.rank}</span>
+                  <strong>{guide.short}</strong>
+                </div>
+                <div style={guideTitle}>{guide.title}</div>
+                <ul style={guideBullets}>
+                  {guide.bullets.map((b) => (
+                    <li key={b}>{b}</li>
+                  ))}
+                </ul>
+                <div style={guideNote}>{guide.note}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    ) : null}
     </main>
   );
 }
@@ -979,4 +1024,118 @@ const toastClose: React.CSSProperties = {
   cursor: "pointer",
   padding: 0,
   opacity: 0.7,
+};
+
+const heroHeader: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const strengthLabelRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  fontWeight: 800,
+  color: "#2d3b31",
+};
+
+const strengthHelpButton: React.CSSProperties = {
+  width: 24,
+  height: 24,
+  borderRadius: 999,
+  border: "2px solid #6b8f71",
+  background: "#fff",
+  color: "#145c2a",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const modalOverlay: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.45)",
+  zIndex: 1000,
+  padding: 16,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+const modalCard: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 720,
+  maxHeight: "85vh",
+  overflowY: "auto",
+  background: "#fff",
+  borderRadius: 20,
+  padding: 18,
+};
+
+const modalHeader: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  marginBottom: 14,
+};
+
+const modalTitle: React.CSSProperties = {
+  fontSize: 22,
+  fontWeight: 900,
+  color: "#16391f",
+};
+
+const guideList: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+};
+
+const guideCard: React.CSSProperties = {
+  border: "1px solid #e5ece7",
+  borderRadius: 16,
+  padding: 14,
+  background: "#fafcfb",
+};
+
+const guideHeader: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  fontSize: 16,
+  color: "#16391f",
+};
+
+const guideRank: React.CSSProperties = {
+  minWidth: 44,
+  padding: "6px 10px",
+  borderRadius: 999,
+  background: "#246b34",
+  color: "#fff",
+  fontWeight: 900,
+  textAlign: "center",
+};
+
+const guideTitle: React.CSSProperties = {
+  marginTop: 12,
+  fontWeight: 900,
+  color: "#1f2937",
+};
+
+const guideBullets: React.CSSProperties = {
+  margin: "10px 0",
+  paddingLeft: 20,
+  lineHeight: 1.8,
+};
+
+const guideNote: React.CSSProperties = {
+  marginTop: 10,
+  padding: 10,
+  borderRadius: 12,
+  background: "#fff7dd",
+  border: "1px solid #f3d37a",
+  fontWeight: 800,
+  color: "#5b4700",
 };
