@@ -214,6 +214,7 @@ export default function TeamMembersPage() {
           "id,team_id,code,role,display_name,expires_at,max_uses,used_count,is_active,created_at"
         )
         .eq("team_id", teamId)
+        .eq("is_active", true)
         .order("created_at", { ascending: false });
 
       if (invitesError) throw invitesError;
@@ -400,11 +401,15 @@ export default function TeamMembersPage() {
     try {
       const { error } = await supabase
         .from("team_invites")
-        .delete()
+        .update({
+          is_active: false,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", invite.id);
 
       if (error) throw error;
 
+      setInvites((prev) => prev.filter((v) => v.id !== invite.id));
       await load();
     } catch (e: any) {
       console.error(e);
@@ -602,12 +607,7 @@ export default function TeamMembersPage() {
                   const isExpired =
                     !!invite.expires_at &&
                     new Date(invite.expires_at).getTime() < Date.now();
-                  const isLimitReached =
-                    typeof invite.max_uses === "number" &&
-                    invite.max_uses > 0 &&
-                    invite.used_count >= invite.max_uses;
-                  const available =
-                    invite.is_active && !isExpired && !isLimitReached;
+                  const available = invite.is_active && !isExpired;
 
                   return (
                     <div key={invite.id} style={memberCard}>
