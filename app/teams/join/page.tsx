@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import Link from "next/link";
+import React, { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import { supabase } from "@/app/lib/supabase";
@@ -32,6 +32,16 @@ export default function TeamJoinPage() {
   const [saving, setSaving] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [successText, setSuccessText] = useState("");
+
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const qCode = searchParams.get("code");
+
+    if (qCode) {
+      setCode(normalizeCode(qCode));
+    }
+  }, [searchParams]);
 
   const joinTeam = async () => {
     const normalizedCode = normalizeCode(code);
@@ -116,7 +126,7 @@ export default function TeamJoinPage() {
 
       if (updateInviteError) throw updateInviteError;
 
-      setSuccessText("チームに参加しました。マイスケジュールを確認できます。");
+      setSuccessText("チームに参加しました。マイページからチーム詳細を確認できます。");
       setCode("");
       setDisplayName("");
     } catch (e: any) {
@@ -136,15 +146,6 @@ export default function TeamJoinPage() {
         title="チームに参加"
         desc="管理者から共有された招待コードを入力して、チームメンバーとして参加できます。"
       />
-
-      <div style={topNavWrap}>
-        <Link href="/teams" className="sh-btn">
-          チーム一覧
-        </Link>
-        <Link href="/match/my-schedule" className="sh-btn sh-btn--primary">
-          マイスケジュール
-        </Link>
-      </div>
 
       {authLoading ? (
         <div style={emptyBox}>読み込み中…</div>

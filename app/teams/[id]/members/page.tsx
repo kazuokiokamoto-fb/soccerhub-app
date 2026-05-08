@@ -369,12 +369,18 @@ export default function TeamMembersPage() {
   };
 
   const copyInvite = async (invite: InviteRow) => {
-    const url =
+    const joinUrl =
       typeof window !== "undefined"
-        ? `${window.location.origin}/teams/join`
-        : "/teams/join";
+        ? `${window.location.origin}/teams/join?code=${encodeURIComponent(invite.code)}`
+        : `/teams/join?code=${encodeURIComponent(invite.code)}`;
 
-    const text = `サカまっちのチーム招待コードです。\n\n招待コード：${invite.code}\n参加ページ：${url}`;
+    const text = `サカまっちのチーム招待です。
+
+  チーム：${team?.name || "チーム"}
+  招待コード：${invite.code}
+  参加ページ：${joinUrl}
+
+  上記URLを開いて、表示名を入力して参加してください。`;
 
     try {
       await navigator.clipboard.writeText(text);
@@ -496,16 +502,18 @@ export default function TeamMembersPage() {
 
       <div style={topNavWrap}>
         <Link href={`/teams/${teamId}`} className="sh-btn">
-          チーム詳細へ戻る
+          戻る
         </Link>
-        <Link href={`/teams/${teamId}/message`} className="sh-btn sh-btn--primary">
+
+        <Link
+          href={`/chat/team/${teamId}?from=team-members&teamId=${teamId}`}
+          className="sh-btn sh-btn--primary"
+        >
           チーム連絡
         </Link>
+
         <Link href="/teams/join" className="sh-btn">
           招待コードで参加
-        </Link>
-        <Link href="/match/my-schedule" className="sh-btn sh-btn--primary">
-          マイスケジュール
         </Link>
       </div>
 
