@@ -5,7 +5,7 @@ export const pageWrap: React.CSSProperties = {
   maxWidth: 860,
   margin: "0 auto",
   boxSizing: "border-box",
-  height: "calc(var(--chat-vh, 100svh) - var(--app-header-height, 0px))",
+  height: "var(--chat-vh, 100dvh)",
   minHeight: 0,
   overflow: "hidden",
 };

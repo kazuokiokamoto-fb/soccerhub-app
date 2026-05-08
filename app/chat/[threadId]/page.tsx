@@ -151,18 +151,17 @@ export default function ChatThreadPage() {
 
   React.useEffect(() => {
     const setVh = () => {
-      const h = window.visualViewport?.height ?? window.innerHeight;
-      document.documentElement.style.setProperty("--chat-vh", `${h}px`);
+      document.documentElement.style.setProperty(
+        "--chat-vh",
+        `${window.innerHeight}px`
+      );
     };
 
     setVh();
-
-    window.visualViewport?.addEventListener("resize", setVh);
-    window.addEventListener("resize", setVh);
+    window.addEventListener("orientationchange", setVh);
 
     return () => {
-      window.visualViewport?.removeEventListener("resize", setVh);
-      window.removeEventListener("resize", setVh);
+      window.removeEventListener("orientationchange", setVh);
     };
   }, []);
 
@@ -259,29 +258,6 @@ export default function ChatThreadPage() {
                 disabled={!chat.canCreateProposal}
               >
                 {chat.creatingProposal ? "作成中…" : "予定を作る"}
-              </button>
-            ) : null}
-
-            {chat.otherTeamId ? (
-              <Link
-                href={`/teams/${chat.otherTeamId}?from=chat-thread&threadId=${threadId}${
-                  chat.carriedQueryString ? `&${chat.carriedQueryString}` : ""
-                }`}
-                className="sh-btn"
-              >
-                チーム詳細
-              </Link>
-            ) : null}
-
-            {chat.notificationPermission === "granted" ? (
-              <span style={notifyBadgeGranted}>通知ON</span>
-            ) : chat.notificationPermission !== "unsupported" ? (
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={chat.requestNotificationPermission}
-              >
-                通知をON
               </button>
             ) : null}
           </div>
