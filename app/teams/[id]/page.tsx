@@ -302,17 +302,19 @@ export default function TeamDetailPage() {
               </div>
 
               <div style={memberPanelActions}>
-                <Link
-                  href="/match/my-schedule"
-                  className="sh-btn sh-btn--primary"
-                >
-                  マイスケジュール
-                </Link>
-
                 {canManageMembers ? (
-                  <Link href={`/teams/${team.id}/members`} className="sh-btn">
-                    メンバー管理
-                  </Link>
+                  <>
+                    <Link href={`/teams/${team.id}/members`} className="sh-btn">
+                      メンバー管理
+                    </Link>
+
+                    <Link
+                      href={`/teams/${team.id}/edit`}
+                      className="sh-btn sh-btn--primary"
+                    >
+                      チーム編集
+                    </Link>
+                  </>
                 ) : null}
               </div>
             </section>
@@ -326,7 +328,7 @@ export default function TeamDetailPage() {
             backLabel={backConfig.label}
             showBackButton
             editHref={`/teams/${team.id}/edit`}
-            showEditButton
+            showEditButton={false}
             showGeminiSection={!mine}
             showChatButton={!mine}
             showStrengthHelpButton
