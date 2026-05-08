@@ -510,7 +510,10 @@ export default function TeamMembersPage() {
           チーム連絡
         </Link>
 
-        <Link href="/teams/join" className="sh-btn">
+        <Link
+          href={`/teams/join?from=members&teamId=${teamId}`}
+          className="sh-btn"
+        >
           招待コードで参加
         </Link>
       </div>

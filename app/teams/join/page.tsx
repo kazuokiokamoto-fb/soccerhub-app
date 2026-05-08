@@ -44,6 +44,14 @@ function TeamJoinPageInner() {
 
   const searchParams = useSearchParams();
 
+  const from = searchParams.get("from");
+  const backTeamId = searchParams.get("teamId");
+
+  const backHref =
+    from === "members" && backTeamId
+      ? `/teams/${backTeamId}/members`
+      : "/mypage";
+      
   useEffect(() => {
     const qCode = searchParams.get("code");
 
@@ -157,8 +165,8 @@ function TeamJoinPageInner() {
       />
 
       <div style={topNavWrap}>
-        <Link href="/teams" className="sh-btn">
-        戻る
+        <Link href={backHref} className="sh-btn">
+          戻る
         </Link>
       </div>
 

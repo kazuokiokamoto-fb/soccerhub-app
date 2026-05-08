@@ -288,7 +288,7 @@ export default function TeamDetailPage() {
 
           {backConfig.href ? (
             <div style={backButtonWrap}>
-              <Link href={backConfig.href} className="sh-btn">
+              <Link href="/mypage" className="sh-btn">
                 マイページ
               </Link>
             </div>
