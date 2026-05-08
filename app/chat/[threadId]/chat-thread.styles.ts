@@ -1,11 +1,12 @@
 import React from "react";
 
 export const pageWrap: React.CSSProperties = {
-  padding: 12,
+  padding: "8px 12px calc(8px + env(safe-area-inset-bottom))",
   maxWidth: 860,
   margin: "0 auto",
   boxSizing: "border-box",
-  height: "var(--chat-vh, 100dvh)",
+  height:
+    "calc(var(--chat-vh, 100svh) - var(--app-header-height, 0px) - env(safe-area-inset-bottom))",
   minHeight: 0,
   overflow: "hidden",
 };

@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { categoryLabel } from "@/app/lib/categories";
+import { STRENGTH_GUIDES } from "@/app/match/constants/strengthGuides";
 
 export type TeamProfileCardRow = {
   id: string;
@@ -426,26 +427,24 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
             <div style={modalTitle}>強さの目安</div>
 
             <div style={guideList}>
-              <div style={guideItem}>
-                <strong>SS</strong>
-                <span>全国・地域トップ級</span>
-              </div>
-              <div style={guideItem}>
-                <strong>S</strong>
-                <span>都・県リーグ上位</span>
-              </div>
-              <div style={guideItem}>
-                <strong>A</strong>
-                <span>都・県リーグ1・2部</span>
-              </div>
-              <div style={guideItem}>
-                <strong>B</strong>
-                <span>地域リーグ・育成中心</span>
-              </div>
-              <div style={guideItem}>
-                <strong>C</strong>
-                <span>交流・入門中心</span>
-              </div>
+              {STRENGTH_GUIDES.map((guide) => (
+                <div key={guide.rank} style={guideCard}>
+                  <div style={guideHeader}>
+                    <strong style={guideRankBadge}>{guide.rank}</strong>
+                    <span style={guideShort}>{guide.short}</span>
+                  </div>
+
+                  <div style={guideTitle}>{guide.title}</div>
+
+                  <ul style={guideBullets}>
+                    {guide.bullets.map((bullet) => (
+                      <li key={bullet}>{bullet}</li>
+                    ))}
+                  </ul>
+
+                  <div style={guideNote}>{guide.note}</div>
+                </div>
+              ))}
             </div>
 
             <div style={modalCloseRow}>
@@ -682,4 +681,64 @@ const modalActionRow: React.CSSProperties = {
 const modalCloseRow: React.CSSProperties = {
   display: "flex",
   justifyContent: "flex-end",
+};
+
+const guideCard: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 16,
+  border: "1px solid #dce9df",
+  background: "#fbfdfc",
+  display: "grid",
+  gap: 10,
+};
+
+const guideHeader: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+};
+
+const guideRankBadge: React.CSSProperties = {
+  minWidth: 48,
+  minHeight: 34,
+  borderRadius: 999,
+  background: "#25662f",
+  color: "#fff",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 16,
+  fontWeight: 900,
+};
+
+const guideShort: React.CSSProperties = {
+  fontSize: 15,
+  fontWeight: 900,
+  color: "#16391f",
+};
+
+const guideTitle: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 900,
+  color: "#1f2937",
+  lineHeight: 1.6,
+};
+
+const guideBullets: React.CSSProperties = {
+  margin: 0,
+  paddingLeft: 20,
+  color: "#374151",
+  lineHeight: 1.8,
+  fontSize: 13,
+};
+
+const guideNote: React.CSSProperties = {
+  padding: "8px 10px",
+  borderRadius: 12,
+  border: "1px solid #f3d37a",
+  background: "#fff8db",
+  color: "#5b4500",
+  fontSize: 13,
+  fontWeight: 900,
+  lineHeight: 1.6,
 };

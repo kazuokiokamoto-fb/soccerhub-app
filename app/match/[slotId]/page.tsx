@@ -63,6 +63,12 @@ type AttendanceRow = {
   team_id: string;
   user_id: string;
   status: AttendanceStatus;
+  comment: string | null;
+};
+
+type AttendanceNameItem = {
+  name: string;
+  comment: string;
 };
 
 type AttendanceSummary = {
@@ -74,10 +80,10 @@ type AttendanceSummary = {
 };
 
 type AttendanceNameGroups = {
-  attend: string[];
-  maybe: string[];
-  absent: string[];
-  unanswered: string[];
+  attend: AttendanceNameItem[];
+  maybe: AttendanceNameItem[];
+  absent: AttendanceNameItem[];
+  unanswered: AttendanceNameItem[];
 };
 
 function isRole(v: string): v is Role {
@@ -199,6 +205,7 @@ export default function MatchDetailPage() {
   const [myAttendance, setMyAttendance] = useState<AttendanceStatus | null>(
     null
   );
+  const [myAttendanceComment, setMyAttendanceComment] = useState("");
   const [attendanceSummary, setAttendanceSummary] =
     useState<AttendanceSummary>(emptySummary());
   const [attendanceNameGroups, setAttendanceNameGroups] =
@@ -387,7 +394,7 @@ export default function MatchDetailPage() {
         const { data: myAttendanceRaw, error: myAttendanceError } =
           await supabase
             .from("match_attendances")
-            .select("slot_id,team_id,user_id,status")
+            .select("slot_id,team_id,user_id,status,comment")
             .eq("slot_id", nextSlot.id)
             .eq("team_id", nextAttendanceTeamId)
             .eq("user_id", myUserId)
@@ -397,6 +404,7 @@ export default function MatchDetailPage() {
 
         const status = String((myAttendanceRaw as any)?.status ?? "");
         setMyAttendance(isAttendanceStatus(status) ? status : null);
+        setMyAttendanceComment(String((myAttendanceRaw as any)?.comment ?? ""));
       } else {
         setMyAttendance(null);
       }
@@ -404,7 +412,7 @@ export default function MatchDetailPage() {
       if (nextAttendanceTeamId) {
         const { data: attendanceRaw, error: attendanceError } = await supabase
           .from("match_attendances")
-          .select("slot_id,team_id,user_id,status")
+          .select("slot_id,team_id,user_id,status,comment")
           .eq("slot_id", nextSlot.id)
           .eq("team_id", nextAttendanceTeamId);
 
@@ -421,6 +429,7 @@ export default function MatchDetailPage() {
                   team_id: String(r.team_id ?? ""),
                   user_id: String(r.user_id ?? ""),
                   status,
+                  comment: typeof r.comment === "string" ? r.comment : null,
                 };
               })
               .filter((v): v is AttendanceRow => !!v?.user_id)
@@ -468,32 +477,37 @@ export default function MatchDetailPage() {
           }
         }
 
-        const attendanceByUser = new Map<string, AttendanceStatus>();
+        const attendanceByUser = new Map<string, AttendanceRow>();
         for (const row of attendanceRows) {
-          attendanceByUser.set(row.user_id, row.status);
+          attendanceByUser.set(row.user_id, row);
         }
 
         const summary = emptySummary(memberMap.size);
         const groups = emptyNameGroups();
 
         for (const member of memberMap.values()) {
-          const status = attendanceByUser.get(member.user_id);
+          const attendance = attendanceByUser.get(member.user_id);
+          const status = attendance?.status;
           const name = displayMemberName(member);
+          const item = {
+            name,
+            comment: String(attendance?.comment ?? "").trim(),
+          };
 
           if (status === "attend") {
             summary.attend += 1;
             summary.totalAnswered += 1;
-            groups.attend.push(name);
+            groups.attend.push(item);
           } else if (status === "maybe") {
             summary.maybe += 1;
             summary.totalAnswered += 1;
-            groups.maybe.push(name);
+            groups.maybe.push(item);
           } else if (status === "absent") {
             summary.absent += 1;
             summary.totalAnswered += 1;
-            groups.absent.push(name);
+            groups.absent.push(item);
           } else {
-            groups.unanswered.push(name);
+            groups.unanswered.push(item);
           }
         }
 
@@ -538,6 +552,7 @@ export default function MatchDetailPage() {
           team_id: attendanceTeamId,
           user_id: myUserId,
           status,
+          comment: myAttendanceComment.trim() || null,
           updated_at: new Date().toISOString(),
         },
         {
@@ -682,11 +697,6 @@ export default function MatchDetailPage() {
             </div>
           ) : null}
 
-          <div style={detailRow}>
-            <span style={icon}>📌</span>
-            <span>{slot.is_closed ? "現在は締切" : "受付中"}</span>
-          </div>
-
           {slot.note ? (
             <div style={detailRowTop}>
               <span style={icon}>📝</span>
@@ -778,6 +788,14 @@ export default function MatchDetailPage() {
             </button>
           </div>
 
+          <textarea
+            value={myAttendanceComment}
+            onChange={(e) => setMyAttendanceComment(e.target.value)}
+            placeholder="コメントを入力できます（例：少し遅れます）"
+            style={attendanceCommentInput}
+            disabled={savingAttendance}
+          />
+
           <div style={summaryBox}>
             <div style={summaryTitle}>出欠集計</div>
 
@@ -864,7 +882,7 @@ export default function MatchDetailPage() {
 
 function AttendanceNameRow(props: {
   label: string;
-  names: string[];
+  names: AttendanceNameItem[];
   emptyText: string;
   tone: "attend" | "maybe" | "absent" | "unanswered";
 }) {
@@ -886,8 +904,22 @@ function AttendanceNameRow(props: {
       >
         {label}
       </div>
+
       <div style={nameRowValue}>
-        {names.length > 0 ? names.join("、") : emptyText}
+        {names.length > 0 ? (
+          <div style={attendancePersonList}>
+            {names.map((item, index) => (
+              <div key={`${item.name}-${index}`} style={attendancePersonRow}>
+                <div style={attendancePersonName}>{item.name}</div>
+                <div style={attendancePersonComment}>
+                  {item.comment || "—"}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          emptyText
+        )}
       </div>
     </div>
   );
@@ -1169,4 +1201,40 @@ const teamMessageButtonWrapTop: React.CSSProperties = {
 const opponentTeamNameText: React.CSSProperties = {
   fontWeight: 900,
   color: "#16391f",
+};
+
+const attendanceCommentInput: React.CSSProperties = {
+  marginTop: 10,
+  width: "100%",
+  minHeight: 72,
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  fontSize: 14,
+  lineHeight: 1.6,
+  resize: "vertical",
+  boxSizing: "border-box",
+};
+
+const attendancePersonList: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+};
+
+const attendancePersonRow: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "120px 1fr",
+  gap: 8,
+  alignItems: "start",
+};
+
+const attendancePersonName: React.CSSProperties = {
+  fontWeight: 800,
+  color: "#1f2937",
+};
+
+const attendancePersonComment: React.CSSProperties = {
+  color: "#4b5563",
+  wordBreak: "break-word",
 };
