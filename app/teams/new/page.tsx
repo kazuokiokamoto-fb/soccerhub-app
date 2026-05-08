@@ -13,6 +13,7 @@ import {
   strengthRankToLegacyLevel,
 } from "@/app/components/StrengthRankPicker";
 import { STRENGTH_GUIDES } from "@/app/lib/strengthGuides";
+import AppHero from "@/app/components/AppHero";
 
 type Toast = { type: "success" | "error" | "info"; text: string };
 
@@ -382,32 +383,17 @@ export default function TeamNewPage() {
         </div>
       ) : null}
 
-      <section style={heroBox}>
-        <div style={heroHeader}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 30, fontWeight: 900 }}>
-              チーム登録
-            </h1>
-            <p style={heroText}>
-              チーム情報を登録して、練習試合マッチングを始めましょう。
-            </p>
-          </div>
+      <AppHero
+        icon="👥"
+        title="チーム登録"
+        desc="チーム情報を登録して、練習試合マッチングを始めましょう。"
+      />
 
-          <div style={heroAction}>
-            <Link
-              href="/mypage"
-              className="sh-btn"
-              style={{
-                minWidth: 132,
-                whiteSpace: "nowrap",
-                textAlign: "center",
-              }}
-            >
-              マイページ
-            </Link>
-          </div>
-        </div>
-      </section>
+      <div style={backButtonWrap}>
+        <Link href="/mypage" className="sh-btn">
+          マイページ
+        </Link>
+      </div>
 
       <section className="sh-section" style={{ marginTop: 16 }}>
         <div style={{ display: "grid", gap: 18 }}>
@@ -744,29 +730,6 @@ export default function TeamNewPage() {
   );
 }
 
-const heroBox: React.CSSProperties = {
-  borderRadius: 20,
-  background: "linear-gradient(135deg, #1e7f3c 0%, #145c2a 100%)",
-  color: "#fff",
-  padding: 20,
-  boxShadow: "0 10px 28px rgba(20,92,42,0.20)",
-};
-
-const heroBadge: React.CSSProperties = {
-  display: "inline-flex",
-  padding: "6px 12px",
-  borderRadius: 999,
-  background: "rgba(255,255,255,0.14)",
-  fontSize: 12,
-  fontWeight: 800,
-};
-
-const heroText: React.CSSProperties = {
-  margin: "8px 0 0",
-  color: "rgba(255,255,255,0.92)",
-  lineHeight: 1.7,
-};
-
 const infoNotice: React.CSSProperties = {
   padding: 14,
   border: "1px solid #d6eadb",
@@ -954,13 +917,6 @@ const toastClose: React.CSSProperties = {
   opacity: 0.7,
 };
 
-const heroHeader: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 12,
-};
-
 const strengthLabelRow: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
@@ -1066,9 +1022,9 @@ const guideNote: React.CSSProperties = {
   color: "#5b4700",
 };
 
-const heroAction: React.CSSProperties = {
+const backButtonWrap: React.CSSProperties = {
+  marginTop: 14,
+  marginBottom: 10,
   display: "flex",
-  gap: 10,
-  marginLeft: "auto",
-  flexShrink: 0,
+  justifyContent: "flex-start",
 };
