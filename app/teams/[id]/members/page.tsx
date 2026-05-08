@@ -368,19 +368,27 @@ export default function TeamMembersPage() {
     }
   };
 
+  function buildInviteJoinUrl(code: string) {
+    if (typeof window === "undefined") return `/teams/join?code=${code}`;
+    return `${window.location.origin}/teams/join?code=${encodeURIComponent(code)}`;
+  }
+
+  function buildInviteText(invite: InviteRow) {
+    const url = buildInviteJoinUrl(invite.code);
+
+    return [
+      "サカまっちのチーム招待です。",
+      "",
+      `チーム：${team?.name || "チーム"}`,
+      `招待コード：${invite.code}`,
+      `参加ページ：${url}`,
+      "",
+      "上記URLを開いて、表示名を入力して参加してください。",
+    ].join("\n");
+  }
+
   const copyInvite = async (invite: InviteRow) => {
-    const joinUrl =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/teams/join?code=${encodeURIComponent(invite.code)}`
-        : `/teams/join?code=${encodeURIComponent(invite.code)}`;
-
-    const text = `サカまっちのチーム招待です。
-
-  チーム：${team?.name || "チーム"}
-  招待コード：${invite.code}
-  参加ページ：${joinUrl}
-
-  上記URLを開いて、表示名を入力して参加してください。`;
+    const text = buildInviteText(invite);
 
     try {
       await navigator.clipboard.writeText(text);
@@ -646,6 +654,26 @@ export default function TeamMembersPage() {
                         >
                           コピー
                         </button>
+
+                        <a
+                          className="sh-btn"
+                          href={`mailto:?subject=${encodeURIComponent(
+                            "サカまっち チーム招待"
+                          )}&body=${encodeURIComponent(buildInviteText(invite))}`}
+                        >
+                          メール
+                        </a>
+
+                        <a
+                          className="sh-btn sh-btn--primary"
+                          href={`https://line.me/R/msg/text/?${encodeURIComponent(
+                            buildInviteText(invite)
+                          )}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          LINE
+                        </a>
 
                         <button
                           type="button"

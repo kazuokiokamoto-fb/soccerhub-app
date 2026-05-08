@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
@@ -179,14 +180,22 @@ export default function TeamJoinPage() {
           {errorText ? <div style={errorBox}>{errorText}</div> : null}
           {successText ? <div style={successBox}>{successText}</div> : null}
 
-          <button
-            type="button"
-            className="sh-btn sh-btn--primary"
-            onClick={joinTeam}
-            disabled={saving}
-          >
-            {saving ? "参加中…" : "チームに参加する"}
-          </button>
+          {successText ? (
+            <Link href="/mypage" className="sh-btn sh-btn--primary">
+              マイページへ
+            </Link>
+          ) : null}
+
+          {!successText ? (
+            <button
+              type="button"
+              className="sh-btn sh-btn--primary"
+              onClick={joinTeam}
+              disabled={saving}
+            >
+              {saving ? "参加中…" : "チームに参加する"}
+            </button>
+          ) : null}
         </section>
       )}
     </main>
@@ -197,13 +206,6 @@ const pageWrap: React.CSSProperties = {
   maxWidth: 720,
   margin: "0 auto",
   padding: 16,
-};
-
-const topNavWrap: React.CSSProperties = {
-  marginTop: 12,
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
 };
 
 const emptyBox: React.CSSProperties = {
