@@ -440,9 +440,6 @@ export default function MyPage() {
             <Link href="/teams/new" className="sh-btn">
               ＋チーム登録
             </Link>
-            <Link href="/teams" className="sh-btn sh-btn--primary">
-              チーム編集
-            </Link>
           </div>
         </div>
 
@@ -477,15 +474,6 @@ export default function MyPage() {
                       <Link href={`/teams/${team.id}?from=mypage`} className="sh-btn">
                         詳細
                       </Link>
-
-                      {isOwner ? (
-                        <Link
-                          href={`/teams/${team.id}/edit`}
-                          className="sh-btn sh-btn--primary"
-                        >
-                          編集
-                        </Link>
-                      ) : null}
 
                       {isOwner ? (
                         <button

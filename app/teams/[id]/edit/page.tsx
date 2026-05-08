@@ -1049,19 +1049,18 @@ const modalOverlay: React.CSSProperties = {
   background: "rgba(0,0,0,0.45)",
   zIndex: 1000,
   padding: 16,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
+  overflowY: "auto",
+  WebkitOverflowScrolling: "touch",
 };
 
 const modalCard: React.CSSProperties = {
   width: "100%",
   maxWidth: 720,
-  maxHeight: "85vh",
-  overflowY: "auto",
+  maxHeight: "none",
   background: "#fff",
   borderRadius: 20,
   padding: 18,
+  margin: "24px auto",
 };
 
 const modalHeader: React.CSSProperties = {
