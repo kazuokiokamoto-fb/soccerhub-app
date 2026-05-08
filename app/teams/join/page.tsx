@@ -156,6 +156,12 @@ function TeamJoinPageInner() {
         desc="管理者から共有された招待コードを入力して、チームメンバーとして参加できます。"
       />
 
+      <div style={topNavWrap}>
+        <Link href="/teams" className="sh-btn">
+        戻る
+        </Link>
+      </div>
+
       {authLoading ? (
         <div style={emptyBox}>読み込み中…</div>
       ) : !userId ? (
@@ -274,4 +280,11 @@ const successBox: React.CSSProperties = {
   background: "#f0fdf4",
   color: "#166534",
   lineHeight: 1.6,
+};
+
+const topNavWrap: React.CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
 };

@@ -99,7 +99,6 @@ export default function TeamMembersPage() {
 
   const [inviteRole, setInviteRole] = useState<InviteRole>("member");
   const [inviteDisplayName, setInviteDisplayName] = useState("");
-  const [inviteMaxUses, setInviteMaxUses] = useState("1");
   const [inviteDays, setInviteDays] = useState("14");
 
   const canManage = myRole === "owner" || myRole === "coach";
@@ -317,11 +316,7 @@ export default function TeamMembersPage() {
       return;
     }
 
-    const maxUsesNum = Number(inviteMaxUses);
     const daysNum = Number(inviteDays);
-
-    const maxUses =
-      Number.isFinite(maxUsesNum) && maxUsesNum > 0 ? maxUsesNum : null;
 
     const expiresAt =
       Number.isFinite(daysNum) && daysNum > 0
@@ -342,7 +337,6 @@ export default function TeamMembersPage() {
           role: inviteRole,
           display_name: inviteDisplayName.trim() || null,
           expires_at: expiresAt,
-          max_uses: maxUses,
           created_by: userId || null,
           updated_at: new Date().toISOString(),
         });
@@ -350,7 +344,6 @@ export default function TeamMembersPage() {
         if (!error) {
           setInviteRole("member");
           setInviteDisplayName("");
-          setInviteMaxUses("1");
           setInviteDays("14");
           await load();
           return;
@@ -398,19 +391,16 @@ export default function TeamMembersPage() {
     }
   };
 
-  const stopInvite = async (invite: InviteRow) => {
+  const deleteInvite = async (invite: InviteRow) => {
     if (!canManage) return;
-    if (!window.confirm("この招待コードを停止しますか？")) return;
+    if (!window.confirm("この招待コードを削除しますか？")) return;
 
     setSaving(true);
 
     try {
       const { error } = await supabase
         .from("team_invites")
-        .update({
-          is_active: false,
-          updated_at: new Date().toISOString(),
-        })
+        .delete()
         .eq("id", invite.id);
 
       if (error) throw error;
@@ -418,7 +408,7 @@ export default function TeamMembersPage() {
       await load();
     } catch (e: any) {
       console.error(e);
-      alert(`停止に失敗しました: ${e?.message ?? "unknown error"}`);
+      alert(`削除に失敗しました: ${e?.message ?? "unknown error"}`);
     } finally {
       setSaving(false);
     }
@@ -577,17 +567,6 @@ export default function TeamMembersPage() {
               </label>
 
               <label style={fieldLabel}>
-                利用上限
-                <input
-                  value={inviteMaxUses}
-                  onChange={(e) => setInviteMaxUses(e.target.value)}
-                  placeholder="例：1"
-                  inputMode="numeric"
-                  style={input}
-                />
-              </label>
-
-              <label style={fieldLabel}>
                 有効期限（日数）
                 <input
                   value={inviteDays}
@@ -632,9 +611,7 @@ export default function TeamMembersPage() {
                       <div style={memberMain}>
                         <div style={inviteCode}>{invite.code}</div>
                         <div style={memberMeta}>
-                          権限：{roleLabel(invite.role)} / 利用：
-                          {invite.used_count}
-                          {invite.max_uses ? ` / ${invite.max_uses}` : ""} /{" "}
+                          権限：{roleLabel(invite.role)} / 利用：{invite.used_count}回 /{" "}
                           {formatDateTime(invite.expires_at)}
                         </div>
                         <div style={available ? inviteActive : inviteStopped}>
@@ -678,10 +655,10 @@ export default function TeamMembersPage() {
                         <button
                           type="button"
                           className="sh-btn"
-                          disabled={saving || !invite.is_active}
-                          onClick={() => stopInvite(invite)}
+                          disabled={saving}
+                          onClick={() => deleteInvite(invite)}
                         >
-                          停止
+                          削除
                         </button>
                       </div>
                     </div>
