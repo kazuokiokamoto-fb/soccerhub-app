@@ -541,15 +541,17 @@ export default function TeamEditPage() {
 
           <div style={heroAction}>
             <Link
-              href="/teams"
+              href={`/teams/${teamId}`}
               className="sh-btn"
               style={{
-                minWidth: 110,
+                width: "auto",
+                paddingInline: 18,
                 whiteSpace: "nowrap",
                 textAlign: "center",
+                flexShrink: 0,
               }}
             >
-              一覧
+              戻る
             </Link>
           </div>
         </div>

@@ -333,8 +333,6 @@ export default function TeamDetailPage() {
             title="チーム詳細"
             team={team}
             myUserId={myUserId}
-            editHref={`/teams/${team.id}/edit`}
-            showEditButton
             showGeminiSection={!mine}
             showChatButton={!mine}
             showStrengthHelpButton
