@@ -188,10 +188,8 @@ export function AreaPickerKanto(props: {
     let cancelled = false;
 
     const run = async () => {
-      setCity("");
-      setTown("");
-      setCityQuery("");
-      setTownQuery("");
+      setCityQuery(city || "");
+      setTownQuery(town || "");
       setCityOptions([]);
       setTownOptions([]);
       setShowTownList(false);
@@ -246,7 +244,7 @@ export function AreaPickerKanto(props: {
     return () => {
       cancelled = true;
     };
-  }, [prefecture, collator, setCity, setTown]);
+  }, [prefecture, collator]);
 
   useEffect(() => {
     let cancelled = false;
@@ -307,8 +305,7 @@ export function AreaPickerKanto(props: {
     let cancelled = false;
 
     const run = async () => {
-      setTown("");
-      setTownQuery("");
+      setTownQuery(town || "");
       setTownOptions([]);
       setShowTownList(false);
 
@@ -363,7 +360,7 @@ export function AreaPickerKanto(props: {
     return () => {
       cancelled = true;
     };
-  }, [prefecture, city, collator, setTown]);
+  }, [prefecture, city, collator]);
 
   useEffect(() => {
     let cancelled = false;
@@ -674,7 +671,7 @@ export function AreaPickerKanto(props: {
 
       <div style={block}>
         <div style={rowHead}>
-          <div style={sectionTitle}>市区町村（任意）</div>
+          <div style={sectionTitle}>市区町村（{allowAll ? "任意" : "必須"}）</div>
           <div style={statusText}>
             {!prefecture ? "候補 0 件" : loadingCities ? "読み込み中..." : `候補 ${cityOptions.length} 件`}
           </div>
