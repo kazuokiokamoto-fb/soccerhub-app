@@ -280,6 +280,7 @@ export default function HomeCalendar(props: {
 
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
   const [showCalendarHelp, setShowCalendarHelp] = useState(false);
+  const [showMatchCalendar, setShowMatchCalendar] = useState(false);
 
   const [myUpcomingSchedules, setMyUpcomingSchedules] = useState<
     MyScheduleItem[]
@@ -1335,10 +1336,13 @@ export default function HomeCalendar(props: {
               type="button"
               className="sh-btn"
               onClick={() => {
-                calendarRef.current?.scrollIntoView({
-                  behavior: "smooth",
-                  block: "start",
-                });
+                setShowMatchCalendar(true);
+                setTimeout(() => {
+                  calendarRef.current?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
+                }, 80);
               }}
             >
               カレンダー
@@ -1363,74 +1367,78 @@ export default function HomeCalendar(props: {
         </div>
       </section>
 
-      <div ref={calendarRef}>
-        <Calendar
-          monthKey={monthKey}
-          loading={loading}
-          cells={calendarCells}
-          selectedYmd={selectedYmd}
-          countByDate={countByDate}
-          dayStatusSummaryByDate={dayStatusSummaryByDate}
-          onSelectDate={(ymd) => {
-            setSelectedYmd(ymd);
-            setSelectedSlotId("");
-            setRequestComment("");
-            scrollToDayList();
-          }}
-          onPrevMonth={() => {
-            const nextMonth = addMonths(monthDate, -1);
-            setMonthDate(nextMonth);
-            setSelectedYmd(firstDayYmdOfMonth(nextMonth));
-            setSelectedSlotId("");
-            setRequestComment("");
-          }}
-          onNextMonth={() => {
-            const nextMonth = addMonths(monthDate, 1);
-            setMonthDate(nextMonth);
-            setSelectedYmd(firstDayYmdOfMonth(nextMonth));
-            setSelectedSlotId("");
-            setRequestComment("");
-          }}
-          onCreateForDate={(ymd) => goToCreatePage(ymd)}
-          disableCreate={!authReady}
-          selectedDateSummaryText={selectedDateSummaryText}
-          titleText="試合日で探す"
-        />
-      </div>
+      {showMatchCalendar ? (
+        <>
+          <div ref={calendarRef}>
+            <Calendar
+              monthKey={monthKey}
+              loading={loading}
+              cells={calendarCells}
+              selectedYmd={selectedYmd}
+              countByDate={countByDate}
+              dayStatusSummaryByDate={dayStatusSummaryByDate}
+              onSelectDate={(ymd) => {
+                setSelectedYmd(ymd);
+                setSelectedSlotId("");
+                setRequestComment("");
+                scrollToDayList();
+              }}
+              onPrevMonth={() => {
+                const nextMonth = addMonths(monthDate, -1);
+                setMonthDate(nextMonth);
+                setSelectedYmd(firstDayYmdOfMonth(nextMonth));
+                setSelectedSlotId("");
+                setRequestComment("");
+              }}
+              onNextMonth={() => {
+                const nextMonth = addMonths(monthDate, 1);
+                setMonthDate(nextMonth);
+                setSelectedYmd(firstDayYmdOfMonth(nextMonth));
+                setSelectedSlotId("");
+                setRequestComment("");
+              }}
+              onCreateForDate={(ymd) => goToCreatePage(ymd)}
+              disableCreate={!authReady}
+              selectedDateSummaryText={selectedDateSummaryText}
+              titleText="試合日で探す"
+            />
+          </div>
 
-      <div ref={dayListRef}>
-        <DaySlotList
-          selectedYmd={selectedYmd}
-          slots={slotsOnSelectedDate as any}
-          venues={venues}
-          allTeams={allTeams as any}
-          myTeams={myTeams as any}
-          meId={currentUserId}
-          requestsForMonth={requestsForMonth}
-          selectedSlotId={selectedSlotId}
-          slotStatusResolver={getSlotStatus}
-          onToggleDetail={(slotId) => {
-            const next = selectedSlotId === slotId ? "" : slotId;
-            setSelectedSlotId(next);
-            setRequestComment("");
-          }}
-          requestTeamId={requestTeamId}
-          onChangeRequestTeamId={setRequestTeamId}
-          requestComment={requestComment}
-          onChangeRequestComment={setRequestComment}
-          onRequestSlot={requestSlot}
-          onCancelMyRequest={cancelMyRequest}
-          selectedSlot={selectedSlot}
-          selectedHostTeam={selectedHostTeam as any}
-          selectedSlotRequests={selectedSlotRequests}
-          isMineSlot={isMineSlot}
-          onAccept={accept}
-          onReject={reject}
-          onOpenChatWithTeam={openDmAndGo}
-          onToggleClosed={toggleClosed}
-          loading={loading}
-        />
-      </div>
+          <div ref={dayListRef}>
+            <DaySlotList
+              selectedYmd={selectedYmd}
+              slots={slotsOnSelectedDate as any}
+              venues={venues}
+              allTeams={allTeams as any}
+              myTeams={myTeams as any}
+              meId={currentUserId}
+              requestsForMonth={requestsForMonth}
+              selectedSlotId={selectedSlotId}
+              slotStatusResolver={getSlotStatus}
+              onToggleDetail={(slotId) => {
+                const next = selectedSlotId === slotId ? "" : slotId;
+                setSelectedSlotId(next);
+                setRequestComment("");
+              }}
+              requestTeamId={requestTeamId}
+              onChangeRequestTeamId={setRequestTeamId}
+              requestComment={requestComment}
+              onChangeRequestComment={setRequestComment}
+              onRequestSlot={requestSlot}
+              onCancelMyRequest={cancelMyRequest}
+              selectedSlot={selectedSlot}
+              selectedHostTeam={selectedHostTeam as any}
+              selectedSlotRequests={selectedSlotRequests}
+              isMineSlot={isMineSlot}
+              onAccept={accept}
+              onReject={reject}
+              onOpenChatWithTeam={openDmAndGo}
+              onToggleClosed={toggleClosed}
+              loading={loading}
+            />
+          </div>
+        </>
+      ) : null}
 
       <MatchHelpModals
         showStrengthHelp={showStrengthHelp}
