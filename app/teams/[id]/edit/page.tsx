@@ -248,35 +248,32 @@ export default function TeamEditPage() {
         const areaText = String(data.area ?? "").trim();
 
         const areaParts = areaText
-          .split("・")
+          .split(/[・,、]/)
           .map((v) => v.trim())
           .filter(Boolean);
 
-        const head = areaParts[0] ?? "";
-        const tail = areaParts[1] ?? "";
+        const firstPart = areaParts[0] ?? "";
+        const secondPart = areaParts[1] ?? "";
+        const thirdPart = areaParts[2] ?? "";
 
-        const headParts = head.split(/\s+/).filter(Boolean);
+        const firstTokens = firstPart.split(/\s+/).filter(Boolean);
 
-        const fallbackPrefecture = headParts[0] ?? "";
-        const fallbackCity = headParts.slice(1).join("");
+        const areaPrefecture =
+          firstTokens.length >= 2 ? firstTokens[0] : firstPart;
 
-        setPrefecture(
-          data.prefecture ??
-            fallbackPrefecture ??
-            "東京都"
-        );
+        const areaCity =
+          firstTokens.length >= 2 ? firstTokens.slice(1).join("") : secondPart;
 
-        setCity(
-          data.city ??
-            fallbackCity ??
-            ""
-        );
+        const areaTown =
+          firstTokens.length >= 2 ? secondPart : thirdPart;
 
-        setTown(
-          data.town ??
-            tail ??
-            ""
-        );
+        const nextPrefecture = data.prefecture || areaPrefecture || "東京都";
+        const nextCity = data.city || areaCity || "";
+        const nextTown = data.town || areaTown || "";
+
+        setPrefecture(nextPrefecture);
+        setCity(nextCity);
+        setTown(nextTown);
 
         setAddressDetail(data.address_detail ?? "");
         setNote(data.note ?? "");
