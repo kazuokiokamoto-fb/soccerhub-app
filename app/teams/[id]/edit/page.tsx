@@ -117,6 +117,7 @@ export default function TeamEditPage() {
       !!name.trim() &&
       !!prefecture &&
       !!city &&
+      !!town &&
       categories.length > 0 &&
       categoryProfiles.length > 0 &&
       categoryProfiles.every(
@@ -130,6 +131,7 @@ export default function TeamEditPage() {
     name,
     prefecture,
     city,
+    town,
     categories,
     categoryProfiles,
     saving,
@@ -574,7 +576,7 @@ export default function TeamEditPage() {
             town={town}
             setTown={setTown}
             title="エリア（関東）"
-            townOptional={true}
+            townOptional={false}
             allowAll={false}
           />
 

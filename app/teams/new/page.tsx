@@ -134,6 +134,7 @@ export default function TeamNewPage() {
     if (!name.trim()) return false;
     if (!prefecture) return false;
     if (!city) return false;
+    if (!town) return false;
     if (categories.length === 0) return false;
     if (loadingDefaults || saving) return false;
 
@@ -148,6 +149,7 @@ export default function TeamNewPage() {
     name,
     prefecture,
     city,
+    town,
     categories,
     categoryProfiles,
     loadingDefaults,
@@ -427,7 +429,7 @@ export default function TeamNewPage() {
             town={town}
             setTown={setTown}
             title="エリア（関東）"
-            townOptional={true}
+            townOptional={false}
             allowAll={false}
           />
 
