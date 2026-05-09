@@ -23,6 +23,11 @@ import { matchesSlotFilters } from "@/app/match/utils/filters";
 
 import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 
+import {
+  MatchCalendarBase,
+  type CalendarItem,
+} from "@/app/match/components/MatchCalendarBase";
+
 type CalendarShortStatus = "decided" | "open" | "other";
 
 type DayCalendarSummary = {
@@ -282,6 +287,16 @@ export default function HomeCalendar(props: {
   const [showCalendarHelp, setShowCalendarHelp] = useState(false);
   const [showMatchCalendar, setShowMatchCalendar] = useState(false);
 
+  const [showMyScheduleCalendar, setShowMyScheduleCalendar] = useState(false);
+  const [myScheduleCalendarMonth, setMyScheduleCalendarMonth] = useState(() =>
+    startOfMonth(new Date())
+  );
+  const [myScheduleCalendarLoading, setMyScheduleCalendarLoading] = useState(false);
+  const [myScheduleCalendarError, setMyScheduleCalendarError] = useState("");
+  const [myScheduleSummaries, setMyScheduleSummaries] = useState<
+    Map<string, { total: number; confirmed: number; draft: number }>
+  >(new Map());
+
   const [myUpcomingSchedules, setMyUpcomingSchedules] = useState<
     MyScheduleItem[]
   >([]);
@@ -290,6 +305,8 @@ export default function HomeCalendar(props: {
   const homeTopRef = useRef<HTMLDivElement | null>(null);
   const calendarRef = useRef<HTMLDivElement | null>(null);
   const dayListRef = useRef<HTMLDivElement | null>(null);
+
+  const myScheduleCalendarRef = useRef<HTMLDivElement | null>(null);
 
   const {
     keyword,
@@ -346,6 +363,193 @@ export default function HomeCalendar(props: {
   }, [myTeams, requestTeamId]);
 
   const myTeamIds = useMemo(() => myTeams.map((t: any) => t.id), [myTeams]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadMyScheduleCalendar = async () => {
+      if (!showMyScheduleCalendar) return;
+
+      if (!authReady || myTeamIds.length === 0) {
+        setMyScheduleSummaries(new Map());
+        return;
+      }
+
+      setMyScheduleCalendarLoading(true);
+      setMyScheduleCalendarError("");
+
+      try {
+        const startStr = `${toMonthKey(myScheduleCalendarMonth)}-01`;
+        const endMonth = addMonths(myScheduleCalendarMonth, 1);
+        const endStr = `${toMonthKey(endMonth)}-01`;
+
+        const { data: teamSchedulesRaw, error: teamSchedulesError } =
+          await supabase
+            .from("team_schedules")
+            .select("id,team_id,date,status")
+            .in("team_id", myTeamIds)
+            .gte("date", startStr)
+            .lt("date", endStr)
+            .order("date", { ascending: true });
+
+        if (teamSchedulesError) throw teamSchedulesError;
+
+        const { data: hostedSlotsRaw, error: hostedSlotsError } = await supabase
+          .from("match_slots")
+          .select("id,host_team_id,date")
+          .in("host_team_id", myTeamIds)
+          .gte("date", startStr)
+          .lt("date", endStr)
+          .order("date", { ascending: true });
+
+        if (hostedSlotsError) throw hostedSlotsError;
+
+        const hostedSlots = Array.isArray(hostedSlotsRaw) ? hostedSlotsRaw : [];
+        const hostedSlotIds = hostedSlots.map((slot: any) => slot.id);
+
+        let hostedRequests: any[] = [];
+
+        if (hostedSlotIds.length > 0) {
+          const { data, error } = await supabase
+            .from("match_requests")
+            .select("id,slot_id,requester_team_id,status")
+            .in("slot_id", hostedSlotIds)
+            .in("status", ["pending", "accepted"]);
+
+          if (error) throw error;
+          hostedRequests = Array.isArray(data) ? data : [];
+        }
+
+        const hostedRequestBySlotId = new Map<string, any>();
+        for (const req of hostedRequests) {
+          const current = hostedRequestBySlotId.get(req.slot_id);
+          if (!current || req.status === "accepted") {
+            hostedRequestBySlotId.set(req.slot_id, req);
+          }
+        }
+
+        const { data: requesterRequestsRaw, error: requesterRequestsError } =
+          await supabase
+            .from("match_requests")
+            .select("id,slot_id,requester_team_id,status")
+            .in("requester_team_id", myTeamIds)
+            .in("status", ["pending", "accepted"]);
+
+        if (requesterRequestsError) throw requesterRequestsError;
+
+        const requesterRequests = Array.isArray(requesterRequestsRaw)
+          ? requesterRequestsRaw
+          : [];
+
+        const requesterSlotIds = Array.from(
+          new Set(requesterRequests.map((row: any) => row.slot_id))
+        ).filter((id) => !hostedSlotIds.includes(id));
+
+        let requesterSlots: any[] = [];
+
+        if (requesterSlotIds.length > 0) {
+          const { data, error } = await supabase
+            .from("match_slots")
+            .select("id,host_team_id,date")
+            .in("id", requesterSlotIds)
+            .gte("date", startStr)
+            .lt("date", endStr)
+            .order("date", { ascending: true });
+
+          if (error) throw error;
+          requesterSlots = Array.isArray(data) ? data : [];
+        }
+
+        const requesterRequestBySlotId = new Map<string, any>();
+        for (const req of requesterRequests) {
+          const current = requesterRequestBySlotId.get(req.slot_id);
+          if (!current || req.status === "accepted") {
+            requesterRequestBySlotId.set(req.slot_id, req);
+          }
+        }
+
+        const map = new Map<
+          string,
+          { total: number; confirmed: number; draft: number }
+        >();
+
+        const seen = new Set<string>();
+
+        const addSummary = (date: string, status: "confirmed" | "draft") => {
+          if (!date) return;
+
+          const current = map.get(date) ?? {
+            total: 0,
+            confirmed: 0,
+            draft: 0,
+          };
+
+          current.total += 1;
+
+          if (status === "confirmed") {
+            current.confirmed += 1;
+          } else {
+            current.draft += 1;
+          }
+
+          map.set(date, current);
+        };
+
+        for (const item of Array.isArray(teamSchedulesRaw) ? teamSchedulesRaw : []) {
+          const seenKey = `team_schedule:${item.id}`;
+          if (seen.has(seenKey)) continue;
+          seen.add(seenKey);
+
+          addSummary(
+            String(item.date ?? ""),
+            item.status === "confirmed" ? "confirmed" : "draft"
+          );
+        }
+
+        for (const slot of hostedSlots) {
+          const seenKey = `host:${slot.id}`;
+          if (seen.has(seenKey)) continue;
+          seen.add(seenKey);
+
+          const req = hostedRequestBySlotId.get(slot.id);
+          addSummary(
+            String(slot.date ?? ""),
+            req?.status === "accepted" ? "confirmed" : "draft"
+          );
+        }
+
+        for (const slot of requesterSlots) {
+          const req = requesterRequestBySlotId.get(slot.id);
+          const requesterTeamId = req?.requester_team_id ?? "";
+
+          const seenKey = `guest:${slot.id}:${requesterTeamId}`;
+          if (seen.has(seenKey)) continue;
+          seen.add(seenKey);
+
+          addSummary(
+            String(slot.date ?? ""),
+            req?.status === "accepted" ? "confirmed" : "draft"
+          );
+        }
+
+        if (!active) return;
+        setMyScheduleSummaries(map);
+      } catch (e: any) {
+        console.error("loadMyScheduleCalendar error:", e);
+        if (!active) return;
+        setMyScheduleSummaries(new Map());
+        setMyScheduleCalendarError(e?.message ?? "予定の取得に失敗しました");
+      } finally {
+        if (active) setMyScheduleCalendarLoading(false);
+      }
+    };
+
+    void loadMyScheduleCalendar();
+
+    return () => {
+      active = false;
+    };
+  }, [showMyScheduleCalendar, authReady, myTeamIds, myScheduleCalendarMonth]);
 
   const teamMap = useMemo(() => {
     return new Map(allTeams.map((t) => [t.id, t]));
@@ -686,10 +890,6 @@ export default function HomeCalendar(props: {
 
   const openMySchedulePage = () => {
     window.location.href = "/match/my-schedule";
-  };
-
-  const openMyScheduleCalendarPage = () => {
-    window.location.href = "/match/my-schedule/calendar";
   };
 
   const openManualScheduleCreatePage = () => {
@@ -1156,6 +1356,46 @@ export default function HomeCalendar(props: {
     return `${selectedYmd} / 募集件数 ${slotsOnSelectedDate.length}件`;
   }, [selectedYmd, slotsOnSelectedDate.length]);
 
+  const myScheduleCalendarCells = useMemo(
+    () => buildCalendarCells(myScheduleCalendarMonth),
+    [myScheduleCalendarMonth]
+  );
+
+  const myScheduleCalendarMonthKey = useMemo(
+    () => toMonthKey(myScheduleCalendarMonth),
+    [myScheduleCalendarMonth]
+  );
+
+  const myScheduleItemsByDate = useMemo(() => {
+    const map = new Map<string, CalendarItem[]>();
+
+    for (const [ymd, summary] of myScheduleSummaries.entries()) {
+      const items: CalendarItem[] = [];
+
+      if (summary.confirmed > 0) {
+        items.push({
+          label: "決定",
+          count: summary.confirmed,
+          tone: "decided",
+        });
+      }
+
+      if (summary.draft > 0) {
+        items.push({
+          label: "交渉",
+          count: summary.draft,
+          tone: "negotiating",
+        });
+      }
+
+      if (items.length > 0) {
+        map.set(ymd, items);
+      }
+    }
+
+    return map;
+  }, [myScheduleSummaries]);
+
   const topConditionText = useMemo(
     () => filterSummaryText,
     [filterSummaryText]
@@ -1255,9 +1495,22 @@ export default function HomeCalendar(props: {
                 <button
                   type="button"
                   className="sh-btn"
-                  onClick={openMyScheduleCalendarPage}
+                  onClick={() => {
+                    const next = !showMyScheduleCalendar;
+
+                    setShowMyScheduleCalendar(next);
+
+                    if (next) {
+                      setTimeout(() => {
+                        myScheduleCalendarRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                      }, 80);
+                    }
+                  }}
                 >
-                  カレンダー
+                  {showMyScheduleCalendar ? "閉じる" : "カレンダー"}
                 </button>
 
                 <button
@@ -1287,17 +1540,30 @@ export default function HomeCalendar(props: {
                 <button
                   type="button"
                   className="sh-btn"
-                  onClick={openManualScheduleCreatePage}
-                >
-                  予定作成
-                </button>
+                  onClick={() => {
+                    const next = !showMyScheduleCalendar;
 
+                    setShowMyScheduleCalendar(next);
+
+                    if (next) {
+                      setTimeout(() => {
+                        myScheduleCalendarRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                      }, 80);
+                    }
+                  }}
+                >
+                  {showMyScheduleCalendar ? "閉じる" : "カレンダー"}
+                </button>
+                
                 <button
                   type="button"
                   className="sh-btn"
-                  onClick={openMyScheduleCalendarPage}
+                  onClick={openManualScheduleCreatePage}
                 >
-                  カレンダー
+                  予定作成
                 </button>
 
                 <button
@@ -1312,6 +1578,52 @@ export default function HomeCalendar(props: {
           )}
         </div>
       </section>
+
+      {showMyScheduleCalendar ? (
+        <section
+          ref={myScheduleCalendarRef}
+          style={calendarCard}
+        >
+          <div style={calendarTitle}>マイスケジュール</div>
+
+          <div style={legendWrap}>
+            <span style={legendItem}>
+              <span style={legendDotConfirmed} />
+              決定
+            </span>
+            <span style={legendItem}>
+              <span style={legendDotNegotiating} />
+              交渉
+            </span>
+          </div>
+
+          {myScheduleCalendarError ? (
+            <div style={errorBox} className="ui-card">
+              {myScheduleCalendarError}
+            </div>
+          ) : myScheduleCalendarLoading ? (
+            <div style={emptyBox} className="ui-meta">
+              読み込み中…
+            </div>
+          ) : (
+            <MatchCalendarBase
+              monthKey={myScheduleCalendarMonthKey}
+              cells={myScheduleCalendarCells}
+              selectedYmd={ymdToday()}
+              itemsByDate={myScheduleItemsByDate}
+              onSelectDate={(ymd) => {
+                window.location.href = `/match/my-schedule?date=${ymd}`;
+              }}
+              onPrevMonth={() =>
+                setMyScheduleCalendarMonth((prev) => addMonths(prev, -1))
+              }
+              onNextMonth={() =>
+                setMyScheduleCalendarMonth((prev) => addMonths(prev, 1))
+              }
+            />
+          )}
+        </section>
+      ) : null}
 
       <section style={summaryBox} className="ui-card">
         <div style={summaryCardTop}>
@@ -1350,7 +1662,7 @@ export default function HomeCalendar(props: {
                 }
               }}
             >
-              カレンダー
+              {showMatchCalendar ? "閉じる" : "カレンダー"}
             </button>
 
             <button
@@ -1615,4 +1927,59 @@ const emptyRecruitText: React.CSSProperties = {
   textOverflow: "clip",
   letterSpacing: "-0.02em",
   fontSize: "clamp(9px, 2.7vw, 15px)",
+};
+
+const calendarCard: React.CSSProperties = {
+  marginTop: 2,
+  padding: "12px 14px",
+  border: "1px solid #dce9df",
+  borderRadius: 14,
+  background: "#fff",
+};
+
+const calendarTitle: React.CSSProperties = {
+  fontSize: 20,
+  fontWeight: 900,
+  color: "#16391f",
+  lineHeight: 1.25,
+};
+
+const legendWrap: React.CSSProperties = {
+  marginTop: 8,
+  marginBottom: 8,
+  display: "flex",
+  gap: 14,
+  flexWrap: "wrap",
+  alignItems: "center",
+};
+
+const legendItem: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  fontSize: 13,
+  color: "#4b5563",
+  fontWeight: 700,
+};
+
+const legendDotConfirmed: React.CSSProperties = {
+  width: 10,
+  height: 10,
+  borderRadius: 999,
+  background: "#16a34a",
+  display: "inline-block",
+};
+
+const legendDotNegotiating: React.CSSProperties = {
+  width: 10,
+  height: 10,
+  borderRadius: 999,
+  background: "#f97316",
+  display: "inline-block",
+};
+
+const emptyBox: React.CSSProperties = {
+  marginTop: 14,
+  padding: 18,
+  textAlign: "center",
 };
