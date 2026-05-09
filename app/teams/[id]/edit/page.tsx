@@ -245,9 +245,38 @@ export default function TeamEditPage() {
         setUniformSub(data.uniform_sub ?? "");
         setUniformGk(data.uniform_gk ?? "");
 
-        setPrefecture(data.prefecture ?? "東京都");
-        setCity(data.city ?? "");
-        setTown(data.town ?? "");
+        const areaText = String(data.area ?? "").trim();
+
+        const areaParts = areaText
+          .split("・")
+          .map((v) => v.trim())
+          .filter(Boolean);
+
+        const head = areaParts[0] ?? "";
+        const tail = areaParts[1] ?? "";
+
+        const headParts = head.split(/\s+/).filter(Boolean);
+
+        const fallbackPrefecture = headParts[0] ?? "";
+        const fallbackCity = headParts.slice(1).join("");
+
+        setPrefecture(
+          data.prefecture ??
+            fallbackPrefecture ??
+            "東京都"
+        );
+
+        setCity(
+          data.city ??
+            fallbackCity ??
+            ""
+        );
+
+        setTown(
+          data.town ??
+            tail ??
+            ""
+        );
 
         setAddressDetail(data.address_detail ?? "");
         setNote(data.note ?? "");
