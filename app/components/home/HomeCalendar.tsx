@@ -1254,17 +1254,17 @@ export default function HomeCalendar(props: {
                 <button
                   type="button"
                   className="sh-btn"
-                  onClick={openManualScheduleCreatePage}
+                  onClick={openMyScheduleCalendarPage}
                 >
-                  予定作成
+                  カレンダー
                 </button>
 
                 <button
                   type="button"
                   className="sh-btn"
-                  onClick={openMyScheduleCalendarPage}
+                  onClick={openManualScheduleCreatePage}
                 >
-                  カレンダー
+                  予定作成
                 </button>
 
                 <button
@@ -1315,7 +1315,7 @@ export default function HomeCalendar(props: {
       <section style={summaryBox} className="ui-card">
         <div style={summaryCardTop}>
           <div style={summaryDateText} className="ui-title">
-            チーム条件で探す
+            練習試合を探す
           </div>
         </div>
 
@@ -1331,6 +1331,19 @@ export default function HomeCalendar(props: {
           </div>
 
           <div style={summaryActionRowCompact}>
+            <button
+              type="button"
+              className="sh-btn"
+              onClick={() => {
+                calendarRef.current?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                });
+              }}
+            >
+              カレンダー
+            </button>
+
             <button
               type="button"
               className="sh-btn"
