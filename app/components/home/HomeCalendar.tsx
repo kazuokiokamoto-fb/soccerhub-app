@@ -1336,13 +1336,18 @@ export default function HomeCalendar(props: {
               type="button"
               className="sh-btn"
               onClick={() => {
-                setShowMatchCalendar(true);
-                setTimeout(() => {
-                  calendarRef.current?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "start",
-                  });
-                }, 80);
+                const next = !showMatchCalendar;
+
+                setShowMatchCalendar(next);
+
+                if (next) {
+                  setTimeout(() => {
+                    calendarRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    });
+                  }, 80);
+                }
               }}
             >
               カレンダー
@@ -1353,7 +1358,7 @@ export default function HomeCalendar(props: {
               className="sh-btn"
               onClick={openTeamFilterPage}
             >
-              条件変更
+              条件検索
             </button>
 
             <button
