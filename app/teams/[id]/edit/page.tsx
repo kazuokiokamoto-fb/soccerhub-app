@@ -112,31 +112,8 @@ export default function TeamEditPage() {
   }, [categoryProfiles, primaryCategory]);
 
   const canSave = useMemo(() => {
-    return (
-      !!teamId &&
-      !!name.trim() &&
-      !!prefecture &&
-      !!city &&
-      !!town &&
-      categories.length > 0 &&
-      categoryProfiles.length > 0 &&
-      categoryProfiles.every(
-        (p) => !!p.category && !!p.strength_rank && p.member_count !== ""
-      ) &&
-      !saving &&
-      !deleting
-    );
-  }, [
-    teamId,
-    name,
-    prefecture,
-    city,
-    town,
-    categories,
-    categoryProfiles,
-    saving,
-    deleting,
-  ]);
+    return !!teamId && !saving && !deleting;
+  }, [teamId, saving, deleting]);
 
   useEffect(() => {
     if (!toast) return;
@@ -429,7 +406,7 @@ export default function TeamEditPage() {
   };
 
   const save = async () => {
-    if (!canSave || !teamId) return;
+  if (!teamId || saving || deleting) return;
 
     setSaving(true);
     setToast({ type: "info", text: "保存中…" });
