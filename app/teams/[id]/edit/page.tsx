@@ -99,6 +99,7 @@ export default function TeamEditPage() {
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [contactLineId, setContactLineId] = useState("");
+  const [initialSnapshot, setInitialSnapshot] = useState("");
 
   const primaryCategory = useMemo(() => categories[0] ?? "", [categories]);
 
@@ -111,9 +112,54 @@ export default function TeamEditPage() {
     return first?.strength_rank ?? "A";
   }, [categoryProfiles, primaryCategory]);
 
+  const currentSnapshot = useMemo(() => {
+    return JSON.stringify({
+      name: name.trim(),
+      categories,
+      categoryProfiles: categories.map((category) => {
+        const p = categoryProfiles.find((x) => x.category === category);
+        return {
+          category,
+          strength_rank: p?.strength_rank ?? "A",
+          member_count: String(p?.member_count ?? ""),
+        };
+      }),
+      hasGround,
+      uniformMain,
+      uniformSub,
+      uniformGk,
+      prefecture,
+      city,
+      town,
+      addressDetail,
+      note,
+      contactEmail,
+      contactPhone,
+      contactLineId,
+    });
+  }, [
+    name,
+    categories,
+    categoryProfiles,
+    hasGround,
+    uniformMain,
+    uniformSub,
+    uniformGk,
+    prefecture,
+    city,
+    town,
+    addressDetail,
+    note,
+    contactEmail,
+    contactPhone,
+    contactLineId,
+  ]);
+
+  const isDirty = !!initialSnapshot && currentSnapshot !== initialSnapshot;
+
   const canSave = useMemo(() => {
-    return !!teamId && !saving && !deleting;
-  }, [teamId, saving, deleting]);
+    return !!teamId && isDirty && !saving && !deleting;
+  }, [teamId, isDirty, saving, deleting]);
 
   useEffect(() => {
     if (!toast) return;
@@ -258,6 +304,47 @@ export default function TeamEditPage() {
         setContactEmail(data.contact_email ?? "");
         setContactPhone(data.contact_phone ?? "");
         setContactLineId(data.contact_line_id ?? "");
+
+        setInitialSnapshot(
+          JSON.stringify({
+            name: String(data.name ?? "").trim(),
+            categories: loadedCategories,
+            categoryProfiles:
+              Array.isArray(data.category_profiles) && data.category_profiles.length > 0
+                ? data.category_profiles.map((p: any) => ({
+                    category: p.category ?? "",
+                    strength_rank:
+                      (p.strength_rank as StrengthRank) ??
+                      legacyLevelToStrengthRank(data.level ?? 5),
+                    member_count: String(p.member_count ?? ""),
+                  }))
+                : loadedCategories.map((cat: string, index: number) => {
+                    const roster = data.roster_by_grade ?? {};
+                    const fallbackMemberCount = data.member_count ?? roster.TOTAL ?? null;
+
+                    return {
+                      category: cat,
+                      strength_rank: legacyLevelToStrengthRank(data.level ?? 5),
+                      member_count:
+                        index === 0 && fallbackMemberCount != null
+                          ? String(fallbackMemberCount)
+                          : "",
+                    };
+                  }),
+            hasGround: !!data.has_ground,
+            uniformMain: data.uniform_main ?? "",
+            uniformSub: data.uniform_sub ?? "",
+            uniformGk: data.uniform_gk ?? "",
+            prefecture: nextPrefecture,
+            city: nextCity,
+            town: nextTown,
+            addressDetail: data.address_detail ?? "",
+            note: data.note ?? "",
+            contactEmail: data.contact_email ?? "",
+            contactPhone: data.contact_phone ?? "",
+            contactLineId: data.contact_line_id ?? "",
+          })
+        );
 
         setLoading(false);
       } catch (e) {
@@ -406,7 +493,7 @@ export default function TeamEditPage() {
   };
 
   const save = async () => {
-  if (!teamId || saving || deleting) return;
+    if (!canSave || !teamId) return;
 
     setSaving(true);
     setToast({ type: "info", text: "保存中…" });
@@ -492,7 +579,7 @@ export default function TeamEditPage() {
 
       setToast({ type: "success", text: "✅ 更新しました" });
       setSaving(false);
-      router.push("/mypage");
+      router.push(`/teams/${teamId}`);
       router.refresh();
     } catch (e: any) {
       console.error(e);
