@@ -262,6 +262,80 @@ function displayStatusFromDates(eventDate: string | null, deadline: string | nul
   return "募集中";
 }
 
+async function notifyNewSelectionEvent(
+  supabase: any,
+  eventId: string,
+  title: string
+) {
+  const notificationTitle = "新しいセレクション情報";
+  const notificationBody = `${title} が追加されました`;
+  const targetUrl = `/selection/${eventId}`;
+
+  const { data: teams, error } = await supabase
+    .from("teams")
+    .select("owner_id")
+    .not("owner_id", "is", null)
+    .limit(500);
+
+  if (error) {
+    await supabase.from("selection_notification_logs").insert({
+      selection_event_id: eventId,
+      notification_type: "push",
+      title: notificationTitle,
+      body: notificationBody,
+      target_url: targetUrl,
+      success: false,
+      error_message: error.message,
+    });
+    return;
+  }
+
+  const userIds = Array.from(
+    new Set((teams ?? []).map((t: any) => t.owner_id).filter(Boolean))
+  );
+
+  for (const userId of userIds) {
+    try {
+      await supabase.from("notifications").insert({
+        user_id: userId,
+        type: "selection_event",
+        title: notificationTitle,
+        body: notificationBody,
+        target_url: targetUrl,
+        is_read: false,
+      });
+
+      await supabase.from("selection_notification_logs").insert({
+        selection_event_id: eventId,
+        user_id: userId,
+        notification_type: "push",
+        title: notificationTitle,
+        body: notificationBody,
+        target_url: targetUrl,
+        success: true,
+      });
+    } catch (e) {
+      const message =
+        e instanceof Error
+          ? e.message
+          : typeof e === "object"
+            ? JSON.stringify(e)
+            : String(e);
+
+      await supabase.from("selection_notification_logs").insert({
+        selection_event_id: eventId,
+        user_id: userId,
+        notification_type: "push",
+        title: notificationTitle,
+        body: notificationBody,
+        target_url: targetUrl,
+        success: false,
+        error_message: message,
+      });
+    }
+  }
+}
+
 serve(async () => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
   const serviceRoleKey =
@@ -384,12 +458,23 @@ serve(async () => {
           if (updateError) throw updateError;
           updatedEvents += 1;
         } else {
-          const { error: insertError } = await supabase
+          const { data: insertedEvent, error: insertError } = await supabase
             .from("selection_events")
-            .insert(payload);
+            .insert(payload)
+            .select("id,title")
+            .single();
 
           if (insertError) throw insertError;
+
           insertedEvents += 1;
+
+          if (insertedEvent?.id) {
+            await notifyNewSelectionEvent(
+              supabase,
+              insertedEvent.id,
+              insertedEvent.title || title
+            );
+          }
         }
       }
 
