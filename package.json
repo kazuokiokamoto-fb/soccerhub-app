@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "selection:deploy": "supabase functions deploy selection-crawler",
+    "selection:deploy": "npx supabase functions deploy selection-crawler",
     "selection:run": "curl -X POST 'https://senspqsexmtrwjfsdadv.supabase.co/functions/v1/selection-crawler' -H \"Authorization: Bearer $SELECTION_SECRET\" -H \"apikey: $SELECTION_SECRET\""
   },
   "dependencies": {
