@@ -28,6 +28,8 @@ import {
   type CalendarItem,
 } from "@/app/match/components/MatchCalendarBase";
 
+import { SelectionSection } from "@/app/home/components/SelectionSection";
+
 type CalendarShortStatus = "decided" | "open" | "other";
 
 type DayCalendarSummary = {
@@ -1756,6 +1758,8 @@ export default function HomeCalendar(props: {
           </div>
         </>
       ) : null}
+
+      <SelectionSection />      
 
       <MatchHelpModals
         showStrengthHelp={showStrengthHelp}
