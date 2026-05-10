@@ -85,6 +85,26 @@ function normalizeUrl(url: string) {
   }
 }
 
+function safeDate(value?: string | null) {
+  if (!value) return null;
+
+  const text = value.trim();
+
+  const normalized = text
+    .replace(/年/g, "-")
+    .replace(/月/g, "-")
+    .replace(/日/g, "")
+    .replace(/\//g, "-");
+
+  const d = new Date(normalized);
+
+  if (Number.isNaN(d.getTime())) {
+    return null;
+  }
+
+  return d.toISOString().slice(0, 10);
+}
+
 function sameHost(url: string, baseUrl: string) {
   try {
     return new URL(url).hostname === new URL(baseUrl).hostname;
@@ -312,8 +332,8 @@ serve(async () => {
         savedPages += 1;
 
         const title = buildTitle(pageTitle, source.name, rawText);
-        const eventDate = extractDate(rawText);
-        const deadline = extractDeadline(rawText);
+        const eventDate = safeDate(extractDate(rawText));
+        const deadline = safeDate(extractDeadline(rawText));
         const contentHash = await sha256(`${title}|${eventDate ?? ""}|${pageUrl}`);
 
         const payload = {
