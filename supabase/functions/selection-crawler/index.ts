@@ -88,21 +88,29 @@ function normalizeUrl(url: string) {
 function safeDate(value?: string | null) {
   if (!value) return null;
 
-  const text = value.trim();
+  const text = String(value).trim();
 
-  const normalized = text
-    .replace(/年/g, "-")
-    .replace(/月/g, "-")
-    .replace(/日/g, "")
-    .replace(/\//g, "-");
+  const match = text.match(/^(\d{4})[-\/年](\d{1,2})[-\/月](\d{1,2})日?$/);
+  if (!match) return null;
 
-  const d = new Date(normalized);
+  const y = Number(match[1]);
+  const m = Number(match[2]);
+  const d = Number(match[3]);
 
-  if (Number.isNaN(d.getTime())) {
-    return null;
-  }
+  if (!y || !m || !d) return null;
+  if (m < 1 || m > 12) return null;
+  if (d < 1 || d > 31) return null;
 
-  return d.toISOString().slice(0, 10);
+  const date = new Date(Date.UTC(y, m - 1, d));
+
+  const valid =
+    date.getUTCFullYear() === y &&
+    date.getUTCMonth() === m - 1 &&
+    date.getUTCDate() === d;
+
+  if (!valid) return null;
+
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
 function sameHost(url: string, baseUrl: string) {
