@@ -5,7 +5,8 @@ export async function fetchSelectionEvents(): Promise<SelectionEvent[]> {
   const { data, error } = await supabase
     .from("selection_events_public")
     .select("*")
-    .order("event_date", { ascending: true });
+    .order("event_date", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: false });
 
   if (error) {
     console.error("fetchSelectionEvents error:", error);

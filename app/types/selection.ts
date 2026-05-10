@@ -1,13 +1,11 @@
 export type SelectionEvent = {
   id: string;
-
   title: string;
 
   organization_name: string | null;
   organization_type: string | null;
 
   target_categories: string[];
-
   gender: "any" | "boys" | "girls";
 
   prefecture: string | null;
@@ -33,11 +31,9 @@ export type SelectionEvent = {
   summary: string | null;
   description: string | null;
   memo: string | null;
-
   image_url: string | null;
 
   is_featured: boolean;
-
   display_status: string;
   days_until_deadline: number | null;
 
