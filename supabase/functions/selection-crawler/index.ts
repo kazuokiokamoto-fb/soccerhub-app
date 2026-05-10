@@ -383,7 +383,12 @@ serve(async () => {
           .eq("id", logId);
       }
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message =
+        e instanceof Error
+          ? e.message
+          : typeof e === "object"
+            ? JSON.stringify(e)
+            : String(e);
       errors.push(`${source.name}: ${message}`);
 
       if (logId) {
