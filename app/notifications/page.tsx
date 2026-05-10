@@ -30,6 +30,21 @@ function fmt(dt: string) {
   }
 }
 
+function notificationTypeLabel(type?: string | null) {
+  switch (type) {
+    case "selection_event":
+      return "セレクション";
+    case "match_request":
+      return "試合申込";
+    case "chat":
+      return "チャット";
+    case "offer":
+      return "オファー";
+    default:
+      return "通知";
+  }
+}
+
 export default function NotificationsPage() {
   const router = useRouter();
 
@@ -236,7 +251,7 @@ export default function NotificationsPage() {
                 <div style={body}>{item.body}</div>
 
                 <div style={metaRow}>
-                  <span style={typePill}>{item.type}</span>
+                  <span style={typePill}>{notificationTypeLabel(item.type)}</span>
                   <span style={timeText}>
                     {busy ? "移動中…" : fmt(item.created_at)}
                   </span>
