@@ -348,6 +348,12 @@ serve(async () => {
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
+  await notifyNewSelectionEvent(
+    supabase,
+    crypto.randomUUID(),
+    "通知テスト セレクション"
+  );
+
   const { data: sources, error } = await supabase
     .from("selection_sources")
     .select("id,name,base_url,organization_type,enabled")
