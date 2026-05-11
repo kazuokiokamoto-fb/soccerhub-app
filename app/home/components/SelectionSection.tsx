@@ -168,47 +168,31 @@ export function SelectionSection() {
 
   return (
     <section ref={sectionRef}>
-      <section style={summaryBox} className="ui-card">
-        <div style={summaryCardTop}>
-          <div style={summaryDateText} className="ui-title">
-            セレクション情報
-          </div>
-        </div>
-
-        <div style={summaryInnerCompactBox} className="ui-card-soft">
-          <div>
-            <div style={summaryCountLineCompact} className="ui-title">
-              掲載件数：{items.length}件
-            </div>
-
-            <div style={summarySubTight} className="ui-meta">
-              J下部組織・強豪チーム・スクール等
+      <Link href="/selection" style={sectionLink}>
+        <section style={summaryBoxClickable} className="ui-card">
+          <div style={summaryCardTop}>
+            <div style={summaryDateText} className="ui-title">
+              セレクション情報
             </div>
           </div>
 
-          <div style={summaryActionRowCompact}>
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={() => openMode("calendar")}
-            >
-              {viewMode === "calendar" ? "閉じる" : "カレンダー"}
-            </button>
+          <div style={summaryInnerCompactBox} className="ui-card-soft">
+            <div>
+              <div style={summaryCountLineCompact} className="ui-title">
+                掲載件数：{items.length}件
+              </div>
 
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={() => openMode("list")}
-            >
-              {viewMode === "list" ? "閉じる" : "一覧を見る"}
-            </button>
+              <div style={summarySubTight} className="ui-meta">
+                J下部組織・強豪チーム・スクール等
+              </div>
+            </div>
 
-            <Link href="/selection" className="sh-btn sh-btn--primary">
-              一覧ページ
-            </Link>
+            <div style={summaryActionRowCompact}>
+              <span style={sectionCta}>一覧ページを見る →</span>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </Link>
 
       {viewMode === "calendar" ? (
         <section style={calendarCard} className="ui-card">
@@ -590,4 +574,27 @@ const tag: React.CSSProperties = {
 const emptyBox: React.CSSProperties = {
   padding: 20,
   textAlign: "center",
+};
+
+const sectionLink: React.CSSProperties = {
+  display: "block",
+  color: "inherit",
+  textDecoration: "none",
+};
+
+const summaryBoxClickable: React.CSSProperties = {
+  ...summaryBox,
+  cursor: "pointer",
+};
+
+const sectionCta: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 40,
+  padding: "0 16px",
+  borderRadius: 999,
+  background: "#0f7a35",
+  color: "#fff",
+  fontSize: 14,
+  fontWeight: 900,
 };
