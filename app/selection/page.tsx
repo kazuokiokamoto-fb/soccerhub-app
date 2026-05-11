@@ -54,16 +54,6 @@ function orgLabel(type?: string | null) {
   }
 }
 
-function feeText(item: SelectionEvent) {
-  if (item.fee_amount != null) {
-    return `${item.fee_amount.toLocaleString()}円`;
-  }
-
-  if (item.fee_note) return item.fee_note;
-
-  return "未定";
-}
-
 function statusStyle(status?: string): React.CSSProperties {
   if (status === "募集中") {
     return {
@@ -88,6 +78,14 @@ function statusStyle(status?: string): React.CSSProperties {
   };
 }
 
+function sortNewestFirst(rows: SelectionEvent[]) {
+  return [...rows].sort((a, b) => {
+    const aa = new Date(a.fetched_at || a.created_at || 0).getTime();
+    const bb = new Date(b.fetched_at || b.created_at || 0).getTime();
+    return bb - aa;
+  });
+}
+
 export default function SelectionListPage() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<SelectionEvent[]>([]);
@@ -107,12 +105,10 @@ export default function SelectionListPage() {
 
     async function load() {
       setLoading(true);
-
       const rows = await fetchSelectionEvents();
-
       if (!active) return;
 
-      setItems(rows);
+      setItems(sortNewestFirst(rows));
       setLoading(false);
     }
 
@@ -123,50 +119,27 @@ export default function SelectionListPage() {
     };
   }, []);
 
-  const calendarCells = useMemo(() => {
-    return buildCalendarCells(monthDate);
-  }, [monthDate]);
-
-  const monthKey = useMemo(() => {
-    return toMonthKey(monthDate);
-  }, [monthDate]);
+  const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
+  const monthKey = useMemo(() => toMonthKey(monthDate), [monthDate]);
 
   const prefectures = useMemo(() => {
     return Array.from(
-      new Set(
-        items
-          .map((v) => v.prefecture)
-          .filter(Boolean)
-          .map(String)
-      )
+      new Set(items.map((v) => v.prefecture).filter(Boolean).map(String))
     ).sort();
   }, [items]);
 
   const categories = useMemo(() => {
-    return Array.from(
-      new Set(items.flatMap((v) => v.target_categories ?? []))
-    ).sort();
+    return Array.from(new Set(items.flatMap((v) => v.target_categories ?? []))).sort();
   }, [items]);
 
   const filteredItems = useMemo(() => {
     const q = keyword.trim().toLowerCase();
 
-    return items.filter((item) => {
-      if (selectedDate && item.event_date !== selectedDate) {
-        return false;
-      }
-
-      if (prefecture !== "all" && item.prefecture !== prefecture) {
-        return false;
-      }
-
-      if (orgType !== "all" && item.organization_type !== orgType) {
-        return false;
-      }
-
-      if (status !== "all" && item.display_status !== status) {
-        return false;
-      }
+    const rows = items.filter((item) => {
+      if (selectedDate && item.event_date !== selectedDate) return false;
+      if (prefecture !== "all" && item.prefecture !== prefecture) return false;
+      if (orgType !== "all" && item.organization_type !== orgType) return false;
+      if (status !== "all" && item.display_status !== status) return false;
 
       if (category !== "all" && !item.target_categories?.includes(category)) {
         return false;
@@ -182,8 +155,6 @@ export default function SelectionListPage() {
           item.area,
           item.venue_name,
           item.venue_address,
-          item.summary,
-          item.memo,
           ...(item.target_categories ?? []),
         ]
           .join(" ")
@@ -193,18 +164,9 @@ export default function SelectionListPage() {
       }
 
       return true;
-    })
-    .sort((a, b) => {
-      const aa = new Date(
-        a.fetched_at || a.created_at || 0
-      ).getTime();
-
-      const bb = new Date(
-        b.fetched_at || b.created_at || 0
-      ).getTime();
-
-      return bb - aa;
     });
+
+    return sortNewestFirst(rows);
   }, [items, keyword, prefecture, orgType, status, category, selectedDate]);
 
   const selectionItemsByDate = useMemo(() => {
@@ -213,18 +175,11 @@ export default function SelectionListPage() {
 
     for (const item of items) {
       if (!item.event_date) continue;
-
       countMap.set(item.event_date, (countMap.get(item.event_date) ?? 0) + 1);
     }
 
     for (const [ymd, count] of countMap.entries()) {
-      map.set(ymd, [
-        {
-          label: "選",
-          count,
-          tone: "open",
-        },
-      ]);
+      map.set(ymd, [{ label: "選", count, tone: "open" }]);
     }
 
     return map;
@@ -394,31 +349,6 @@ export default function SelectionListPage() {
                   {item.organization_name || "団体名未設定"}
                 </div>
 
-                <div style={infoGrid}>
-                  <div>
-                    <div style={label}>開催日</div>
-                    <div style={value}>{formatDate(item.event_date)}</div>
-                  </div>
-
-                  <div>
-                    <div style={label}>申込期限</div>
-                    <div style={value}>{formatDate(item.application_deadline)}</div>
-                  </div>
-
-                  <div>
-                    <div style={label}>地域</div>
-                    <div style={value}>
-                      {[item.prefecture, item.city].filter(Boolean).join(" ") ||
-                        "未定"}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div style={label}>参加費</div>
-                    <div style={value}>{feeText(item)}</div>
-                  </div>
-                </div>
-
                 {item.target_categories?.length > 0 ? (
                   <div style={tagWrap}>
                     {item.target_categories.map((cat) => (
@@ -429,7 +359,20 @@ export default function SelectionListPage() {
                   </div>
                 ) : null}
 
-                {item.summary ? <p style={summary}>{item.summary}</p> : null}
+                <div style={infoGrid}>
+                  <div>
+                    <div style={label}>開催日</div>
+                    <div style={value}>{formatDate(item.event_date)}</div>
+                  </div>
+
+                  <div>
+                    <div style={label}>地域</div>
+                    <div style={value}>
+                      {[item.prefecture, item.city].filter(Boolean).join(" ") ||
+                        "未定"}
+                    </div>
+                  </div>
+                </div>
               </article>
             </Link>
           ))}
@@ -619,13 +562,6 @@ const tag: React.CSSProperties = {
   color: "#374151",
   fontSize: 12,
   fontWeight: 700,
-};
-
-const summary: React.CSSProperties = {
-  margin: "12px 0 0",
-  fontSize: 13,
-  color: "#4b5563",
-  lineHeight: 1.6,
 };
 
 const emptyBox: React.CSSProperties = {
