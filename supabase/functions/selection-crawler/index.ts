@@ -442,9 +442,30 @@ serve(async () => {
         const pageTitle = getTitle(html);
         const checksum = await sha256(rawText);
 
+        const lowerPageUrl = pageUrl.toLowerCase();
+
+        const isTargetPage =
+          containsKeyword(rawText) &&
+          (
+            pageTitle.includes("セレクション") ||
+            pageTitle.includes("選考会") ||
+            pageTitle.includes("体験") ||
+            pageTitle.includes("募集") ||
+            pageTitle.includes("練習参加") ||
+            pageTitle.includes("トライアウト") ||
+            pageTitle.includes("スクール") ||
+            pageTitle.includes("アカデミー") ||
+            lowerPageUrl.includes("selection") ||
+            lowerPageUrl.includes("tryout") ||
+            lowerPageUrl.includes("trial") ||
+            lowerPageUrl.includes("recruit") ||
+            lowerPageUrl.includes("school") ||
+            lowerPageUrl.includes("academy")
+          );
+
         const isJClub = source.organization_type === "j_club";
 
-        if (!isJClub && !containsKeyword(rawText)) continue;
+        if (!isTargetPage) continue;
 
         const { data: pageRow, error: pageError } = await supabase
           .from("selection_crawl_pages")

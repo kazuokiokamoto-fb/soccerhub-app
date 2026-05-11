@@ -37,6 +37,8 @@ export type SelectionEvent = {
   display_status: string;
   days_until_deadline: number | null;
 
+  fetched_at: string | null;
+
   created_at: string;
   updated_at: string;
 };

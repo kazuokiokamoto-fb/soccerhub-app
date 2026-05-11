@@ -193,6 +193,17 @@ export default function SelectionListPage() {
       }
 
       return true;
+    })
+    .sort((a, b) => {
+      const aa = new Date(
+        a.fetched_at || a.created_at || 0
+      ).getTime();
+
+      const bb = new Date(
+        b.fetched_at || b.created_at || 0
+      ).getTime();
+
+      return bb - aa;
     });
   }, [items, keyword, prefecture, orgType, status, category, selectedDate]);
 

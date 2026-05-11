@@ -13,7 +13,19 @@ export async function fetchSelectionEvents(): Promise<SelectionEvent[]> {
     return [];
   }
 
-  return (data ?? []) as SelectionEvent[];
+  const rows = ((data ?? []) as SelectionEvent[]).sort((a, b) => {
+    const aa = new Date(
+      a.fetched_at || a.created_at || 0
+    ).getTime();
+
+    const bb = new Date(
+      b.fetched_at || b.created_at || 0
+    ).getTime();
+
+    return bb - aa;
+  });
+
+  return rows;
 }
 
 export async function fetchSelectionEventById(
