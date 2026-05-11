@@ -11,21 +11,46 @@ type SelectionSource = {
   enabled: boolean;
 };
 
-const MAX_PAGES_PER_SOURCE = 5;
+const MAX_PAGES_PER_SOURCE = 10;
 
 const KEYWORDS = [
   "セレクション",
   "選考会",
+  "練習参加",
+  "加入",
+  "入団",
+  "募集",
+  "参加者募集",
+  "新加入",
+  "トライアウト",
+  "体験",
   "体験練習",
   "体験会",
   "練習会",
-  "ジュニアユース",
+  "アカデミー",
+  "育成",
+  "スクール",
   "ジュニア",
-  "U-12",
-  "U-13",
-  "U-14",
-  "U-15",
-  "募集",
+  "ジュニアユース",
+  "ユース",
+  "トップチーム",
+  "レディース",
+  "女子",
+  "WEリーグ",
+  "フットサル",
+  "GK",
+  "ゴールキーパー",
+  "キャンプ",
+  "短期スクール",
+  "tryout",
+  "academy",
+  "school",
+  "ladies",
+  "women",
+  "futsal",
+  "topteam",
+  "join",
+  "recruit",
 ];
 
 const CATEGORY_KEYWORDS = [
@@ -147,18 +172,42 @@ function extractLinks(html: string, baseUrl: string) {
         abs.includes("セレクション") ||
         abs.includes("選考") ||
         abs.includes("体験") ||
+        abs.includes("募集") ||
+        abs.includes("入団") ||
+        abs.includes("加入") ||
+        abs.includes("育成") ||
+        abs.includes("アカデミー") ||
+        abs.includes("スクール") ||
+        abs.includes("ジュニア") ||
+        abs.includes("ジュニアユース") ||
+        abs.includes("ユース") ||
+        abs.includes("レディース") ||
+        abs.includes("女子") ||
+        abs.includes("フットサル") ||
+        abs.includes("トップチーム") ||
         lower.includes("selection") ||
         lower.includes("tryout") ||
         lower.includes("trial") ||
         lower.includes("junior") ||
+        lower.includes("academy") ||
+        lower.includes("school") ||
+        lower.includes("ladies") ||
+        lower.includes("women") ||
+        lower.includes("futsal") ||
+        lower.includes("topteam") ||
+        lower.includes("top-team") ||
+        lower.includes("player") ||
+        lower.includes("join") ||
+        lower.includes("recruit") ||
         lower.includes("u-12") ||
         lower.includes("u12") ||
         lower.includes("u-13") ||
         lower.includes("u13") ||
         lower.includes("u-15") ||
         lower.includes("u15") ||
-        lower.includes("news") ||
-        lower.includes("academy");
+        lower.includes("u-18") ||
+        lower.includes("u18") ||
+        lower.includes("news");
 
       if (likely) links.add(abs);
     } catch {
@@ -393,7 +442,9 @@ serve(async () => {
         const pageTitle = getTitle(html);
         const checksum = await sha256(rawText);
 
-        if (!containsKeyword(rawText)) continue;
+        const isJClub = source.organization_type === "j_club";
+
+        if (!isJClub && !containsKeyword(rawText)) continue;
 
         const { data: pageRow, error: pageError } = await supabase
           .from("selection_crawl_pages")
