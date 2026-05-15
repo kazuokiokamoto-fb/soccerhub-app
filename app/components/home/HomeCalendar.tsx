@@ -455,20 +455,6 @@ export default function HomeCalendar(props: {
     return text || "すべての条件で表示中";
   }, [filters]);
 
-  const totalTeamCountText = useMemo(() => {
-    return `登録チーム総数：${allTeams.length}件`;
-  }, [allTeams.length]);
-
-  const totalOpenSlotCountText = useMemo(() => {
-    const today = ymdToday();
-
-    const count = slotsInMonth.filter((slot: any) => {
-      return !slot.is_closed && slot.date >= today;
-    }).length;
-
-    return `試合募集中：${count}件`;
-  }, [slotsInMonth]);
-
   const showCriticalError =
     (baseError && baseError.includes("teams:")) ||
     (monthError && monthError.includes("match_slots:"));
@@ -505,14 +491,6 @@ export default function HomeCalendar(props: {
           </div>
         </div>
       ) : null}
-
-      <section style={summaryStatsBox} className="ui-card-soft">
-        <div style={summaryStatsInner} className="ui-meta ui-strong">
-          {totalTeamCountText}
-          <span style={summaryStatsDivider}> / </span>
-          {totalOpenSlotCountText}
-        </div>
-      </section>
 
       <Link href="/match/my-schedule" style={sectionLink}>
         <section style={summaryBoxClickable} className="ui-card">
@@ -616,21 +594,6 @@ const errorBox: React.CSSProperties = {
 
 const errorTitle: React.CSSProperties = {
   marginBottom: 4,
-};
-
-const summaryStatsBox: React.CSSProperties = {
-  marginTop: 2,
-  padding: "12px 14px",
-};
-
-const summaryStatsInner: React.CSSProperties = {
-  fontSize: 15,
-  lineHeight: 1.5,
-  textAlign: "center",
-};
-
-const summaryStatsDivider: React.CSSProperties = {
-  opacity: 0.7,
 };
 
 const summaryBox: React.CSSProperties = {
