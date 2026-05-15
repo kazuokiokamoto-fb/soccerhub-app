@@ -96,6 +96,50 @@ export function MatchHelpModals({
             </div>
 
             <div style={guideList}>
+
+              <div style={guideCard}>
+                <div style={guideTop}>
+                  <div style={calendarLegendBadgeInfo}>💪</div>
+                  <div style={guideShort}>強さランク</div>
+                </div>
+
+                <div style={guideTitleText}>
+                  チームの強さは、練習試合の相手を探しやすくするための目安です。
+                  公式戦の所属リーグや試合強度をもとに、SS・S・A・B・Cで設定します。
+                </div>
+
+                <div style={guideBulletList}>
+                  <div style={guideBulletRow}>
+                    <span style={guideBulletMark}>•</span>
+                    <span><b>SS</b>：都・県リーグ上位、非常に高い強度</span>
+                  </div>
+
+                  <div style={guideBulletRow}>
+                    <span style={guideBulletMark}>•</span>
+                    <span><b>S</b>：都・県リーグ所属、高い強度</span>
+                  </div>
+
+                  <div style={guideBulletRow}>
+                    <span style={guideBulletMark}>•</span>
+                    <span><b>A</b>：地域リーグ上位、育成と競争のバランス型</span>
+                  </div>
+
+                  <div style={guideBulletRow}>
+                    <span style={guideBulletMark}>•</span>
+                    <span><b>B</b>：地域リーグ所属、成長重視の実戦経験向け</span>
+                  </div>
+
+                  <div style={guideBulletRow}>
+                    <span style={guideBulletMark}>•</span>
+                    <span><b>C</b>：交流・経験重視、フレンドリーマッチ向け</span>
+                  </div>
+                </div>
+
+                <div style={guideNote}>
+                  ※強さは勝敗を保証するものではなく、マッチングしやすくするための参考情報です。
+                </div>
+              </div>
+
               <div style={guideCard}>
                 <div style={guideTop}>
                   <div style={calendarLegendBadgeDecided}>決</div>
