@@ -5,27 +5,14 @@ export async function fetchSelectionEvents(): Promise<SelectionEvent[]> {
   const { data, error } = await supabase
     .from("selection_events_public")
     .select("*")
-    .order("fetched_at", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false });
+    .limit(200);
 
-  if (error) {
-    console.error("fetchSelectionEvents error:", error);
-    return [];
-  }
+  console.log("selection_events_public data:", data);
+  console.log("selection_events_public error:", error);
 
-  const rows = ((data ?? []) as SelectionEvent[]).sort((a, b) => {
-    const aa = new Date(
-      a.fetched_at || a.created_at || 0
-    ).getTime();
+  if (error) return [];
 
-    const bb = new Date(
-      b.fetched_at || b.created_at || 0
-    ).getTime();
-
-    return bb - aa;
-  });
-
-  return rows;
+  return (data ?? []) as SelectionEvent[];
 }
 
 export async function fetchSelectionEventById(
