@@ -310,6 +310,10 @@ export default function TeamsSearchClient() {
 
   const filteredTeams = useMemo(() => {
     const matched = teams.filter((team) => {
+      if (myUserId && team.owner_id === myUserId) {
+        return false;
+      }
+
       const categories = teamCategories(team);
 
       if (filters.categoryFilter.length > 0) {
@@ -736,9 +740,6 @@ export default function TeamsSearchClient() {
       ) : (
         <section style={listWrap}>
           {filteredTeams.map((team) => {
-            const mine =
-              !!myUserId &&
-              team.owner_id === myUserId;
 
             const categories = teamCategories(team);
 
@@ -754,12 +755,6 @@ export default function TeamsSearchClient() {
                       <div style={teamName}>
                         {team.name || "チーム名未設定"}
                       </div>
-
-                      {mine ? (
-                        <span style={mineBadge}>
-                          自分のチーム
-                        </span>
-                      ) : null}
                     </div>
 
                     <div style={rankBadge}>
@@ -966,17 +961,6 @@ const teamName: React.CSSProperties = {
   fontWeight: 900,
   color: "#16391f",
   lineHeight: 1.3,
-};
-
-const mineBadge: React.CSSProperties = {
-  display: "inline-block",
-  padding: "4px 8px",
-  borderRadius: 999,
-  background: "#ecfdf3",
-  color: "#166534",
-  fontSize: 12,
-  fontWeight: 900,
-  border: "1px solid #bbf7d0",
 };
 
 const rankBadge: React.CSSProperties = {
