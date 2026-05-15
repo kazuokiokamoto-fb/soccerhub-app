@@ -89,12 +89,9 @@ export function SelectionSection() {
   const isOpen = viewMode !== "none";
 
   useEffect(() => {
-    if (!isOpen) return;
-    if (items.length > 0) return;
-
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, []);
 
   async function load() {
     setLoading(true);
