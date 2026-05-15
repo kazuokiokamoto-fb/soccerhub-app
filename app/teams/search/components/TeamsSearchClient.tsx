@@ -340,13 +340,6 @@ export default function TeamsSearchClient() {
         return false;
       }
 
-      if (
-        filters.townFilter &&
-        norm(team.town) !== filters.townFilter
-      ) {
-        return false;
-      }
-
       if (filters.strengthFilter.length > 0) {
         const rank = teamStrengthLabel(team);
 
@@ -490,10 +483,6 @@ export default function TeamsSearchClient() {
 
     if (filters.cityFilter) {
       parts.push(`市区町村: ${filters.cityFilter}`);
-    }
-
-    if (filters.townFilter) {
-      parts.push(`町名: ${filters.townFilter}`);
     }
 
     if (filters.categoryFilter.length > 0) {
@@ -646,20 +635,51 @@ export default function TeamsSearchClient() {
             style={inputMini}
           />
 
-          <div style={{ gridColumn: "1 / -1" }}>
-            <AreaPickerKanto
-              disabled={loading || authLoading}
-              prefecture={prefectureFilter}
-              setPrefecture={(v) => setPrefectureFilter(v === "all" ? "" : v)}
-              city={cityFilter}
-              setCity={(v) => setCityFilter(v === "all" ? "" : v)}
-              town={townFilter}
-              setTown={(v) => setTownFilter(v === "all" ? "" : v)}
-              title="エリア"
-              townOptional={true}
-              allowAll={true}
-            />
-          </div>
+          <select
+            value={prefectureFilter}
+            onChange={(e) => {
+              setPrefectureFilter(e.target.value);
+              setCityFilter("");
+            }}
+            style={select}
+          >
+            <option value="">都道府県すべて</option>
+
+            <option value="東京都">東京都</option>
+            <option value="神奈川県">神奈川県</option>
+            <option value="千葉県">千葉県</option>
+            <option value="埼玉県">埼玉県</option>
+            <option value="茨城県">茨城県</option>
+            <option value="栃木県">栃木県</option>
+            <option value="群馬県">群馬県</option>
+          </select>
+
+          <select
+            value={cityFilter}
+            onChange={(e) => setCityFilter(e.target.value)}
+            style={select}
+          >
+            <option value="">市区町村すべて</option>
+
+            {Array.from(
+              new Set(
+                teams
+                  .filter(
+                    (t) =>
+                      !prefectureFilter ||
+                      t.prefecture === prefectureFilter
+                  )
+                  .map((t) => t.city)
+                  .filter(Boolean)
+              )
+            )
+              .sort((a, b) => String(a).localeCompare(String(b), "ja"))
+              .map((city) => (
+                <option key={city} value={city ?? ""}>
+                  {city}
+                </option>
+              ))}
+          </select>
 
         </div>
 
