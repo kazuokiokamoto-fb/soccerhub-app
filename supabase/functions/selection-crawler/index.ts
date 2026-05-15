@@ -748,7 +748,10 @@ async function notifyNewSelectionEvent(
   }
 }
 
-serve(async () => {
+serve(async (req) => {
+  const url = new URL(req.url);
+  const offset = Number(url.searchParams.get("offset") || "0");
+  const limit = Number(url.searchParams.get("limit") || "1");
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
   const serviceRoleKey =
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
@@ -764,7 +767,8 @@ serve(async () => {
     .from("selection_sources")
     .select("id,name,base_url,organization_type,source_rank,enabled")
     .eq("enabled", true)
-    .limit(50);
+    .order("created_at", { ascending: true })
+    .range(offset, offset);
 
   if (error) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });
@@ -1054,9 +1058,39 @@ serve(async () => {
     }
   }
 
+  const nextOffset = offset + 1;
+  const shouldContinue = Boolean(sources?.length) && limit > 1;
+
+  if (shouldContinue) {
+    const nextUrl = new URL(req.url);
+    nextUrl.searchParams.set("offset", String(nextOffset));
+    nextUrl.searchParams.set("limit", String(limit - 1));
+
+    const authorization = req.headers.get("authorization");
+    const apiKey = req.headers.get("apikey");
+
+    EdgeRuntime.waitUntil(
+      fetch(nextUrl.toString(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(authorization ? { Authorization: authorization } : {}),
+          ...(apiKey ? { apikey: apiKey } : {}),
+        },
+        body: JSON.stringify({
+          continuedFrom: offset,
+          nextOffset,
+        }),
+      })
+    );
+  }
+
   return Response.json({
     ok: errors.length === 0,
     sourceCount: sources?.length ?? 0,
+    offset,
+    nextOffset: shouldContinue ? nextOffset : null,
+    remainingLimit: shouldContinue ? limit - 1 : 0,
     fetchedPages,
     savedPages,
     insertedEvents,
