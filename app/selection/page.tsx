@@ -19,6 +19,8 @@ import {
   type CalendarItem,
 } from "@/app/match/components/MatchCalendarBase";
 
+import { CATEGORY_OPTIONS, categoryLabel } from "@/app/lib/categories";
+
 type OrgFilter =
   | "all"
   | "j_club"
@@ -92,6 +94,7 @@ export default function SelectionListPage() {
 
   const [keyword, setKeyword] = useState("");
   const [prefecture, setPrefecture] = useState("all");
+  const [city, setCity] = useState("all");
   const [orgType, setOrgType] = useState<OrgFilter>("all");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [category, setCategory] = useState("all");
@@ -128,9 +131,17 @@ export default function SelectionListPage() {
     ).sort();
   }, [items]);
 
-  const categories = useMemo(() => {
-    return Array.from(new Set(items.flatMap((v) => v.target_categories ?? []))).sort();
-  }, [items]);
+  const cities = useMemo(() => {
+  return Array.from(
+    new Set(
+      items
+        .filter((v) => prefecture === "all" || v.prefecture === prefecture)
+        .map((v) => v.city)
+        .filter(Boolean)
+        .map(String)
+    )
+  ).sort((a, b) => a.localeCompare(b, "ja"));
+}, [items, prefecture]);
 
   const filteredItems = useMemo(() => {
     const q = keyword.trim().toLowerCase();
@@ -138,6 +149,7 @@ export default function SelectionListPage() {
     const rows = items.filter((item) => {
       if (selectedDate && item.event_date !== selectedDate) return false;
       if (prefecture !== "all" && item.prefecture !== prefecture) return false;
+      if (city !== "all" && item.city !== city) return false;
       if (orgType !== "all" && item.organization_type !== orgType) return false;
       if (status !== "all" && item.display_status !== status) return false;
 
@@ -167,7 +179,7 @@ export default function SelectionListPage() {
     });
 
     return sortNewestFirst(rows);
-  }, [items, keyword, prefecture, orgType, status, category, selectedDate]);
+  }, [items, keyword, prefecture, city, orgType, status, category, selectedDate]);
 
   const selectionItemsByDate = useMemo(() => {
     const map = new Map<string, CalendarItem[]>();
@@ -193,6 +205,7 @@ export default function SelectionListPage() {
   const clearFilters = () => {
     setKeyword("");
     setPrefecture("all");
+    setCity("all");
     setOrgType("all");
     setStatus("all");
     setCategory("all");
@@ -234,13 +247,30 @@ export default function SelectionListPage() {
         <div style={filterGrid}>
           <select
             value={prefecture}
-            onChange={(e) => setPrefecture(e.target.value)}
+            onChange={(e) => {
+              setPrefecture(e.target.value);
+              setCity("all");
+            }}
             style={select}
           >
             <option value="all">都道府県すべて</option>
             {prefectures.map((p) => (
               <option key={p} value={p}>
                 {p}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            style={select}
+          >
+            <option value="all">市区町村すべて</option>
+
+            {cities.map((c) => (
+              <option key={c} value={c}>
+                {c}
               </option>
             ))}
           </select>
@@ -276,9 +306,10 @@ export default function SelectionListPage() {
             style={select}
           >
             <option value="all">対象カテゴリすべて</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
+
+            {CATEGORY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
               </option>
             ))}
           </select>
@@ -352,8 +383,8 @@ export default function SelectionListPage() {
                 {item.target_categories?.length > 0 ? (
                   <div style={tagWrap}>
                     {item.target_categories.map((cat) => (
-                      <span key={cat} style={tag}>
-                        {cat}
+                      <span key={categoryLabel(cat) || cat} style={tag}>
+                        {categoryLabel(cat) || cat}
                       </span>
                     ))}
                   </div>
