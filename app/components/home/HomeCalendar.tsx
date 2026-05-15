@@ -517,10 +517,12 @@ export default function HomeCalendar(props: {
       <Link href="/match/my-schedule" style={sectionLink}>
         <section style={summaryBoxClickable} className="ui-card">
           <div style={summaryCardTop}>
-            <div style={summaryDateText} className="ui-title">
-              マイスケジュール
-            </div>
+          <div style={summaryDateText} className="ui-title">
+            マイスケジュール
           </div>
+
+          <span style={sectionCtaSmall}>予定一覧</span>
+        </div>
 
           <div style={summaryInnerCompactBox} className="ui-card-soft">
             {myScheduleLoading ? (
@@ -559,10 +561,6 @@ export default function HomeCalendar(props: {
                 </div>
               </div>
             )}
-
-            <div style={summaryActionRowCompact}>
-              <span style={sectionCta}>予定ページを見る →</span>
-            </div>
           </div>
         </section>
       </Link>
@@ -573,6 +571,8 @@ export default function HomeCalendar(props: {
             <div style={summaryDateText} className="ui-title">
               練習試合を探す
             </div>
+
+            <span style={sectionCtaSmall}>試合検索</span>
           </div>
 
           <div style={summaryInnerCompactBox} className="ui-card-soft">
@@ -584,10 +584,6 @@ export default function HomeCalendar(props: {
               <div style={summarySubTight} className="ui-meta">
                 表示条件：{filterSummaryText}
               </div>
-            </div>
-
-            <div style={summaryActionRowCompact}>
-              <span style={sectionCta}>条件検索へ →</span>
             </div>
           </div>
         </section>
@@ -745,4 +741,18 @@ const sectionCta: React.CSSProperties = {
   color: "#fff",
   fontSize: 14,
   fontWeight: 900,
+};
+
+const sectionCtaSmall: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minHeight: 36,
+  padding: "0 14px",
+  borderRadius: 999,
+  background: "#0f7a35",
+  color: "#fff",
+  fontSize: 13,
+  fontWeight: 900,
+  whiteSpace: "nowrap",
 };
