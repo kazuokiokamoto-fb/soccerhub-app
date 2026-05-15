@@ -2,6 +2,7 @@
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.4.168";
 
 type SelectionSource = {
   id: string;
@@ -313,6 +314,102 @@ async function fetchHtml(url: string) {
   };
 }
 
+async function extractPdfTextFromBuffer(buffer: ArrayBuffer) {
+  try {
+    const pdf = await pdfjsLib.getDocument({
+      data: buffer,
+      useWorkerFetch: false,
+      isEvalSupported: false,
+      useSystemFonts: true,
+    }).promise;
+
+    let fullText = "";
+
+    const maxPages = Math.min(pdf.numPages, 20);
+
+    for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+      const page = await pdf.getPage(pageNo);
+
+      const content = await page.getTextContent();
+
+      const pageText = content.items
+        .map((item: any) => item.str || "")
+        .join(" ");
+
+      fullText += "\n" + pageText;
+    }
+
+    return fullText
+      .replace(/\s+/g, " ")
+      .trim();
+  } catch (e) {
+    console.error("PDF extract error", e);
+    return "";
+  }
+}
+
+function extractInstagramText(html: string, pageUrl: string, sourceName: string) {
+  const source = String(html ?? "");
+
+  const candidates: string[] = [];
+
+  const metaPatterns = [
+    /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["'][^>]*>/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["'][^>]*>/i,
+  ];
+
+  for (const pattern of metaPatterns) {
+    const m = source.match(pattern);
+    if (m?.[1]) candidates.push(m[1]);
+  }
+
+  const scriptTextMatches = source.match(/"text":"([^"]+)"/g) ?? [];
+  for (const item of scriptTextMatches.slice(0, 20)) {
+    const m = item.match(/"text":"([^"]+)"/);
+    if (m?.[1]) candidates.push(m[1]);
+  }
+
+  const captionMatches = source.match(/"caption":"([^"]+)"/g) ?? [];
+  for (const item of captionMatches.slice(0, 20)) {
+    const m = item.match(/"caption":"([^"]+)"/);
+    if (m?.[1]) candidates.push(m[1]);
+  }
+
+  const joined = candidates
+    .map((v) =>
+      String(v)
+        .replace(/\\u([0-9a-fA-F]{4})/g, (_, code) =>
+          String.fromCharCode(parseInt(code, 16))
+        )
+        .replace(/\\"/g, '"')
+        .replace(/\\n/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\s+/g, " ")
+        .trim()
+    )
+    .filter(Boolean)
+    .join(" ");
+
+  return [
+    sourceName,
+    "Instagram投稿",
+    joined,
+    pageUrl,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function extractCategories(text: string) {
   const found = new Set<string>();
 
@@ -429,6 +526,30 @@ function buildSummary(text: string) {
 
   if (idx == null) return text.slice(0, 160);
   return text.slice(Math.max(0, idx - 50), idx + 260).trim();
+}
+
+function normalizeDuplicateText(text?: string | null) {
+  return String(text ?? "")
+    .toLowerCase()
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (s) =>
+      String.fromCharCode(s.charCodeAt(0) - 0xfee0)
+    )
+    .replace(/[\s　]/g, "")
+    .replace(/-|－|ー/g, "")
+    .replace(/[()（）【】［］]/g, "")
+    .trim();
+}
+
+function buildDuplicateKey(params: {
+  title?: string | null;
+  organizationName?: string | null;
+  eventDate?: string | null;
+}) {
+  return [
+    normalizeDuplicateText(params.organizationName),
+    normalizeDuplicateText(params.title),
+    params.eventDate ?? "",
+  ].join("|");
 }
 
 function displayStatusFromDates(eventDate: string | null, deadline: string | null) {
@@ -638,11 +759,30 @@ serve(async () => {
         let pageTitle = "";
 
         if (pdf) {
-          rawText = `${source.name} PDF募集資料 ${pageUrl}`;
           pageTitle = titleFromUrl(pageUrl, "PDF募集資料");
+
+          const pdfText = fetched.pdfBuffer
+            ? await extractPdfTextFromBuffer(fetched.pdfBuffer)
+            : "";
+
+          rawText = [
+            source.name,
+            pageTitle,
+            pdfText,
+            pageUrl,
+          ]
+            .filter(Boolean)
+            .join(" ");
+
+          if (!rawText.trim()) {
+            rawText = `${source.name} PDF募集資料 ${pageUrl}`;
+          }
         } else if (instagram) {
-          rawText = `${source.name} Instagram投稿 ${pageUrl}`;
           pageTitle = "Instagram投稿";
+
+          const instagramText = extractInstagramText(html, pageUrl, source.name);
+
+          rawText = instagramText || `${source.name} Instagram投稿 ${pageUrl}`;
         } else {
           rawText = stripHtml(html);
           pageTitle = getTitle(html);
@@ -680,9 +820,20 @@ serve(async () => {
         savedPages += 1;
 
         const title = buildTitle(pageTitle, source.name, rawText, pageUrl);
-        const eventDate = pdf || instagram ? null : safeDate(extractDateNearKeyword(rawText));
-        const deadline = pdf || instagram ? null : safeDate(extractDeadline(rawText));
-        const contentHash = await sha256(`${title}|${eventDate ?? ""}|${pageUrl}`);
+
+        const eventDate = safeDate(extractDateNearKeyword(rawText));
+
+        const deadline = safeDate(extractDeadline(rawText));
+
+        const duplicateKey = buildDuplicateKey({
+          title,
+          organizationName: source.name,
+          eventDate,
+        });
+
+        const contentHash = await sha256(
+          `${title}|${eventDate ?? ""}|${pageUrl}`
+        );
 
         const payload = {
           source_id: source.id,
@@ -701,15 +852,16 @@ serve(async () => {
           source_url: pageUrl,
           official_url: pageUrl,
           summary: pdf
-            ? "PDF募集資料を検出しました。詳細は公式PDFをご確認ください。"
+            ? buildSummary(rawText) || "PDF募集資料を検出しました。詳細は公式PDFをご確認ください。"
             : instagram
-              ? "Instagram投稿を検出しました。詳細は公式投稿をご確認ください。"
+              ? buildSummary(rawText) || "Instagram投稿を検出しました。詳細は公式投稿をご確認ください。"
               : buildSummary(rawText),
           memo:
             "※本情報は公開情報をもとに自動収集した参考情報です。最新情報・申込条件は必ず公式サイトでご確認ください。",
           fetched_at: new Date().toISOString(),
           raw_text: rawText.slice(0, 500000),
           content_hash: contentHash,
+          duplicate_key: duplicateKey,
           status: "published",
           display_status: displayStatusFromDates(eventDate, deadline),
           is_featured: source.organization_type === "j_club",
@@ -719,15 +871,34 @@ serve(async () => {
           pdf_url: pdf ? pageUrl : null,
           instagram_url: instagram ? pageUrl : null,
           external_url: pdf || instagram ? pageUrl : null,
-          extraction_status: pdf ? "pending" : "success",
+          extraction_status: "success",
           extraction_error: null,
         };
 
-        const { data: existing } = await supabase
+        let existing: any = null;
+
+        const { data: existingByUrl, error: existingByUrlError } = await supabase
           .from("selection_events")
           .select("id")
           .eq("source_url", pageUrl)
           .maybeSingle();
+
+        if (existingByUrlError) throw existingByUrlError;
+
+        existing = existingByUrl;
+
+        if (!existing?.id) {
+          const { data: existingByDuplicateKey, error: existingByDuplicateKeyError } =
+            await supabase
+              .from("selection_events")
+              .select("id")
+              .eq("duplicate_key", duplicateKey)
+              .maybeSingle();
+
+          if (existingByDuplicateKeyError) throw existingByDuplicateKeyError;
+
+          existing = existingByDuplicateKey;
+        }
 
         if (existing?.id) {
           let { error: updateError } = await supabase
