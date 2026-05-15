@@ -646,18 +646,20 @@ export default function TeamsSearchClient() {
             style={inputMini}
           />
 
-          <AreaPickerKanto
-            disabled={loading || authLoading}
-            prefecture={prefectureFilter}
-            setPrefecture={(v) => setPrefectureFilter(v === "all" ? "" : v)}
-            city={cityFilter}
-            setCity={(v) => setCityFilter(v === "all" ? "" : v)}
-            town={townFilter}
-            setTown={(v) => setTownFilter(v === "all" ? "" : v)}
-            title="エリア"
-            townOptional={true}
-            allowAll={true}
-          />
+          <div style={{ gridColumn: "1 / -1" }}>
+            <AreaPickerKanto
+              disabled={loading || authLoading}
+              prefecture={prefectureFilter}
+              setPrefecture={(v) => setPrefectureFilter(v === "all" ? "" : v)}
+              city={cityFilter}
+              setCity={(v) => setCityFilter(v === "all" ? "" : v)}
+              town={townFilter}
+              setTown={(v) => setTownFilter(v === "all" ? "" : v)}
+              title="エリア"
+              townOptional={true}
+              allowAll={true}
+            />
+          </div>
 
         </div>
 
