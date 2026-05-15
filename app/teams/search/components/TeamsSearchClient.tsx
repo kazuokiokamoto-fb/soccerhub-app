@@ -6,7 +6,6 @@ import Link from "next/link";
 
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
-import { categoryLabel } from "@/app/lib/categories";
 
 import {
   buildCalendarCells,
@@ -21,6 +20,9 @@ import {
 } from "@/app/match/components/MatchCalendarBase";
 
 import { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
+
+import { CATEGORY_OPTIONS, categoryLabel } from "@/app/lib/categories";
+import { AreaPickerKanto } from "@/app/components/AreaPickerKanto";
 
 type TeamRow = {
   id: string;
@@ -563,29 +565,6 @@ export default function TeamsSearchClient() {
 
         <div style={filterGrid}>
           <select
-            value={prefectureFilter}
-            onChange={(e) => setPrefectureFilter(e.target.value)}
-            style={select}
-          >
-            <option value="">都道府県すべて</option>
-
-            {Array.from(
-              new Set(
-                teams
-                  .map((t) => t.prefecture)
-                  .filter(Boolean)
-                  .map(String)
-              )
-            )
-              .sort()
-              .map((pref) => (
-                <option key={pref} value={pref}>
-                  {pref}
-                </option>
-              ))}
-          </select>
-
-          <select
             value={categoryFilter[0] ?? ""}
             onChange={(e) =>
               setCategoryFilter(
@@ -596,17 +575,11 @@ export default function TeamsSearchClient() {
           >
             <option value="">カテゴリすべて</option>
 
-            {Array.from(
-              new Set(
-                teams.flatMap((team) => teamCategories(team))
-              )
-            )
-              .sort()
-              .map((cat) => (
-                <option key={cat} value={cat}>
-                  {categoryLabel(cat) || cat}
-                </option>
-              ))}
+            {CATEGORY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
           </select>
 
           <select
@@ -672,6 +645,20 @@ export default function TeamsSearchClient() {
             placeholder="駐輪台数下限"
             style={inputMini}
           />
+
+          <AreaPickerKanto
+            disabled={loading || authLoading}
+            prefecture={prefectureFilter}
+            setPrefecture={(v) => setPrefectureFilter(v === "all" ? "" : v)}
+            city={cityFilter}
+            setCity={(v) => setCityFilter(v === "all" ? "" : v)}
+            town={townFilter}
+            setTown={(v) => setTownFilter(v === "all" ? "" : v)}
+            title="エリア"
+            townOptional={true}
+            allowAll={true}
+          />
+
         </div>
 
         <div style={filterFooter}>
