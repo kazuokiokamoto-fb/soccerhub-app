@@ -925,7 +925,7 @@ serve(async () => {
           title,
           organization_name: source.name,
           organization_type: source.organization_type || "other",
-          source_rank: source.source_rank || null,
+          source_rank: source.source_rank || "district",
           target_categories: extractCategories(rawText),
           gender: rawText.includes("女子") || rawText.includes("レディース")
             ? "girls"
