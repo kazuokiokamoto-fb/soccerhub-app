@@ -1,60 +1,124 @@
+// /app/teams/search/components/TeamsSearchClient.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { supabase } from "@/app/lib/supabase";
-import AppHero from "@/app/components/AppHero";
-import AppTabNav from "@/app/components/AppTabNav";
-import { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
-import { MatchFilterPanel } from "@/app/match/components/MatchFilterPanel";
+import Link from "next/link";
 
-import { DbTeam, Toast, STRENGTH_GUIDES } from "./teamSearchUtils";
+import { supabase } from "@/app/lib/supabase";
+import { useAuth } from "@/app/lib/auth";
+import { categoryLabel } from "@/app/lib/categories";
 
 import {
-  toastBox,
-  toastSuccess,
-  toastError,
-  toastInfo,
-  toastClose,
-  modalOverlay,
-  modalCard,
-  modalHeader,
-  modalTitle,
-  modalCloseButton,
-  guideList,
-  guideCard,
-  guideTop,
-  guideRank,
-  guideShort,
-  guideTitleText,
-  guideBulletList,
-  guideBulletRow,
-  guideBulletMark,
-  guideNote,
-} from "./teamSearchStyles";
+  buildCalendarCells,
+  addMonths,
+  startOfMonth,
+  toMonthKey,
+} from "@/app/match/utils/date";
 
-function normalizeRank(level?: number | null, strengthRank?: string | null) {
-  if (strengthRank && String(strengthRank).trim()) {
-    return String(strengthRank).trim();
-  }
+import {
+  MatchCalendarBase,
+  type CalendarItem,
+} from "@/app/match/components/MatchCalendarBase";
 
+import { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
+
+type TeamRow = {
+  id: string;
+  owner_id: string | null;
+  name: string | null;
+  category: string | null;
+  categories?: string[] | null;
+  level: number | null;
+  strength_rank?: string | null;
+  area: string | null;
+  prefecture?: string | null;
+  city?: string | null;
+  town?: string | null;
+  has_ground?: boolean | null;
+  bike_parking?: string | null;
+  bike_parking_capacity?: string | null;
+  member_count?: number | null;
+  uniform_main?: string | null;
+  uniform_sub?: string | null;
+  note?: string | null;
+  desired_dates?: string[] | null;
+};
+
+function norm(v?: string | null) {
+  return String(v ?? "").trim();
+}
+
+function levelToRank(level?: number | null) {
   const n = Number(level ?? 0);
+
   if (!Number.isFinite(n)) return "";
+
   if (n >= 9) return "SS";
   if (n >= 7) return "S";
   if (n >= 5) return "A";
   if (n >= 3) return "B";
+
   return "C";
 }
 
-export default function TeamsSearchClient() {
-  const searchParams = useSearchParams();
+function teamStrengthLabel(team: TeamRow) {
+  if (team.strength_rank) return team.strength_rank;
+  return levelToRank(team.level);
+}
 
-  const [toast, setToast] = useState<Toast | null>(null);
+function parseBikeCapacity(value?: string | null) {
+  const v = String(value ?? "").trim();
+
+  if (!v || v === "不明") return null;
+
+  const n = Number(v.replace(/[^\d]/g, ""));
+
+  return Number.isFinite(n) ? n : null;
+}
+
+function teamCategories(team: TeamRow) {
+  if (Array.isArray(team.categories) && team.categories.length > 0) {
+    return team.categories;
+  }
+
+  if (team.category) {
+    return [team.category];
+  }
+
+  return [];
+}
+
+function toTeamRows(value: unknown): TeamRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((row) => row as TeamRow);
+}
+
+function compareTeamsForList(a: TeamRow, b: TeamRow, myUserId: string) {
+  const aMine = !!myUserId && a.owner_id === myUserId;
+  const bMine = !!myUserId && b.owner_id === myUserId;
+
+  if (aMine !== bMine) {
+    return aMine ? 1 : -1;
+  }
+
+  const aName = String(a.name ?? "").trim();
+  const bName = String(b.name ?? "").trim();
+
+  const byName = aName.localeCompare(bName, "ja");
+
+  if (byName !== 0) return byName;
+
+  return String(a.id).localeCompare(String(b.id), "ja");
+}
+
+export default function TeamsSearchClient() {
+  const { user, loading: authLoading } = useAuth();
+
+  const myUserId = user?.id ?? "";
+
   const [loading, setLoading] = useState(true);
-  const [teams, setTeams] = useState<DbTeam[]>([]);
-  const [showStrengthHelp, setShowStrengthHelp] = useState(false);
-  const [queryApplied, setQueryApplied] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [teams, setTeams] = useState<TeamRow[]>([]);
 
   const {
     keyword,
@@ -81,118 +145,172 @@ export default function TeamsSearchClient() {
     clearAllFilters,
   } = useMatchFilters();
 
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2800);
-    return () => clearTimeout(t);
-  }, [toast]);
+  const [showCalendar, setShowCalendar] = useState(true);
+
+  const [monthDate, setMonthDate] = useState(() =>
+    startOfMonth(new Date())
+  );
+
+  const [selectedDate, setSelectedDate] = useState("");
 
   useEffect(() => {
-    if (queryApplied) return;
+    let active = true;
 
-    clearAllFilters();
+    const load = async () => {
+      setLoading(true);
+      setLoadError("");
 
-    const keywordParam = searchParams.get("keyword") ?? "";
-    const prefParam = searchParams.get("pref") ?? "";
-    const cityParam = searchParams.get("city") ?? "";
-    const townParam = searchParams.get("town") ?? "";
-    const catParam = searchParams.get("cat") ?? "";
-    const rankParam = searchParams.get("rank") ?? "";
-    const groundParam = searchParams.get("ground") ?? "";
-    const bikeParam = searchParams.get("bike") ?? "";
-    const bikeMinParam = searchParams.get("bikeMin") ?? "";
-    const memberMinParam = searchParams.get("memberMin") ?? "";
+      try {
+        const { data, error } = await supabase
+          .from("teams")
+          .select(
+            [
+              "id",
+              "owner_id",
+              "name",
+              "category",
+              "categories",
+              "level",
+              "strength_rank",
+              "area",
+              "prefecture",
+              "city",
+              "town",
+              "has_ground",
+              "bike_parking",
+              "bike_parking_capacity",
+              "member_count",
+              "uniform_main",
+              "uniform_sub",
+              "note",
+              "desired_dates",
+            ].join(",")
+          )
+          .order("updated_at", { ascending: false });
 
-    setKeyword(keywordParam);
-    setPrefectureFilter(prefParam);
-    setCityFilter(cityParam);
-    setTownFilter(townParam);
+        if (error) throw error;
 
-    setCategoryFilter(
-      catParam
-        ? catParam
-            .split(",")
-            .map((v) => v.trim())
-            .filter(Boolean)
-        : []
-    );
+        if (!active) return;
 
-    setStrengthFilter(
-      rankParam
-        ? (rankParam
-            .split(",")
-            .map((v) => v.trim())
-            .filter(Boolean) as any)
-        : []
-    );
+        setTeams(toTeamRows(data));
+      } catch (e: any) {
+        console.error("[teams search] load error:", e);
 
-    setGroundFilter(
-      groundParam === "あり" || groundParam === "なし" ? groundParam : "all"
-    );
+        if (!active) return;
 
-    setBikeFilter(
-      bikeParam === "あり" || bikeParam === "なし" || bikeParam === "不明"
-        ? bikeParam
-        : "all"
-    );
+        setTeams([]);
+        setLoadError(e?.message ?? "チーム一覧の取得に失敗しました");
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
 
-    setBikeCapacityMin(bikeMinParam);
-    setMemberCountMin(memberMinParam);
-
-    setQueryApplied(true);
-  }, [
-    queryApplied,
-    searchParams,
-    clearAllFilters,
-    setKeyword,
-    setCategoryFilter,
-    setPrefectureFilter,
-    setCityFilter,
-    setTownFilter,
-    setGroundFilter,
-    setStrengthFilter,
-    setBikeFilter,
-    setBikeCapacityMin,
-    setMemberCountMin,
-  ]);
-
-  const load = async () => {
-    setLoading(true);
-
-    const { data, error } = await supabase
-      .from("teams")
-      .select(
-        "id,owner_id,name,area,prefecture,city,town,address_detail,category,categories,level,strength_rank,has_ground,bike_parking,bike_parking_capacity,member_count,roster_by_grade,uniform_main,uniform_sub,desired_dates,note,updated_at"
-      )
-      .order("updated_at", { ascending: false });
-
-    if (error) {
-      console.error(error);
-      setTeams([]);
-      setToast({
-        type: "error",
-        text: `読み込みに失敗しました: ${error.message}`,
-      });
-      setLoading(false);
-      return;
-    }
-
-    setTeams((data ?? []) as DbTeam[]);
-    setLoading(false);
-  };
-
-  useEffect(() => {
     void load();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
+  const calendarCells = useMemo(
+    () => buildCalendarCells(monthDate),
+    [monthDate]
+  );
+
+  const monthKey = useMemo(
+    () => toMonthKey(monthDate),
+    [monthDate]
+  );
+
   const filteredTeams = useMemo(() => {
-    return teams.filter((team) => {
-      const teamCategories =
-        Array.isArray(team.categories) && team.categories.length > 0
-          ? team.categories
-          : team.category
-            ? [team.category]
-            : [];
+    const matched = teams.filter((team) => {
+      const categories = teamCategories(team);
+
+      if (filters.categoryFilter.length > 0) {
+        const ok = categories.some((c) =>
+          filters.categoryFilter.includes(String(c).trim())
+        );
+
+        if (!ok) return false;
+      }
+
+      if (
+        filters.prefectureFilter &&
+        norm(team.prefecture) !== filters.prefectureFilter
+      ) {
+        return false;
+      }
+
+      if (
+        filters.cityFilter &&
+        norm(team.city) !== filters.cityFilter
+      ) {
+        return false;
+      }
+
+      if (
+        filters.townFilter &&
+        norm(team.town) !== filters.townFilter
+      ) {
+        return false;
+      }
+
+      if (filters.strengthFilter.length > 0) {
+        const rank = teamStrengthLabel(team);
+
+        if (!filters.strengthFilter.includes(rank as any)) {
+          return false;
+        }
+      }
+
+      if (filters.memberCountMin) {
+        const count = Number(team.member_count ?? 0);
+
+        if (count < Number(filters.memberCountMin)) {
+          return false;
+        }
+      }
+
+      if (filters.groundFilter !== "all") {
+        const ground = team.has_ground ? "あり" : "なし";
+
+        if (ground !== filters.groundFilter) {
+          return false;
+        }
+      }
+
+      if (filters.bikeFilter !== "all") {
+        const bike = (team.bike_parking ?? "不明") as
+          | "あり"
+          | "なし"
+          | "不明";
+
+        if (bike !== filters.bikeFilter) {
+          return false;
+        }
+      }
+
+      if (filters.bikeCapacityMin) {
+        const cap = parseBikeCapacity(team.bike_parking_capacity);
+
+        if (cap == null || cap < Number(filters.bikeCapacityMin)) {
+          return false;
+        }
+      }
+
+      if (selectedDate) {
+        const dates = Array.isArray(team.desired_dates)
+          ? team.desired_dates
+          : [];
+
+        const hasDate = dates.some((v) =>
+          String(v).includes(selectedDate)
+        );
+
+        if (!hasDate) return false;
+      }
 
       if (filters.keyword.trim()) {
         const q = filters.keyword.trim().toLowerCase();
@@ -203,9 +321,8 @@ export default function TeamsSearchClient() {
           team.prefecture,
           team.city,
           team.town,
-          team.address_detail,
           team.category,
-          ...teamCategories,
+          ...categories,
           team.uniform_main,
           team.uniform_sub,
           team.note,
@@ -213,7 +330,7 @@ export default function TeamsSearchClient() {
           team.bike_parking_capacity,
           String(team.member_count ?? ""),
           String(team.strength_rank ?? ""),
-          String(team.level ?? ""),
+          levelToRank(team.level),
         ]
           .join(" ")
           .toLowerCase();
@@ -221,356 +338,604 @@ export default function TeamsSearchClient() {
         if (!hay.includes(q)) return false;
       }
 
-      if (filters.prefectureFilter) {
-        if (String(team.prefecture ?? "").trim() !== filters.prefectureFilter) {
-          return false;
-        }
-      }
-
-      if (filters.cityFilter) {
-        if (String(team.city ?? "").trim() !== filters.cityFilter) {
-          return false;
-        }
-      }
-
-      if (filters.townFilter) {
-        if (String(team.town ?? "").trim() !== filters.townFilter) {
-          return false;
-        }
-      }
-
-      if (filters.categoryFilter.length > 0) {
-        const ok = teamCategories.some((c) =>
-          filters.categoryFilter.includes(String(c).trim())
-        );
-        if (!ok) return false;
-      }
-
-      if (filters.strengthFilter.length > 0) {
-        const rank = normalizeRank(team.level, team.strength_rank);
-        if (!rank || !filters.strengthFilter.includes(rank as any)) {
-          return false;
-        }
-      }
-
-      if (filters.memberCountMin) {
-        const count = Number(team.member_count ?? 0);
-        if (count < Number(filters.memberCountMin)) return false;
-      }
-
-      if (filters.groundFilter !== "all") {
-        const ground = team.has_ground ? "あり" : "なし";
-        if (ground !== filters.groundFilter) return false;
-      }
-
-      if (filters.bikeFilter !== "all") {
-        const bike = (team.bike_parking ?? "不明") as
-          | "あり"
-          | "なし"
-          | "不明";
-        if (bike !== filters.bikeFilter) return false;
-      }
-
-      if (filters.bikeCapacityMin) {
-        const raw = String(team.bike_parking_capacity ?? "").trim();
-        const cap = raw ? Number(raw.replace(/[^\d]/g, "")) : NaN;
-        if (!Number.isFinite(cap) || cap < Number(filters.bikeCapacityMin)) {
-          return false;
-        }
-      }
-
       return true;
     });
-  }, [teams, filters]);
 
-  const handleResetFilters = () => {
-    clearAllFilters();
-  };
+    return [...matched].sort((a, b) =>
+      compareTeamsForList(a, b, myUserId)
+    );
+  }, [teams, filters, myUserId, selectedDate]);
 
-  const openFilteredTeamsPage = () => {
-    const params = new URLSearchParams();
+  const itemsByDate = useMemo(() => {
+    const map = new Map<string, CalendarItem[]>();
 
-    if (keyword.trim()) params.set("keyword", keyword.trim());
-    if (prefectureFilter) params.set("pref", prefectureFilter);
-    if (cityFilter.trim()) params.set("city", cityFilter.trim());
-    if (townFilter.trim()) params.set("town", townFilter.trim());
+    const countMap = new Map<string, number>();
 
-    if (categoryFilter.length > 0) {
-      params.set("cat", categoryFilter.join(","));
+    for (const team of teams) {
+      const dates = Array.isArray(team.desired_dates)
+        ? team.desired_dates
+        : [];
+
+      for (const raw of dates) {
+        const ymd = String(raw).slice(0, 10);
+
+        if (!ymd) continue;
+
+        countMap.set(ymd, (countMap.get(ymd) ?? 0) + 1);
+      }
     }
 
-    if (strengthFilter.length > 0) {
-      params.set("rank", strengthFilter.join(","));
+    for (const [ymd, count] of countMap.entries()) {
+      map.set(ymd, [
+        {
+          label: "募",
+          count,
+          tone: "open",
+        },
+      ]);
     }
 
-    if (memberCountMin) {
-      params.set("memberMin", memberCountMin);
+    return map;
+  }, [teams]);
+
+  const filterSummaryText = useMemo(() => {
+    const parts: string[] = [];
+
+    if (filters.keyword.trim()) {
+      parts.push(`キーワード: ${filters.keyword.trim()}`);
     }
 
-    if (groundFilter !== "all") {
-      params.set("ground", groundFilter);
+    if (filters.prefectureFilter) {
+      parts.push(`都道府県: ${filters.prefectureFilter}`);
     }
 
-    if (bikeFilter !== "all") {
-      params.set("bike", bikeFilter);
+    if (filters.cityFilter) {
+      parts.push(`市区町村: ${filters.cityFilter}`);
     }
 
-    if (bikeCapacityMin) {
-      params.set("bikeMin", bikeCapacityMin);
+    if (filters.townFilter) {
+      parts.push(`町名: ${filters.townFilter}`);
     }
 
-    const qs = params.toString();
-    window.location.href = qs ? `/teams?${qs}` : "/teams";
-  };
+    if (filters.categoryFilter.length > 0) {
+      parts.push(
+        `カテゴリ: ${filters.categoryFilter
+          .map((v) => categoryLabel(v) || v)
+          .join(" / ")}`
+      );
+    }
+
+    if (filters.strengthFilter.length > 0) {
+      parts.push(`強さ: ${filters.strengthFilter.join(" / ")}`);
+    }
+
+    if (filters.memberCountMin) {
+      parts.push(`人数: ${filters.memberCountMin}人以上`);
+    }
+
+    if (filters.groundFilter !== "all") {
+      parts.push(`グラウンド: ${filters.groundFilter}`);
+    }
+
+    if (filters.bikeFilter !== "all") {
+      parts.push(`駐輪場: ${filters.bikeFilter}`);
+    }
+
+    if (filters.bikeCapacityMin) {
+      parts.push(`駐輪台数: ${filters.bikeCapacityMin}台以上`);
+    }
+
+    if (selectedDate) {
+      parts.push(`日付: ${selectedDate}`);
+    }
+
+    return parts.join(" / ") || "すべての条件で表示中";
+  }, [filters, selectedDate]);
 
   return (
-    <main style={pageShell}>
-      {toast ? (
-        <div
-          style={{
-            ...toastBox,
-            ...(toast.type === "success"
-              ? toastSuccess
-              : toast.type === "error"
-                ? toastError
-                : toastInfo),
-            margin: "12px 16px 0",
-            flexShrink: 0,
-          }}
-          role="status"
-          aria-live="polite"
-        >
-          <div style={{ whiteSpace: "pre-wrap" }}>{toast.text}</div>
+    <main style={wrap}>
+      <div style={topBar}>
+        <Link href="/" className="sh-btn">
+          ← ホーム
+        </Link>
+
+        <div style={pageTitle}>練習試合を探す</div>
+      </div>
+
+      <section className="ui-card" style={searchBox}>
+        <div style={searchHeader}>
+          <div className="ui-title" style={searchTitle}>
+            条件検索
+          </div>
+
           <button
             type="button"
-            onClick={() => setToast(null)}
-            style={toastClose}
-            aria-label="閉じる"
+            className="sh-btn"
+            onClick={() => setShowCalendar((v) => !v)}
           >
-            ×
+            {showCalendar ? "カレンダーを閉じる" : "カレンダー表示"}
           </button>
+        </div>
+
+        <input
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          placeholder="チーム名・地域・カテゴリなど"
+          style={input}
+        />
+
+        <div style={filterGrid}>
+          <select
+            value={prefectureFilter}
+            onChange={(e) => setPrefectureFilter(e.target.value)}
+            style={select}
+          >
+            <option value="">都道府県すべて</option>
+
+            {Array.from(
+              new Set(
+                teams
+                  .map((t) => t.prefecture)
+                  .filter(Boolean)
+                  .map(String)
+              )
+            )
+              .sort()
+              .map((pref) => (
+                <option key={pref} value={pref}>
+                  {pref}
+                </option>
+              ))}
+          </select>
+
+          <select
+            value={categoryFilter[0] ?? ""}
+            onChange={(e) =>
+              setCategoryFilter(
+                e.target.value ? [e.target.value] : []
+              )
+            }
+            style={select}
+          >
+            <option value="">カテゴリすべて</option>
+
+            {Array.from(
+              new Set(
+                teams.flatMap((team) => teamCategories(team))
+              )
+            )
+              .sort()
+              .map((cat) => (
+                <option key={cat} value={cat}>
+                  {categoryLabel(cat) || cat}
+                </option>
+              ))}
+          </select>
+
+          <select
+            value={strengthFilter[0] ?? ""}
+            onChange={(e) =>
+              setStrengthFilter(
+                e.target.value ? [e.target.value as any] : []
+              )
+            }
+            style={select}
+          >
+            <option value="">強さすべて</option>
+            <option value="SS">SS</option>
+            <option value="S">S</option>
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+          </select>
+
+          <select
+            value={groundFilter}
+            onChange={(e) =>
+              setGroundFilter(
+                e.target.value as "all" | "あり" | "なし"
+              )
+            }
+            style={select}
+          >
+            <option value="all">グラウンドすべて</option>
+            <option value="あり">あり</option>
+            <option value="なし">なし</option>
+          </select>
+
+          <select
+            value={bikeFilter}
+            onChange={(e) =>
+              setBikeFilter(
+                e.target.value as any
+              )
+            }
+            style={select}
+          >
+            <option value="all">駐輪場すべて</option>
+            <option value="あり">あり</option>
+            <option value="なし">なし</option>
+            <option value="不明">不明</option>
+          </select>
+
+          <input
+            value={memberCountMin}
+            onChange={(e) =>
+              setMemberCountMin(e.target.value)
+            }
+            placeholder="人数下限"
+            style={inputMini}
+          />
+
+          <input
+            value={bikeCapacityMin}
+            onChange={(e) =>
+              setBikeCapacityMin(e.target.value)
+            }
+            placeholder="駐輪台数下限"
+            style={inputMini}
+          />
+        </div>
+
+        <div style={filterFooter}>
+          <div className="ui-meta">
+            表示件数：{filteredTeams.length}件
+            <br />
+            {filterSummaryText}
+          </div>
+
+          <button
+            type="button"
+            className="sh-btn"
+            onClick={() => {
+              clearAllFilters();
+              setSelectedDate("");
+            }}
+          >
+            条件クリア
+          </button>
+        </div>
+      </section>
+
+      {showCalendar ? (
+        <section className="ui-card" style={calendarBox}>
+          <div style={calendarTitle}>開催日カレンダー</div>
+
+          <div style={calendarHint} className="ui-meta">
+            日付を押すと、その日に募集しているチームだけを表示します。
+          </div>
+
+          <MatchCalendarBase
+            monthKey={monthKey}
+            cells={calendarCells}
+            selectedYmd={selectedDate}
+            itemsByDate={itemsByDate}
+            onSelectDate={(ymd) => {
+              setSelectedDate((current) =>
+                current === ymd ? "" : ymd
+              );
+            }}
+            onPrevMonth={() =>
+              setMonthDate((prev) => addMonths(prev, -1))
+            }
+            onNextMonth={() =>
+              setMonthDate((prev) => addMonths(prev, 1))
+            }
+          />
+        </section>
+      ) : null}
+
+      {loadError ? (
+        <div className="ui-card" style={errorBox}>
+          <div style={errorTitle}>読み込みエラー</div>
+          <div>{loadError}</div>
         </div>
       ) : null}
 
-      <div style={topFixedArea}>
-        <AppTabNav />
+      {loading || authLoading ? (
+        <div className="ui-card" style={emptyBox}>
+          読み込み中…
+        </div>
+      ) : filteredTeams.length === 0 ? (
+        <div className="ui-card" style={emptyBox}>
+          条件に一致するチームがありません
+        </div>
+      ) : (
+        <section style={listWrap}>
+          {filteredTeams.map((team) => {
+            const mine =
+              !!myUserId &&
+              team.owner_id === myUserId;
 
-        <AppHero
-          icon="🔎"
-          title="条件検索"
-          desc="ホームと同じ条件UIで、相手チームを絞り込めます。"
-        />
+            const categories = teamCategories(team);
 
-        <section style={stickySummaryBox}>
-          <div style={stickySummaryTopRow}>
-            <div style={stickySummaryInline}>
-              <span style={stickySummaryMini}>対象チーム数</span>
-              <span style={stickySummaryValue}>{filteredTeams.length}件</span>
-            </div>
-
-            <div style={stickySummaryActions}>
-              <button
-                type="button"
-                className="sh-btn sh-btn--primary"
-                onClick={openFilteredTeamsPage}
-                disabled={loading}
+            return (
+              <Link
+                key={team.id}
+                href={`/teams/${team.id}`}
+                style={teamCardLink}
               >
-                チーム一覧
-              </button>
+                <article className="ui-card" style={teamCard}>
+                  <div style={teamCardHead}>
+                    <div style={teamNameWrap}>
+                      <div style={teamName}>
+                        {team.name || "チーム名未設定"}
+                      </div>
 
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={handleResetFilters}
-                disabled={loading}
-              >
-                条件リセット
-              </button>
+                      {mine ? (
+                        <span style={mineBadge}>
+                          自分のチーム
+                        </span>
+                      ) : null}
+                    </div>
 
-              <button
-                type="button"
-                className="sh-btn"
-                onClick={() => {
-                  window.history.back();
-                }}
-                disabled={loading}
-              >
-                閉じる
-              </button>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <div style={filterScrollArea}>
-        <MatchFilterPanel
-          filterRef={undefined}
-          loading={loading}
-          keyword={keyword}
-          setKeyword={setKeyword}
-          categoryFilter={categoryFilter}
-          setCategoryFilter={setCategoryFilter}
-          prefectureFilter={prefectureFilter}
-          setPrefectureFilter={setPrefectureFilter}
-          cityFilter={cityFilter}
-          setCityFilter={setCityFilter}
-          townFilter={townFilter}
-          setTownFilter={setTownFilter}
-          groundFilter={groundFilter}
-          setGroundFilter={setGroundFilter}
-          strengthFilter={strengthFilter}
-          setStrengthFilter={(value) => setStrengthFilter(value as any)}
-          bikeFilter={bikeFilter}
-          setBikeFilter={setBikeFilter}
-          bikeCapacityMin={bikeCapacityMin}
-          setBikeCapacityMin={setBikeCapacityMin}
-          memberCountMin={memberCountMin}
-          setMemberCountMin={setMemberCountMin}
-          onBackToCalendar={() => {
-            window.history.back();
-          }}
-          onOpenTeamList={openFilteredTeamsPage}
-          onReset={handleResetFilters}
-          onBackToList={() => {
-            window.history.back();
-          }}
-          onOpenStrengthHelp={() => setShowStrengthHelp(true)}
-          strengthGuides={STRENGTH_GUIDES}
-          titleText="相手を探す"
-          descriptionText="レベル・エリア・人数感などから相手チームを探せます。"
-          liveCountLabel="対象チーム数"
-          liveCountText={`${filteredTeams.length}件`}
-          hideFilterBadge={true}
-          inlineHeaderActions={false}
-          showTopActions={false}
-          showTopHitBox={false}
-          renderHeaderActionsInHitBox={false}
-          hidePanelHeader={true}
-          hidePanelTitleBlock={true}
-          compactTopHitBox={false}
-        />
-      </div>
-
-      {showStrengthHelp ? (
-        <div
-          style={modalOverlay}
-          onClick={() => setShowStrengthHelp(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="強さの説明"
-        >
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={modalHeader}>
-              <h3 style={modalTitle}>強さの説明</h3>
-              <button
-                type="button"
-                style={modalCloseButton}
-                onClick={() => setShowStrengthHelp(false)}
-              >
-                閉じる
-              </button>
-            </div>
-
-            <div style={guideList}>
-              {STRENGTH_GUIDES.map((item) => (
-                <div key={item.rank} style={guideCard}>
-                  <div style={guideTop}>
-                    <div style={guideRank}>{item.rank}</div>
-                    <div style={guideShort}>{item.short}</div>
+                    <div style={rankBadge}>
+                      強さ{" "}
+                      {teamStrengthLabel(team) || "未設定"}
+                    </div>
                   </div>
 
-                  <div style={guideTitleText}>{item.title}</div>
-
-                  <div style={guideBulletList}>
-                    {item.bullets.map((bullet) => (
-                      <div key={bullet} style={guideBulletRow}>
-                        <span style={guideBulletMark}>•</span>
-                        <span>{bullet}</span>
-                      </div>
+                  <div style={tagWrap}>
+                    {categories.map((cat) => (
+                      <span key={cat} style={tag}>
+                        {categoryLabel(cat) || cat}
+                      </span>
                     ))}
                   </div>
 
-                  <div style={guideNote}>{item.note}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
+                  <div style={teamMeta}>
+                    <div>
+                      <strong>エリア：</strong>
+
+                      {[team.prefecture, team.city, team.town]
+                        .filter(Boolean)
+                        .join("・") ||
+                        team.area ||
+                        "未設定"}
+                    </div>
+
+                    <div>
+                      <strong>人数：</strong>
+                      {team.member_count ?? "未設定"}
+                    </div>
+
+                    <div>
+                      <strong>グラウンド：</strong>
+                      {team.has_ground ? "あり" : "なし"}
+                    </div>
+
+                    <div>
+                      <strong>駐輪場：</strong>
+                      {team.bike_parking || "不明"}
+                      {team.bike_parking_capacity
+                        ? ` / ${team.bike_parking_capacity}`
+                        : ""}
+                    </div>
+
+                    {(team.uniform_main ||
+                      team.uniform_sub) && (
+                      <div>
+                        <strong>ユニフォーム：</strong>
+
+                        {[team.uniform_main, team.uniform_sub]
+                          .filter(Boolean)
+                          .join(" / ")}
+                      </div>
+                    )}
+
+                    {team.note ? (
+                      <div>
+                        <strong>メモ：</strong>
+                        {team.note}
+                      </div>
+                    ) : null}
+                  </div>
+                </article>
+              </Link>
+            );
+          })}
+        </section>
+      )}
     </main>
   );
 }
 
-const pageShell: React.CSSProperties = {
-  height: "100dvh",
-  minHeight: "100dvh",
-  maxWidth: 980,
+const wrap: React.CSSProperties = {
+  padding: 16,
+  maxWidth: 900,
   margin: "0 auto",
-  background: "#fff",
-  display: "flex",
-  flexDirection: "column",
-  overflow: "hidden",
+  display: "grid",
+  gap: 12,
 };
 
-const topFixedArea: React.CSSProperties = {
-  flexShrink: 0,
-  padding: "16px 16px 0",
-  background: "#fff",
-  borderBottom: "1px solid #edf2ee",
-};
-
-const stickySummaryBox: React.CSSProperties = {
-  marginTop: 12,
-  marginBottom: 12,
-  padding: "10px 14px",
-  borderRadius: 16,
-  border: "1px solid #dce9df",
-  background: "#f7fbf8",
-};
-
-const stickySummaryTopRow: React.CSSProperties = {
+const topBar: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
-  justifyContent: "space-between",
   gap: 12,
-  flexWrap: "wrap",
 };
 
-const stickySummaryInline: React.CSSProperties = {
+const pageTitle: React.CSSProperties = {
+  fontSize: 22,
+  fontWeight: 900,
+  color: "#16391f",
+};
+
+const searchBox: React.CSSProperties = {
+  padding: 14,
+};
+
+const searchHeader: React.CSSProperties = {
   display: "flex",
-  alignItems: "baseline",
+  justifyContent: "space-between",
+  alignItems: "center",
   gap: 10,
-  minWidth: 0,
+  flexWrap: "wrap",
+  marginBottom: 10,
+};
+
+const searchTitle: React.CSSProperties = {
+  fontSize: 18,
+};
+
+const input: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "12px 12px",
+  borderRadius: 12,
+  border: "1px solid #d1d5db",
+  fontSize: 16,
+  outline: "none",
+  background: "#fff",
+};
+
+const inputMini: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "11px 10px",
+  borderRadius: 12,
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  fontSize: 14,
+};
+
+const filterGrid: React.CSSProperties = {
+  marginTop: 10,
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+  gap: 8,
+};
+
+const select: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "11px 10px",
+  borderRadius: 12,
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  fontSize: 14,
+};
+
+const filterFooter: React.CSSProperties = {
+  marginTop: 10,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
   flexWrap: "wrap",
 };
 
-const stickySummaryMini: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 800,
-  color: "#3b6a49",
-  lineHeight: 1.2,
+const calendarBox: React.CSSProperties = {
+  padding: 14,
 };
 
-const stickySummaryValue: React.CSSProperties = {
+const calendarTitle: React.CSSProperties = {
   fontSize: 18,
   fontWeight: 900,
-  color: "#14532d",
-  lineHeight: 1.1,
+  color: "#16391f",
 };
 
-const stickySummaryActions: React.CSSProperties = {
+const calendarHint: React.CSSProperties = {
+  marginTop: 4,
+  marginBottom: 10,
+};
+
+const listWrap: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+};
+
+const teamCardLink: React.CSSProperties = {
+  textDecoration: "none",
+  color: "inherit",
+};
+
+const teamCard: React.CSSProperties = {
+  padding: 14,
+};
+
+const teamCardHead: React.CSSProperties = {
   display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const teamNameWrap: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
   gap: 8,
   flexWrap: "wrap",
-  marginLeft: "auto",
-  justifyContent: "flex-end",
 };
 
-const filterScrollArea: React.CSSProperties = {
-  flex: 1,
-  minHeight: 0,
-  overflowY: "auto",
-  overflowX: "hidden",
-  WebkitOverflowScrolling: "touch",
-  padding: "0 16px 16px",
+const teamName: React.CSSProperties = {
+  fontSize: 20,
+  fontWeight: 900,
+  color: "#16391f",
+  lineHeight: 1.3,
+};
+
+const mineBadge: React.CSSProperties = {
+  display: "inline-block",
+  padding: "4px 8px",
+  borderRadius: 999,
+  background: "#ecfdf3",
+  color: "#166534",
+  fontSize: 12,
+  fontWeight: 900,
+  border: "1px solid #bbf7d0",
+};
+
+const rankBadge: React.CSSProperties = {
+  display: "inline-block",
+  padding: "6px 10px",
+  borderRadius: 999,
+  background: "#eef6f0",
+  color: "#14532d",
+  fontSize: 13,
+  fontWeight: 900,
+  border: "1px solid #dce9df",
+};
+
+const teamMeta: React.CSSProperties = {
+  marginTop: 12,
+  display: "grid",
+  gap: 8,
+  color: "#374151",
+  lineHeight: 1.7,
+  fontSize: 14,
+};
+
+const tagWrap: React.CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 6,
+};
+
+const tag: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 26,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#f3f4f6",
+  color: "#374151",
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const errorBox: React.CSSProperties = {
+  padding: 14,
+  color: "#991b1b",
+};
+
+const errorTitle: React.CSSProperties = {
+  fontWeight: 900,
+  marginBottom: 4,
+};
+
+const emptyBox: React.CSSProperties = {
+  padding: 22,
+  textAlign: "center",
 };
