@@ -9,6 +9,7 @@ type SelectionSource = {
   name: string;
   base_url: string;
   organization_type: string;
+  source_rank: string | null;
   enabled: boolean;
 };
 
@@ -791,7 +792,7 @@ serve(async () => {
 
   const { data: sources, error } = await supabase
     .from("selection_sources")
-    .select("id,name,base_url,organization_type,enabled")
+    .select("id,name,base_url,organization_type,source_rank,enabled")
     .eq("enabled", true)
     .limit(50);
 
@@ -924,6 +925,7 @@ serve(async () => {
           title,
           organization_name: source.name,
           organization_type: source.organization_type || "other",
+          source_rank: source.source_rank || null,
           target_categories: extractCategories(rawText),
           gender: rawText.includes("女子") || rawText.includes("レディース")
             ? "girls"
