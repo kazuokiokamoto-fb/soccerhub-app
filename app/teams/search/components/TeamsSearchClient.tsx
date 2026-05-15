@@ -111,6 +111,90 @@ function compareTeamsForList(a: TeamRow, b: TeamRow, myUserId: string) {
   return String(a.id).localeCompare(String(b.id), "ja");
 }
 
+function normalizeSearchText(value: string) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (s) =>
+      String.fromCharCode(s.charCodeAt(0) - 0xfee0)
+    )
+    .replace(/年/g, "/")
+    .replace(/月/g, "/")
+    .replace(/日/g, "")
+    .replace(/-/g, "/")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function dateSearchVariants(value?: string | null) {
+  const text = String(value ?? "").trim();
+  if (!text) return [];
+
+  const normalized = normalizeSearchText(text);
+
+  const m = normalized.match(/(?:(\d{4})\/)?(\d{1,2})\/(\d{1,2})/);
+  if (!m) return [normalized];
+
+  const y = m[1];
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+
+  if (!month || !day) return [normalized];
+
+  return [
+    normalized,
+    `${month}/${day}`,
+    `${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}`,
+    `${month}月${day}日`,
+    `${String(month).padStart(2, "0")}月${String(day).padStart(2, "0")}日`,
+    y ? `${y}/${month}/${day}` : "",
+    y ? `${y}年${month}月${day}日` : "",
+  ].filter(Boolean);
+}
+
+function categorySearchVariants(value?: string | null) {
+  const raw = String(value ?? "").trim();
+  const label = categoryLabel(raw) || raw;
+  const text = normalizeSearchText(raw);
+  const labelText = normalizeSearchText(label);
+
+  const variants = new Set<string>([raw, label, text, labelText]);
+
+  const gradeMatch = `${raw} ${label}`.match(/小\s*([1-6])|小学\s*([1-6])|([1-6])年/);
+  const grade = gradeMatch?.[1] || gradeMatch?.[2] || gradeMatch?.[3];
+
+  if (grade) {
+    variants.add(`小${grade}`);
+    variants.add(`小学${grade}年`);
+    variants.add(`${grade}年`);
+    variants.add(`${grade}年生`);
+
+    const u = 6 + Number(grade);
+    variants.add(`u-${u}`);
+    variants.add(`u${u}`);
+    variants.add(`U-${u}`);
+    variants.add(`U${u}`);
+  }
+
+  const uMatch = text.match(/u-?(\d{1,2})/);
+  if (uMatch) {
+    const u = Number(uMatch[1]);
+    variants.add(`u-${u}`);
+    variants.add(`u${u}`);
+    variants.add(`U-${u}`);
+    variants.add(`U${u}`);
+
+    const gradeNo = u - 6;
+    if (gradeNo >= 1 && gradeNo <= 6) {
+      variants.add(`小${gradeNo}`);
+      variants.add(`小学${gradeNo}年`);
+      variants.add(`${gradeNo}年`);
+      variants.add(`${gradeNo}年生`);
+    }
+  }
+
+  return Array.from(variants).filter(Boolean);
+}
+
 export default function TeamsSearchClient() {
   const { user, loading: authLoading } = useAuth();
 
@@ -313,7 +397,14 @@ export default function TeamsSearchClient() {
       }
 
       if (filters.keyword.trim()) {
-        const q = filters.keyword.trim().toLowerCase();
+        const q = normalizeSearchText(filters.keyword.trim());
+
+        const desiredDates = Array.isArray((team as any).desired_dates)
+          ? (team as any).desired_dates
+          : [];
+
+        const categoryWords = categories.flatMap((v) => categorySearchVariants(v));
+        const dateWords = desiredDates.flatMap((v: string) => dateSearchVariants(v));
 
         const hay = [
           team.name,
@@ -323,6 +414,8 @@ export default function TeamsSearchClient() {
           team.town,
           team.category,
           ...categories,
+          ...categoryWords,
+          ...dateWords,
           team.uniform_main,
           team.uniform_sub,
           team.note,
@@ -332,8 +425,8 @@ export default function TeamsSearchClient() {
           String(team.strength_rank ?? ""),
           levelToRank(team.level),
         ]
-          .join(" ")
-          .toLowerCase();
+          .map((v) => normalizeSearchText(String(v ?? "")))
+          .join(" ");
 
         if (!hay.includes(q)) return false;
       }
