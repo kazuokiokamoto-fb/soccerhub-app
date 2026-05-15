@@ -126,6 +126,9 @@ export default async function SelectionDetailPage(props: {
 
   const officialUrl = item.official_url || item.source_url;
 
+  const showLinkSection =
+    !!item.official_url && item.official_url !== item.source_url;
+
   return (
     <main style={wrap}>
       <div style={topBar}>
@@ -228,23 +231,25 @@ export default async function SelectionDetailPage(props: {
         </section>
       ) : null}
 
-      <section className="ui-card" style={detailCard}>
-        <h2 style={sectionTitle}>リンク</h2>
+      {showLinkSection ? (
+        <section className="ui-card" style={detailCard}>
+          <h2 style={sectionTitle}>リンク</h2>
 
-        <DetailRow
-          label="公式URL"
-          value={
-            <a
-              href={officialUrl}
-              target="_blank"
-              rel="noreferrer"
-              style={plainLink}
-            >
-              {officialUrl}
-            </a>
-          }
-        />
-      </section>
+          <DetailRow
+            label="公式URL"
+            value={
+              <a
+                href={item.official_url || ""}
+                target="_blank"
+                rel="noreferrer"
+                style={plainLink}
+              >
+                {item.official_url}
+              </a>
+            }
+          />
+        </section>
+      ) : null}
     </main>
   );
 }
