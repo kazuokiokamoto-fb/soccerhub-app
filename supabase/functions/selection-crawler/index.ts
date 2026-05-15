@@ -11,62 +11,55 @@ type SelectionSource = {
   enabled: boolean;
 };
 
-const MAX_PAGES_PER_SOURCE = 10;
+const MAX_PAGES_PER_SOURCE = 12;
 
 const KEYWORDS = [
   "セレクション",
   "選考会",
   "練習参加",
-  "加入",
+  "練習会",
+  "体験練習",
+  "体験会",
+  "体験",
+  "トライアウト",
   "入団",
+  "加入",
   "募集",
   "参加者募集",
   "新加入",
-  "トライアウト",
-  "体験",
-  "体験練習",
-  "体験会",
-  "練習会",
   "アカデミー",
   "育成",
   "スクール",
   "ジュニア",
   "ジュニアユース",
   "ユース",
-  "トップチーム",
   "レディース",
   "女子",
-  "WEリーグ",
-  "フットサル",
   "GK",
   "ゴールキーパー",
   "キャンプ",
   "短期スクール",
   "tryout",
+  "trial",
+  "selection",
   "academy",
   "school",
-  "ladies",
-  "women",
-  "futsal",
-  "topteam",
-  "join",
   "recruit",
+  "join",
 ];
 
-const CATEGORY_KEYWORDS = [
-  "U-12",
-  "U-13",
-  "U-14",
-  "U-15",
-  "小1",
-  "小2",
-  "小3",
-  "小4",
-  "小5",
-  "小6",
-  "中1",
-  "中2",
-  "中3",
+const EXCLUDE_KEYWORDS = [
+  "試合結果",
+  "大会結果",
+  "順位表",
+  "戦績",
+  "マッチレポート",
+  "代表メンバー",
+  "日本代表",
+  "ハイライト",
+  "チケット",
+  "グッズ",
+  "観戦",
 ];
 
 const PREFECTURES = [
@@ -80,6 +73,52 @@ const PREFECTURES = [
   "山梨県",
 ];
 
+const CITIES = [
+  "世田谷区",
+  "杉並区",
+  "練馬区",
+  "大田区",
+  "目黒区",
+  "渋谷区",
+  "新宿区",
+  "中野区",
+  "板橋区",
+  "足立区",
+  "江戸川区",
+  "江東区",
+  "品川区",
+  "町田市",
+  "調布市",
+  "府中市",
+  "三鷹市",
+  "武蔵野市",
+  "八王子市",
+  "立川市",
+  "横浜市",
+  "川崎市",
+  "相模原市",
+  "藤沢市",
+  "大和市",
+  "厚木市",
+  "さいたま市",
+  "川口市",
+  "所沢市",
+  "越谷市",
+  "川越市",
+  "千葉市",
+  "船橋市",
+  "市川市",
+  "柏市",
+  "松戸市",
+  "浦安市",
+  "流山市",
+  "つくば市",
+  "水戸市",
+  "宇都宮市",
+  "前橋市",
+  "高崎市",
+];
+
 function stripHtml(html: string) {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -87,6 +126,10 @@ function stripHtml(html: string) {
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -100,6 +143,10 @@ function containsKeyword(text: string) {
   return KEYWORDS.some((keyword) => text.includes(keyword));
 }
 
+function containsExcludeKeyword(text: string) {
+  return EXCLUDE_KEYWORDS.some((keyword) => text.includes(keyword));
+}
+
 function normalizeUrl(url: string) {
   try {
     const u = new URL(url);
@@ -110,11 +157,18 @@ function normalizeUrl(url: string) {
   }
 }
 
+function sameHost(url: string, baseUrl: string) {
+  try {
+    return new URL(url).hostname === new URL(baseUrl).hostname;
+  } catch {
+    return false;
+  }
+}
+
 function safeDate(value?: string | null) {
   if (!value) return null;
 
   const text = String(value).trim();
-
   const match = text.match(/^(\d{4})[-\/年](\d{1,2})[-\/月](\d{1,2})日?$/);
   if (!match) return null;
 
@@ -138,14 +192,6 @@ function safeDate(value?: string | null) {
   return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
-function sameHost(url: string, baseUrl: string) {
-  try {
-    return new URL(url).hostname === new URL(baseUrl).hostname;
-  } catch {
-    return false;
-  }
-}
-
 function extractLinks(html: string, baseUrl: string) {
   const links = new Set<string>();
   const re = /href=["']([^"']+)["']/gi;
@@ -158,17 +204,38 @@ function extractLinks(html: string, baseUrl: string) {
     if (href.startsWith("#")) continue;
     if (href.startsWith("mailto:")) continue;
     if (href.startsWith("tel:")) continue;
-    if (href.includes(".pdf")) continue;
-    if (href.includes(".jpg")) continue;
-    if (href.includes(".png")) continue;
+
+    const lowerHref = href.toLowerCase();
+    if (lowerHref.includes(".pdf")) continue;
+    if (lowerHref.includes(".jpg")) continue;
+    if (lowerHref.includes(".jpeg")) continue;
+    if (lowerHref.includes(".png")) continue;
+    if (lowerHref.includes(".webp")) continue;
 
     try {
       const abs = normalizeUrl(new URL(href, baseUrl).toString());
       if (!sameHost(abs, baseUrl)) continue;
 
-      const lower = abs.toLowerCase();
+      const lower = decodeURIComponent(abs).toLowerCase();
 
       const likely =
+        lower.includes("selection") ||
+        lower.includes("tryout") ||
+        lower.includes("trial") ||
+        lower.includes("recruit") ||
+        lower.includes("academy") ||
+        lower.includes("school") ||
+        lower.includes("junior") ||
+        lower.includes("youth") ||
+        lower.includes("u-12") ||
+        lower.includes("u12") ||
+        lower.includes("u-13") ||
+        lower.includes("u13") ||
+        lower.includes("u-15") ||
+        lower.includes("u15") ||
+        lower.includes("u-18") ||
+        lower.includes("u18") ||
+        lower.includes("news") ||
         abs.includes("セレクション") ||
         abs.includes("選考") ||
         abs.includes("体験") ||
@@ -179,35 +246,8 @@ function extractLinks(html: string, baseUrl: string) {
         abs.includes("アカデミー") ||
         abs.includes("スクール") ||
         abs.includes("ジュニア") ||
-        abs.includes("ジュニアユース") ||
         abs.includes("ユース") ||
-        abs.includes("レディース") ||
-        abs.includes("女子") ||
-        abs.includes("フットサル") ||
-        abs.includes("トップチーム") ||
-        lower.includes("selection") ||
-        lower.includes("tryout") ||
-        lower.includes("trial") ||
-        lower.includes("junior") ||
-        lower.includes("academy") ||
-        lower.includes("school") ||
-        lower.includes("ladies") ||
-        lower.includes("women") ||
-        lower.includes("futsal") ||
-        lower.includes("topteam") ||
-        lower.includes("top-team") ||
-        lower.includes("player") ||
-        lower.includes("join") ||
-        lower.includes("recruit") ||
-        lower.includes("u-12") ||
-        lower.includes("u12") ||
-        lower.includes("u-13") ||
-        lower.includes("u13") ||
-        lower.includes("u-15") ||
-        lower.includes("u15") ||
-        lower.includes("u-18") ||
-        lower.includes("u18") ||
-        lower.includes("news");
+        abs.includes("女子");
 
       if (likely) links.add(abs);
     } catch {
@@ -245,11 +285,48 @@ async function fetchHtml(url: string) {
 }
 
 function extractCategories(text: string) {
-  return CATEGORY_KEYWORDS.filter((v) => text.includes(v));
+  const found = new Set<string>();
+
+  const normalized = String(text ?? "")
+    .replace(/Ｕ/g, "U")
+    .replace(/－/g, "-")
+    .replace(/ー/g, "-")
+    .replace(/\s+/g, "");
+
+  if (/U-?7|小学1年|小1|1年生/.test(normalized)) found.add("U-7");
+  if (/U-?8|小学2年|小2|2年生/.test(normalized)) found.add("U-8");
+  if (/U-?9|小学3年|小3|3年生/.test(normalized)) found.add("U-9");
+  if (/U-?10|小学4年|小4|4年生/.test(normalized)) found.add("U-10");
+  if (/U-?11|小学5年|小5|5年生/.test(normalized)) found.add("U-11");
+  if (/U-?12|小学6年|小6|6年生/.test(normalized)) found.add("U-12");
+  if (/U-?13|中学1年|中1/.test(normalized)) found.add("U-13");
+  if (/U-?14|中学2年|中2/.test(normalized)) found.add("U-14");
+  if (/U-?15|中学3年|中3|ジュニアユース/.test(normalized)) found.add("U-15");
+  if (/U-?18|ユース/.test(normalized)) found.add("U-18");
+
+  return Array.from(found);
 }
 
 function extractPrefecture(text: string) {
   return PREFECTURES.find((v) => text.includes(v)) ?? null;
+}
+
+function extractCity(text: string) {
+  return CITIES.find((v) => text.includes(v)) ?? null;
+}
+
+function extractDateNearKeyword(text: string) {
+  const keywordIndexes = KEYWORDS.map((k) => text.indexOf(k))
+    .filter((v) => v >= 0)
+    .sort((a, b) => a - b);
+
+  for (const idx of keywordIndexes) {
+    const part = text.slice(Math.max(0, idx - 200), idx + 800);
+    const date = extractDate(part);
+    if (date) return date;
+  }
+
+  return extractDate(text);
 }
 
 function extractDate(text: string) {
@@ -262,7 +339,10 @@ function extractDate(text: string) {
     ).padStart(2, "0")}`;
   }
 
-  const md = text.match(/(\d{1,2})月(\d{1,2})日/) || text.match(/(\d{1,2})\/(\d{1,2})/);
+  const md =
+    text.match(/(\d{1,2})月(\d{1,2})日/) ||
+    text.match(/(\d{1,2})\/(\d{1,2})/);
+
   if (md) {
     return `${year}-${String(md[1]).padStart(2, "0")}-${String(md[2]).padStart(
       2,
@@ -274,16 +354,16 @@ function extractDate(text: string) {
 }
 
 function extractDeadline(text: string) {
-  const idx =
-    text.indexOf("申込期限") >= 0
-      ? text.indexOf("申込期限")
-      : text.indexOf("締切") >= 0
-        ? text.indexOf("締切")
-        : -1;
+  const words = ["申込期限", "申込締切", "応募締切", "締切", "〆切", "申込み期限"];
 
-  if (idx < 0) return null;
+  for (const word of words) {
+    const idx = text.indexOf(word);
+    if (idx >= 0) {
+      return extractDate(text.slice(idx, idx + 180));
+    }
+  }
 
-  return extractDate(text.slice(idx, idx + 120));
+  return null;
 }
 
 function buildTitle(pageTitle: string, sourceName: string, text: string) {
@@ -299,7 +379,7 @@ function buildSummary(text: string) {
     .sort((a, b) => a - b)[0];
 
   if (idx == null) return text.slice(0, 160);
-  return text.slice(Math.max(0, idx - 50), idx + 220).trim();
+  return text.slice(Math.max(0, idx - 50), idx + 260).trim();
 }
 
 function displayStatusFromDates(eventDate: string | null, deadline: string | null) {
@@ -309,6 +389,40 @@ function displayStatusFromDates(eventDate: string | null, deadline: string | nul
   if (deadline && deadline < today) return "申込終了";
 
   return "募集中";
+}
+
+function isTargetPage(params: {
+  rawText: string;
+  pageTitle: string;
+  pageUrl: string;
+}) {
+  const { rawText, pageTitle, pageUrl } = params;
+
+  const text = `${pageTitle} ${rawText}`;
+  const lowerUrl = pageUrl.toLowerCase();
+
+  if (!containsKeyword(text)) return false;
+  if (containsExcludeKeyword(text)) return false;
+
+  const positiveScore =
+    (text.includes("セレクション") ? 3 : 0) +
+    (text.includes("選考会") ? 3 : 0) +
+    (text.includes("トライアウト") ? 3 : 0) +
+    (text.includes("練習参加") ? 2 : 0) +
+    (text.includes("体験練習") ? 2 : 0) +
+    (text.includes("体験会") ? 2 : 0) +
+    (text.includes("募集") ? 1 : 0) +
+    (text.includes("アカデミー") ? 1 : 0) +
+    (text.includes("ジュニアユース") ? 1 : 0) +
+    (text.includes("ユース") ? 1 : 0) +
+    (lowerUrl.includes("selection") ? 3 : 0) +
+    (lowerUrl.includes("tryout") ? 3 : 0) +
+    (lowerUrl.includes("trial") ? 2 : 0) +
+    (lowerUrl.includes("recruit") ? 2 : 0) +
+    (lowerUrl.includes("academy") ? 1 : 0) +
+    (lowerUrl.includes("school") ? 1 : 0);
+
+  return positiveScore >= 1;
 }
 
 async function notifyNewSelectionEvent(
@@ -401,7 +515,7 @@ serve(async () => {
     .from("selection_sources")
     .select("id,name,base_url,organization_type,enabled")
     .eq("enabled", true)
-    .limit(20);
+    .limit(50);
 
   if (error) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });
@@ -422,50 +536,39 @@ serve(async () => {
 
     const logId = log?.id;
 
+    let sourceFetchedPages = 0;
+    let sourceInsertedEvents = 0;
+    let sourceUpdatedEvents = 0;
+
     try {
       const firstUrl = normalizeUrl(source.base_url);
       const first = await fetchHtml(firstUrl);
 
-      const urls = [
-        firstUrl,
-        ...extractLinks(first.html, firstUrl),
-      ].slice(0, MAX_PAGES_PER_SOURCE);
+      const urls = [firstUrl, ...extractLinks(first.html, firstUrl)].slice(
+        0,
+        MAX_PAGES_PER_SOURCE
+      );
 
       for (const pageUrl of urls) {
-        const fetched =
-          pageUrl === firstUrl ? first : await fetchHtml(pageUrl);
+        const fetched = pageUrl === firstUrl ? first : await fetchHtml(pageUrl);
 
         fetchedPages += 1;
+        sourceFetchedPages += 1;
 
         const html = fetched.html;
         const rawText = stripHtml(html);
         const pageTitle = getTitle(html);
         const checksum = await sha256(rawText);
 
-        const lowerPageUrl = pageUrl.toLowerCase();
-
-        const isTargetPage =
-          containsKeyword(rawText) &&
-          (
-            pageTitle.includes("セレクション") ||
-            pageTitle.includes("選考会") ||
-            pageTitle.includes("体験") ||
-            pageTitle.includes("募集") ||
-            pageTitle.includes("練習参加") ||
-            pageTitle.includes("トライアウト") ||
-            pageTitle.includes("スクール") ||
-            pageTitle.includes("アカデミー") ||
-            lowerPageUrl.includes("selection") ||
-            lowerPageUrl.includes("tryout") ||
-            lowerPageUrl.includes("trial") ||
-            lowerPageUrl.includes("recruit") ||
-            lowerPageUrl.includes("school") ||
-            lowerPageUrl.includes("academy")
-          );
-
-        const isJClub = source.organization_type === "j_club";
-
-        if (!isTargetPage) continue;
+        if (
+          !isTargetPage({
+            rawText,
+            pageTitle,
+            pageUrl,
+          })
+        ) {
+          continue;
+        }
 
         const { data: pageRow, error: pageError } = await supabase
           .from("selection_crawl_pages")
@@ -486,7 +589,7 @@ serve(async () => {
         savedPages += 1;
 
         const title = buildTitle(pageTitle, source.name, rawText);
-        const eventDate = safeDate(extractDate(rawText));
+        const eventDate = safeDate(extractDateNearKeyword(rawText));
         const deadline = safeDate(extractDeadline(rawText));
         const contentHash = await sha256(`${title}|${eventDate ?? ""}|${pageUrl}`);
 
@@ -497,8 +600,11 @@ serve(async () => {
           organization_name: source.name,
           organization_type: source.organization_type || "other",
           target_categories: extractCategories(rawText),
-          gender: "any",
+          gender: rawText.includes("女子") || rawText.includes("レディース")
+            ? "girls"
+            : "any",
           prefecture: extractPrefecture(rawText),
+          city: extractCity(rawText),
           event_date: eventDate,
           application_deadline: deadline,
           source_url: pageUrl,
@@ -528,7 +634,9 @@ serve(async () => {
             .eq("id", existing.id);
 
           if (updateError) throw updateError;
+
           updatedEvents += 1;
+          sourceUpdatedEvents += 1;
         } else {
           const { data: insertedEvent, error: insertError } = await supabase
             .from("selection_events")
@@ -539,6 +647,7 @@ serve(async () => {
           if (insertError) throw insertError;
 
           insertedEvents += 1;
+          sourceInsertedEvents += 1;
 
           if (insertedEvent?.id) {
             await notifyNewSelectionEvent(
@@ -561,9 +670,9 @@ serve(async () => {
           .update({
             finished_at: new Date().toISOString(),
             success: true,
-            fetched_pages: fetchedPages,
-            inserted_events: insertedEvents,
-            updated_events: updatedEvents,
+            fetched_pages: sourceFetchedPages,
+            inserted_events: sourceInsertedEvents,
+            updated_events: sourceUpdatedEvents,
           })
           .eq("id", logId);
       }
@@ -574,6 +683,7 @@ serve(async () => {
           : typeof e === "object"
             ? JSON.stringify(e)
             : String(e);
+
       errors.push(`${source.name}: ${message}`);
 
       if (logId) {
@@ -583,6 +693,9 @@ serve(async () => {
             finished_at: new Date().toISOString(),
             success: false,
             error_message: message,
+            fetched_pages: sourceFetchedPages,
+            inserted_events: sourceInsertedEvents,
+            updated_events: sourceUpdatedEvents,
           })
           .eq("id", logId);
       }
