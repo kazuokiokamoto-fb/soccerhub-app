@@ -17,36 +17,58 @@ const MAX_PAGES_PER_SOURCE = 20;
 const KEYWORDS = [
   "セレクション",
   "選考会",
+  "追加セレクション",
+  "GKセレクション",
+  "ゴールキーパーセレクション",
+
+  "募集",
+  "参加者募集",
+  "選手募集",
+  "入団",
+  "加入",
+  "新加入",
+  "応募",
+  "申込",
+  "申し込み",
+  "エントリー",
+
   "練習参加",
   "練習会",
   "体験練習",
   "体験会",
   "体験",
+  "無料体験",
+
   "トライアウト",
-  "入団",
-  "加入",
-  "募集",
-  "参加者募集",
-  "新加入",
   "アカデミー",
+  "アカデミーセレクション",
   "育成",
-  "スクール",
   "ジュニア",
   "ジュニアユース",
   "ユース",
+  "スクール",
   "レディース",
   "女子",
   "GK",
   "ゴールキーパー",
-  "キャンプ",
-  "短期スクール",
+
+  "selection",
+  "select",
   "tryout",
   "trial",
-  "selection",
-  "academy",
-  "school",
+  "entry",
   "recruit",
+  "recruitment",
   "join",
+  "academy",
+  "academy-selection",
+  "school",
+  "junior",
+  "youth",
+  "ladies",
+  "women",
+  "girls",
+  "gk",
 ];
 
 const EXCLUDE_KEYWORDS = [
@@ -61,6 +83,15 @@ const EXCLUDE_KEYWORDS = [
   "チケット",
   "グッズ",
   "観戦",
+  "スタッフ紹介",
+  "スタッフ",
+  "選手一覧",
+  "選手紹介",
+  "コーチ",
+  "会社概要",
+  "プライバシー",
+  "個人情報",
+  "利用規約",
 ];
 
 const PREFECTURES = [
@@ -217,10 +248,21 @@ function extractLinks(html: string, baseUrl: string) {
     if (href.startsWith("tel:")) continue;
 
     const lowerHref = href.toLowerCase();
+
     if (lowerHref.includes(".jpg")) continue;
     if (lowerHref.includes(".jpeg")) continue;
     if (lowerHref.includes(".png")) continue;
     if (lowerHref.includes(".webp")) continue;
+
+    const blockedFile =
+      lowerHref.includes(".css") ||
+      lowerHref.includes(".js") ||
+      lowerHref.includes(".json") ||
+      lowerHref.includes(".xml") ||
+      lowerHref.includes(".svg") ||
+      lowerHref.includes(".ico");
+
+    if (blockedFile) continue;
 
     try {
       const abs = normalizeUrl(new URL(href, baseUrl).toString());
@@ -229,35 +271,54 @@ function extractLinks(html: string, baseUrl: string) {
       const pdf = isPdfUrl(abs);
       const instagram = isInstagramUrl(abs);
 
+      const blockedPath =
+        lower.includes("/staff") ||
+        lower.includes("/coach") ||
+        lower.includes("/player") ||
+        lower.includes("/team") ||
+        lower.includes("/schedule") ||
+        lower.includes("/result") ||
+        lower.includes("/standings") ||
+        lower.includes("/ticket") ||
+        lower.includes("/goods") ||
+        lower.includes("/privacy") ||
+        lower.includes("/company") ||
+        lower.includes("/feed");
+
+      if (!pdf && !instagram && blockedPath) continue;
+
       if (!pdf && !instagram && !sameHost(abs, baseUrl)) continue;
 
       const likely =
         pdf ||
         instagram ||
         lower.includes("selection") ||
+        lower.includes("select") ||
         lower.includes("tryout") ||
         lower.includes("trial") ||
         lower.includes("recruit") ||
+        lower.includes("recruitment") ||
+        lower.includes("entry") ||
+        lower.includes("join") ||
+        lower.includes("academy-selection") ||
         lower.includes("academy") ||
         lower.includes("school") ||
         lower.includes("junior") ||
         lower.includes("youth") ||
-        lower.includes("u-12") ||
-        lower.includes("u12") ||
-        lower.includes("u-13") ||
-        lower.includes("u13") ||
-        lower.includes("u-15") ||
-        lower.includes("u15") ||
-        lower.includes("u-18") ||
-        lower.includes("u18") ||
-        lower.includes("news") ||
+        lower.includes("ladies") ||
+        lower.includes("women") ||
+        lower.includes("girls") ||
+        lower.includes("gk") ||
         abs.includes("セレクション") ||
         abs.includes("選考") ||
         abs.includes("体験") ||
         abs.includes("募集") ||
         abs.includes("入団") ||
         abs.includes("加入") ||
-        abs.includes("育成") ||
+        abs.includes("応募") ||
+        abs.includes("申込") ||
+        abs.includes("練習会") ||
+        abs.includes("練習参加") ||
         abs.includes("アカデミー") ||
         abs.includes("スクール") ||
         abs.includes("ジュニア") ||
@@ -595,24 +656,30 @@ function isTargetPage(params: {
   if (containsExcludeKeyword(text)) return false;
 
   const positiveScore =
-    (text.includes("セレクション") ? 3 : 0) +
-    (text.includes("選考会") ? 3 : 0) +
-    (text.includes("トライアウト") ? 3 : 0) +
-    (text.includes("練習参加") ? 2 : 0) +
-    (text.includes("体験練習") ? 2 : 0) +
-    (text.includes("体験会") ? 2 : 0) +
-    (text.includes("募集") ? 1 : 0) +
-    (text.includes("アカデミー") ? 1 : 0) +
-    (text.includes("ジュニアユース") ? 1 : 0) +
-    (text.includes("ユース") ? 1 : 0) +
-    (lowerUrl.includes("selection") ? 3 : 0) +
-    (lowerUrl.includes("tryout") ? 3 : 0) +
-    (lowerUrl.includes("trial") ? 2 : 0) +
-    (lowerUrl.includes("recruit") ? 2 : 0) +
-    (lowerUrl.includes("academy") ? 1 : 0) +
-    (lowerUrl.includes("school") ? 1 : 0);
+    (text.includes("セレクション") ? 10 : 0) +
+    (text.includes("選考会") ? 9 : 0) +
+    (text.includes("トライアウト") ? 9 : 0) +
+    (text.includes("追加セレクション") ? 10 : 0) +
+    (text.includes("GKセレクション") ? 8 : 0) +
+    (text.includes("選手募集") ? 8 : 0) +
+    (text.includes("参加者募集") ? 7 : 0) +
+    (text.includes("練習参加") ? 6 : 0) +
+    (text.includes("練習会") ? 5 : 0) +
+    (text.includes("体験練習") ? 5 : 0) +
+    (text.includes("体験会") ? 5 : 0) +
+    (text.includes("入団") ? 5 : 0) +
+    (text.includes("加入") ? 5 : 0) +
+    (text.includes("応募") ? 4 : 0) +
+    (text.includes("申込") ? 4 : 0) +
+    (text.includes("エントリー") ? 4 : 0) +
+    (lowerUrl.includes("selection") ? 10 : 0) +
+    (lowerUrl.includes("tryout") ? 9 : 0) +
+    (lowerUrl.includes("trial") ? 7 : 0) +
+    (lowerUrl.includes("recruit") ? 7 : 0) +
+    (lowerUrl.includes("entry") ? 5 : 0) +
+    (lowerUrl.includes("join") ? 5 : 0);
 
-  return positiveScore >= 1;
+  return positiveScore >= 5;
 }
 
 function isMissingColumnError(err: any) {

@@ -36,9 +36,40 @@ type StatusFilter =
   | "開催終了"
   | "日程未定";
 
+const SOURCE_PREFECTURE_MAP: Record<string, string> = {
+  鹿島アントラーズ: "茨城県",
+  水戸ホーリーホック: "茨城県",
+  浦和レッズ: "埼玉県",
+  RB大宮アルディージャ: "埼玉県",
+  ジェフユナイテッド市原・千葉: "千葉県",
+  柏レイソル: "千葉県",
+  FC東京: "東京都",
+  東京ヴェルディ: "東京都",
+  FC町田ゼルビア: "東京都",
+  川崎フロンターレ: "神奈川県",
+  横浜F・マリノス: "神奈川県",
+  横浜FC: "神奈川県",
+  湘南ベルマーレ: "神奈川県",
+  栃木SC: "栃木県",
+  ザスパ群馬: "群馬県",
+  ヴァンフォーレ甲府: "山梨県",
+};
+
 function formatDate(date?: string | null) {
   if (!date) return "未定";
   return new Date(date).toLocaleDateString("ja-JP");
+}
+
+function inferredPrefecture(item: SelectionEvent) {
+  if (item.prefecture) return item.prefecture;
+
+  const name = item.organization_name || "";
+
+  const matched = Object.keys(SOURCE_PREFECTURE_MAP).find((key) =>
+    name.includes(key)
+  );
+
+  return matched ? SOURCE_PREFECTURE_MAP[matched] : null;
 }
 
 function orgLabel(type?: string | null) {
@@ -127,28 +158,33 @@ export default function SelectionListPage() {
 
   const prefectures = useMemo(() => {
     return Array.from(
-      new Set(items.map((v) => v.prefecture).filter(Boolean).map(String))
-    ).sort();
+      new Set(items.map((v) => inferredPrefecture(v)).filter(Boolean).map(String))
+    ).sort((a, b) => a.localeCompare(b, "ja"));
   }, [items]);
 
   const cities = useMemo(() => {
-  return Array.from(
-    new Set(
-      items
-        .filter((v) => prefecture === "all" || v.prefecture === prefecture)
-        .map((v) => v.city)
-        .filter(Boolean)
-        .map(String)
-    )
-  ).sort((a, b) => a.localeCompare(b, "ja"));
-}, [items, prefecture]);
+    return Array.from(
+      new Set(
+        items
+          .filter((v) => {
+            const itemPrefecture = inferredPrefecture(v);
+            return prefecture === "all" || itemPrefecture === prefecture;
+          })
+          .map((v) => v.city)
+          .filter(Boolean)
+          .map(String)
+      )
+    ).sort((a, b) => a.localeCompare(b, "ja"));
+  }, [items, prefecture]);
 
   const filteredItems = useMemo(() => {
     const q = keyword.trim().toLowerCase();
 
     const rows = items.filter((item) => {
+      const itemPrefecture = inferredPrefecture(item);
+
       if (selectedDate && item.event_date !== selectedDate) return false;
-      if (prefecture !== "all" && item.prefecture !== prefecture) return false;
+      if (prefecture !== "all" && itemPrefecture !== prefecture) return false;
       if (city !== "all" && item.city !== city) return false;
       if (orgType !== "all" && item.organization_type !== orgType) return false;
       if (status !== "all" && item.display_status !== status) return false;
@@ -162,7 +198,7 @@ export default function SelectionListPage() {
           item.title,
           item.organization_name,
           item.organization_type,
-          item.prefecture,
+          itemPrefecture,
           item.city,
           item.area,
           item.venue_name,
@@ -358,55 +394,65 @@ export default function SelectionListPage() {
         </div>
       ) : (
         <section style={listWrap}>
-          {filteredItems.map((item) => (
-            <Link key={item.id} href={`/selection/${item.id}`} style={linkStyle}>
-              <article className="ui-card" style={card}>
-                <div style={cardTop}>
-                  <span style={orgBadge}>{orgLabel(item.organization_type)}</span>
+          {filteredItems.map((item) => {
+            const itemPrefecture = inferredPrefecture(item);
 
-                  <span
-                    style={{
-                      ...statusBadge,
-                      ...statusStyle(item.display_status),
-                    }}
-                  >
-                    {item.display_status}
-                  </span>
-                </div>
+            return (
+              <Link
+                key={item.id}
+                href={`/selection/${item.id}`}
+                style={linkStyle}
+              >
+                <article className="ui-card" style={card}>
+                  <div style={cardTop}>
+                    <span style={orgBadge}>
+                      {orgLabel(item.organization_type)}
+                    </span>
 
-                <h2 style={cardTitle}>{item.title}</h2>
-
-                <div className="ui-meta" style={orgName}>
-                  {item.organization_name || "団体名未設定"}
-                </div>
-
-                {item.target_categories?.length > 0 ? (
-                  <div style={tagWrap}>
-                    {item.target_categories.map((cat) => (
-                      <span key={categoryLabel(cat) || cat} style={tag}>
-                        {categoryLabel(cat) || cat}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-
-                <div style={infoGrid}>
-                  <div>
-                    <div style={label}>開催日</div>
-                    <div style={value}>{formatDate(item.event_date)}</div>
+                    <span
+                      style={{
+                        ...statusBadge,
+                        ...statusStyle(item.display_status),
+                      }}
+                    >
+                      {item.display_status}
+                    </span>
                   </div>
 
-                  <div>
-                    <div style={label}>地域</div>
-                    <div style={value}>
-                      {[item.prefecture, item.city].filter(Boolean).join(" ") ||
-                        "未定"}
+                  <h2 style={cardTitle}>{item.title}</h2>
+
+                  <div className="ui-meta" style={orgName}>
+                    {item.organization_name || "団体名未設定"}
+                  </div>
+
+                  {item.target_categories?.length > 0 ? (
+                    <div style={tagWrap}>
+                      {item.target_categories.map((cat) => (
+                        <span key={categoryLabel(cat) || cat} style={tag}>
+                          {categoryLabel(cat) || cat}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div style={infoGrid}>
+                    <div>
+                      <div style={label}>開催日</div>
+                      <div style={value}>{formatDate(item.event_date)}</div>
+                    </div>
+
+                    <div>
+                      <div style={label}>地域</div>
+                      <div style={value}>
+                        {[itemPrefecture, item.city].filter(Boolean).join(" ") ||
+                          "未定"}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </article>
-            </Link>
-          ))}
+                </article>
+              </Link>
+            );
+          })}
         </section>
       )}
     </main>

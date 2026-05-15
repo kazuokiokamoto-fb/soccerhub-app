@@ -12,7 +12,8 @@ export async function fetchSelectionEvents(): Promise<SelectionEvent[]> {
     .from("selection_events_public")
     .select("*")
     .gte("event_date", today)
-    .order("event_date", { ascending: true })
+    .order("fetched_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
     .limit(200);
 
   if (error) {
