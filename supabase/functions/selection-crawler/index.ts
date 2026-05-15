@@ -379,6 +379,22 @@ function extractInstagramText(html: string, pageUrl: string, sourceName: string)
     if (m?.[1]) candidates.push(m[1]);
   }
 
+  const accessibilityMatches =
+    source.match(/"accessibility_caption":"([^"]+)"/g) ?? [];
+
+  for (const item of accessibilityMatches.slice(0, 20)) {
+    const m = item.match(/"accessibility_caption":"([^"]+)"/);
+    if (m?.[1]) candidates.push(m[1]);
+  }
+
+  const edgeCaptionMatches =
+    source.match(/"edge_media_to_caption"[\s\S]{0,800}/g) ?? [];
+
+  for (const item of edgeCaptionMatches.slice(0, 10)) {
+    const m = item.match(/"text":"([^"]+)"/);
+    if (m?.[1]) candidates.push(m[1]);
+  }
+
   const joined = candidates
     .map((v) =>
       String(v)
