@@ -377,37 +377,9 @@ async function fetchHtml(url: string) {
 }
 
 async function extractPdfTextFromBuffer(buffer: ArrayBuffer) {
-  try {
-    const pdf = await pdfjsLib.getDocument({
-      data: buffer,
-      useWorkerFetch: false,
-      isEvalSupported: false,
-      useSystemFonts: true,
-    }).promise;
-
-    let fullText = "";
-
-    const maxPages = Math.min(pdf.numPages, 20);
-
-    for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
-      const page = await pdf.getPage(pageNo);
-
-      const content = await page.getTextContent();
-
-      const pageText = content.items
-        .map((item: any) => item.str || "")
-        .join(" ");
-
-      fullText += "\n" + pageText;
-    }
-
-    return fullText
-      .replace(/\s+/g, " ")
-      .trim();
-  } catch (e) {
-    console.error("PDF extract error", e);
-    return "";
-  }
+  // Supabase Edge Function 上では pdfjs の worker 読み込みで失敗するため、
+  // いったんPDF本文解析は行わず、PDFリンク検出のみで登録する。
+  return "";
 }
 
 function extractInstagramText(html: string, pageUrl: string, sourceName: string) {
