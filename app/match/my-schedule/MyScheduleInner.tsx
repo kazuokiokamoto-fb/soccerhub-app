@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
-import { categoryLabel } from "@/app/lib/categories";
+import { CATEGORY_OPTIONS, categoryLabel } from "@/app/lib/categories";
 
 import {
   buildCalendarCells,
@@ -649,10 +649,11 @@ export default function MyScheduleInner() {
             onChange={(e) => setCategory(e.target.value)}
             style={select}
           >
-            <option value="all">カテゴリすべて</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
+            <option value="">カテゴリすべて</option>
+
+            {CATEGORY_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
               </option>
             ))}
           </select>
