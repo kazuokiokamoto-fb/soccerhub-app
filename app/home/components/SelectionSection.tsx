@@ -9,19 +9,33 @@ import type { SelectionEvent } from "@/app/types/selection";
 export function SelectionSection() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<SelectionEvent[]>([]);
+  const [errorText, setErrorText] = useState("");
 
   useEffect(() => {
     let active = true;
 
     async function load() {
       setLoading(true);
+      setErrorText("");
 
-      const rows = await fetchSelectionEvents();
+      try {
+        const rows = await fetchSelectionEvents();
 
-      if (!active) return;
+        if (!active) return;
 
-      setItems(rows);
-      setLoading(false);
+        setItems(rows);
+      } catch (e: any) {
+        console.error("SelectionSection load error:", e);
+
+        if (!active) return;
+
+        setItems([]);
+        setErrorText(e?.message ?? "読み込みエラー");
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
     }
 
     void load();
@@ -49,7 +63,9 @@ export function SelectionSection() {
             </div>
 
             <div style={summarySubTight} className="ui-meta">
-              J下部組織・強豪チーム・スクール等
+              {errorText
+                ? `取得エラー：${errorText}`
+                : "J下部組織・強豪チーム・スクール等"}
             </div>
           </div>
         </div>

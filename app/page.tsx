@@ -6,6 +6,7 @@ import AppTabNav from "@/app/components/AppTabNav";
 import HomeCalendar from "@/app/components/home/HomeCalendar";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
+import { SelectionSection } from "@/app/home/components/SelectionSection";
 
 type TeamRow = {
   id: string;
@@ -106,6 +107,8 @@ export default function HomePage() {
       <Suspense fallback={<div style={loadingPanel}>読み込み中…</div>}>
         <HomeCalendar />
       </Suspense>
+
+      <SelectionSection />
 
       <section style={foldSection}>
         <button
