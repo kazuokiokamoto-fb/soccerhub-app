@@ -553,6 +553,53 @@ export default function TeamsSearchClient() {
         />
 
         <div style={filterGrid}>
+
+          <select
+            value={prefectureFilter}
+            onChange={(e) => {
+              setPrefectureFilter(e.target.value);
+              setCityFilter("");
+            }}
+            style={select}
+          >
+            <option value="">都道府県すべて</option>
+
+            <option value="東京都">東京都</option>
+            <option value="神奈川県">神奈川県</option>
+            <option value="千葉県">千葉県</option>
+            <option value="埼玉県">埼玉県</option>
+            <option value="茨城県">茨城県</option>
+            <option value="栃木県">栃木県</option>
+            <option value="群馬県">群馬県</option>
+          </select>
+
+          <select
+            value={cityFilter}
+            onChange={(e) => setCityFilter(e.target.value)}
+            style={select}
+          >
+            <option value="">市区町村すべて</option>
+
+            {Array.from(
+              new Set(
+                teams
+                  .filter(
+                    (t) =>
+                      !prefectureFilter ||
+                      t.prefecture === prefectureFilter
+                  )
+                  .map((t) => t.city)
+                  .filter(Boolean)
+              )
+            )
+              .sort((a, b) => String(a).localeCompare(String(b), "ja"))
+              .map((city) => (
+                <option key={city} value={city ?? ""}>
+                  {city}
+                </option>
+              ))}
+          </select>
+
           <select
             value={categoryFilter[0] ?? ""}
             onChange={(e) =>
@@ -600,85 +647,6 @@ export default function TeamsSearchClient() {
             <option value="all">グラウンドすべて</option>
             <option value="あり">あり</option>
             <option value="なし">なし</option>
-          </select>
-
-          <select
-            value={bikeFilter}
-            onChange={(e) =>
-              setBikeFilter(
-                e.target.value as any
-              )
-            }
-            style={select}
-          >
-            <option value="all">駐輪場すべて</option>
-            <option value="あり">あり</option>
-            <option value="なし">なし</option>
-            <option value="不明">不明</option>
-          </select>
-
-          <input
-            value={memberCountMin}
-            onChange={(e) =>
-              setMemberCountMin(e.target.value)
-            }
-            placeholder="人数下限"
-            style={inputMini}
-          />
-
-          <input
-            value={bikeCapacityMin}
-            onChange={(e) =>
-              setBikeCapacityMin(e.target.value)
-            }
-            placeholder="駐輪台数下限"
-            style={inputMini}
-          />
-
-          <select
-            value={prefectureFilter}
-            onChange={(e) => {
-              setPrefectureFilter(e.target.value);
-              setCityFilter("");
-            }}
-            style={select}
-          >
-            <option value="">都道府県すべて</option>
-
-            <option value="東京都">東京都</option>
-            <option value="神奈川県">神奈川県</option>
-            <option value="千葉県">千葉県</option>
-            <option value="埼玉県">埼玉県</option>
-            <option value="茨城県">茨城県</option>
-            <option value="栃木県">栃木県</option>
-            <option value="群馬県">群馬県</option>
-          </select>
-
-          <select
-            value={cityFilter}
-            onChange={(e) => setCityFilter(e.target.value)}
-            style={select}
-          >
-            <option value="">市区町村すべて</option>
-
-            {Array.from(
-              new Set(
-                teams
-                  .filter(
-                    (t) =>
-                      !prefectureFilter ||
-                      t.prefecture === prefectureFilter
-                  )
-                  .map((t) => t.city)
-                  .filter(Boolean)
-              )
-            )
-              .sort((a, b) => String(a).localeCompare(String(b), "ja"))
-              .map((city) => (
-                <option key={city} value={city ?? ""}>
-                  {city}
-                </option>
-              ))}
           </select>
 
         </div>
