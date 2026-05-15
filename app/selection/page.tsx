@@ -21,13 +21,16 @@ import {
 
 import { CATEGORY_OPTIONS, categoryLabel } from "@/app/lib/categories";
 
-type OrgFilter =
+type RankFilter =
   | "all"
-  | "j_club"
-  | "strong_team"
+  | "j_academy"
+  | "pref_top"
+  | "pref_2"
+  | "pref_3"
+  | "pref_4"
+  | "district"
   | "school"
-  | "club_team"
-  | "other";
+  | "girls";
 
 type StatusFilter =
   | "all"
@@ -72,19 +75,39 @@ function inferredPrefecture(item: SelectionEvent) {
   return matched ? SOURCE_PREFECTURE_MAP[matched] : null;
 }
 
-function orgLabel(type?: string | null) {
-  switch (type) {
-    case "j_club":
-      return "J下部";
-    case "strong_team":
-      return "強豪";
-    case "school":
-      return "スクール";
-    case "club_team":
-      return "クラブ";
-    default:
-      return "その他";
+function rankLabel(rank?: string | null, prefecture?: string | null) {
+  if (rank === "j_academy") return "J下部";
+
+  if (prefecture === "東京都") {
+    if (rank === "pref_top") return "T1";
+    if (rank === "pref_2") return "T2";
+    if (rank === "pref_3") return "T3";
+    if (rank === "pref_4") return "T4";
   }
+
+  if (rank === "pref_top") return "1部";
+  if (rank === "pref_2") return "2部";
+  if (rank === "pref_3") return "3部";
+  if (rank === "pref_4") return "4部";
+  if (rank === "district") return "地区リーグ";
+  if (rank === "school") return "スクール";
+  if (rank === "girls") return "女子";
+
+  return "未設定";
+}
+
+function rankSelectLabel(rank: RankFilter, prefecture: string) {
+  if (rank === "all") return "ランクすべて";
+  if (rank === "j_academy") return "J下部";
+  if (rank === "pref_top") return "T1 / 1部";
+  if (rank === "pref_2") return "T2 / 2部";
+  if (rank === "pref_3") return "T3 / 3部";
+  if (rank === "pref_4") return "T4 / 4部";
+  if (rank === "district") return "地区リーグ";
+  if (rank === "school") return "スクール";
+  if (rank === "girls") return "女子";
+
+  return "ランク未設定";
 }
 
 function statusStyle(status?: string): React.CSSProperties {
@@ -126,7 +149,7 @@ export default function SelectionListPage() {
   const [keyword, setKeyword] = useState("");
   const [prefecture, setPrefecture] = useState("all");
   const [city, setCity] = useState("all");
-  const [orgType, setOrgType] = useState<OrgFilter>("all");
+  const [rank, setRank] = useState<RankFilter>("all");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [category, setCategory] = useState("all");
 
@@ -182,11 +205,12 @@ export default function SelectionListPage() {
 
     const rows = items.filter((item) => {
       const itemPrefecture = inferredPrefecture(item);
+      const itemRank = item.source_rank || null;
 
       if (selectedDate && item.event_date !== selectedDate) return false;
       if (prefecture !== "all" && itemPrefecture !== prefecture) return false;
       if (city !== "all" && item.city !== city) return false;
-      if (orgType !== "all" && item.organization_type !== orgType) return false;
+      if (rank !== "all" && itemRank !== rank) return false;
       if (status !== "all" && item.display_status !== status) return false;
 
       if (category !== "all" && !item.target_categories?.includes(category)) {
@@ -197,7 +221,8 @@ export default function SelectionListPage() {
         const hay = [
           item.title,
           item.organization_name,
-          item.organization_type,
+          itemRank,
+          rankLabel(itemRank, itemPrefecture || undefined),
           itemPrefecture,
           item.city,
           item.area,
@@ -215,7 +240,16 @@ export default function SelectionListPage() {
     });
 
     return sortNewestFirst(rows);
-  }, [items, keyword, prefecture, city, orgType, status, category, selectedDate]);
+  }, [
+    items,
+    keyword,
+    prefecture,
+    city,
+    rank,
+    status,
+    category,
+    selectedDate,
+  ]);
 
   const selectionItemsByDate = useMemo(() => {
     const map = new Map<string, CalendarItem[]>();
@@ -242,7 +276,7 @@ export default function SelectionListPage() {
     setKeyword("");
     setPrefecture("all");
     setCity("all");
-    setOrgType("all");
+    setRank("all");
     setStatus("all");
     setCategory("all");
     setSelectedDate("");
@@ -297,13 +331,8 @@ export default function SelectionListPage() {
             ))}
           </select>
 
-          <select
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            style={select}
-          >
+          <select value={city} onChange={(e) => setCity(e.target.value)} style={select}>
             <option value="all">市区町村すべて</option>
-
             {cities.map((c) => (
               <option key={c} value={c}>
                 {c}
@@ -312,16 +341,25 @@ export default function SelectionListPage() {
           </select>
 
           <select
-            value={orgType}
-            onChange={(e) => setOrgType(e.target.value as OrgFilter)}
+            value={rank}
+            onChange={(e) => setRank(e.target.value as RankFilter)}
             style={select}
           >
-            <option value="all">種別すべて</option>
-            <option value="j_club">J下部</option>
-            <option value="strong_team">強豪</option>
-            <option value="school">スクール</option>
-            <option value="club_team">クラブ</option>
-            <option value="other">その他</option>
+            <option value="all">{rankSelectLabel("all", prefecture)}</option>
+            <option value="j_academy">
+              {rankSelectLabel("j_academy", prefecture)}
+            </option>
+            <option value="pref_top">
+              {rankSelectLabel("pref_top", prefecture)}
+            </option>
+            <option value="pref_2">{rankSelectLabel("pref_2", prefecture)}</option>
+            <option value="pref_3">{rankSelectLabel("pref_3", prefecture)}</option>
+            <option value="pref_4">{rankSelectLabel("pref_4", prefecture)}</option>
+            <option value="district">
+              {rankSelectLabel("district", prefecture)}
+            </option>
+            <option value="school">{rankSelectLabel("school", prefecture)}</option>
+            <option value="girls">{rankSelectLabel("girls", prefecture)}</option>
           </select>
 
           <select
@@ -342,7 +380,6 @@ export default function SelectionListPage() {
             style={select}
           >
             <option value="all">対象カテゴリすべて</option>
-
             {CATEGORY_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
@@ -396,6 +433,7 @@ export default function SelectionListPage() {
         <section style={listWrap}>
           {filteredItems.map((item) => {
             const itemPrefecture = inferredPrefecture(item);
+            const itemRank = item.source_rank || null;
 
             return (
               <Link
@@ -405,8 +443,8 @@ export default function SelectionListPage() {
               >
                 <article className="ui-card" style={card}>
                   <div style={cardTop}>
-                    <span style={orgBadge}>
-                      {orgLabel(item.organization_type)}
+                    <span style={rankBadge}>
+                      {rankLabel(itemRank, itemPrefecture || undefined)}
                     </span>
 
                     <span
@@ -569,15 +607,15 @@ const cardTop: React.CSSProperties = {
   alignItems: "center",
 };
 
-const orgBadge: React.CSSProperties = {
+const rankBadge: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   minHeight: 26,
   padding: "0 10px",
   borderRadius: 999,
-  background: "#eef6f0",
-  color: "#14532d",
-  border: "1px solid #dce9df",
+  background: "#fff7ed",
+  color: "#9a3412",
+  border: "1px solid #fed7aa",
   fontSize: 12,
   fontWeight: 900,
 };

@@ -5,6 +5,8 @@ export type SelectionEvent = {
   organization_name: string | null;
   organization_type: string | null;
 
+  source_rank: string | null;
+
   target_categories: string[];
   gender: "any" | "boys" | "girls";
 
