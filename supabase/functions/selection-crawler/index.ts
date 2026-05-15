@@ -2,7 +2,7 @@
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.4.168";
+//import * as pdfjsLib from "https://esm.sh/pdfjs-dist@4.4.168";
 
 type SelectionSource = {
   id: string;
@@ -377,8 +377,6 @@ async function fetchHtml(url: string) {
 }
 
 async function extractPdfTextFromBuffer(buffer: ArrayBuffer) {
-  // Supabase Edge Function 上では pdfjs の worker 読み込みで失敗するため、
-  // いったんPDF本文解析は行わず、PDFリンク検出のみで登録する。
   return "";
 }
 
