@@ -13,7 +13,7 @@ type SelectionSource = {
   enabled: boolean;
 };
 
-const MAX_PAGES_PER_SOURCE = 20;
+const MAX_PAGES_PER_SOURCE = 50;
 
 const KEYWORDS = [
   "セレクション",
