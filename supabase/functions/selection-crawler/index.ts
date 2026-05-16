@@ -12,7 +12,31 @@ type SelectionSource = {
   enabled: boolean;
 };
 
-const MAX_PAGES_PER_SOURCE = 50;
+const MAX_PAGES_PER_SOURCE = 100;
+
+const CRAWL_ENTRY_PATHS = [
+  "",
+  "/",
+  "/news/",
+  "/info/",
+  "/information/",
+  "/topics/",
+  "/academy/",
+  "/academy/news/",
+  "/academy/info/",
+  "/academy/topics/",
+  "/academy/selection/",
+  "/academy/recruit/",
+  "/school/",
+  "/school/news/",
+  "/junior-youth/",
+  "/youth/",
+  "/recruit/",
+  "/selection/",
+  "/tryout/",
+  "/trial/",
+  "/entry/",
+];
 
 const KEYWORDS = [
   "セレクション",
@@ -44,6 +68,35 @@ const KEYWORDS = [
   "recruit",
   "recruitment",
   "entry",
+];
+
+const LINK_HINTS = [
+  "news",
+  "info",
+  "information",
+  "topics",
+  "academy",
+  "school",
+  "junior",
+  "youth",
+  "selection",
+  "select",
+  "tryout",
+  "trial",
+  "recruit",
+  "recruitment",
+  "entry",
+  "join",
+  "体験",
+  "募集",
+  "入団",
+  "加入",
+  "応募",
+  "申込",
+  "練習会",
+  "練習参加",
+  "セレクション",
+  "選考",
 ];
 
 const EXCLUDE_KEYWORDS = [
@@ -181,30 +234,93 @@ function isInstagramUrl(url: string) {
   return url.toLowerCase().includes("instagram.com/");
 }
 
-function safeDate(value?: string | null) {
-  if (!value) return null;
+function isBlockedFile(url: string) {
+  const lower = url.toLowerCase();
+  return (
+    lower.includes(".jpg") ||
+    lower.includes(".jpeg") ||
+    lower.includes(".png") ||
+    lower.includes(".webp") ||
+    lower.includes(".gif") ||
+    lower.includes(".css") ||
+    lower.includes(".js") ||
+    lower.includes(".json") ||
+    lower.includes(".xml") ||
+    lower.includes(".svg") ||
+    lower.includes(".ico") ||
+    lower.includes("swiper") ||
+    lower.includes("style.css")
+  );
+}
 
-  const text = String(value).trim();
-  const match = text.match(/^(\d{4})[-\/年](\d{1,2})[-\/月](\d{1,2})日?$/);
-  if (!match) return null;
+function isBlockedPath(url: string) {
+  const lower = decodeURIComponent(url.toLowerCase());
 
-  const y = Number(match[1]);
-  const m = Number(match[2]);
-  const d = Number(match[3]);
+  return (
+    lower.includes("/staff") ||
+    lower.includes("/coach") ||
+    lower.includes("coach_staff") ||
+    lower.includes("/concept") ||
+    lower.includes("/profile") ||
+    lower.includes("/academy/coach") ||
+    lower.includes("/academy/staff") ||
+    lower.includes("/academy/profile") ||
+    lower.includes("/player") ||
+    lower.includes("/team") ||
+    lower.includes("/schedule") ||
+    lower.includes("/result") ||
+    lower.includes("/standings") ||
+    lower.includes("/ticket") ||
+    lower.includes("/goods") ||
+    lower.includes("/privacy") ||
+    lower.includes("/company") ||
+    lower.includes("/feed")
+  );
+}
 
-  if (!y || !m || !d) return null;
-  if (m < 1 || m > 12) return null;
-  if (d < 1 || d > 31) return null;
+function looksUsefulLink(url: string) {
+  const lower = decodeURIComponent(url.toLowerCase());
+  if (isPdfUrl(url)) return true;
+  return LINK_HINTS.some((hint) => lower.includes(hint.toLowerCase()));
+}
 
-  const date = new Date(Date.UTC(y, m - 1, d));
-  const valid =
-    date.getUTCFullYear() === y &&
-    date.getUTCMonth() === m - 1 &&
-    date.getUTCDate() === d;
+function buildSeedUrls(baseUrl: string) {
+  const urls = new Set<string>();
 
-  if (!valid) return null;
+  try {
+    const base = new URL(baseUrl);
+    urls.add(normalizeUrl(base.toString()));
 
-  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    for (const path of CRAWL_ENTRY_PATHS) {
+      const u = new URL(path, base.origin);
+      urls.add(normalizeUrl(u.toString()));
+    }
+
+    if (base.pathname && base.pathname !== "/") {
+      const cleanPath = base.pathname.endsWith("/")
+        ? base.pathname
+        : `${base.pathname}/`;
+
+      const nested = [
+        cleanPath,
+        `${cleanPath}news/`,
+        `${cleanPath}info/`,
+        `${cleanPath}topics/`,
+        `${cleanPath}selection/`,
+        `${cleanPath}recruit/`,
+        `${cleanPath}entry/`,
+      ];
+
+      for (const path of nested) {
+        const u = new URL(path, base.origin);
+        urls.add(normalizeUrl(u.toString()));
+      }
+    }
+  } catch {
+    urls.add(baseUrl);
+  }
+
+  return Array.from(urls).slice(0, 30);
 }
 
 function extractLinks(html: string, baseUrl: string) {
@@ -220,86 +336,25 @@ function extractLinks(html: string, baseUrl: string) {
     if (href.startsWith("mailto:")) continue;
     if (href.startsWith("tel:")) continue;
 
-    const lowerHref = href.toLowerCase();
-
-    if (
-      lowerHref.includes(".jpg") ||
-      lowerHref.includes(".jpeg") ||
-      lowerHref.includes(".png") ||
-      lowerHref.includes(".webp") ||
-      lowerHref.includes(".css") ||
-      lowerHref.includes(".js") ||
-      lowerHref.includes(".json") ||
-      lowerHref.includes(".xml") ||
-      lowerHref.includes(".svg") ||
-      lowerHref.includes(".ico") ||
-      lowerHref.includes("swiper") ||
-      lowerHref.includes("style.css")
-    ) {
-      continue;
-    }
-
     try {
       const abs = normalizeUrl(new URL(href, baseUrl).toString());
-      const lower = decodeURIComponent(abs).toLowerCase();
+
+      if (isInstagramUrl(abs)) continue;
+      if (isBlockedFile(abs)) continue;
 
       const pdf = isPdfUrl(abs);
-      const instagram = isInstagramUrl(abs);
 
-      if (instagram) continue;
-
-      const blockedPath =
-        lower.includes("/staff") ||
-        lower.includes("/coach") ||
-        lower.includes("coach_staff") ||
-        lower.includes("/concept") ||
-        lower.includes("/profile") ||
-        lower.includes("/school") ||
-        lower.includes("/academy/coach") ||
-        lower.includes("/academy/staff") ||
-        lower.includes("/academy/profile") ||
-        lower.includes("/player") ||
-        lower.includes("/team") ||
-        lower.includes("/schedule") ||
-        lower.includes("/result") ||
-        lower.includes("/standings") ||
-        lower.includes("/ticket") ||
-        lower.includes("/goods") ||
-        lower.includes("/privacy") ||
-        lower.includes("/company") ||
-        lower.includes("/feed");
-
-      if (!pdf && blockedPath) continue;
       if (!pdf && !sameHost(abs, baseUrl)) continue;
+      if (!pdf && isBlockedPath(abs)) continue;
+      if (!looksUsefulLink(abs)) continue;
 
-      const likely =
-        pdf ||
-        lower.includes("selection") ||
-        lower.includes("select") ||
-        lower.includes("tryout") ||
-        lower.includes("trial") ||
-        lower.includes("recruit") ||
-        lower.includes("recruitment") ||
-        lower.includes("entry") ||
-        lower.includes("join") ||
-        abs.includes("セレクション") ||
-        abs.includes("選考") ||
-        abs.includes("体験") ||
-        abs.includes("募集") ||
-        abs.includes("入団") ||
-        abs.includes("加入") ||
-        abs.includes("応募") ||
-        abs.includes("申込") ||
-        abs.includes("練習会") ||
-        abs.includes("練習参加");
-
-      if (likely) links.add(abs);
+      links.add(abs);
     } catch {
       // ignore
     }
   }
 
-  return Array.from(links).slice(0, MAX_PAGES_PER_SOURCE - 1);
+  return Array.from(links);
 }
 
 async function sha256(text: string) {
@@ -347,6 +402,32 @@ async function extractPdfTextFromBuffer(buffer: ArrayBuffer) {
   return "";
 }
 
+function safeDate(value?: string | null) {
+  if (!value) return null;
+
+  const text = String(value).trim();
+  const match = text.match(/^(\d{4})[-\/年](\d{1,2})[-\/月](\d{1,2})日?$/);
+  if (!match) return null;
+
+  const y = Number(match[1]);
+  const m = Number(match[2]);
+  const d = Number(match[3]);
+
+  if (!y || !m || !d) return null;
+  if (m < 1 || m > 12) return null;
+  if (d < 1 || d > 31) return null;
+
+  const date = new Date(Date.UTC(y, m - 1, d));
+  const valid =
+    date.getUTCFullYear() === y &&
+    date.getUTCMonth() === m - 1 &&
+    date.getUTCDate() === d;
+
+  if (!valid) return null;
+
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
 function extractCategories(text: string) {
   const found = new Set<string>();
 
@@ -384,7 +465,7 @@ function extractDateNearKeyword(text: string) {
     .sort((a, b) => a - b);
 
   for (const idx of keywordIndexes) {
-    const part = text.slice(Math.max(0, idx - 200), idx + 800);
+    const part = text.slice(Math.max(0, idx - 300), idx + 1200);
     const date = extractDate(part);
     if (date) return date;
   }
@@ -422,7 +503,7 @@ function extractDeadline(text: string) {
   for (const word of words) {
     const idx = text.indexOf(word);
     if (idx >= 0) {
-      return extractDate(text.slice(idx, idx + 180));
+      return extractDate(text.slice(idx, idx + 220));
     }
   }
 
@@ -432,7 +513,10 @@ function extractDeadline(text: string) {
 function titleFromUrl(pageUrl: string, fallback: string) {
   try {
     const u = new URL(pageUrl);
-    const file = decodeURIComponent(u.pathname.split("/").filter(Boolean).pop() || "");
+    const file = decodeURIComponent(
+      u.pathname.split("/").filter(Boolean).pop() || ""
+    );
+
     if (file) return file.replace(/\.pdf$/i, "").slice(0, 120);
   } catch {
     // ignore
@@ -441,7 +525,12 @@ function titleFromUrl(pageUrl: string, fallback: string) {
   return fallback;
 }
 
-function buildTitle(pageTitle: string, sourceName: string, text: string, pageUrl: string) {
+function buildTitle(
+  pageTitle: string,
+  sourceName: string,
+  text: string,
+  pageUrl: string
+) {
   if (isPdfUrl(pageUrl)) {
     return `${sourceName} ${titleFromUrl(pageUrl, "PDF募集資料")}`.slice(0, 120);
   }
@@ -457,8 +546,8 @@ function buildSummary(text: string) {
     .filter((v) => v >= 0)
     .sort((a, b) => a - b)[0];
 
-  if (idx == null) return text.slice(0, 160);
-  return text.slice(Math.max(0, idx - 50), idx + 260).trim();
+  if (idx == null) return text.slice(0, 180);
+  return text.slice(Math.max(0, idx - 80), idx + 360).trim();
 }
 
 function normalizeDuplicateText(text?: string | null) {
@@ -485,7 +574,10 @@ function buildDuplicateKey(params: {
   ].join("|");
 }
 
-function displayStatusFromDates(eventDate: string | null, deadline: string | null) {
+function displayStatusFromDates(
+  eventDate: string | null,
+  deadline: string | null
+) {
   const today = new Date().toISOString().slice(0, 10);
 
   if (eventDate && eventDate < today) return "開催終了";
@@ -506,6 +598,9 @@ function isTargetPage(params: {
   const lowerUrl = pageUrl.toLowerCase();
 
   if (isInstagramUrl(pageUrl)) return false;
+  if (isBlockedFile(pageUrl)) return false;
+  if (!isPdfUrl(pageUrl) && isBlockedPath(pageUrl)) return false;
+
   if (!containsKeyword(text)) return false;
   if (containsExcludeKeyword(text)) return false;
 
@@ -515,6 +610,7 @@ function isTargetPage(params: {
     (text.includes("トライアウト") ? 9 : 0) +
     (text.includes("追加セレクション") ? 10 : 0) +
     (text.includes("GKセレクション") ? 8 : 0) +
+    (text.includes("ゴールキーパーセレクション") ? 8 : 0) +
     (text.includes("選手募集") ? 8 : 0) +
     (text.includes("参加者募集") ? 7 : 0) +
     (text.includes("練習参加") ? 6 : 0) +
@@ -525,12 +621,14 @@ function isTargetPage(params: {
     (text.includes("加入") ? 5 : 0) +
     (text.includes("応募") ? 4 : 0) +
     (text.includes("申込") ? 4 : 0) +
+    (text.includes("申し込み") ? 4 : 0) +
     (text.includes("エントリー") ? 4 : 0) +
     (lowerUrl.includes("selection") ? 10 : 0) +
     (lowerUrl.includes("tryout") ? 9 : 0) +
     (lowerUrl.includes("trial") ? 7 : 0) +
     (lowerUrl.includes("recruit") ? 7 : 0) +
-    (lowerUrl.includes("entry") ? 5 : 0);
+    (lowerUrl.includes("entry") ? 5 : 0) +
+    (lowerUrl.includes("join") ? 4 : 0);
 
   return positiveScore >= 5;
 }
@@ -677,18 +775,28 @@ serve(async (req) => {
     let sourceUpdatedEvents = 0;
 
     try {
-      const firstUrl = normalizeUrl(source.base_url);
-      const first = await fetchHtml(firstUrl);
+      const seedUrls = buildSeedUrls(source.base_url);
+      const queue = [...seedUrls];
+      const visited = new Set<string>();
+      const candidateUrls: string[] = [];
 
-      const urls = [firstUrl, ...extractLinks(first.html || "", firstUrl)].slice(
-        0,
-        MAX_PAGES_PER_SOURCE
-      );
-
-      for (const pageUrl of urls) {
+      while (queue.length > 0 && visited.size < MAX_PAGES_PER_SOURCE) {
+        const pageUrl = normalizeUrl(queue.shift() || "");
+        if (!pageUrl) continue;
+        if (visited.has(pageUrl)) continue;
         if (isInstagramUrl(pageUrl)) continue;
+        if (!isPdfUrl(pageUrl) && isBlockedFile(pageUrl)) continue;
+        if (!isPdfUrl(pageUrl) && isBlockedPath(pageUrl)) continue;
 
-        const fetched = pageUrl === firstUrl ? first : await fetchHtml(pageUrl);
+        visited.add(pageUrl);
+
+        let fetched: any = null;
+
+        try {
+          fetched = await fetchHtml(pageUrl);
+        } catch {
+          continue;
+        }
 
         fetchedPages += 1;
         sourceFetchedPages += 1;
@@ -716,19 +824,24 @@ serve(async (req) => {
         } else {
           rawText = stripHtml(html);
           pageTitle = getTitle(html);
+
+          const foundLinks = extractLinks(html, pageUrl);
+          for (const link of foundLinks) {
+            if (!visited.has(link) && queue.length < MAX_PAGES_PER_SOURCE * 3) {
+              queue.push(link);
+            }
+          }
         }
 
-        const checksum = await sha256(rawText);
-
         if (
-          !isTargetPage({
+          isTargetPage({
             rawText,
             pageTitle,
             pageUrl,
             sourceName: source.name,
           })
         ) {
-          continue;
+          candidateUrls.push(pageUrl);
         }
 
         const title = buildTitle(pageTitle, source.name, rawText, pageUrl);
@@ -739,6 +852,8 @@ serve(async (req) => {
         }
 
         const deadline = safeDate(extractDeadline(rawText));
+
+        const checksum = await sha256(rawText);
 
         const { data: pageRow, error: pageError } = await supabase
           .from("selection_crawl_pages")
@@ -904,6 +1019,10 @@ serve(async (req) => {
             fetched_pages: sourceFetchedPages,
             inserted_events: sourceInsertedEvents,
             updated_events: sourceUpdatedEvents,
+            error_message:
+              candidateUrls.length > 0
+                ? null
+                : "No target candidates found",
           })
           .eq("id", logId);
       }
