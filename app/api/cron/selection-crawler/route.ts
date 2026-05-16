@@ -1,73 +1,84 @@
-// /app/api/cron/selection-crawler/route.ts
+import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const url = new URL(req.url);
-
-  const offset = Number(url.searchParams.get("offset") ?? "0");
-  const limit = Number(url.searchParams.get("limit") ?? "92");
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !anonKey) {
-    return Response.json(
-      { ok: false, error: "Missing Supabase env" },
-      { status: 500 }
-    );
-  }
-
   try {
+    const url = new URL(req.url);
+
+    const offset = Number(url.searchParams.get("offset") ?? "0");
+    const limit = Number(url.searchParams.get("limit") ?? "92");
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !anonKey) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Missing Supabase env",
+        },
+        { status: 500 }
+      );
+    }
+
     const functionUrl =
       `${supabaseUrl.replace(/\/$/, "")}/functions/v1/selection-crawler` +
-      `?offset=${offset}&limit=1`;
+      `?offset=${offset}` +
+      `&limit=${limit}`;
 
-    const controller = new AbortController();
+    const response = await fetch(functionUrl, {
+      method: "GET",
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+        "Content-Type": "application/json",
+      },
+    });
 
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, 25000);
+    const text = await response.text();
+
+    let data: any = null;
 
     try {
-      await fetch(functionUrl, {
-        method: "GET",
-        headers: {
-          apikey: anonKey,
-          Authorization: `Bearer ${anonKey}`,
-        },
-        signal: controller.signal,
-      });
-    } catch (err) {
-      console.error("selection crawler fetch error:", err);
-    } finally {
-      clearTimeout(timeout);
+      data = JSON.parse(text);
+    } catch {
+      data = { raw: text };
     }
 
-    const nextOffset = offset + 1;
+    const nextOffset =
+      typeof data?.nextOffset === "number"
+        ? data.nextOffset
+        : offset + 1;
 
-    if (nextOffset < limit) {
+    const hasMore =
+      data?.hasMore === true ||
+      nextOffset < limit;
+
+    if (hasMore) {
       const nextUrl =
         `${url.origin}/api/cron/selection-crawler` +
-        `?offset=${nextOffset}&limit=${limit}`;
+        `?offset=${nextOffset}` +
+        `&limit=${limit}`;
 
-      fetch(nextUrl).catch(console.error);
+      await fetch(nextUrl).catch(console.error);
     }
 
-    return Response.json({
+    return NextResponse.json({
       ok: true,
       offset,
       nextOffset,
-      limit,
+      hasMore,
+      crawler: data,
     });
   } catch (e) {
     console.error(e);
 
-    return Response.json(
+    return NextResponse.json(
       {
         ok: false,
-        error: e instanceof Error ? e.message : "unknown",
+        error: e instanceof Error ? e.message : "Unknown error",
       },
       { status: 500 }
     );
