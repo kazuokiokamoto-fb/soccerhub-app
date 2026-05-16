@@ -1,0 +1,2 @@
+[functions.selection-crawler]
+verify_jwt = false
