@@ -53,23 +53,39 @@ export async function GET(req: Request) {
     }
 
     const nextOffset =
-      typeof data?.nextOffset === "number" ? data.nextOffset : offset + 1;
+      typeof data?.nextOffset === "number"
+        ? data.nextOffset
+        : offset + 1;
 
-    const hasMore = data?.hasMore === true || nextOffset < limit;
+    const remainingLimit =
+      typeof data?.remainingLimit === "number"
+        ? data.remainingLimit
+        : limit - 1;
 
-    if (hasMore) {
+    const hasMore =
+      data?.hasMore === true ||
+      data?.nextOffset != null ||
+      remainingLimit > 0;
+
+    if (hasMore && remainingLimit > 0) {
       const nextUrl =
         `${url.origin}/api/cron/selection-crawler` +
         `?offset=${nextOffset}` +
-        `&limit=${limit}`;
+        `&limit=${remainingLimit}`;
 
-      await fetch(nextUrl).catch(console.error);
+      await fetch(nextUrl, {
+        method: "GET",
+        headers: {
+          "x-selection-secret": selectionSecret,
+        },
+      }).catch(console.error);
     }
 
     return NextResponse.json({
       ok: true,
       offset,
       nextOffset,
+      remainingLimit,
       hasMore,
       crawler: data,
     });
