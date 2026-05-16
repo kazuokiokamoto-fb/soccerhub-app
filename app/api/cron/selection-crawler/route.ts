@@ -12,12 +12,16 @@ export async function GET(req: Request) {
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const selectionSecret = process.env.SELECTION_SECRET;
 
-    if (!supabaseUrl || !anonKey) {
+    if (!supabaseUrl || !anonKey || !selectionSecret) {
       return NextResponse.json(
         {
           ok: false,
-          error: "Missing Supabase env",
+          error: "Missing env",
+          hasSupabaseUrl: Boolean(supabaseUrl),
+          hasAnonKey: Boolean(anonKey),
+          hasSelectionSecret: Boolean(selectionSecret),
         },
         { status: 500 }
       );
@@ -33,6 +37,7 @@ export async function GET(req: Request) {
       headers: {
         apikey: anonKey,
         Authorization: `Bearer ${anonKey}`,
+        "x-selection-secret": selectionSecret,
         "Content-Type": "application/json",
       },
     });
@@ -48,13 +53,9 @@ export async function GET(req: Request) {
     }
 
     const nextOffset =
-      typeof data?.nextOffset === "number"
-        ? data.nextOffset
-        : offset + 1;
+      typeof data?.nextOffset === "number" ? data.nextOffset : offset + 1;
 
-    const hasMore =
-      data?.hasMore === true ||
-      nextOffset < limit;
+    const hasMore = data?.hasMore === true || nextOffset < limit;
 
     if (hasMore) {
       const nextUrl =
