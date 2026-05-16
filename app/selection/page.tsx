@@ -205,7 +205,8 @@ export default function SelectionListPage() {
 
     const rows = items.filter((item) => {
       const itemPrefecture = inferredPrefecture(item);
-      const itemRank = item.source_rank || null;
+      const itemRank =
+        (item as SelectionEvent & { source_rank?: string }).source_rank || null;
 
       if (selectedDate && item.event_date !== selectedDate) return false;
       if (prefecture !== "all" && itemPrefecture !== prefecture) return false;
@@ -433,7 +434,8 @@ export default function SelectionListPage() {
         <section style={listWrap}>
           {filteredItems.map((item) => {
             const itemPrefecture = inferredPrefecture(item);
-            const itemRank = item.source_rank || null;
+            const itemRank =
+              (item as SelectionEvent & { source_rank?: string }).source_rank || null;
 
             return (
               <Link
