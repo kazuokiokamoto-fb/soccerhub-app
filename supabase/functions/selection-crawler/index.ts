@@ -261,7 +261,9 @@ function extractLinks(html: string, baseUrl: string) {
       lowerHref.includes(".json") ||
       lowerHref.includes(".xml") ||
       lowerHref.includes(".svg") ||
-      lowerHref.includes(".ico");
+      lowerHref.includes(".ico") ||
+      lowerHref.includes("swiper") ||
+      lowerHref.includes("style.css")
 
     if (blockedFile) continue;
 
@@ -275,6 +277,7 @@ function extractLinks(html: string, baseUrl: string) {
       const blockedPath =
         lower.includes("/staff") ||
         lower.includes("/coach") ||
+        lower.includes("coach_staff") ||
         lower.includes("/player") ||
         lower.includes("/team") ||
         lower.includes("/schedule") ||
@@ -284,7 +287,9 @@ function extractLinks(html: string, baseUrl: string) {
         lower.includes("/goods") ||
         lower.includes("/privacy") ||
         lower.includes("/company") ||
-        lower.includes("/feed");
+        lower.includes("/feed") ||
+        lower.includes("/concept") ||
+        lower.includes("/profile");
 
       if (!pdf && !instagram && blockedPath) continue;
 
