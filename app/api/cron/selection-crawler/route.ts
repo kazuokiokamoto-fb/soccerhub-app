@@ -1,56 +1,56 @@
-import { NextResponse } from "next/server";
+// /app/api/cron/selection-crawler/route.ts
 
-export async function GET() {
-  try {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_SUPABASE_URL ||
-      process.env.SUPABASE_URL;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-    const anonKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+export async function GET(req: Request) {
+  const url = new URL(req.url);
 
-    if (!baseUrl || !anonKey) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "Missing Supabase env",
-        },
-        { status: 500 }
-      );
-    }
+  const offset = url.searchParams.get("offset") ?? "0";
+  const limit = url.searchParams.get("limit") ?? "92";
 
-    const response = await fetch(
-      `${baseUrl}/functions/v1/selection-crawler?offset=0&limit=92`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${anonKey}`,
-          apikey: anonKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({}),
-      }
-    );
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    const text = await response.text();
-
-    return new NextResponse(text, {
-      status: response.status,
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-  } catch (error) {
-    return NextResponse.json(
+  if (!supabaseUrl || !anonKey) {
+    return Response.json(
       {
         ok: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "unknown error",
+        error: "Missing Supabase env",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
+
+  const functionUrl =
+    `${supabaseUrl.replace(/\/$/, "")}/functions/v1/selection-crawler` +
+    `?offset=${encodeURIComponent(offset)}` +
+    `&limit=${encodeURIComponent(limit)}`;
+
+  const task = fetch(functionUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${anonKey}`,
+      apikey: anonKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      triggeredBy: "vercel-cron",
+      offset: Number(offset),
+      limit: Number(limit),
+    }),
+  }).catch((error) => {
+    console.error("selection crawler trigger failed:", error);
+  });
+
+  (globalThis as any).waitUntil?.(task);
+
+  return Response.json({
+    ok: true,
+    message: "selection-crawler started",
+    offset: Number(offset),
+    limit: Number(limit),
+  });
 }
