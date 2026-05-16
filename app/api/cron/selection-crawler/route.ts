@@ -73,7 +73,7 @@ export async function GET(req: Request) {
         `?offset=${nextOffset}` +
         `&limit=${remainingLimit}`;
 
-      await fetch(nextUrl, {
+      fetch(nextUrl, {
         method: "GET",
         headers: {
           "x-selection-secret": selectionSecret,
