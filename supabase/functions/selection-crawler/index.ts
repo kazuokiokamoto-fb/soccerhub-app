@@ -30,12 +30,20 @@ const CRAWL_ENTRY_PATHS = [
   "/school/",
   "/school/news/",
   "/junior-youth/",
+  "/junior_youth/",
+  "/jy/",
   "/youth/",
   "/recruit/",
   "/selection/",
   "/tryout/",
   "/trial/",
   "/entry/",
+  "/join/",
+  "/member/",
+  "/taiken/",
+  "/experience/",
+  "/sitemap.xml",
+  "/sitemap_index.xml",
 ];
 
 const KEYWORDS = [
@@ -47,6 +55,7 @@ const KEYWORDS = [
   "募集",
   "参加者募集",
   "選手募集",
+  "新入団",
   "入団",
   "加入",
   "新加入",
@@ -57,46 +66,41 @@ const KEYWORDS = [
   "練習参加",
   "練習会",
   "体験練習",
+  "体験練習会",
   "体験会",
-  "体験",
+  "体験参加",
+  "体験スクール",
   "無料体験",
+  "スクール体験",
+  "随時募集",
+  "団員募集",
+  "部員募集",
+  "メンバー募集",
+  "クラブ生募集",
+  "スクール生募集",
+  "アカデミー生募集",
+  "ジュニアユース募集",
+  "ユース募集",
+  "ジュニア募集",
   "トライアウト",
   "アカデミーセレクション",
+  "Tリーグ",
+  "東京都リーグ",
+  "街クラブ",
+  "ジュニアユース",
+  "ユース",
+  "少年団",
+  "サッカースクール",
   "selection",
-  "tryout",
-  "trial",
-  "recruit",
-  "recruitment",
-  "entry",
-];
-
-const LINK_HINTS = [
-  "news",
-  "info",
-  "information",
-  "topics",
-  "academy",
-  "school",
-  "junior",
-  "youth",
-  "selection",
-  "select",
   "tryout",
   "trial",
   "recruit",
   "recruitment",
   "entry",
   "join",
-  "体験",
-  "募集",
-  "入団",
-  "加入",
-  "応募",
-  "申込",
-  "練習会",
-  "練習参加",
-  "セレクション",
-  "選考",
+  "member",
+  "academy",
+  "school",
 ];
 
 const EXCLUDE_KEYWORDS = [
@@ -230,12 +234,20 @@ function isPdfUrl(url: string) {
   return lower.endsWith(".pdf") || lower.includes(".pdf?");
 }
 
+function isSitemapUrl(url: string) {
+  const lower = url.toLowerCase();
+  return lower.includes("sitemap") && lower.includes(".xml");
+}
+
 function isInstagramUrl(url: string) {
   return url.toLowerCase().includes("instagram.com/");
 }
 
 function isBlockedFile(url: string) {
   const lower = url.toLowerCase();
+
+  if (isSitemapUrl(url)) return false;
+
   return (
     lower.includes(".jpg") ||
     lower.includes(".jpeg") ||
@@ -248,6 +260,9 @@ function isBlockedFile(url: string) {
     lower.includes(".xml") ||
     lower.includes(".svg") ||
     lower.includes(".ico") ||
+    lower.includes(".zip") ||
+    lower.includes(".mp4") ||
+    lower.includes(".mov") ||
     lower.includes("swiper") ||
     lower.includes("style.css")
   );
@@ -266,7 +281,6 @@ function isBlockedPath(url: string) {
     lower.includes("/academy/staff") ||
     lower.includes("/academy/profile") ||
     lower.includes("/player") ||
-    lower.includes("/team") ||
     lower.includes("/schedule") ||
     lower.includes("/result") ||
     lower.includes("/standings") ||
@@ -274,14 +288,12 @@ function isBlockedPath(url: string) {
     lower.includes("/goods") ||
     lower.includes("/privacy") ||
     lower.includes("/company") ||
-    lower.includes("/feed")
+    lower.includes("/feed") ||
+    lower.includes("/contact") ||
+    lower.includes("/inquiry") ||
+    lower.includes("/login") ||
+    lower.includes("/admin")
   );
-}
-
-function looksUsefulLink(url: string) {
-  const lower = decodeURIComponent(url.toLowerCase());
-  if (isPdfUrl(url)) return true;
-  return LINK_HINTS.some((hint) => lower.includes(hint.toLowerCase()));
 }
 
 function buildSeedUrls(baseUrl: string) {
@@ -309,6 +321,10 @@ function buildSeedUrls(baseUrl: string) {
         `${cleanPath}selection/`,
         `${cleanPath}recruit/`,
         `${cleanPath}entry/`,
+        `${cleanPath}join/`,
+        `${cleanPath}member/`,
+        `${cleanPath}school/`,
+        `${cleanPath}sitemap.xml`,
       ];
 
       for (const path of nested) {
@@ -320,7 +336,7 @@ function buildSeedUrls(baseUrl: string) {
     urls.add(baseUrl);
   }
 
-  return Array.from(urls).slice(0, 30);
+  return Array.from(urls).slice(0, 50);
 }
 
 function extractLinks(html: string, baseUrl: string) {
@@ -335,6 +351,7 @@ function extractLinks(html: string, baseUrl: string) {
     if (href.startsWith("#")) continue;
     if (href.startsWith("mailto:")) continue;
     if (href.startsWith("tel:")) continue;
+    if (href.startsWith("javascript:")) continue;
 
     try {
       const abs = normalizeUrl(new URL(href, baseUrl).toString());
@@ -343,10 +360,10 @@ function extractLinks(html: string, baseUrl: string) {
       if (isBlockedFile(abs)) continue;
 
       const pdf = isPdfUrl(abs);
+      const sitemap = isSitemapUrl(abs);
 
-      if (!pdf && !sameHost(abs, baseUrl)) continue;
-      if (!pdf && isBlockedPath(abs)) continue;
-      if (!looksUsefulLink(abs)) continue;
+      if (!pdf && !sitemap && !sameHost(abs, baseUrl)) continue;
+      if (!pdf && !sitemap && isBlockedPath(abs)) continue;
 
       links.add(abs);
     } catch {
@@ -355,6 +372,39 @@ function extractLinks(html: string, baseUrl: string) {
   }
 
   return Array.from(links);
+}
+
+function extractSitemapUrls(xml: string, baseUrl: string) {
+  const urls = new Set<string>();
+  const re = /<loc[^>]*>([\s\S]*?)<\/loc>/gi;
+
+  let match: RegExpExecArray | null;
+
+  while ((match = re.exec(xml))) {
+    const loc = String(match[1] ?? "")
+      .replace(/<!\[CDATA\[/g, "")
+      .replace(/\]\]>/g, "")
+      .trim();
+
+    if (!loc) continue;
+
+    try {
+      const abs = normalizeUrl(new URL(loc, baseUrl).toString());
+
+      if (isInstagramUrl(abs)) continue;
+      if (isBlockedFile(abs) && !isSitemapUrl(abs)) continue;
+      if (!isPdfUrl(abs) && !isSitemapUrl(abs) && !sameHost(abs, baseUrl)) {
+        continue;
+      }
+      if (!isPdfUrl(abs) && !isSitemapUrl(abs) && isBlockedPath(abs)) continue;
+
+      urls.add(abs);
+    } catch {
+      // ignore
+    }
+  }
+
+  return Array.from(urls);
 }
 
 async function sha256(text: string) {
@@ -371,7 +421,8 @@ async function fetchHtml(url: string) {
     headers: {
       "user-agent":
         "SakaMatchBot/1.0 (+https://www.sakamatch.com/; public selection info crawler)",
-      accept: "text/html,application/xhtml+xml,application/pdf",
+      accept:
+        "text/html,application/xhtml+xml,application/xml,text/xml,application/pdf",
     },
   });
 
@@ -443,10 +494,10 @@ function extractCategories(text: string) {
   if (/U-?10|小学4年|小4|4年生/.test(normalized)) found.add("U-10");
   if (/U-?11|小学5年|小5|5年生/.test(normalized)) found.add("U-11");
   if (/U-?12|小学6年|小6|6年生/.test(normalized)) found.add("U-12");
-  if (/U-?13|中学1年|中1/.test(normalized)) found.add("U-13");
-  if (/U-?14|中学2年|中2/.test(normalized)) found.add("U-14");
+  if (/U-?13|中学1年|中1|新中学1年|新中1/.test(normalized)) found.add("U-13");
+  if (/U-?14|中学2年|中2|新中学2年|新中2/.test(normalized)) found.add("U-14");
   if (/U-?15|中学3年|中3|ジュニアユース/.test(normalized)) found.add("U-15");
-  if (/U-?18|ユース/.test(normalized)) found.add("U-18");
+  if (/U-?18|ユース|高校生|高校/.test(normalized)) found.add("U-18");
 
   return Array.from(found);
 }
@@ -498,7 +549,15 @@ function extractDate(text: string) {
 }
 
 function extractDeadline(text: string) {
-  const words = ["申込期限", "申込締切", "応募締切", "締切", "〆切", "申込み期限"];
+  const words = [
+    "申込期限",
+    "申込締切",
+    "応募締切",
+    "締切",
+    "〆切",
+    "申込み期限",
+    "募集締切",
+  ];
 
   for (const word of words) {
     const idx = text.indexOf(word);
@@ -537,7 +596,7 @@ function buildTitle(
 
   if (pageTitle && containsKeyword(pageTitle)) return pageTitle.slice(0, 120);
 
-  const keyword = KEYWORDS.find((k) => text.includes(k)) ?? "セレクション情報";
+  const keyword = KEYWORDS.find((k) => text.includes(k)) ?? "募集情報";
   return `${sourceName} ${keyword}`.slice(0, 120);
 }
 
@@ -566,11 +625,13 @@ function buildDuplicateKey(params: {
   title?: string | null;
   organizationName?: string | null;
   eventDate?: string | null;
+  pageUrl?: string | null;
 }) {
   return [
     normalizeDuplicateText(params.organizationName),
     normalizeDuplicateText(params.title),
-    params.eventDate ?? "",
+    params.eventDate ?? "date_unknown",
+    normalizeDuplicateText(params.pageUrl),
   ].join("|");
 }
 
@@ -598,11 +659,11 @@ function isTargetPage(params: {
   const lowerUrl = pageUrl.toLowerCase();
 
   if (isInstagramUrl(pageUrl)) return false;
+  if (isSitemapUrl(pageUrl)) return false;
   if (isBlockedFile(pageUrl)) return false;
   if (!isPdfUrl(pageUrl) && isBlockedPath(pageUrl)) return false;
 
   if (!containsKeyword(text)) return false;
-  if (containsExcludeKeyword(text)) return false;
 
   const positiveScore =
     (text.includes("セレクション") ? 10 : 0) +
@@ -613,24 +674,50 @@ function isTargetPage(params: {
     (text.includes("ゴールキーパーセレクション") ? 8 : 0) +
     (text.includes("選手募集") ? 8 : 0) +
     (text.includes("参加者募集") ? 7 : 0) +
-    (text.includes("練習参加") ? 6 : 0) +
-    (text.includes("練習会") ? 5 : 0) +
-    (text.includes("体験練習") ? 5 : 0) +
-    (text.includes("体験会") ? 5 : 0) +
+    (text.includes("練習参加") ? 7 : 0) +
+    (text.includes("練習会") ? 6 : 0) +
+    (text.includes("体験練習") ? 6 : 0) +
+    (text.includes("体験練習会") ? 7 : 0) +
+    (text.includes("体験会") ? 6 : 0) +
+    (text.includes("無料体験") ? 5 : 0) +
+    (text.includes("スクール体験") ? 5 : 0) +
+    (text.includes("団員募集") ? 7 : 0) +
+    (text.includes("部員募集") ? 7 : 0) +
+    (text.includes("メンバー募集") ? 7 : 0) +
+    (text.includes("スクール生募集") ? 7 : 0) +
+    (text.includes("クラブ生募集") ? 7 : 0) +
+    (text.includes("随時募集") ? 6 : 0) +
     (text.includes("入団") ? 5 : 0) +
     (text.includes("加入") ? 5 : 0) +
     (text.includes("応募") ? 4 : 0) +
     (text.includes("申込") ? 4 : 0) +
     (text.includes("申し込み") ? 4 : 0) +
     (text.includes("エントリー") ? 4 : 0) +
-    (lowerUrl.includes("selection") ? 10 : 0) +
-    (lowerUrl.includes("tryout") ? 9 : 0) +
-    (lowerUrl.includes("trial") ? 7 : 0) +
-    (lowerUrl.includes("recruit") ? 7 : 0) +
-    (lowerUrl.includes("entry") ? 5 : 0) +
-    (lowerUrl.includes("join") ? 4 : 0);
+    (text.includes("ジュニアユース") ? 3 : 0) +
+    (text.includes("ユース") ? 2 : 0) +
+    (text.includes("サッカースクール") ? 3 : 0) +
+    (text.includes("Tリーグ") ? 2 : 0) +
+    (lowerUrl.includes("selection") ? 4 : 0) +
+    (lowerUrl.includes("tryout") ? 4 : 0) +
+    (lowerUrl.includes("trial") ? 3 : 0) +
+    (lowerUrl.includes("recruit") ? 3 : 0) +
+    (lowerUrl.includes("entry") ? 3 : 0) +
+    (lowerUrl.includes("join") ? 3 : 0) +
+    (lowerUrl.includes("member") ? 2 : 0) +
+    (lowerUrl.includes("school") ? 2 : 0) +
+    (lowerUrl.includes("academy") ? 2 : 0);
 
-  return positiveScore >= 5;
+  const negativeScore =
+    (text.includes("試合結果") ? 8 : 0) +
+    (text.includes("大会結果") ? 8 : 0) +
+    (text.includes("順位表") ? 8 : 0) +
+    (text.includes("戦績") ? 6 : 0) +
+    (text.includes("マッチレポート") ? 6 : 0) +
+    (text.includes("チケット") ? 5 : 0) +
+    (text.includes("グッズ") ? 5 : 0) +
+    (text.includes("観戦") ? 5 : 0);
+
+  return positiveScore - negativeScore >= 5;
 }
 
 function isMissingColumnError(err: any) {
@@ -785,8 +872,8 @@ serve(async (req) => {
         if (!pageUrl) continue;
         if (visited.has(pageUrl)) continue;
         if (isInstagramUrl(pageUrl)) continue;
-        if (!isPdfUrl(pageUrl) && isBlockedFile(pageUrl)) continue;
-        if (!isPdfUrl(pageUrl) && isBlockedPath(pageUrl)) continue;
+        if (!isPdfUrl(pageUrl) && !isSitemapUrl(pageUrl) && isBlockedFile(pageUrl)) continue;
+        if (!isPdfUrl(pageUrl) && !isSitemapUrl(pageUrl) && isBlockedPath(pageUrl)) continue;
 
         visited.add(pageUrl);
 
@@ -802,7 +889,24 @@ serve(async (req) => {
         sourceFetchedPages += 1;
 
         const pdf = isPdfUrl(pageUrl) || fetched.contentType?.includes("pdf");
+        const sitemap =
+          isSitemapUrl(pageUrl) ||
+          fetched.contentType?.includes("xml") ||
+          fetched.contentType?.includes("text/xml");
+
         const html = fetched.html || "";
+
+        if (sitemap && html) {
+          const sitemapLinks = extractSitemapUrls(html, pageUrl);
+
+          for (const link of sitemapLinks) {
+            if (!visited.has(link) && queue.length < MAX_PAGES_PER_SOURCE * 5) {
+              queue.push(link);
+            }
+          }
+
+          continue;
+        }
 
         let rawText = "";
         let pageTitle = "";
@@ -827,30 +931,25 @@ serve(async (req) => {
 
           const foundLinks = extractLinks(html, pageUrl);
           for (const link of foundLinks) {
-            if (!visited.has(link) && queue.length < MAX_PAGES_PER_SOURCE * 3) {
+            if (!visited.has(link) && queue.length < MAX_PAGES_PER_SOURCE * 5) {
               queue.push(link);
             }
           }
         }
 
-        if (
-          isTargetPage({
-            rawText,
-            pageTitle,
-            pageUrl,
-            sourceName: source.name,
-          })
-        ) {
-          candidateUrls.push(pageUrl);
-        }
+        const target = isTargetPage({
+          rawText,
+          pageTitle,
+          pageUrl,
+          sourceName: source.name,
+        });
+
+        if (!target) continue;
+
+        candidateUrls.push(pageUrl);
 
         const title = buildTitle(pageTitle, source.name, rawText, pageUrl);
         const eventDate = safeDate(extractDateNearKeyword(rawText));
-
-        if (!eventDate) {
-          continue;
-        }
-
         const deadline = safeDate(extractDeadline(rawText));
 
         const checksum = await sha256(rawText);
@@ -877,9 +976,12 @@ serve(async (req) => {
           title,
           organizationName: source.name,
           eventDate,
+          pageUrl,
         });
 
-        const contentHash = await sha256(`${title}|${eventDate}|${pageUrl}`);
+        const contentHash = await sha256(
+          `${title}|${eventDate ?? "date_unknown"}|${pageUrl}`
+        );
 
         const payload = {
           source_id: source.id,
@@ -904,7 +1006,9 @@ serve(async (req) => {
               "PDF募集資料を検出しました。詳細は公式PDFをご確認ください。"
             : buildSummary(rawText),
           memo:
-            "※本情報は公開情報をもとに自動収集した参考情報です。最新情報・申込条件は必ず公式サイトでご確認ください。",
+            eventDate
+              ? "※本情報は公開情報をもとに自動収集した参考情報です。最新情報・申込条件は必ず公式サイトでご確認ください。"
+              : "※日付未取得の募集情報です。開催日・申込条件は必ず公式サイトでご確認ください。",
           fetched_at: new Date().toISOString(),
           raw_text: rawText.slice(0, 500000),
           content_hash: contentHash,
@@ -918,8 +1022,8 @@ serve(async (req) => {
           pdf_url: pdf ? pageUrl : null,
           instagram_url: null,
           external_url: pdf ? pageUrl : null,
-          extraction_status: "success",
-          extraction_error: null,
+          extraction_status: eventDate ? "success" : "date_missing",
+          extraction_error: eventDate ? null : "event_date not found",
         };
 
         let existing: any = null;
