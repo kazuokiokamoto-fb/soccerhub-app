@@ -689,7 +689,7 @@ function isTargetPage(params: {
   if (isBlockedFile(pageUrl)) return false;
   if (!isPdfUrl(pageUrl) && isBlockedPath(pageUrl)) return false;
 
-  if (EXCLUDE_KEYWORDS.some((keyword) => text.includes(keyword))) return false;
+  //if (EXCLUDE_KEYWORDS.some((keyword) => text.includes(keyword))) return false;
 
   const hasSelectionIntent =
     text.includes("セレクション") ||
