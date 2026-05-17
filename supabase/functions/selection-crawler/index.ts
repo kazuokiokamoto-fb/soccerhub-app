@@ -12,7 +12,20 @@ type SelectionSource = {
   enabled: boolean;
 };
 
+type CandidatePage = {
+  pageUrl: string;
+  pageTitle: string;
+  rawText: string;
+  html: string;
+  status: number;
+  contentType: string;
+  pdf: boolean;
+  priority: number;
+  reason: string;
+};
+
 const MAX_PAGES_PER_SOURCE = 100;
+const MAX_EVENTS_PER_SOURCE = 5;
 
 const CRAWL_ENTRY_PATHS = [
   "",
@@ -52,9 +65,18 @@ const KEYWORDS = [
   "追加セレクション",
   "GKセレクション",
   "ゴールキーパーセレクション",
-  "募集",
-  "参加者募集",
+  "トライアウト",
   "選手募集",
+  "参加者募集",
+  "団員募集",
+  "部員募集",
+  "メンバー募集",
+  "クラブ生募集",
+  "スクール生募集",
+  "アカデミー生募集",
+  "ジュニアユース募集",
+  "ユース募集",
+  "ジュニア募集",
   "新入団",
   "入団",
   "加入",
@@ -68,29 +90,8 @@ const KEYWORDS = [
   "体験練習",
   "体験練習会",
   "体験会",
-  "体験参加",
-  "体験スクール",
-  "無料体験",
-  "スクール体験",
+  "無料体験会",
   "随時募集",
-  "団員募集",
-  "部員募集",
-  "メンバー募集",
-  "クラブ生募集",
-  "スクール生募集",
-  "アカデミー生募集",
-  "ジュニアユース募集",
-  "ユース募集",
-  "ジュニア募集",
-  "トライアウト",
-  "アカデミーセレクション",
-  "Tリーグ",
-  "東京都リーグ",
-  "街クラブ",
-  "ジュニアユース",
-  "ユース",
-  "少年団",
-  "サッカースクール",
   "selection",
   "tryout",
   "trial",
@@ -98,9 +99,6 @@ const KEYWORDS = [
   "recruitment",
   "entry",
   "join",
-  "member",
-  "academy",
-  "school",
 ];
 
 const EXCLUDE_KEYWORDS = [
@@ -124,6 +122,15 @@ const EXCLUDE_KEYWORDS = [
   "プライバシー",
   "個人情報",
   "利用規約",
+  "訪問スクール",
+  "スクール訪問",
+  "出張スクール",
+  "訪問指導",
+  "巡回指導",
+  "派遣指導",
+  "幼稚園訪問",
+  "保育園訪問",
+  "小学校訪問",
 ];
 
 const PREFECTURES = [
@@ -201,14 +208,6 @@ function stripHtml(html: string) {
 function getTitle(html: string) {
   const match = String(html ?? "").match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   return match?.[1]?.replace(/\s+/g, " ").trim() ?? "";
-}
-
-function containsKeyword(text: string) {
-  return KEYWORDS.some((keyword) => text.includes(keyword));
-}
-
-function containsExcludeKeyword(text: string) {
-  return EXCLUDE_KEYWORDS.some((keyword) => text.includes(keyword));
 }
 
 function normalizeUrl(url: string) {
@@ -292,7 +291,12 @@ function isBlockedPath(url: string) {
     lower.includes("/contact") ||
     lower.includes("/inquiry") ||
     lower.includes("/login") ||
-    lower.includes("/admin")
+    lower.includes("/admin") ||
+    lower.includes("visitschool") ||
+    lower.includes("visit-school") ||
+    lower.includes("visit_school") ||
+    lower.includes("school-visit") ||
+    lower.includes("school_visit")
   );
 }
 
@@ -488,16 +492,30 @@ function extractCategories(text: string) {
     .replace(/ー/g, "-")
     .replace(/\s+/g, "");
 
-  if (/U-?7|小学1年|小1|1年生/.test(normalized)) found.add("U-7");
-  if (/U-?8|小学2年|小2|2年生/.test(normalized)) found.add("U-8");
-  if (/U-?9|小学3年|小3|3年生/.test(normalized)) found.add("U-9");
-  if (/U-?10|小学4年|小4|4年生/.test(normalized)) found.add("U-10");
-  if (/U-?11|小学5年|小5|5年生/.test(normalized)) found.add("U-11");
-  if (/U-?12|小学6年|小6|6年生/.test(normalized)) found.add("U-12");
+  if (/未就学|幼児|年中|年長|キッズ/.test(normalized)) found.add("未就学");
+  if (/年長/.test(normalized)) found.add("年長");
+
+  if (/U-?6|年長/.test(normalized)) found.add("U-6");
+  if (/U-?7|小学1年|小1|1年生|新小学1年|新小1/.test(normalized)) found.add("U-7");
+  if (/U-?8|小学2年|小2|2年生|新小学2年|新小2/.test(normalized)) found.add("U-8");
+  if (/U-?9|小学3年|小3|3年生|新小学3年|新小3/.test(normalized)) found.add("U-9");
+  if (/U-?10|小学4年|小4|4年生|新小学4年|新小4/.test(normalized)) found.add("U-10");
+  if (/U-?11|小学5年|小5|5年生|新小学5年|新小5/.test(normalized)) found.add("U-11");
+  if (/U-?12|小学6年|小6|6年生|新小学6年|新小6/.test(normalized)) found.add("U-12");
+
   if (/U-?13|中学1年|中1|新中学1年|新中1/.test(normalized)) found.add("U-13");
   if (/U-?14|中学2年|中2|新中学2年|新中2/.test(normalized)) found.add("U-14");
-  if (/U-?15|中学3年|中3|ジュニアユース/.test(normalized)) found.add("U-15");
-  if (/U-?18|ユース|高校生|高校/.test(normalized)) found.add("U-18");
+  if (/U-?15|中学3年|中3|新中学3年|新中3/.test(normalized)) found.add("U-15");
+
+  if (/U-?16|高校1年|高1|新高校1年|新高1/.test(normalized)) found.add("U-16");
+  if (/U-?17|高校2年|高2|新高校2年|新高2/.test(normalized)) found.add("U-17");
+  if (/U-?18|高校3年|高3|新高校3年|新高3|ユース/.test(normalized)) found.add("U-18");
+
+  if (/ジュニアユース/.test(normalized)) found.add("ジュニアユース");
+  if (/ユース/.test(normalized)) found.add("ユース");
+  if (/スクール生|スクール/.test(normalized)) found.add("スクール生");
+  if (/GK|ＧＫ|ゴールキーパー/.test(normalized)) found.add("GK");
+  if (/女子|レディース|ガールズ/.test(normalized)) found.add("女子");
 
   return Array.from(found);
 }
@@ -584,6 +602,10 @@ function titleFromUrl(pageUrl: string, fallback: string) {
   return fallback;
 }
 
+function containsKeyword(text: string) {
+  return KEYWORDS.some((keyword) => text.includes(keyword));
+}
+
 function buildTitle(
   pageTitle: string,
   sourceName: string,
@@ -637,12 +659,15 @@ function buildDuplicateKey(params: {
 
 function displayStatusFromDates(
   eventDate: string | null,
-  deadline: string | null
+  deadline: string | null,
+  rawText: string
 ) {
   const today = new Date().toISOString().slice(0, 10);
 
   if (eventDate && eventDate < today) return "開催終了";
   if (deadline && deadline < today) return "申込終了";
+  if (!eventDate && rawText.includes("随時募集")) return "随時募集";
+  if (!eventDate) return "日付未取得";
 
   return "募集中";
 }
@@ -656,6 +681,7 @@ function isTargetPage(params: {
   const { rawText, pageTitle, pageUrl, sourceName } = params;
 
   const text = `${sourceName} ${pageTitle} ${rawText}`;
+  const lowerText = text.toLowerCase();
   const lowerUrl = pageUrl.toLowerCase();
 
   if (isInstagramUrl(pageUrl)) return false;
@@ -663,61 +689,160 @@ function isTargetPage(params: {
   if (isBlockedFile(pageUrl)) return false;
   if (!isPdfUrl(pageUrl) && isBlockedPath(pageUrl)) return false;
 
-  if (!containsKeyword(text)) return false;
+  if (EXCLUDE_KEYWORDS.some((keyword) => text.includes(keyword))) return false;
 
-  const positiveScore =
-    (text.includes("セレクション") ? 10 : 0) +
-    (text.includes("選考会") ? 9 : 0) +
-    (text.includes("トライアウト") ? 9 : 0) +
-    (text.includes("追加セレクション") ? 10 : 0) +
-    (text.includes("GKセレクション") ? 8 : 0) +
-    (text.includes("ゴールキーパーセレクション") ? 8 : 0) +
-    (text.includes("選手募集") ? 8 : 0) +
-    (text.includes("参加者募集") ? 7 : 0) +
-    (text.includes("練習参加") ? 7 : 0) +
-    (text.includes("練習会") ? 6 : 0) +
-    (text.includes("体験練習") ? 6 : 0) +
-    (text.includes("体験練習会") ? 7 : 0) +
-    (text.includes("体験会") ? 6 : 0) +
-    (text.includes("無料体験") ? 5 : 0) +
-    (text.includes("スクール体験") ? 5 : 0) +
-    (text.includes("団員募集") ? 7 : 0) +
-    (text.includes("部員募集") ? 7 : 0) +
-    (text.includes("メンバー募集") ? 7 : 0) +
-    (text.includes("スクール生募集") ? 7 : 0) +
-    (text.includes("クラブ生募集") ? 7 : 0) +
-    (text.includes("随時募集") ? 6 : 0) +
-    (text.includes("入団") ? 5 : 0) +
-    (text.includes("加入") ? 5 : 0) +
-    (text.includes("応募") ? 4 : 0) +
-    (text.includes("申込") ? 4 : 0) +
-    (text.includes("申し込み") ? 4 : 0) +
-    (text.includes("エントリー") ? 4 : 0) +
-    (text.includes("ジュニアユース") ? 3 : 0) +
-    (text.includes("ユース") ? 2 : 0) +
-    (text.includes("サッカースクール") ? 3 : 0) +
-    (text.includes("Tリーグ") ? 2 : 0) +
-    (lowerUrl.includes("selection") ? 4 : 0) +
-    (lowerUrl.includes("tryout") ? 4 : 0) +
-    (lowerUrl.includes("trial") ? 3 : 0) +
-    (lowerUrl.includes("recruit") ? 3 : 0) +
-    (lowerUrl.includes("entry") ? 3 : 0) +
-    (lowerUrl.includes("join") ? 3 : 0) +
-    (lowerUrl.includes("member") ? 2 : 0) +
-    (lowerUrl.includes("school") ? 2 : 0) +
-    (lowerUrl.includes("academy") ? 2 : 0);
+  const hasSelectionIntent =
+    text.includes("セレクション") ||
+    text.includes("選考会") ||
+    text.includes("トライアウト") ||
+    text.includes("GKセレクション") ||
+    text.includes("ゴールキーパーセレクション") ||
+    lowerText.includes("selection") ||
+    lowerText.includes("tryout") ||
+    lowerUrl.includes("selection") ||
+    lowerUrl.includes("tryout") ||
+    lowerUrl.includes("trial");
 
-  const negativeScore =
-    (text.includes("試合結果") ? 8 : 0) +
-    (text.includes("大会結果") ? 8 : 0) +
-    (text.includes("順位表") ? 8 : 0) +
-    (text.includes("戦績") ? 6 : 0) +
-    (text.includes("マッチレポート") ? 6 : 0) +
-    (text.includes("チケット") ? 5 : 0) +
-    (text.includes("グッズ") ? 5 : 0) +
-    (text.includes("観戦") ? 5 : 0);
+  const hasRecruitIntent =
+    text.includes("選手募集") ||
+    text.includes("参加者募集") ||
+    text.includes("団員募集") ||
+    text.includes("部員募集") ||
+    text.includes("メンバー募集") ||
+    text.includes("クラブ生募集") ||
+    text.includes("スクール生募集") ||
+    text.includes("ジュニアユース募集") ||
+    text.includes("ユース募集") ||
+    text.includes("新入団") ||
+    text.includes("入団") ||
+    text.includes("加入") ||
+    text.includes("応募") ||
+    text.includes("申込") ||
+    text.includes("申し込み") ||
+    text.includes("エントリー") ||
+    lowerUrl.includes("recruit") ||
+    lowerUrl.includes("entry") ||
+    lowerUrl.includes("join");
 
-  return positiveScore - negativeScore >= 5;
+  const hasTrainingTrialIntent =
+    text.includes("練習参加") ||
+    text.includes("体験練習") ||
+    text.includes("体験練習会") ||
+    text.includes("練習会") ||
+    text.includes("無料体験会");
+
+  const hasCategoryContext =
+    text.includes("U-") ||
+    text.includes("Ｕ-") ||
+    text.includes("ジュニアユース") ||
+    text.includes("ユース") ||
+    text.includes("ジュニア") ||
+    text.includes("小学生") ||
+    text.includes("中学生") ||
+    text.includes("新中") ||
+    text.includes("小学") ||
+    text.includes("中学") ||
+    text.includes("年長") ||
+    text.includes("年中");
+
+  const hasApplicationContext =
+    text.includes("申込") ||
+    text.includes("申し込み") ||
+    text.includes("応募") ||
+    text.includes("エントリー") ||
+    text.includes("フォーム") ||
+    text.includes("締切") ||
+    text.includes("募集");
+
+  if (hasSelectionIntent) return true;
+  if (hasRecruitIntent && (hasCategoryContext || hasApplicationContext)) return true;
+  if (hasTrainingTrialIntent && (hasCategoryContext || hasApplicationContext)) return true;
+
+  return false;
+}
+
+function getPagePriority(params: {
+  rawText: string;
+  pageTitle: string;
+  pageUrl: string;
+}) {
+  const { rawText, pageTitle, pageUrl } = params;
+  const text = `${pageTitle} ${rawText}`;
+  const lowerUrl = pageUrl.toLowerCase();
+
+  if (
+    lowerUrl.includes("/news/trial") ||
+    lowerUrl.includes("/selection") ||
+    lowerUrl.includes("/tryout") ||
+    lowerUrl.includes("/trial") ||
+    lowerUrl.includes("/recruit") ||
+    lowerUrl.includes("/entry")
+  ) {
+    return { priority: 100, reason: "official_detail_url" };
+  }
+
+  if (
+    text.includes("セレクション") ||
+    text.includes("選考会") ||
+    text.includes("トライアウト") ||
+    text.includes("GKセレクション") ||
+    text.includes("ゴールキーパーセレクション")
+  ) {
+    return { priority: 90, reason: "selection_text" };
+  }
+
+  if (
+    text.includes("練習参加") ||
+    text.includes("体験練習会") ||
+    text.includes("体験練習")
+  ) {
+    return { priority: 80, reason: "training_trial_text" };
+  }
+
+  if (
+    text.includes("選手募集") ||
+    text.includes("参加者募集") ||
+    text.includes("団員募集") ||
+    text.includes("部員募集") ||
+    text.includes("入団") ||
+    text.includes("加入")
+  ) {
+    return { priority: 70, reason: "recruit_text" };
+  }
+
+  if (
+    lowerUrl.endsWith("/news/") ||
+    lowerUrl.includes("/news/page/") ||
+    lowerUrl.includes("/topics/") ||
+    lowerUrl.includes("/info/")
+  ) {
+    return { priority: 30, reason: "list_page" };
+  }
+
+  return { priority: 50, reason: "general_candidate" };
+}
+
+function normalizeSourceRank(source: SelectionSource, rawText: string) {
+  const text = `${source.name} ${rawText}`;
+  const current = source.source_rank;
+
+  if (current) return current;
+
+  if (source.organization_type === "j_club") return "J下部";
+  if (text.includes("Jリーグ") || text.includes("J下部")) return "J下部";
+  if (text.includes("T1")) return "T1";
+  if (text.includes("T2")) return "T2";
+  if (text.includes("T3")) return "T3";
+  if (text.includes("T4")) return "T4";
+  if (text.includes("東京都1部") || text.includes("都1部")) return "県1部";
+  if (text.includes("東京都2部") || text.includes("都2部")) return "県2部";
+  if (text.includes("東京都3部") || text.includes("都3部")) return "県3部";
+  if (text.includes("GKスクール")) return "GKスクール";
+  if (text.includes("スクール")) return "サッカースクール";
+  if (text.includes("少年団")) return "少年団";
+  if (text.includes("女子") || text.includes("レディース")) return "女子クラブ";
+
+  return "地域クラブ";
 }
 
 function isMissingColumnError(err: any) {
@@ -738,6 +863,8 @@ function removeOptionalCrawlerColumns(payload: any) {
   delete copy.external_url;
   delete copy.extraction_status;
   delete copy.extraction_error;
+  delete copy.page_priority;
+  delete copy.priority_reason;
   return copy;
 }
 
@@ -815,6 +942,173 @@ async function notifyNewSelectionEvent(
   }
 }
 
+async function saveCandidateEvent(params: {
+  supabase: any;
+  source: SelectionSource;
+  candidate: CandidatePage;
+}) {
+  const { supabase, source, candidate } = params;
+
+  const { pageUrl, pageTitle, rawText, html, status, pdf, priority, reason } =
+    candidate;
+
+  const title = buildTitle(pageTitle, source.name, rawText, pageUrl);
+  const eventDate = safeDate(extractDateNearKeyword(rawText));
+  const deadline = safeDate(extractDeadline(rawText));
+  const checksum = await sha256(rawText);
+
+  const { data: pageRow, error: pageError } = await supabase
+    .from("selection_crawl_pages")
+    .insert({
+      source_id: source.id,
+      page_url: pageUrl,
+      page_title: pageTitle,
+      http_status: status,
+      raw_html: html.slice(0, 500000),
+      raw_text: rawText.slice(0, 500000),
+      checksum,
+    })
+    .select("id")
+    .single();
+
+  if (pageError) throw pageError;
+
+  const duplicateKey = buildDuplicateKey({
+    title,
+    organizationName: source.name,
+    eventDate,
+    pageUrl,
+  });
+
+  const contentHash = await sha256(
+    `${title}|${eventDate ?? "date_unknown"}|${pageUrl}`
+  );
+
+  const payload = {
+    source_id: source.id,
+    crawl_page_id: pageRow?.id ?? null,
+    title,
+    organization_name: source.name,
+    organization_type: source.organization_type || "other",
+    source_rank: normalizeSourceRank(source, rawText),
+    target_categories: extractCategories(rawText),
+    gender:
+      rawText.includes("女子") ||
+      rawText.includes("レディース") ||
+      rawText.includes("ガールズ")
+        ? "girls"
+        : "any",
+    prefecture: extractPrefecture(rawText),
+    city: extractCity(rawText),
+    event_date: eventDate,
+    application_deadline: deadline,
+    source_url: pageUrl,
+    official_url: pageUrl,
+    summary: pdf
+      ? buildSummary(rawText) ||
+        "PDF募集資料を検出しました。詳細は公式PDFをご確認ください。"
+      : buildSummary(rawText),
+    memo: eventDate
+      ? "※本情報は公開情報をもとに自動収集した参考情報です。最新情報・申込条件は必ず公式サイトでご確認ください。"
+      : "※日付未取得の募集情報です。開催日・申込条件は必ず公式サイトでご確認ください。",
+    fetched_at: new Date().toISOString(),
+    raw_text: rawText.slice(0, 500000),
+    content_hash: contentHash,
+    duplicate_key: duplicateKey,
+    status: "published",
+    display_status: displayStatusFromDates(eventDate, deadline, rawText),
+    is_featured: source.organization_type === "j_club",
+    last_seen_at: new Date().toISOString(),
+
+    source_type: pdf ? "pdf" : "web",
+    pdf_url: pdf ? pageUrl : null,
+    instagram_url: null,
+    external_url: pdf ? pageUrl : null,
+    extraction_status: eventDate ? "success" : "date_missing",
+    extraction_error: eventDate ? null : "event_date not found",
+    page_priority: priority,
+    priority_reason: reason,
+  };
+
+  let existing: any = null;
+
+  const { data: existingByUrl, error: existingByUrlError } = await supabase
+    .from("selection_events")
+    .select("id")
+    .eq("source_url", pageUrl)
+    .maybeSingle();
+
+  if (existingByUrlError) throw existingByUrlError;
+
+  existing = existingByUrl;
+
+  if (!existing?.id) {
+    const { data: existingByDuplicateKey, error: existingByDuplicateKeyError } =
+      await supabase
+        .from("selection_events")
+        .select("id")
+        .eq("duplicate_key", duplicateKey)
+        .maybeSingle();
+
+    if (existingByDuplicateKeyError) throw existingByDuplicateKeyError;
+
+    existing = existingByDuplicateKey;
+  }
+
+  if (existing?.id) {
+    let { error: updateError } = await supabase
+      .from("selection_events")
+      .update(payload)
+      .eq("id", existing.id);
+
+    if (updateError && isMissingColumnError(updateError)) {
+      const fallbackPayload = removeOptionalCrawlerColumns(payload);
+
+      const retry = await supabase
+        .from("selection_events")
+        .update(fallbackPayload)
+        .eq("id", existing.id);
+
+      updateError = retry.error;
+    }
+
+    if (updateError) throw updateError;
+
+    return { inserted: false, updated: true, pageSaved: true };
+  }
+
+  let { data: insertedEvent, error: insertError } = await supabase
+    .from("selection_events")
+    .insert(payload)
+    .select("id,title")
+    .single();
+
+  if (insertError && isMissingColumnError(insertError)) {
+    const fallbackPayload = removeOptionalCrawlerColumns(payload);
+
+    const retry = await supabase
+      .from("selection_events")
+      .insert(fallbackPayload)
+      .select("id,title")
+      .single();
+
+    insertedEvent = retry.data;
+    insertError = retry.error;
+  }
+
+  if (insertError) throw insertError;
+
+  if (insertedEvent?.id) {
+    await notifyNewSelectionEvent(
+      supabase,
+      insertedEvent.id,
+      insertedEvent.title || title
+    );
+  }
+
+  return { inserted: true, updated: false, pageSaved: true };
+}
+
 serve(async (req) => {
   const url = new URL(req.url);
   const offset = Number(url.searchParams.get("offset") || "0");
@@ -860,12 +1154,13 @@ serve(async (req) => {
     let sourceFetchedPages = 0;
     let sourceInsertedEvents = 0;
     let sourceUpdatedEvents = 0;
+    let sourceSavedPages = 0;
 
     try {
       const seedUrls = buildSeedUrls(source.base_url);
       const queue = [...seedUrls];
       const visited = new Set<string>();
-      const candidateUrls: string[] = [];
+      const candidates: CandidatePage[] = [];
 
       while (queue.length > 0 && visited.size < MAX_PAGES_PER_SOURCE) {
         const pageUrl = normalizeUrl(queue.shift() || "");
@@ -946,166 +1241,52 @@ serve(async (req) => {
 
         if (!target) continue;
 
-        candidateUrls.push(pageUrl);
-
-        const title = buildTitle(pageTitle, source.name, rawText, pageUrl);
-        const eventDate = safeDate(extractDateNearKeyword(rawText));
-        const deadline = safeDate(extractDeadline(rawText));
-
-        const checksum = await sha256(rawText);
-
-        const { data: pageRow, error: pageError } = await supabase
-          .from("selection_crawl_pages")
-          .insert({
-            source_id: source.id,
-            page_url: pageUrl,
-            page_title: pageTitle,
-            http_status: fetched.status,
-            raw_html: html.slice(0, 500000),
-            raw_text: rawText.slice(0, 500000),
-            checksum,
-          })
-          .select("id")
-          .single();
-
-        if (pageError) throw pageError;
-
-        savedPages += 1;
-
-        const duplicateKey = buildDuplicateKey({
-          title,
-          organizationName: source.name,
-          eventDate,
+        const priority = getPagePriority({
+          rawText,
+          pageTitle,
           pageUrl,
         });
 
-        const contentHash = await sha256(
-          `${title}|${eventDate ?? "date_unknown"}|${pageUrl}`
-        );
+        candidates.push({
+          pageUrl,
+          pageTitle,
+          rawText,
+          html,
+          status: fetched.status,
+          contentType: fetched.contentType,
+          pdf,
+          priority: priority.priority,
+          reason: priority.reason,
+        });
+      }
 
-        const payload = {
-          source_id: source.id,
-          crawl_page_id: pageRow?.id ?? null,
-          title,
-          organization_name: source.name,
-          organization_type: source.organization_type || "other",
-          source_rank: source.source_rank || "district",
-          target_categories: extractCategories(rawText),
-          gender:
-            rawText.includes("女子") || rawText.includes("レディース")
-              ? "girls"
-              : "any",
-          prefecture: extractPrefecture(rawText),
-          city: extractCity(rawText),
-          event_date: eventDate,
-          application_deadline: deadline,
-          source_url: pageUrl,
-          official_url: pageUrl,
-          summary: pdf
-            ? buildSummary(rawText) ||
-              "PDF募集資料を検出しました。詳細は公式PDFをご確認ください。"
-            : buildSummary(rawText),
-          memo:
-            eventDate
-              ? "※本情報は公開情報をもとに自動収集した参考情報です。最新情報・申込条件は必ず公式サイトでご確認ください。"
-              : "※日付未取得の募集情報です。開催日・申込条件は必ず公式サイトでご確認ください。",
-          fetched_at: new Date().toISOString(),
-          raw_text: rawText.slice(0, 500000),
-          content_hash: contentHash,
-          duplicate_key: duplicateKey,
-          status: "published",
-          display_status: displayStatusFromDates(eventDate, deadline),
-          is_featured: source.organization_type === "j_club",
-          last_seen_at: new Date().toISOString(),
+      candidates.sort((a, b) => {
+        if (b.priority !== a.priority) return b.priority - a.priority;
+        return a.pageUrl.length - b.pageUrl.length;
+      });
 
-          source_type: pdf ? "pdf" : "web",
-          pdf_url: pdf ? pageUrl : null,
-          instagram_url: null,
-          external_url: pdf ? pageUrl : null,
-          extraction_status: eventDate ? "success" : "date_missing",
-          extraction_error: eventDate ? null : "event_date not found",
-        };
+      const selectedCandidates = candidates.slice(0, MAX_EVENTS_PER_SOURCE);
 
-        let existing: any = null;
+      for (const candidate of selectedCandidates) {
+        const result = await saveCandidateEvent({
+          supabase,
+          source,
+          candidate,
+        });
 
-        const { data: existingByUrl, error: existingByUrlError } = await supabase
-          .from("selection_events")
-          .select("id")
-          .eq("source_url", pageUrl)
-          .maybeSingle();
-
-        if (existingByUrlError) throw existingByUrlError;
-
-        existing = existingByUrl;
-
-        if (!existing?.id) {
-          const {
-            data: existingByDuplicateKey,
-            error: existingByDuplicateKeyError,
-          } = await supabase
-            .from("selection_events")
-            .select("id")
-            .eq("duplicate_key", duplicateKey)
-            .maybeSingle();
-
-          if (existingByDuplicateKeyError) throw existingByDuplicateKeyError;
-
-          existing = existingByDuplicateKey;
+        if (result.pageSaved) {
+          savedPages += 1;
+          sourceSavedPages += 1;
         }
 
-        if (existing?.id) {
-          let { error: updateError } = await supabase
-            .from("selection_events")
-            .update(payload)
-            .eq("id", existing.id);
-
-          if (updateError && isMissingColumnError(updateError)) {
-            const fallbackPayload = removeOptionalCrawlerColumns(payload);
-
-            const retry = await supabase
-              .from("selection_events")
-              .update(fallbackPayload)
-              .eq("id", existing.id);
-
-            updateError = retry.error;
-          }
-
-          if (updateError) throw updateError;
-
-          updatedEvents += 1;
-          sourceUpdatedEvents += 1;
-        } else {
-          let { data: insertedEvent, error: insertError } = await supabase
-            .from("selection_events")
-            .insert(payload)
-            .select("id,title")
-            .single();
-
-          if (insertError && isMissingColumnError(insertError)) {
-            const fallbackPayload = removeOptionalCrawlerColumns(payload);
-
-            const retry = await supabase
-              .from("selection_events")
-              .insert(fallbackPayload)
-              .select("id,title")
-              .single();
-
-            insertedEvent = retry.data;
-            insertError = retry.error;
-          }
-
-          if (insertError) throw insertError;
-
+        if (result.inserted) {
           insertedEvents += 1;
           sourceInsertedEvents += 1;
+        }
 
-          if (insertedEvent?.id) {
-            await notifyNewSelectionEvent(
-              supabase,
-              insertedEvent.id,
-              insertedEvent.title || title
-            );
-          }
+        if (result.updated) {
+          updatedEvents += 1;
+          sourceUpdatedEvents += 1;
         }
       }
 
@@ -1124,7 +1305,7 @@ serve(async (req) => {
             inserted_events: sourceInsertedEvents,
             updated_events: sourceUpdatedEvents,
             error_message:
-              candidateUrls.length > 0
+              candidates.length > 0
                 ? null
                 : "No target candidates found",
           })
