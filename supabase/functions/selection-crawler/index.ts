@@ -113,11 +113,6 @@ const EXCLUDE_KEYWORDS = [
   "チケット",
   "グッズ",
   "観戦",
-  "スタッフ紹介",
-  "スタッフ",
-  "選手一覧",
-  "選手紹介",
-  "コーチ",
   "会社概要",
   "プライバシー",
   "個人情報",
@@ -300,6 +295,83 @@ function isBlockedPath(url: string) {
   );
 }
 
+function isThinPath(url: string) {
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+
+    const thinPaths = [
+      "/selection/",
+      "/trial/",
+      "/tryout/",
+      "/entry/",
+      "/recruit/",
+      "/join/",
+      "/member/",
+      "/academy/selection/",
+      "/academy/recruit/",
+      "/academy/entry/",
+      "/academy/trial/",
+      "/academy/tryout/",
+      "/school/",
+      "/academy/",
+      "/news/",
+      "/topics/",
+      "/info/",
+      "/information/",
+    ];
+
+    return thinPaths.includes(path);
+  } catch {
+    return false;
+  }
+}
+
+function getUrlDepth(url: string) {
+  try {
+    return new URL(url).pathname.split("/").filter(Boolean).length;
+  } catch {
+    return 0;
+  }
+}
+
+function looksLikeArticleUrl(url: string) {
+  try {
+    const u = new URL(url);
+    const path = u.pathname.toLowerCase();
+
+    if (isThinPath(url)) return false;
+
+    if (
+      /\/news\/.+/.test(path) ||
+      /\/topics\/.+/.test(path) ||
+      /\/info\/.+/.test(path) ||
+      /\/information\/.+/.test(path) ||
+      /\/blog\/.+/.test(path) ||
+      /\/post\/.+/.test(path) ||
+      /\/article\/.+/.test(path)
+    ) {
+      return true;
+    }
+
+    if (
+      (path.includes("selection") ||
+        path.includes("tryout") ||
+        path.includes("trial") ||
+        path.includes("recruit") ||
+        path.includes("entry")) &&
+      getUrlDepth(url) >= 2
+    ) {
+      return true;
+    }
+
+    if (/\d{4}/.test(path) && getUrlDepth(url) >= 2) return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function buildSeedUrls(baseUrl: string) {
   const urls = new Set<string>();
 
@@ -422,6 +494,7 @@ async function sha256(text: string) {
 
 async function fetchHtml(url: string) {
   const res = await fetch(url, {
+    redirect: "follow",
     headers: {
       "user-agent":
         "SakaMatchBot/1.0 (+https://www.sakamatch.com/; public selection info crawler)",
@@ -439,6 +512,7 @@ async function fetchHtml(url: string) {
       status: res.status,
       html: "",
       contentType,
+      finalUrl: res.url || url,
       pdfBuffer: arrayBuffer,
     };
   }
@@ -449,6 +523,7 @@ async function fetchHtml(url: string) {
     status: res.status,
     html,
     contentType,
+    finalUrl: res.url || url,
     pdfBuffer: null,
   };
 }
@@ -647,13 +722,11 @@ function buildDuplicateKey(params: {
   title?: string | null;
   organizationName?: string | null;
   eventDate?: string | null;
-  pageUrl?: string | null;
 }) {
   return [
     normalizeDuplicateText(params.organizationName),
     normalizeDuplicateText(params.title),
     params.eventDate ?? "date_unknown",
-    normalizeDuplicateText(params.pageUrl),
   ].join("|");
 }
 
@@ -682,28 +755,25 @@ function isTargetPage(params: {
 
   const text = `${sourceName} ${pageTitle} ${rawText}`;
   const lowerText = text.toLowerCase();
-  const lowerUrl = pageUrl.toLowerCase();
 
   if (isInstagramUrl(pageUrl)) return false;
   if (isSitemapUrl(pageUrl)) return false;
   if (isBlockedFile(pageUrl)) return false;
   if (!isPdfUrl(pageUrl) && isBlockedPath(pageUrl)) return false;
+  if (!isPdfUrl(pageUrl) && isThinPath(pageUrl)) return false;
 
-  //if (EXCLUDE_KEYWORDS.some((keyword) => text.includes(keyword))) return false;
+  const isArticle = isPdfUrl(pageUrl) || looksLikeArticleUrl(pageUrl);
 
-  const hasSelectionIntent =
+  const hasStrongKeyword =
     text.includes("セレクション") ||
     text.includes("選考会") ||
     text.includes("トライアウト") ||
     text.includes("GKセレクション") ||
     text.includes("ゴールキーパーセレクション") ||
     lowerText.includes("selection") ||
-    lowerText.includes("tryout") ||
-    lowerUrl.includes("selection") ||
-    lowerUrl.includes("tryout") ||
-    lowerUrl.includes("trial");
+    lowerText.includes("tryout");
 
-  const hasRecruitIntent =
+  const hasRecruitKeyword =
     text.includes("選手募集") ||
     text.includes("参加者募集") ||
     text.includes("団員募集") ||
@@ -715,20 +785,12 @@ function isTargetPage(params: {
     text.includes("ユース募集") ||
     text.includes("新入団") ||
     text.includes("入団") ||
-    text.includes("加入") ||
-    text.includes("応募") ||
-    text.includes("申込") ||
-    text.includes("申し込み") ||
-    text.includes("エントリー") ||
-    lowerUrl.includes("recruit") ||
-    lowerUrl.includes("entry") ||
-    lowerUrl.includes("join");
+    text.includes("加入");
 
   const hasTrainingTrialIntent =
     text.includes("練習参加") ||
     text.includes("体験練習") ||
     text.includes("体験練習会") ||
-    text.includes("練習会") ||
     text.includes("無料体験会");
 
   const hasCategoryContext =
@@ -742,6 +804,7 @@ function isTargetPage(params: {
     text.includes("新中") ||
     text.includes("小学") ||
     text.includes("中学") ||
+    text.includes("高校") ||
     text.includes("年長") ||
     text.includes("年中");
 
@@ -754,9 +817,31 @@ function isTargetPage(params: {
     text.includes("締切") ||
     text.includes("募集");
 
-  if (hasSelectionIntent) return true;
-  if (hasRecruitIntent && (hasCategoryContext || hasApplicationContext)) return true;
-  if (hasTrainingTrialIntent && (hasCategoryContext || hasApplicationContext)) return true;
+  const hasDate =
+    /\d{4}年\d{1,2}月\d{1,2}日/.test(text) ||
+    /\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2}/.test(text) ||
+    /\d{1,2}月\d{1,2}日/.test(text) ||
+    /\d{1,2}\/\d{1,2}/.test(text);
+
+  if (hasStrongKeyword && isArticle) return true;
+
+  if (
+    hasRecruitKeyword &&
+    hasCategoryContext &&
+    (isArticle || hasDate || hasApplicationContext)
+  ) {
+    return true;
+  }
+
+  if (
+    hasTrainingTrialIntent &&
+    hasCategoryContext &&
+    (isArticle || hasDate || hasApplicationContext)
+  ) {
+    return true;
+  }
+
+  if (isPdfUrl(pageUrl) && (hasStrongKeyword || hasRecruitKeyword)) return true;
 
   return false;
 }
@@ -767,18 +852,20 @@ function getPagePriority(params: {
   pageUrl: string;
 }) {
   const { rawText, pageTitle, pageUrl } = params;
-  const text = `${pageTitle} ${rawText}`;
-  const lowerUrl = pageUrl.toLowerCase();
 
-  if (
-    lowerUrl.includes("/news/trial") ||
-    lowerUrl.includes("/selection") ||
-    lowerUrl.includes("/tryout") ||
-    lowerUrl.includes("/trial") ||
-    lowerUrl.includes("/recruit") ||
-    lowerUrl.includes("/entry")
-  ) {
-    return { priority: 100, reason: "official_detail_url" };
+  const text = `${pageTitle} ${rawText}`;
+
+  let score = 0;
+  let reason = "general";
+
+  if (looksLikeArticleUrl(pageUrl)) {
+    score += 60;
+    reason = "article_url";
+  }
+
+  if (isPdfUrl(pageUrl)) {
+    score += 50;
+    reason = "pdf";
   }
 
   if (
@@ -788,38 +875,49 @@ function getPagePriority(params: {
     text.includes("GKセレクション") ||
     text.includes("ゴールキーパーセレクション")
   ) {
-    return { priority: 90, reason: "selection_text" };
-  }
-
-  if (
-    text.includes("練習参加") ||
-    text.includes("体験練習会") ||
-    text.includes("体験練習")
-  ) {
-    return { priority: 80, reason: "training_trial_text" };
+    score += 40;
+    reason = "selection_keyword";
   }
 
   if (
     text.includes("選手募集") ||
     text.includes("参加者募集") ||
-    text.includes("団員募集") ||
-    text.includes("部員募集") ||
-    text.includes("入団") ||
-    text.includes("加入")
+    text.includes("ジュニアユース募集") ||
+    text.includes("ユース募集")
   ) {
-    return { priority: 70, reason: "recruit_text" };
+    score += 25;
+    reason = "recruit_keyword";
   }
 
   if (
-    lowerUrl.endsWith("/news/") ||
-    lowerUrl.includes("/news/page/") ||
-    lowerUrl.includes("/topics/") ||
-    lowerUrl.includes("/info/")
+    /\d{4}年\d{1,2}月\d{1,2}日/.test(text) ||
+    /\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2}/.test(text) ||
+    /\d{1,2}月\d{1,2}日/.test(text)
   ) {
-    return { priority: 30, reason: "list_page" };
+    score += 20;
   }
 
-  return { priority: 50, reason: "general_candidate" };
+  if (
+    text.includes("U-") ||
+    text.includes("ジュニアユース") ||
+    text.includes("ユース") ||
+    text.includes("小学生") ||
+    text.includes("中学生")
+  ) {
+    score += 10;
+  }
+
+  score += Math.min(getUrlDepth(pageUrl) * 5, 20);
+
+  if (isThinPath(pageUrl)) {
+    score -= 100;
+    reason = "thin_path";
+  }
+
+  return {
+    priority: score,
+    reason,
+  };
 }
 
 function normalizeSourceRank(source: SelectionSource, rawText: string) {
@@ -977,7 +1075,6 @@ async function saveCandidateEvent(params: {
     title,
     organizationName: source.name,
     eventDate,
-    pageUrl,
   });
 
   const contentHash = await sha256(
@@ -1163,7 +1260,7 @@ serve(async (req) => {
       const candidates: CandidatePage[] = [];
 
       while (queue.length > 0 && visited.size < MAX_PAGES_PER_SOURCE) {
-        const pageUrl = normalizeUrl(queue.shift() || "");
+        let pageUrl = normalizeUrl(queue.shift() || "");
         if (!pageUrl) continue;
         if (visited.has(pageUrl)) continue;
         if (isInstagramUrl(pageUrl)) continue;
@@ -1178,6 +1275,14 @@ serve(async (req) => {
           fetched = await fetchHtml(pageUrl);
         } catch {
           continue;
+        }
+
+        const finalUrl = normalizeUrl(fetched.finalUrl || pageUrl);
+
+        if (finalUrl !== pageUrl) {
+          if (visited.has(finalUrl)) continue;
+          pageUrl = finalUrl;
+          visited.add(pageUrl);
         }
 
         fetchedPages += 1;
@@ -1240,12 +1345,15 @@ serve(async (req) => {
         });
 
         if (!target) continue;
+        if (!pdf && isThinPath(pageUrl)) continue;
 
         const priority = getPagePriority({
           rawText,
           pageTitle,
           pageUrl,
         });
+
+        if (priority.priority <= 0) continue;
 
         candidates.push({
           pageUrl,
@@ -1260,12 +1368,36 @@ serve(async (req) => {
         });
       }
 
-      candidates.sort((a, b) => {
-        if (b.priority !== a.priority) return b.priority - a.priority;
-        return a.pageUrl.length - b.pageUrl.length;
-      });
+      const uniqueByDuplicateKey = new Map<string, CandidatePage>();
 
-      const selectedCandidates = candidates.slice(0, MAX_EVENTS_PER_SOURCE);
+      for (const candidate of candidates) {
+        const title = buildTitle(
+          candidate.pageTitle,
+          source.name,
+          candidate.rawText,
+          candidate.pageUrl
+        );
+        const eventDate = safeDate(extractDateNearKeyword(candidate.rawText));
+
+        const key = buildDuplicateKey({
+          title,
+          organizationName: source.name,
+          eventDate,
+        });
+
+        const existing = uniqueByDuplicateKey.get(key);
+
+        if (!existing || candidate.priority > existing.priority) {
+          uniqueByDuplicateKey.set(key, candidate);
+        }
+      }
+
+      const selectedCandidates = Array.from(uniqueByDuplicateKey.values())
+        .sort((a, b) => {
+          if (b.priority !== a.priority) return b.priority - a.priority;
+          return b.pageUrl.length - a.pageUrl.length;
+        })
+        .slice(0, MAX_EVENTS_PER_SOURCE);
 
       for (const candidate of selectedCandidates) {
         const result = await saveCandidateEvent({
