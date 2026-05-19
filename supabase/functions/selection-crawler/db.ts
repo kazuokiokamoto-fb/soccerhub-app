@@ -16,12 +16,41 @@ import { isPdfUrl } from "./url.ts";
 import { notifyNewSelectionEvent } from "./notify.ts";
 
 export async function sha256(text: string) {
-  const data = new TextEncoder().encode(text);
+  const safeText = cleanDbText(text);
+  const data = new TextEncoder().encode(safeText);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
 
   return Array.from(new Uint8Array(hashBuffer))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+export function cleanDbText(value?: string | null) {
+  return String(value ?? "")
+    .replace(/\u0000/g, "")
+    .replace(/\x00/g, "");
+}
+
+export function normalizeOrganizationType(value?: string | null) {
+  const v = String(value ?? "").trim();
+
+  if (v === "j_club") return "j_club";
+  if (v === "club") return "club";
+  if (v === "school") return "school";
+  if (v === "academy") return "academy";
+  if (v === "other") return "other";
+
+  if (v === "j_academy") return "j_club";
+  if (v === "ladies") return "club";
+  if (v === "women") return "club";
+  if (v === "サッカースクール") return "school";
+  if (v === "スクール") return "school";
+  if (v === "地域クラブ") return "club";
+  if (v === "街クラブ") return "club";
+  if (v === "女子クラブ") return "club";
+  if (v === "少年団") return "club";
+
+  return "other";
 }
 
 export function isMissingColumnError(err: any) {
@@ -54,10 +83,27 @@ export async function saveCandidateEvent(params: {
 }) {
   const { supabase, source, candidate } = params;
 
-  const { pageUrl, pageTitle, rawText, html, status, pdf, priority, reason } =
-    candidate;
+  const {
+    pageUrl,
+    pageTitle,
+    rawText: originalRawText,
+    html: originalHtml,
+    status,
+    pdf,
+    priority,
+    reason,
+  } = candidate;
 
-  const title = buildTitle(pageTitle, source.name, rawText, pageUrl);
+  const rawText = cleanDbText(originalRawText);
+  const html = cleanDbText(originalHtml);
+  const cleanPageTitle = cleanDbText(pageTitle);
+  const cleanSourceName = cleanDbText(source.name);
+  const cleanPageUrl = cleanDbText(pageUrl);
+
+  const title = cleanDbText(
+    buildTitle(cleanPageTitle, cleanSourceName, rawText, cleanPageUrl),
+  );
+
   const eventDate = safeDate(extractDateNearKeyword(rawText));
   const deadline = safeDate(extractDeadline(rawText));
   const checksum = await sha256(rawText);
@@ -66,8 +112,8 @@ export async function saveCandidateEvent(params: {
     .from("selection_crawl_pages")
     .insert({
       source_id: source.id,
-      page_url: pageUrl,
-      page_title: pageTitle,
+      page_url: cleanPageUrl,
+      page_title: cleanPageTitle,
       http_status: status,
       raw_html: html.slice(0, 500000),
       raw_text: rawText.slice(0, 500000),
@@ -80,21 +126,25 @@ export async function saveCandidateEvent(params: {
 
   const duplicateKey = buildDuplicateKey({
     title,
-    organizationName: source.name,
+    organizationName: cleanSourceName,
     eventDate,
   });
 
   const contentHash = await sha256(
-    `${title}|${eventDate ?? "date_unknown"}|${pageUrl}`,
+    `${title}|${eventDate ?? "date_unknown"}|${cleanPageUrl}`,
+  );
+
+  const normalizedOrganizationType = normalizeOrganizationType(
+    source.organization_type,
   );
 
   const payload = {
     source_id: source.id,
     crawl_page_id: pageRow?.id ?? null,
     title,
-    organization_name: source.name,
-    organization_type: source.organization_type || "other",
-    source_rank: normalizeSourceRank(source, rawText),
+    organization_name: cleanSourceName,
+    organization_type: normalizedOrganizationType,
+    source_rank: cleanDbText(normalizeSourceRank(source, rawText)),
     target_categories: extractCategories(rawText),
     gender:
       rawText.includes("女子") ||
@@ -106,12 +156,14 @@ export async function saveCandidateEvent(params: {
     city: extractCity(rawText),
     event_date: eventDate,
     application_deadline: deadline,
-    source_url: pageUrl,
-    official_url: pageUrl,
-    summary: pdf
-      ? buildSummary(rawText) ||
-        "PDF募集資料を検出しました。詳細は公式PDFをご確認ください。"
-      : buildSummary(rawText),
+    source_url: cleanPageUrl,
+    official_url: cleanPageUrl,
+    summary: cleanDbText(
+      pdf
+        ? buildSummary(rawText) ||
+          "PDF募集資料を検出しました。詳細は公式PDFをご確認ください。"
+        : buildSummary(rawText),
+    ),
     memo: eventDate
       ? "※本情報は公開情報をもとに自動収集した参考情報です。最新情報・申込条件は必ず公式サイトでご確認ください。"
       : "※日付未取得の募集情報です。開催日・申込条件は必ず公式サイトでご確認ください。",
@@ -121,13 +173,13 @@ export async function saveCandidateEvent(params: {
     duplicate_key: duplicateKey,
     status: "published",
     display_status: displayStatusFromDates(eventDate, deadline, rawText),
-    is_featured: source.organization_type === "j_club",
+    is_featured: normalizedOrganizationType === "j_club",
     last_seen_at: new Date().toISOString(),
 
     source_type: pdf ? "pdf" : "web",
-    pdf_url: pdf ? pageUrl : null,
+    pdf_url: pdf ? cleanPageUrl : null,
     instagram_url: null,
-    external_url: pdf ? pageUrl : null,
+    external_url: pdf ? cleanPageUrl : null,
     extraction_status: eventDate ? "success" : "date_missing",
     extraction_error: eventDate ? null : "event_date not found",
     page_priority: priority,
@@ -139,7 +191,7 @@ export async function saveCandidateEvent(params: {
   const { data: existingByUrl, error: existingByUrlError } = await supabase
     .from("selection_events")
     .select("id")
-    .eq("source_url", pageUrl)
+    .eq("source_url", cleanPageUrl)
     .maybeSingle();
 
   if (existingByUrlError) throw existingByUrlError;
