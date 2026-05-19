@@ -27,6 +27,12 @@ export function shouldExtractExternalLinks(params: {
     text.includes("トライアウト") ||
     text.includes("選手募集") ||
     text.includes("参加者募集") ||
+    text.includes("募集") ||
+    text.includes("体験会") ||
+    text.includes("練習会") ||
+    text.includes("アカデミー") ||
+    text.includes("ジュニアユース") ||
+    text.includes("GK募集") ||
     text.includes("スクール生募集") ||
     text.includes("ジュニアユース募集") ||
     text.includes("ユース募集") ||
@@ -64,6 +70,15 @@ export function isTargetPage(params: {
     text.includes("トライアウト") ||
     text.includes("GKセレクション") ||
     text.includes("ゴールキーパーセレクション") ||
+    text.includes("募集") ||
+    text.includes("体験会") ||
+    text.includes("練習会") ||
+    text.includes("アカデミー") ||
+    text.includes("ジュニアユース") ||
+    text.includes("GK募集") ||
+    text.includes("新年度") ||
+    text.includes("2026年度") ||
+    text.includes("2027年度") ||
     lowerText.includes("selection") ||
     lowerText.includes("tryout");
 
@@ -83,6 +98,8 @@ export function isTargetPage(params: {
 
   const hasTrainingTrialIntent =
     text.includes("練習参加") ||
+    text.includes("練習会") ||
+    text.includes("体験会") ||
     text.includes("体験練習") ||
     text.includes("体験練習会") ||
     text.includes("無料体験会");
@@ -176,8 +193,11 @@ export function getPagePriority(params: {
   if (
     text.includes("選手募集") ||
     text.includes("参加者募集") ||
-    text.includes("ジュニアユース募集") ||
-    text.includes("ユース募集")
+    text.includes("募集") ||
+    text.includes("体験会") ||
+    text.includes("練習会") ||
+    text.includes("アカデミー") ||
+    text.includes("ジュニアユース")
   ) {
     score += 25;
     reason = "recruit_keyword";
@@ -221,18 +241,49 @@ export function normalizeSourceRank(source: SelectionSource, rawText: string) {
   if (current) return current;
 
   if (source.organization_type === "j_club") return "J下部";
-  if (text.includes("Jリーグ") || text.includes("J下部")) return "J下部";
-  if (text.includes("T1")) return "T1";
-  if (text.includes("T2")) return "T2";
-  if (text.includes("T3")) return "T3";
-  if (text.includes("T4")) return "T4";
-  if (text.includes("東京都1部") || text.includes("都1部")) return "県1部";
-  if (text.includes("東京都2部") || text.includes("都2部")) return "県2部";
-  if (text.includes("東京都3部") || text.includes("都3部")) return "県3部";
-  if (text.includes("GKスクール")) return "GKスクール";
-  if (text.includes("スクール")) return "サッカースクール";
-  if (text.includes("少年団")) return "少年団";
-  if (text.includes("女子") || text.includes("レディース")) return "女子クラブ";
 
-  return "地域クラブ";
+  if (text.includes("Jリーグ") || text.includes("J下部")) {
+    return "J下部";
+  }
+
+  if (text.includes("T1") || text.includes("1部")) {
+    return "T1 / 1部";
+  }
+
+  if (text.includes("T2") || text.includes("2部")) {
+    return "T2 / 2部";
+  }
+
+  if (text.includes("T3") || text.includes("3部")) {
+    return "T3 / 3部";
+  }
+
+  if (text.includes("T4") || text.includes("4部")) {
+    return "T4 / 4部";
+  }
+
+  if (
+    text.includes("地区リーグ") ||
+    text.includes("県リーグ") ||
+    text.includes("地域リーグ")
+  ) {
+    return "地区リーグ";
+  }
+
+  if (
+    text.includes("女子") ||
+    text.includes("レディース") ||
+    text.includes("ガールズ")
+  ) {
+    return "女子";
+  }
+
+  if (
+    text.includes("スクール") ||
+    text.includes("アカデミー")
+  ) {
+    return "スクール";
+  }
+
+  return "その他";
 }

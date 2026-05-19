@@ -42,7 +42,11 @@ export const KEYWORDS = [
   "追加セレクション",
   "GKセレクション",
   "ゴールキーパーセレクション",
+
   "トライアウト",
+  "tryout",
+  "trial",
+
   "選手募集",
   "参加者募集",
   "団員募集",
@@ -54,28 +58,44 @@ export const KEYWORDS = [
   "ジュニアユース募集",
   "ユース募集",
   "ジュニア募集",
+  "GK募集",
+
+  "募集",
+  "新年度",
+  "2026年度",
+  "2027年度",
+
+  "アカデミー",
+  "academy",
+
+  "ジュニアユース",
+  "junior youth",
+  "junior-youth",
+
   "新入団",
   "入団",
   "加入",
   "新加入",
+
   "応募",
   "申込",
   "申し込み",
   "エントリー",
+  "entry",
+  "join",
+
   "練習参加",
   "練習会",
   "体験練習",
   "体験練習会",
   "体験会",
   "無料体験会",
+
   "随時募集",
+
   "selection",
-  "tryout",
-  "trial",
   "recruit",
   "recruitment",
-  "entry",
-  "join",
 ];
 
 export const EXCLUDE_KEYWORDS = [
