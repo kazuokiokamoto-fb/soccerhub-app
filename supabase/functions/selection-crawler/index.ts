@@ -17,7 +17,6 @@ import {
   isInstagramUrl,
   isPdfUrl,
   isSitemapUrl,
-  isThinPath,
   normalizeUrl,
 } from "./url.ts";
 
@@ -108,11 +107,26 @@ serve(async (req) => {
     let sourceInsertedEvents = 0;
     let sourceUpdatedEvents = 0;
 
+    const debug = {
+      queued: 0,
+      fetched: 0,
+      sitemapLinks: 0,
+      internalLinks: 0,
+      externalLinks: 0,
+      targetRejected: 0,
+      priorityRejected: 0,
+      candidates: 0,
+      uniqueCandidates: 0,
+      selected: 0,
+    };
+
     try {
       const seedUrls = buildSeedUrls(source.base_url);
       const queue = [...seedUrls];
       const visited = new Set<string>();
       const candidates: CandidatePage[] = [];
+
+      debug.queued = seedUrls.length;
 
       while (queue.length > 0 && visited.size < MAX_PAGES_PER_SOURCE) {
         let pageUrl = normalizeUrl(queue.shift() || "");
@@ -158,6 +172,7 @@ serve(async (req) => {
 
         fetchedPages += 1;
         sourceFetchedPages += 1;
+        debug.fetched += 1;
 
         const pdf =
           isPdfUrl(pageUrl) || String(fetched.contentType || "").includes("pdf");
@@ -171,6 +186,7 @@ serve(async (req) => {
 
         if (sitemap && html) {
           const sitemapLinks = extractSitemapUrls(html, pageUrl);
+          debug.sitemapLinks += sitemapLinks.length;
 
           for (const link of sitemapLinks) {
             if (
@@ -195,6 +211,7 @@ serve(async (req) => {
           pageTitle = getTitle(html);
 
           const foundLinks = extractLinks(html, pageUrl);
+          debug.internalLinks += foundLinks.length;
 
           for (const link of foundLinks) {
             if (
@@ -214,6 +231,7 @@ serve(async (req) => {
             })
           ) {
             const externalLinks = extractExternalCandidateLinks(html, pageUrl);
+            debug.externalLinks += externalLinks.length;
 
             for (const externalLink of externalLinks) {
               if (
@@ -233,7 +251,10 @@ serve(async (req) => {
           sourceName: source.name,
         });
 
-        if (!target) continue;
+        if (!target) {
+          debug.targetRejected += 1;
+          continue;
+        }
 
         const priority = getPagePriority({
           rawText,
@@ -241,7 +262,10 @@ serve(async (req) => {
           pageUrl,
         });
 
-        if (priority.priority <= 0) continue;
+        if (priority.priority <= 0) {
+          debug.priorityRejected += 1;
+          continue;
+        }
 
         candidates.push({
           pageUrl,
@@ -254,6 +278,8 @@ serve(async (req) => {
           priority: priority.priority,
           reason: priority.reason,
         });
+
+        debug.candidates += 1;
       }
 
       const uniqueByDuplicateKey = new Map<string, CandidatePage>();
@@ -266,9 +292,7 @@ serve(async (req) => {
           candidate.pageUrl,
         );
 
-        const eventDate = safeDate(
-          extractDateNearKeyword(candidate.rawText),
-        );
+        const eventDate = safeDate(extractDateNearKeyword(candidate.rawText));
 
         const key = buildDuplicateKey({
           title,
@@ -283,6 +307,8 @@ serve(async (req) => {
         }
       }
 
+      debug.uniqueCandidates = uniqueByDuplicateKey.size;
+
       const selectedCandidates = Array.from(uniqueByDuplicateKey.values())
         .sort((a, b) => {
           if (b.priority !== a.priority) {
@@ -292,6 +318,8 @@ serve(async (req) => {
           return b.pageUrl.length - a.pageUrl.length;
         })
         .slice(0, MAX_EVENTS_PER_SOURCE);
+
+      debug.selected = selectedCandidates.length;
 
       for (const candidate of selectedCandidates) {
         const result = await saveCandidateEvent({
@@ -331,6 +359,9 @@ serve(async (req) => {
             fetched_pages: sourceFetchedPages,
             inserted_events: sourceInsertedEvents,
             updated_events: sourceUpdatedEvents,
+            candidate_count: candidates.length,
+            rejected_count: debug.targetRejected + debug.priorityRejected,
+            debug_message: JSON.stringify(debug),
             error_message:
               candidates.length > 0 ? null : "No target candidates found",
           })
@@ -356,6 +387,9 @@ serve(async (req) => {
             fetched_pages: sourceFetchedPages,
             inserted_events: sourceInsertedEvents,
             updated_events: sourceUpdatedEvents,
+            candidate_count: 0,
+            rejected_count: debug.targetRejected + debug.priorityRejected,
+            debug_message: JSON.stringify(debug),
           })
           .eq("id", logId);
       }
