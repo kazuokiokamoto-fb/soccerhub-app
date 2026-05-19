@@ -55,7 +55,6 @@ export function isTargetPage(params: {
   if (isSitemapUrl(pageUrl)) return false;
   if (isBlockedFile(pageUrl)) return false;
   if (!isPdfUrl(pageUrl) && isBlockedPath(pageUrl)) return false;
-  if (!isPdfUrl(pageUrl) && isThinPath(pageUrl)) return false;
 
   const isArticle = isPdfUrl(pageUrl) || looksLikeArticleUrl(pageUrl);
 

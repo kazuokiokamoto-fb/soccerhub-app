@@ -234,7 +234,6 @@ serve(async (req) => {
         });
 
         if (!target) continue;
-        if (!pdf && isThinPath(pageUrl)) continue;
 
         const priority = getPagePriority({
           rawText,
