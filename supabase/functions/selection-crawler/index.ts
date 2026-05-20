@@ -1,3 +1,7 @@
+// @ts-nocheck
+
+/// <reference lib="deno.window" />
+
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -38,6 +42,7 @@ import {
 
 import { fetchHtml } from "./fetch.ts";
 import { saveCandidateEvent } from "./db.ts";
+import { buildSearchSeedUrls } from "./search.ts";
 
 serve(async (req) => {
   const url = new URL(req.url);
@@ -109,6 +114,7 @@ serve(async (req) => {
 
     const debug = {
       queued: 0,
+      searchUrls: 0,
       fetched: 0,
       sitemapLinks: 0,
       internalLinks: 0,
@@ -121,12 +127,21 @@ serve(async (req) => {
     };
 
     try {
-      const seedUrls = buildSeedUrls(source.base_url);
+      const normalSeedUrls = buildSeedUrls(source.base_url);
+
+      const searchSeeds = await buildSearchSeedUrls(source);
+      const searchSeedUrls = searchSeeds.map((item) => item.url);
+
+      const seedUrls = Array.from(
+        new Set([...searchSeedUrls, ...normalSeedUrls].map(normalizeUrl)),
+      );
+
       const queue = [...seedUrls];
       const visited = new Set<string>();
       const candidates: CandidatePage[] = [];
 
       debug.queued = seedUrls.length;
+      debug.searchUrls = searchSeedUrls.length;
 
       while (queue.length > 0 && visited.size < MAX_PAGES_PER_SOURCE) {
         let pageUrl = normalizeUrl(queue.shift() || "");

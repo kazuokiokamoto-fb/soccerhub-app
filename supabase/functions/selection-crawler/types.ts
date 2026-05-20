@@ -25,3 +25,11 @@ export type QueueItem = {
   depth: number;
   fromUrl?: string | null;
 };
+
+export type SearchResult = {
+  title: string;
+  url: string;
+  snippet: string;
+  source: "bing";
+  query: string;
+};

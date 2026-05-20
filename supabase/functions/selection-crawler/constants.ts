@@ -4,6 +4,10 @@ export const MAX_EXTERNAL_LINKS_PER_PAGE = 8;
 export const MAX_EXTERNAL_HOSTS_PER_SOURCE = 8;
 export const MAX_EXTERNAL_DEPTH = 2;
 
+export const MAX_SEARCH_QUERIES_PER_SOURCE = 8;
+export const MAX_SEARCH_RESULTS_PER_QUERY = 5;
+export const MAX_SEARCH_URLS_PER_SOURCE = 20;
+
 export const CRAWL_ENTRY_PATHS = [
   "",
   "/",
@@ -36,17 +40,26 @@ export const CRAWL_ENTRY_PATHS = [
   "/sitemap_index.xml",
 ];
 
+export const SEARCH_KEYWORDS = [
+  "セレクション",
+  "ジュニアユース セレクション",
+  "U-13 セレクション",
+  "新中1 セレクション",
+  "選手募集",
+  "体験練習会",
+  "練習会",
+  "2026年度 募集",
+];
+
 export const KEYWORDS = [
   "セレクション",
   "選考会",
   "追加セレクション",
   "GKセレクション",
   "ゴールキーパーセレクション",
-
   "トライアウト",
   "tryout",
   "trial",
-
   "選手募集",
   "参加者募集",
   "団員募集",
@@ -59,40 +72,32 @@ export const KEYWORDS = [
   "ユース募集",
   "ジュニア募集",
   "GK募集",
-
   "募集",
   "新年度",
   "2026年度",
   "2027年度",
-
   "アカデミー",
   "academy",
-
   "ジュニアユース",
   "junior youth",
   "junior-youth",
-
   "新入団",
   "入団",
   "加入",
   "新加入",
-
   "応募",
   "申込",
   "申し込み",
   "エントリー",
   "entry",
   "join",
-
   "練習参加",
   "練習会",
   "体験練習",
   "体験練習会",
   "体験会",
   "無料体験会",
-
   "随時募集",
-
   "selection",
   "recruit",
   "recruitment",
