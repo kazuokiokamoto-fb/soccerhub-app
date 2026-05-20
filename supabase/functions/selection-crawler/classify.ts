@@ -27,6 +27,18 @@ function includesCurrentOrNextYear(text: string) {
   return getCurrentYears().some((value) => text.includes(value));
 }
 
+function hasOldYearOnly(text: string) {
+  const currentYear = new Date().getFullYear();
+  const years = Array.from(text.matchAll(/20\d{2}/g)).map((m) => Number(m[0]));
+
+  if (years.length === 0) return false;
+
+  const hasCurrentOrFuture = years.some((y) => y >= currentYear);
+  const hasOld = years.some((y) => y < currentYear);
+
+  return hasOld && !hasCurrentOrFuture;
+}
+
 function hasEndedText(text: string) {
   return (
     text.includes("募集終了") ||
@@ -168,6 +180,8 @@ export function isTargetPage(params: {
   if (isBlockedFile(pageUrl)) return false;
   if (!isPdfUrl(pageUrl) && isBlockedPath(pageUrl)) return false;
 
+  if (hasOldYearOnly(text)) return false;
+
   const isArticle = isPdfUrl(pageUrl) || looksLikeArticleUrl(pageUrl);
 
   const selectionIntent = hasSelectionIntent(text, lowerText);
@@ -201,7 +215,8 @@ export function isTargetPage(params: {
     text.includes("募集") &&
     categoryContext &&
     applicationContext &&
-    (isArticle || dateContext)
+    dateContext &&
+    isArticle
   ) {
     return true;
   }
@@ -251,21 +266,22 @@ export function getPagePriority(params: {
     reason = "training_keyword";
   }
 
-  if (text.includes("募集") && hasCategoryContext(text)) {
-    score += 20;
+  if (
+    text.includes("募集") &&
+    hasCategoryContext(text) &&
+    hasApplicationContext(text)
+  ) {
+    score += 10;
     reason = "broad_recruit_keyword";
   }
 
-  if (hasDateContext(text)) {
-    score += 20;
-  }
+  if (hasDateContext(text)) score += 20;
+  if (hasCategoryContext(text)) score += 15;
+  if (hasApplicationContext(text)) score += 15;
 
-  if (hasCategoryContext(text)) {
-    score += 15;
-  }
-
-  if (hasApplicationContext(text)) {
-    score += 15;
+  if (hasOldYearOnly(text)) {
+    score -= 120;
+    reason = "old_year_only";
   }
 
   if (hasEndedText(text)) {

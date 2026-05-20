@@ -35,20 +35,26 @@ export function normalizeOrganizationType(value?: string | null) {
   const v = String(value ?? "").trim();
 
   if (v === "j_club") return "j_club";
-  if (v === "club") return "club";
+  if (v === "strong_team") return "strong_team";
   if (v === "school") return "school";
-  if (v === "academy") return "academy";
+  if (v === "club_team") return "club_team";
   if (v === "other") return "other";
 
+  if (v === "club") return "club_team";
+  if (v === "academy") return "club_team";
   if (v === "j_academy") return "j_club";
-  if (v === "ladies") return "club";
-  if (v === "women") return "club";
+
+  if (v === "ladies") return "club_team";
+  if (v === "women") return "club_team";
+  if (v === "girls") return "club_team";
+
   if (v === "サッカースクール") return "school";
   if (v === "スクール") return "school";
-  if (v === "地域クラブ") return "club";
-  if (v === "街クラブ") return "club";
-  if (v === "女子クラブ") return "club";
-  if (v === "少年団") return "club";
+
+  if (v === "地域クラブ") return "club_team";
+  if (v === "街クラブ") return "club_team";
+  if (v === "女子クラブ") return "club_team";
+  if (v === "少年団") return "club_team";
 
   return "other";
 }

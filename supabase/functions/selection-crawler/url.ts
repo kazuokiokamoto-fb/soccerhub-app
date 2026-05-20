@@ -7,9 +7,7 @@ import {
 export function normalizeUrl(url: string) {
   try {
     const u = new URL(url);
-
     u.hash = "";
-
     return u.toString();
   } catch {
     return url;
@@ -34,13 +32,11 @@ export function getHost(url: string) {
 
 export function isPdfUrl(url: string) {
   const lower = url.toLowerCase();
-
   return lower.endsWith(".pdf") || lower.includes(".pdf?");
 }
 
 export function isSitemapUrl(url: string) {
   const lower = url.toLowerCase();
-
   return lower.includes("sitemap") && lower.includes(".xml");
 }
 
@@ -64,6 +60,19 @@ export function isSnsOrMapUrl(url: string) {
     lower.includes("google.com/maps") ||
     lower.includes("goo.gl/maps") ||
     lower.includes("maps.app.goo.gl")
+  );
+}
+
+export function isSearchResultUrl(url: string) {
+  const lower = decodeURIComponent(url.toLowerCase());
+
+  return (
+    lower.includes("?s=") ||
+    lower.includes("&s=") ||
+    lower.includes("?q=") ||
+    lower.includes("&q=") ||
+    lower.includes("/search/") ||
+    lower.includes("/search?")
   );
 }
 
@@ -96,6 +105,13 @@ export function isBlockedPath(url: string) {
   const lower = decodeURIComponent(url.toLowerCase());
 
   return (
+    isSearchResultUrl(url) ||
+    lower.includes("/tag/") ||
+    lower.includes("/tags/") ||
+    lower.includes("/category/") ||
+    lower.includes("/categories/") ||
+    lower.includes("/author/") ||
+    lower.includes("/wp-json/") ||
     lower.includes("/staff") ||
     lower.includes("/coach") ||
     lower.includes("coach_staff") ||
@@ -166,8 +182,9 @@ export function getUrlDepth(url: string) {
 
 export function looksLikeArticleUrl(url: string) {
   try {
-    const u = new URL(url);
+    if (isSearchResultUrl(url)) return false;
 
+    const u = new URL(url);
     const path = decodeURIComponent(u.pathname.toLowerCase());
     const full = `${u.hostname}${path}${u.search}`.toLowerCase();
 
@@ -187,10 +204,7 @@ export function looksLikeArticleUrl(url: string) {
       return true;
     }
 
-    if (
-      /\?p=\d+/.test(full) ||
-      /\/\d{4}\/\d{1,2}\//.test(path)
-    ) {
+    if (/\?p=\d+/.test(full) || /\/\d{4}\/\d{1,2}\//.test(path)) {
       return true;
     }
 
@@ -218,16 +232,12 @@ export function looksLikeArticleUrl(url: string) {
       return getUrlDepth(url) >= 2;
     }
 
-    if (/202\d/.test(path) && getUrlDepth(url) >= 2) {
-      return true;
-    }
+    if (/202\d/.test(path) && getUrlDepth(url) >= 2) return true;
 
     const segments = path.split("/").filter(Boolean);
     const last = segments.at(-1) || "";
 
-    if (last.length >= 12 && getUrlDepth(url) >= 2) {
-      return true;
-    }
+    if (last.length >= 12 && getUrlDepth(url) >= 2) return true;
 
     return false;
   } catch {
@@ -238,7 +248,6 @@ export function looksLikeArticleUrl(url: string) {
 export function looksLikeSoccerExternalUrl(url: string) {
   try {
     const u = new URL(url);
-
     const host = u.hostname.toLowerCase();
     const path = decodeURIComponent(u.pathname.toLowerCase());
     const text = `${host} ${path}`;
@@ -299,9 +308,7 @@ export function buildSeedUrls(baseUrl: string) {
     urls.add(normalizeUrl(base.toString()));
 
     for (const path of CRAWL_ENTRY_PATHS) {
-      const u = new URL(path, base.origin);
-
-      urls.add(normalizeUrl(u.toString()));
+      urls.add(normalizeUrl(new URL(path, base.origin).toString()));
     }
 
     const aggressiveSeeds = [
@@ -383,9 +390,7 @@ export function buildSeedUrls(baseUrl: string) {
 
       for (const path of nested) {
         try {
-          const u = new URL(path, base.origin);
-
-          urls.add(normalizeUrl(u.toString()));
+          urls.add(normalizeUrl(new URL(path, base.origin).toString()));
         } catch {
           // ignore
         }
@@ -400,7 +405,6 @@ export function buildSeedUrls(baseUrl: string) {
 
 export function extractLinks(html: string, baseUrl: string) {
   const links = new Set<string>();
-
   const re = /href=["']([^"']+)["']/gi;
 
   let match: RegExpExecArray | null;
@@ -435,16 +439,10 @@ export function extractLinks(html: string, baseUrl: string) {
   return Array.from(links);
 }
 
-export function extractExternalCandidateLinks(
-  html: string,
-  baseUrl: string,
-) {
+export function extractExternalCandidateLinks(html: string, baseUrl: string) {
   const links = new Set<string>();
-
   const baseHost = getHost(baseUrl);
-
-  const re =
-    /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  const re = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
 
   let match: RegExpExecArray | null;
 
