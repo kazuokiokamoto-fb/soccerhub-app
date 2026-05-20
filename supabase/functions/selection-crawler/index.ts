@@ -16,6 +16,7 @@ import {
   buildSeedUrls,
   extractLinks,
   extractExternalCandidateLinks,
+  getUrlDepth,
   isBlockedFile,
   isBlockedPath,
   isInstagramUrl,
@@ -42,7 +43,42 @@ import {
 
 import { fetchHtml } from "./fetch.ts";
 import { saveCandidateEvent } from "./db.ts";
-import { buildSearchSeedUrls } from "./search.ts";
+
+function candidateSortScore(candidate: CandidatePage) {
+  const url = decodeURIComponent(candidate.pageUrl.toLowerCase());
+  const text = `${candidate.pageTitle} ${candidate.rawText}`;
+
+  let score = candidate.priority;
+
+  if (url.includes("selection")) score += 40;
+  if (url.includes("tryout")) score += 35;
+  if (url.includes("trial")) score += 30;
+  if (url.includes("recruit")) score += 25;
+  if (url.includes("entry")) score += 20;
+  if (url.includes("academy")) score += 20;
+  if (url.includes("junior-youth")) score += 25;
+  if (url.includes("u-13") || url.includes("u13")) score += 25;
+  if (url.includes("u-15") || url.includes("u15")) score += 20;
+  if (url.includes("news") || url.includes("info") || url.includes("topics")) score += 10;
+
+  if (text.includes("セレクション")) score += 35;
+  if (text.includes("選考会")) score += 30;
+  if (text.includes("トライアウト")) score += 30;
+  if (text.includes("選手募集")) score += 25;
+  if (text.includes("参加者募集")) score += 20;
+  if (text.includes("体験会")) score += 15;
+  if (text.includes("練習会")) score += 15;
+  if (text.includes("ジュニアユース")) score += 20;
+  if (text.includes("新中1") || text.includes("現小6")) score += 20;
+  if (text.includes("U-13") || text.includes("U13")) score += 20;
+  if (text.includes("申込") || text.includes("応募") || text.includes("締切")) score += 15;
+
+  const depth = getUrlDepth(candidate.pageUrl);
+  if (depth <= 1) score -= 40;
+  if (depth >= 3) score += 15;
+
+  return score;
+}
 
 serve(async (req) => {
   const url = new URL(req.url);
@@ -57,15 +93,7 @@ serve(async (req) => {
     Deno.env.get("SB_SERVICE_ROLE_KEY");
 
   if (!supabaseUrl || !serviceRoleKey) {
-    return Response.json(
-      {
-        ok: false,
-        error: "Missing env",
-      },
-      {
-        status: 500,
-      },
-    );
+    return Response.json({ ok: false, error: "Missing env" }, { status: 500 });
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
@@ -78,15 +106,7 @@ serve(async (req) => {
     .range(offset, offset);
 
   if (error) {
-    return Response.json(
-      {
-        ok: false,
-        error: error.message,
-      },
-      {
-        status: 500,
-      },
-    );
+    return Response.json({ ok: false, error: error.message }, { status: 500 });
   }
 
   let fetchedPages = 0;
@@ -114,7 +134,6 @@ serve(async (req) => {
 
     const debug = {
       queued: 0,
-      searchUrls: 0,
       fetched: 0,
       sitemapLinks: 0,
       internalLinks: 0,
@@ -127,21 +146,12 @@ serve(async (req) => {
     };
 
     try {
-      const normalSeedUrls = buildSeedUrls(source.base_url);
-
-      const searchSeeds = await buildSearchSeedUrls(source);
-      const searchSeedUrls = searchSeeds.map((item) => item.url);
-
-      const seedUrls = Array.from(
-        new Set([...searchSeedUrls, ...normalSeedUrls].map(normalizeUrl)),
-      );
-
+      const seedUrls = buildSeedUrls(source.base_url);
       const queue = [...seedUrls];
       const visited = new Set<string>();
       const candidates: CandidatePage[] = [];
 
       debug.queued = seedUrls.length;
-      debug.searchUrls = searchSeedUrls.length;
 
       while (queue.length > 0 && visited.size < MAX_PAGES_PER_SOURCE) {
         let pageUrl = normalizeUrl(queue.shift() || "");
@@ -204,10 +214,7 @@ serve(async (req) => {
           debug.sitemapLinks += sitemapLinks.length;
 
           for (const link of sitemapLinks) {
-            if (
-              !visited.has(link) &&
-              queue.length < MAX_PAGES_PER_SOURCE * 5
-            ) {
+            if (!visited.has(link) && queue.length < MAX_PAGES_PER_SOURCE * 5) {
               queue.push(link);
             }
           }
@@ -229,10 +236,7 @@ serve(async (req) => {
           debug.internalLinks += foundLinks.length;
 
           for (const link of foundLinks) {
-            if (
-              !visited.has(link) &&
-              queue.length < MAX_PAGES_PER_SOURCE * 5
-            ) {
+            if (!visited.has(link) && queue.length < MAX_PAGES_PER_SOURCE * 5) {
               queue.push(link);
             }
           }
@@ -290,7 +294,17 @@ serve(async (req) => {
           status: fetched.status,
           contentType: fetched.contentType,
           pdf,
-          priority: priority.priority,
+          priority: candidateSortScore({
+            pageUrl,
+            pageTitle,
+            rawText,
+            html,
+            status: fetched.status,
+            contentType: fetched.contentType,
+            pdf,
+            priority: priority.priority,
+            reason: priority.reason,
+          }),
           reason: priority.reason,
         });
 
@@ -326,10 +340,7 @@ serve(async (req) => {
 
       const selectedCandidates = Array.from(uniqueByDuplicateKey.values())
         .sort((a, b) => {
-          if (b.priority !== a.priority) {
-            return b.priority - a.priority;
-          }
-
+          if (b.priority !== a.priority) return b.priority - a.priority;
           return b.pageUrl.length - a.pageUrl.length;
         })
         .slice(0, MAX_EVENTS_PER_SOURCE);
@@ -343,9 +354,7 @@ serve(async (req) => {
           candidate,
         });
 
-        if (result.pageSaved) {
-          savedPages += 1;
-        }
+        if (result.pageSaved) savedPages += 1;
 
         if (result.inserted) {
           insertedEvents += 1;

@@ -10,6 +10,125 @@ import {
   looksLikeArticleUrl,
 } from "./url.ts";
 
+function getCurrentYears() {
+  const year = new Date().getFullYear();
+
+  return [
+    String(year),
+    String(year + 1),
+    `${year}年`,
+    `${year + 1}年`,
+    `${year}年度`,
+    `${year + 1}年度`,
+  ];
+}
+
+function includesCurrentOrNextYear(text: string) {
+  return getCurrentYears().some((value) => text.includes(value));
+}
+
+function hasEndedText(text: string) {
+  return (
+    text.includes("募集終了") ||
+    text.includes("受付終了") ||
+    text.includes("申込終了") ||
+    text.includes("応募終了") ||
+    text.includes("終了しました") ||
+    text.includes("締め切りました")
+  );
+}
+
+function hasSelectionIntent(text: string, lowerText: string) {
+  return (
+    text.includes("セレクション") ||
+    text.includes("選考会") ||
+    text.includes("トライアウト") ||
+    text.includes("GKセレクション") ||
+    text.includes("ゴールキーパーセレクション") ||
+    lowerText.includes("selection") ||
+    lowerText.includes("tryout") ||
+    lowerText.includes("trial")
+  );
+}
+
+function hasRecruitIntent(text: string) {
+  return (
+    text.includes("選手募集") ||
+    text.includes("参加者募集") ||
+    text.includes("団員募集") ||
+    text.includes("部員募集") ||
+    text.includes("メンバー募集") ||
+    text.includes("クラブ生募集") ||
+    text.includes("スクール生募集") ||
+    text.includes("アカデミー生募集") ||
+    text.includes("ジュニアユース募集") ||
+    text.includes("ユース募集") ||
+    text.includes("GK募集") ||
+    text.includes("新入団") ||
+    text.includes("入団") ||
+    text.includes("加入") ||
+    text.includes("新年度")
+  );
+}
+
+function hasTrainingIntent(text: string) {
+  return (
+    text.includes("体験会") ||
+    text.includes("練習会") ||
+    text.includes("練習参加") ||
+    text.includes("体験練習") ||
+    text.includes("体験練習会") ||
+    text.includes("無料体験会")
+  );
+}
+
+function hasCategoryContext(text: string) {
+  return (
+    text.includes("U-") ||
+    text.includes("Ｕ-") ||
+    text.includes("U13") ||
+    text.includes("U15") ||
+    text.includes("ジュニアユース") ||
+    text.includes("ユース") ||
+    text.includes("ジュニア") ||
+    text.includes("アカデミー") ||
+    text.includes("スクール") ||
+    text.includes("小学生") ||
+    text.includes("中学生") ||
+    text.includes("高校生") ||
+    text.includes("新中") ||
+    text.includes("現小") ||
+    text.includes("小学") ||
+    text.includes("中学") ||
+    text.includes("高校") ||
+    text.includes("年長") ||
+    text.includes("年中") ||
+    text.includes("GK") ||
+    text.includes("ゴールキーパー")
+  );
+}
+
+function hasApplicationContext(text: string) {
+  return (
+    text.includes("申込") ||
+    text.includes("申し込み") ||
+    text.includes("応募") ||
+    text.includes("エントリー") ||
+    text.includes("フォーム") ||
+    text.includes("締切")
+  );
+}
+
+function hasDateContext(text: string) {
+  return (
+    /\d{4}年\d{1,2}月\d{1,2}日/.test(text) ||
+    /\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2}/.test(text) ||
+    /\d{1,2}月\d{1,2}日/.test(text) ||
+    /\d{1,2}\/\d{1,2}/.test(text) ||
+    includesCurrentOrNextYear(text)
+  );
+}
+
 export function shouldExtractExternalLinks(params: {
   rawText: string;
   pageTitle: string;
@@ -18,27 +137,14 @@ export function shouldExtractExternalLinks(params: {
 }) {
   const { rawText, pageTitle, pageUrl, sourceName } = params;
   const text = `${sourceName} ${pageTitle} ${rawText}`;
+  const lowerText = text.toLowerCase();
 
   if (!looksLikeArticleUrl(pageUrl)) return false;
 
   return (
-    text.includes("セレクション") ||
-    text.includes("選考会") ||
-    text.includes("トライアウト") ||
-    text.includes("選手募集") ||
-    text.includes("参加者募集") ||
-    text.includes("募集") ||
-    text.includes("体験会") ||
-    text.includes("練習会") ||
-    text.includes("アカデミー") ||
-    text.includes("ジュニアユース") ||
-    text.includes("GK募集") ||
-    text.includes("スクール生募集") ||
-    text.includes("ジュニアユース募集") ||
-    text.includes("ユース募集") ||
-    text.includes("練習参加") ||
-    text.includes("体験練習") ||
-    text.includes("体験練習会") ||
+    hasSelectionIntent(text, lowerText) ||
+    hasRecruitIntent(text) ||
+    hasTrainingIntent(text) ||
     text.includes("詳しくはこちら") ||
     text.includes("詳細はこちら") ||
     text.includes("お申し込み") ||
@@ -64,95 +170,45 @@ export function isTargetPage(params: {
 
   const isArticle = isPdfUrl(pageUrl) || looksLikeArticleUrl(pageUrl);
 
-  const hasStrongKeyword =
-    text.includes("セレクション") ||
-    text.includes("選考会") ||
-    text.includes("トライアウト") ||
-    text.includes("GKセレクション") ||
-    text.includes("ゴールキーパーセレクション") ||
-    text.includes("募集") ||
-    text.includes("体験会") ||
-    text.includes("練習会") ||
-    text.includes("アカデミー") ||
-    text.includes("ジュニアユース") ||
-    text.includes("GK募集") ||
-    text.includes("新年度") ||
-    text.includes("2026年度") ||
-    text.includes("2027年度") ||
-    lowerText.includes("selection") ||
-    lowerText.includes("tryout");
+  const selectionIntent = hasSelectionIntent(text, lowerText);
+  const recruitIntent = hasRecruitIntent(text);
+  const trainingIntent = hasTrainingIntent(text);
+  const categoryContext = hasCategoryContext(text);
+  const applicationContext = hasApplicationContext(text);
+  const dateContext = hasDateContext(text);
 
-  const hasRecruitKeyword =
-    text.includes("選手募集") ||
-    text.includes("参加者募集") ||
-    text.includes("団員募集") ||
-    text.includes("部員募集") ||
-    text.includes("メンバー募集") ||
-    text.includes("クラブ生募集") ||
-    text.includes("スクール生募集") ||
-    text.includes("ジュニアユース募集") ||
-    text.includes("ユース募集") ||
-    text.includes("新入団") ||
-    text.includes("入団") ||
-    text.includes("加入");
-
-  const hasTrainingTrialIntent =
-    text.includes("練習参加") ||
-    text.includes("練習会") ||
-    text.includes("体験会") ||
-    text.includes("体験練習") ||
-    text.includes("体験練習会") ||
-    text.includes("無料体験会");
-
-  const hasCategoryContext =
-    text.includes("U-") ||
-    text.includes("Ｕ-") ||
-    text.includes("ジュニアユース") ||
-    text.includes("ユース") ||
-    text.includes("ジュニア") ||
-    text.includes("小学生") ||
-    text.includes("中学生") ||
-    text.includes("新中") ||
-    text.includes("小学") ||
-    text.includes("中学") ||
-    text.includes("高校") ||
-    text.includes("年長") ||
-    text.includes("年中");
-
-  const hasApplicationContext =
-    text.includes("申込") ||
-    text.includes("申し込み") ||
-    text.includes("応募") ||
-    text.includes("エントリー") ||
-    text.includes("フォーム") ||
-    text.includes("締切") ||
-    text.includes("募集");
-
-  const hasDate =
-    /\d{4}年\d{1,2}月\d{1,2}日/.test(text) ||
-    /\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2}/.test(text) ||
-    /\d{1,2}月\d{1,2}日/.test(text) ||
-    /\d{1,2}\/\d{1,2}/.test(text);
-
-  if (hasStrongKeyword && isArticle) return true;
+  if (selectionIntent && (isArticle || dateContext || applicationContext)) {
+    return true;
+  }
 
   if (
-    hasRecruitKeyword &&
-    hasCategoryContext &&
-    (isArticle || hasDate || hasApplicationContext)
+    recruitIntent &&
+    categoryContext &&
+    (isArticle || dateContext || applicationContext)
   ) {
     return true;
   }
 
   if (
-    hasTrainingTrialIntent &&
-    hasCategoryContext &&
-    (isArticle || hasDate || hasApplicationContext)
+    trainingIntent &&
+    categoryContext &&
+    (isArticle || dateContext || applicationContext)
   ) {
     return true;
   }
 
-  if (isPdfUrl(pageUrl) && (hasStrongKeyword || hasRecruitKeyword)) return true;
+  if (
+    text.includes("募集") &&
+    categoryContext &&
+    applicationContext &&
+    (isArticle || dateContext)
+  ) {
+    return true;
+  }
+
+  if (isPdfUrl(pageUrl) && (selectionIntent || recruitIntent || trainingIntent)) {
+    return true;
+  }
 
   return false;
 }
@@ -165,6 +221,7 @@ export function getPagePriority(params: {
   const { rawText, pageTitle, pageUrl } = params;
 
   const text = `${pageTitle} ${rawText}`;
+  const lowerText = text.toLowerCase();
 
   let score = 0;
   let reason = "general";
@@ -179,46 +236,41 @@ export function getPagePriority(params: {
     reason = "pdf";
   }
 
-  if (
-    text.includes("セレクション") ||
-    text.includes("選考会") ||
-    text.includes("トライアウト") ||
-    text.includes("GKセレクション") ||
-    text.includes("ゴールキーパーセレクション")
-  ) {
-    score += 40;
+  if (hasSelectionIntent(text, lowerText)) {
+    score += 50;
     reason = "selection_keyword";
   }
 
-  if (
-    text.includes("選手募集") ||
-    text.includes("参加者募集") ||
-    text.includes("募集") ||
-    text.includes("体験会") ||
-    text.includes("練習会") ||
-    text.includes("アカデミー") ||
-    text.includes("ジュニアユース")
-  ) {
-    score += 25;
+  if (hasRecruitIntent(text)) {
+    score += 35;
     reason = "recruit_keyword";
   }
 
-  if (
-    /\d{4}年\d{1,2}月\d{1,2}日/.test(text) ||
-    /\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2}/.test(text) ||
-    /\d{1,2}月\d{1,2}日/.test(text)
-  ) {
+  if (hasTrainingIntent(text)) {
+    score += 30;
+    reason = "training_keyword";
+  }
+
+  if (text.includes("募集") && hasCategoryContext(text)) {
+    score += 20;
+    reason = "broad_recruit_keyword";
+  }
+
+  if (hasDateContext(text)) {
     score += 20;
   }
 
-  if (
-    text.includes("U-") ||
-    text.includes("ジュニアユース") ||
-    text.includes("ユース") ||
-    text.includes("小学生") ||
-    text.includes("中学生")
-  ) {
-    score += 10;
+  if (hasCategoryContext(text)) {
+    score += 15;
+  }
+
+  if (hasApplicationContext(text)) {
+    score += 15;
+  }
+
+  if (hasEndedText(text)) {
+    score -= 80;
+    reason = "ended_text";
   }
 
   score += Math.min(getUrlDepth(pageUrl) * 5, 20);
@@ -278,10 +330,7 @@ export function normalizeSourceRank(source: SelectionSource, rawText: string) {
     return "女子";
   }
 
-  if (
-    text.includes("スクール") ||
-    text.includes("アカデミー")
-  ) {
+  if (text.includes("スクール") || text.includes("アカデミー")) {
     return "スクール";
   }
 

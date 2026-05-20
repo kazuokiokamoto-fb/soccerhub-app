@@ -1,12 +1,15 @@
 import {
   CRAWL_ENTRY_PATHS,
   MAX_EXTERNAL_LINKS_PER_PAGE,
+  SEARCH_KEYWORDS,
 } from "./constants.ts";
 
 export function normalizeUrl(url: string) {
   try {
     const u = new URL(url);
+
     u.hash = "";
+
     return u.toString();
   } catch {
     return url;
@@ -31,11 +34,13 @@ export function getHost(url: string) {
 
 export function isPdfUrl(url: string) {
   const lower = url.toLowerCase();
+
   return lower.endsWith(".pdf") || lower.includes(".pdf?");
 }
 
 export function isSitemapUrl(url: string) {
   const lower = url.toLowerCase();
+
   return lower.includes("sitemap") && lower.includes(".xml");
 }
 
@@ -162,7 +167,9 @@ export function getUrlDepth(url: string) {
 export function looksLikeArticleUrl(url: string) {
   try {
     const u = new URL(url);
-    const path = u.pathname.toLowerCase();
+
+    const path = decodeURIComponent(u.pathname.toLowerCase());
+    const full = `${u.hostname}${path}${u.search}`.toLowerCase();
 
     if (isThinPath(url)) return false;
 
@@ -174,23 +181,53 @@ export function looksLikeArticleUrl(url: string) {
       /\/blog\/.+/.test(path) ||
       /\/post\/.+/.test(path) ||
       /\/article\/.+/.test(path) ||
-      /\/pickup\/.+/.test(path)
+      /\/pickup\/.+/.test(path) ||
+      /\/archives\/.+/.test(path)
     ) {
       return true;
     }
 
     if (
-      (path.includes("selection") ||
-        path.includes("tryout") ||
-        path.includes("trial") ||
-        path.includes("recruit") ||
-        path.includes("entry")) &&
-      getUrlDepth(url) >= 2
+      /\?p=\d+/.test(full) ||
+      /\/\d{4}\/\d{1,2}\//.test(path)
     ) {
       return true;
     }
 
-    if (/\d{4}/.test(path) && getUrlDepth(url) >= 2) return true;
+    if (
+      path.includes("selection") ||
+      path.includes("tryout") ||
+      path.includes("trial") ||
+      path.includes("recruit") ||
+      path.includes("entry") ||
+      path.includes("join")
+    ) {
+      return getUrlDepth(url) >= 2;
+    }
+
+    if (
+      path.includes("academy") ||
+      path.includes("junior") ||
+      path.includes("youth") ||
+      path.includes("school") ||
+      path.includes("u13") ||
+      path.includes("u-13") ||
+      path.includes("u15") ||
+      path.includes("u-15")
+    ) {
+      return getUrlDepth(url) >= 2;
+    }
+
+    if (/202\d/.test(path) && getUrlDepth(url) >= 2) {
+      return true;
+    }
+
+    const segments = path.split("/").filter(Boolean);
+    const last = segments.at(-1) || "";
+
+    if (last.length >= 12 && getUrlDepth(url) >= 2) {
+      return true;
+    }
 
     return false;
   } catch {
@@ -201,8 +238,9 @@ export function looksLikeArticleUrl(url: string) {
 export function looksLikeSoccerExternalUrl(url: string) {
   try {
     const u = new URL(url);
+
     const host = u.hostname.toLowerCase();
-    const path = u.pathname.toLowerCase();
+    const path = decodeURIComponent(u.pathname.toLowerCase());
     const text = `${host} ${path}`;
 
     if (isSnsOrMapUrl(url)) return false;
@@ -223,6 +261,7 @@ export function looksLikeSoccerExternalUrl(url: string) {
       text.includes("u-") ||
       text.includes("u_") ||
       text.includes("u12") ||
+      text.includes("u13") ||
       text.includes("u15") ||
       text.includes("u18") ||
       text.includes("selection") ||
@@ -236,16 +275,82 @@ export function looksLikeSoccerExternalUrl(url: string) {
   }
 }
 
+function buildSiteSearchPaths(keyword: string) {
+  const q = encodeURIComponent(keyword);
+
+  return [
+    `/?s=${q}`,
+    `/search?q=${q}`,
+    `/news/?s=${q}`,
+    `/topics/?s=${q}`,
+    `/info/?s=${q}`,
+    `/information/?s=${q}`,
+    `/academy/?s=${q}`,
+    `/school/?s=${q}`,
+  ];
+}
+
 export function buildSeedUrls(baseUrl: string) {
   const urls = new Set<string>();
 
   try {
     const base = new URL(baseUrl);
+
     urls.add(normalizeUrl(base.toString()));
 
     for (const path of CRAWL_ENTRY_PATHS) {
       const u = new URL(path, base.origin);
+
       urls.add(normalizeUrl(u.toString()));
+    }
+
+    const aggressiveSeeds = [
+      "/selection/",
+      "/academy/selection/",
+      "/academy/news/",
+      "/academy/info/",
+      "/academy/topics/",
+      "/academy/recruit/",
+      "/junior-youth/",
+      "/junior_youth/",
+      "/jy/",
+      "/youth/",
+      "/u-13/",
+      "/u13/",
+      "/u-15/",
+      "/u15/",
+      "/tryout/",
+      "/trial/",
+      "/recruit/",
+      "/entry/",
+      "/taiken/",
+      "/experience/",
+      "/school/",
+      "/academy/",
+      "/news/",
+      "/topics/",
+      "/info/",
+      "/information/",
+      "/archives/",
+      "/blog/",
+    ];
+
+    for (const path of aggressiveSeeds) {
+      try {
+        urls.add(normalizeUrl(new URL(path, base.origin).toString()));
+      } catch {
+        // ignore
+      }
+    }
+
+    for (const keyword of SEARCH_KEYWORDS) {
+      for (const path of buildSiteSearchPaths(keyword)) {
+        try {
+          urls.add(normalizeUrl(new URL(path, base.origin).toString()));
+        } catch {
+          // ignore
+        }
+      }
     }
 
     if (base.pathname && base.pathname !== "/") {
@@ -264,29 +369,45 @@ export function buildSeedUrls(baseUrl: string) {
         `${cleanPath}join/`,
         `${cleanPath}member/`,
         `${cleanPath}school/`,
+        `${cleanPath}academy/`,
+        `${cleanPath}junior-youth/`,
+        `${cleanPath}youth/`,
+        `${cleanPath}u-13/`,
+        `${cleanPath}u13/`,
+        `${cleanPath}u-15/`,
+        `${cleanPath}u15/`,
+        `${cleanPath}archives/`,
+        `${cleanPath}blog/`,
         `${cleanPath}sitemap.xml`,
       ];
 
       for (const path of nested) {
-        const u = new URL(path, base.origin);
-        urls.add(normalizeUrl(u.toString()));
+        try {
+          const u = new URL(path, base.origin);
+
+          urls.add(normalizeUrl(u.toString()));
+        } catch {
+          // ignore
+        }
       }
     }
   } catch {
     urls.add(baseUrl);
   }
 
-  return Array.from(urls).slice(0, 50);
+  return Array.from(urls).slice(0, 120);
 }
 
 export function extractLinks(html: string, baseUrl: string) {
   const links = new Set<string>();
+
   const re = /href=["']([^"']+)["']/gi;
 
   let match: RegExpExecArray | null;
 
   while ((match = re.exec(html))) {
     const href = match[1];
+
     if (!href) continue;
     if (href.startsWith("#")) continue;
     if (href.startsWith("mailto:")) continue;
@@ -314,15 +435,22 @@ export function extractLinks(html: string, baseUrl: string) {
   return Array.from(links);
 }
 
-export function extractExternalCandidateLinks(html: string, baseUrl: string) {
+export function extractExternalCandidateLinks(
+  html: string,
+  baseUrl: string,
+) {
   const links = new Set<string>();
+
   const baseHost = getHost(baseUrl);
-  const re = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+
+  const re =
+    /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
 
   let match: RegExpExecArray | null;
 
   while ((match = re.exec(html))) {
     const href = match[1];
+
     const anchorText = String(match[2] || "")
       .replace(/<[^>]+>/g, " ")
       .replace(/\s+/g, " ")
@@ -357,7 +485,10 @@ export function extractExternalCandidateLinks(html: string, baseUrl: string) {
         anchorText.includes("アカデミー") ||
         anchorText.includes("スクール") ||
         anchorText.includes("クラブ") ||
-        anchorText.includes("チーム");
+        anchorText.includes("チーム") ||
+        anchorText.includes("ジュニアユース") ||
+        anchorText.includes("募集") ||
+        anchorText.includes("練習会");
 
       if (!looksLikeSoccerExternalUrl(abs) && !anchorLooksUseful) continue;
 

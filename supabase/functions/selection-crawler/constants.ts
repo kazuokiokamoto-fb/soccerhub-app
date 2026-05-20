@@ -1,5 +1,7 @@
+const CURRENT_YEAR = new Date().getFullYear();
+
 export const MAX_PAGES_PER_SOURCE = 120;
-export const MAX_EVENTS_PER_SOURCE = 5;
+export const MAX_EVENTS_PER_SOURCE = 15;
 export const MAX_EXTERNAL_LINKS_PER_PAGE = 8;
 export const MAX_EXTERNAL_HOSTS_PER_SOURCE = 8;
 export const MAX_EXTERNAL_DEPTH = 2;
@@ -46,9 +48,28 @@ export const SEARCH_KEYWORDS = [
   "U-13 セレクション",
   "新中1 セレクション",
   "選手募集",
+  "参加者募集",
   "体験練習会",
   "練習会",
-  "2026年度 募集",
+  "体験会",
+  "アカデミー",
+  "ジュニアユース",
+  "GK募集",
+  "新年度 募集",
+
+  `${CURRENT_YEAR}年度 募集`,
+  `${CURRENT_YEAR + 1}年度 募集`,
+  `${CURRENT_YEAR} セレクション`,
+  `${CURRENT_YEAR + 1} セレクション`,
+];
+
+export const YEAR_KEYWORDS = [
+  `${CURRENT_YEAR}`,
+  `${CURRENT_YEAR + 1}`,
+  `${CURRENT_YEAR}年度`,
+  `${CURRENT_YEAR + 1}年度`,
+  `${CURRENT_YEAR}年`,
+  `${CURRENT_YEAR + 1}年`,
 ];
 
 export const KEYWORDS = [
@@ -57,9 +78,11 @@ export const KEYWORDS = [
   "追加セレクション",
   "GKセレクション",
   "ゴールキーパーセレクション",
+
   "トライアウト",
   "tryout",
   "trial",
+
   "選手募集",
   "参加者募集",
   "団員募集",
@@ -72,35 +95,53 @@ export const KEYWORDS = [
   "ユース募集",
   "ジュニア募集",
   "GK募集",
+
   "募集",
   "新年度",
-  "2026年度",
-  "2027年度",
+
   "アカデミー",
   "academy",
+
   "ジュニアユース",
   "junior youth",
   "junior-youth",
+
   "新入団",
   "入団",
   "加入",
   "新加入",
+
   "応募",
   "申込",
   "申し込み",
   "エントリー",
   "entry",
   "join",
+
   "練習参加",
   "練習会",
   "体験練習",
   "体験練習会",
   "体験会",
   "無料体験会",
+
   "随時募集",
+
   "selection",
   "recruit",
   "recruitment",
+
+  "現小学6年",
+  "現小6",
+  "新中学1年",
+  "新中1",
+
+  "U-13",
+  "U13",
+  "U-15",
+  "U15",
+
+  ...YEAR_KEYWORDS,
 ];
 
 export const EXCLUDE_KEYWORDS = [

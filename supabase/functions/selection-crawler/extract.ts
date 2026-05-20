@@ -98,6 +98,12 @@ export function extractDate(text: string) {
 
     if (Number.isNaN(parsed.getTime())) return null;
 
+    const currentYear = today.getFullYear();
+
+    if (y < currentYear) {
+      return null;
+    }
+
     return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   }
 
@@ -294,7 +300,7 @@ export function buildSummary(text: string) {
     return text.slice(0, 180);
   }
 
-  return text.slice(Math.max(0, idx - 120), idx + 500).trim();
+  return text.slice(Math.max(0, idx - 200), idx + 900).trim();
 }
 
 export function normalizeDuplicateText(text?: string | null) {
@@ -326,6 +332,14 @@ export function displayStatusFromDates(
   deadline: string | null,
   rawText: string,
 ) {
+  if (
+    rawText.includes("募集終了") ||
+    rawText.includes("受付終了") ||
+    rawText.includes("終了しました")
+  ) {
+    return "申込終了";
+  }
+
   const today = new Date().toISOString().slice(0, 10);
 
   if (eventDate && eventDate < today) {

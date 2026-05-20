@@ -30,6 +30,6 @@ export type SearchResult = {
   title: string;
   url: string;
   snippet: string;
-  source: "bing";
+  source: "bing" | "generated";
   query: string;
 };
