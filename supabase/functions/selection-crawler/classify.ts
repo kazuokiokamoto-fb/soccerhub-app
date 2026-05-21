@@ -14,7 +14,7 @@ function hasAny(text: string, words: string[]) {
   return words.some((w) => text.includes(w));
 }
 
-const RECRUIT_INTENT_WORDS = [
+const STRONG_SELECTION_WORDS = [
   "セレクション",
   "追加セレクション",
   "最終セレクション",
@@ -28,11 +28,14 @@ const RECRUIT_INTENT_WORDS = [
   "入会セレクション",
   "選考会",
   "入団選考会",
-  "選考",
   "トライアウト",
   "tryout",
   "selection",
   "trial",
+];
+
+const RECRUIT_INTENT_WORDS = [
+  ...STRONG_SELECTION_WORDS,
 
   "練習会",
   "合同練習会",
@@ -55,7 +58,6 @@ const RECRUIT_INTENT_WORDS = [
   "参加者募集",
   "部員募集",
   "団員募集",
-  "会員募集",
   "メンバー募集",
   "クラブ生募集",
   "スクール生募集",
@@ -94,20 +96,6 @@ const RECRUIT_INTENT_WORDS = [
   "来年度入団希望",
   "入団希望者",
   "所属希望者",
-
-  "アカデミー",
-  "academy",
-  "サッカースクール",
-  "スペシャルクラス",
-  "ジュニアユース",
-  "ジュニアユースU15",
-  "ユースチーム",
-
-  "エントリー",
-  "応募受付",
-  "申込受付",
-  "受付開始",
-  "受付中",
 
   "チャレンジャー募集",
   "セレクション実施",
@@ -185,6 +173,32 @@ const TARGET_WORDS = [
   "ガールズ",
 ];
 
+const PLAYER_CONTEXT_WORDS = [
+  "入団",
+  "加入",
+  "新入団",
+  "現小学",
+  "現小",
+  "新中",
+  "現中",
+  "フィールドプレイヤー",
+  "フィールドプレーヤー",
+  "FP",
+  "GK",
+  "ＧＫ",
+  "ゴールキーパー",
+  "セレクション",
+  "練習会",
+  "体験練習",
+  "ジュニアユース",
+  "ユース",
+  "アカデミー",
+  "U-13",
+  "U13",
+  "U-15",
+  "U15",
+];
+
 const SCHEDULE_WORDS = [
   "開催日",
   "実施日",
@@ -260,6 +274,43 @@ const DETAIL_WORDS = [
   "中止",
 ];
 
+const NEGATIVE_WORDS = [
+  "試合結果",
+  "試合情報",
+  "MATCHDAY",
+  "マッチデー",
+  "観戦",
+  "チケット",
+  "ファンクラブ",
+  "SOCIO",
+  "パートナー",
+  "スポンサー",
+  "ホームタウン",
+  "イベント情報",
+  "イベント開催",
+  "グッズ",
+  "オンラインショップ",
+  "スクールコーチ",
+  "スタッフ募集",
+  "アルバイト募集",
+  "求人",
+  "採用",
+  "ボランティア",
+  "サポーター",
+  "サポートスタッフ",
+  "設営撤収",
+  "ゲーム",
+  "リーグ戦",
+  "クラブユース選手権",
+  "大会結果",
+  "活動報告",
+  "レポート",
+  "キャンペーン",
+  "SOCIO",
+  "年間チケット",
+  "OFFICIAL MEMBERSHIP",
+];
+
 function getCurrentYears() {
   const year = new Date().getFullYear();
 
@@ -279,14 +330,16 @@ function includesCurrentOrNextYear(text: string) {
 
 function hasOldYearOnly(text: string) {
   const currentYear = new Date().getFullYear();
-  const years = Array.from(text.matchAll(/20\d{2}/g)).map((m) => Number(m[0]));
+
+  const years = Array.from(text.matchAll(/20\d{2}/g)).map((m) =>
+    Number(m[0])
+  );
 
   if (years.length === 0) return false;
 
-  const hasCurrentOrFuture = years.some((y) => y >= currentYear);
-  const hasOld = years.some((y) => y < currentYear);
+  const newestYear = Math.max(...years);
 
-  return hasOld && !hasCurrentOrFuture;
+  return newestYear < currentYear;
 }
 
 function hasEndedText(text: string) {
@@ -300,6 +353,27 @@ function hasEndedText(text: string) {
   );
 }
 
+function hasNegativeContext(text: string) {
+  return hasAny(text, NEGATIVE_WORDS);
+}
+
+function isIndexLikeUrl(url: string) {
+  const normalized = url.endsWith("/") ? url : `${url}/`;
+
+  return (
+    normalized.endsWith("/news/") ||
+    normalized.endsWith("/match/") ||
+    normalized.endsWith("/academy/") ||
+    normalized.endsWith("/school/") ||
+    normalized.endsWith("/information/") ||
+    normalized.endsWith("/topics/") ||
+    normalized.endsWith("/info/") ||
+    normalized.includes("/category/") ||
+    normalized.includes("/tag/") ||
+    normalized.includes("/page/")
+  );
+}
+
 function hasSelectionIntent(text: string, lowerText: string) {
   return (
     hasAny(text, RECRUIT_INTENT_WORDS) ||
@@ -307,6 +381,15 @@ function hasSelectionIntent(text: string, lowerText: string) {
     lowerText.includes("tryout") ||
     lowerText.includes("trial") ||
     lowerText.includes("open training")
+  );
+}
+
+function hasStrongSelectionIntent(text: string, lowerText: string) {
+  return (
+    hasAny(text, STRONG_SELECTION_WORDS) ||
+    lowerText.includes("selection") ||
+    lowerText.includes("tryout") ||
+    lowerText.includes("trial")
   );
 }
 
@@ -331,6 +414,10 @@ function hasCategoryContext(text: string) {
   return hasAny(text, TARGET_WORDS);
 }
 
+function hasPlayerContext(text: string) {
+  return hasAny(text, PLAYER_CONTEXT_WORDS);
+}
+
 function hasApplicationContext(text: string) {
   return hasAny(text, APPLICATION_WORDS);
 }
@@ -350,13 +437,15 @@ export function isSelectionDetailPage(text: string) {
   const scheduleInfo = hasAny(text, SCHEDULE_WORDS);
   const applicationInfo = hasAny(text, APPLICATION_WORDS);
   const targetInfo = hasAny(text, TARGET_WORDS);
+  const playerInfo = hasAny(text, PLAYER_CONTEXT_WORDS);
   const venueInfo = hasAny(text, VENUE_WORDS);
   const detailInfo = hasAny(text, DETAIL_WORDS);
 
   return (
     recruitIntent &&
     (scheduleInfo || applicationInfo) &&
-    (targetInfo || venueInfo || detailInfo)
+    (targetInfo || playerInfo) &&
+    (venueInfo || detailInfo || applicationInfo)
   );
 }
 
@@ -398,15 +487,24 @@ export function isTargetPage(params: {
   if (isSitemapUrl(pageUrl)) return false;
   if (isBlockedFile(pageUrl)) return false;
   if (!isPdfUrl(pageUrl) && isBlockedPath(pageUrl)) return false;
+  if (!isPdfUrl(pageUrl) && isIndexLikeUrl(pageUrl)) return false;
   if (hasOldYearOnly(text)) return false;
 
-  const isArticle = isPdfUrl(pageUrl) || looksLikeArticleUrl(pageUrl);
-
+  const strongSelectionIntent = hasStrongSelectionIntent(text, lowerText);
   const selectionIntent = hasSelectionIntent(text, lowerText);
   const recruitIntent = hasRecruitIntent(text);
   const trainingIntent = hasTrainingIntent(text);
+  const playerContext = hasPlayerContext(text);
 
   if (!selectionIntent && !recruitIntent && !trainingIntent) {
+    return false;
+  }
+
+  if (hasNegativeContext(text) && !strongSelectionIntent) {
+    return false;
+  }
+
+  if (!strongSelectionIntent && !playerContext) {
     return false;
   }
 
@@ -414,7 +512,7 @@ export function isTargetPage(params: {
     return true;
   }
 
-  if (isPdfUrl(pageUrl) && (selectionIntent || recruitIntent || trainingIntent)) {
+  if (isPdfUrl(pageUrl) && (strongSelectionIntent || playerContext)) {
     return true;
   }
 
@@ -449,13 +547,13 @@ export function getPagePriority(params: {
     reason = "selection_detail_page";
   }
 
-  if (hasSelectionIntent(text, lowerText)) {
-    score += 50;
-    reason = "selection_keyword";
+  if (hasStrongSelectionIntent(text, lowerText)) {
+    score += 60;
+    reason = "strong_selection_keyword";
   }
 
   if (hasRecruitIntent(text)) {
-    score += 35;
+    score += 25;
     reason = "recruit_keyword";
   }
 
@@ -467,10 +565,16 @@ export function getPagePriority(params: {
   if (hasDateContext(text)) score += 20;
   if (hasCategoryContext(text)) score += 15;
   if (hasApplicationContext(text)) score += 15;
+  if (hasPlayerContext(text)) score += 20;
 
   if (hasOldYearOnly(text)) {
     score -= 120;
     reason = "old_year_only";
+  }
+
+  if (hasNegativeContext(text) && !hasStrongSelectionIntent(text, lowerText)) {
+    score -= 100;
+    reason = "negative_context";
   }
 
   if (hasEndedText(text)) {
@@ -480,9 +584,9 @@ export function getPagePriority(params: {
 
   score += Math.min(getUrlDepth(pageUrl) * 5, 20);
 
-  if (isThinPath(pageUrl)) {
+  if (isThinPath(pageUrl) || isIndexLikeUrl(pageUrl)) {
     score -= 100;
-    reason = "thin_path";
+    reason = "thin_or_index_path";
   }
 
   return {
