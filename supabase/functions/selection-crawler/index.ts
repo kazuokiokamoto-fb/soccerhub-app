@@ -44,6 +44,14 @@ import {
 import { fetchHtml } from "./fetch.ts";
 import { saveCandidateEvent } from "./db.ts";
 
+function sampleText(text: string, length = 260) {
+  return String(text ?? "").replace(/\s+/g, " ").trim().slice(0, length);
+}
+
+function pushSample(arr: any[], value: any, max = 12) {
+  if (arr.length < max) arr.push(value);
+}
+
 function candidateSortScore(candidate: CandidatePage) {
   const url = decodeURIComponent(candidate.pageUrl.toLowerCase());
   const text = `${candidate.pageTitle} ${candidate.rawText}`;
@@ -103,7 +111,7 @@ serve(async (req) => {
     .select("id,name,base_url,organization_type,source_rank,enabled")
     .eq("enabled", true)
     .order("created_at", { ascending: true })
-    .range(offset, offset);
+    .range(offset, offset + Math.max(limit, 1) - 1);
 
   if (error) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });
@@ -115,6 +123,7 @@ serve(async (req) => {
   let updatedEvents = 0;
 
   const errors: string[] = [];
+  const debugBySource: any[] = [];
 
   for (const source of (sources ?? []) as SelectionSource[]) {
     const { data: log } = await supabase
@@ -133,6 +142,8 @@ serve(async (req) => {
     let sourceUpdatedEvents = 0;
 
     const debug = {
+      sourceName: source.name,
+      baseUrl: source.base_url,
       queued: 0,
       fetched: 0,
       sitemapLinks: 0,
@@ -143,6 +154,14 @@ serve(async (req) => {
       candidates: 0,
       uniqueCandidates: 0,
       selected: 0,
+      saved: 0,
+      inserted: 0,
+      updated: 0,
+      targetRejectedSamples: [],
+      priorityRejectedSamples: [],
+      candidateSamples: [],
+      selectedSamples: [],
+      saveErrors: [],
     };
 
     try {
@@ -182,7 +201,12 @@ serve(async (req) => {
 
         try {
           fetched = await fetchHtml(pageUrl);
-        } catch {
+        } catch (e) {
+          pushSample(debug.targetRejectedSamples, {
+            pageUrl,
+            reason: "fetch_failed",
+            error: e instanceof Error ? e.message : String(e),
+          });
           continue;
         }
 
@@ -272,6 +296,11 @@ serve(async (req) => {
 
         if (!target) {
           debug.targetRejected += 1;
+          pushSample(debug.targetRejectedSamples, {
+            pageUrl,
+            pageTitle,
+            textSample: sampleText(rawText),
+          });
           continue;
         }
 
@@ -283,10 +312,17 @@ serve(async (req) => {
 
         if (priority.priority <= 0) {
           debug.priorityRejected += 1;
+          pushSample(debug.priorityRejectedSamples, {
+            pageUrl,
+            pageTitle,
+            priority: priority.priority,
+            reason: priority.reason,
+            textSample: sampleText(rawText),
+          });
           continue;
         }
 
-        candidates.push({
+        const candidate = {
           pageUrl,
           pageTitle,
           rawText,
@@ -306,9 +342,18 @@ serve(async (req) => {
             reason: priority.reason,
           }),
           reason: priority.reason,
-        });
+        };
+
+        candidates.push(candidate);
 
         debug.candidates += 1;
+        pushSample(debug.candidateSamples, {
+          pageUrl,
+          pageTitle,
+          priority: candidate.priority,
+          reason: candidate.reason,
+          textSample: sampleText(rawText),
+        });
       }
 
       const uniqueByDuplicateKey = new Map<string, CandidatePage>();
@@ -348,22 +393,47 @@ serve(async (req) => {
       debug.selected = selectedCandidates.length;
 
       for (const candidate of selectedCandidates) {
-        const result = await saveCandidateEvent({
-          supabase,
-          source,
-          candidate,
+        pushSample(debug.selectedSamples, {
+          pageUrl: candidate.pageUrl,
+          pageTitle: candidate.pageTitle,
+          priority: candidate.priority,
+          reason: candidate.reason,
+          textSample: sampleText(candidate.rawText),
         });
 
-        if (result.pageSaved) savedPages += 1;
+        try {
+          const result = await saveCandidateEvent({
+            supabase,
+            source,
+            candidate,
+          });
 
-        if (result.inserted) {
-          insertedEvents += 1;
-          sourceInsertedEvents += 1;
-        }
+          if (result.pageSaved) {
+            savedPages += 1;
+            debug.saved += 1;
+          }
 
-        if (result.updated) {
-          updatedEvents += 1;
-          sourceUpdatedEvents += 1;
+          if (result.inserted) {
+            insertedEvents += 1;
+            sourceInsertedEvents += 1;
+            debug.inserted += 1;
+          }
+
+          if (result.updated) {
+            updatedEvents += 1;
+            sourceUpdatedEvents += 1;
+            debug.updated += 1;
+          }
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+
+          pushSample(debug.saveErrors, {
+            pageUrl: candidate.pageUrl,
+            pageTitle: candidate.pageTitle,
+            error: message,
+          });
+
+          errors.push(`${source.name}: ${candidate.pageUrl}: ${message}`);
         }
       }
 
@@ -379,7 +449,7 @@ serve(async (req) => {
           .from("selection_fetch_logs")
           .update({
             finished_at: new Date().toISOString(),
-            success: true,
+            success: errors.length === 0,
             fetched_pages: sourceFetchedPages,
             inserted_events: sourceInsertedEvents,
             updated_events: sourceUpdatedEvents,
@@ -418,18 +488,21 @@ serve(async (req) => {
           .eq("id", logId);
       }
     }
+
+    debugBySource.push(debug);
   }
 
   return Response.json({
     ok: errors.length === 0,
     sourceCount: sources?.length ?? 0,
     offset,
-    nextOffset: sources?.length ? offset + 1 : null,
-    remainingLimit: Math.max(limit - 1, 0),
+    nextOffset: sources?.length ? offset + sources.length : null,
+    remainingLimit: Math.max(limit - (sources?.length ?? 0), 0),
     fetchedPages,
     savedPages,
     insertedEvents,
     updatedEvents,
     errors,
+    debugBySource,
   });
 });
