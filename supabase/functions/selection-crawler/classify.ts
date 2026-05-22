@@ -518,8 +518,15 @@ export function isTargetPage(params: {
 
   if (
     hasNegativeContext(titleText) &&
-    !strongSelectionIntent &&
     !bodyLooksStrong
+  ) {
+    return false;
+  }
+
+  if (
+    hasNegativeContext(text) &&
+    !bodyLooksStrong &&
+    !isPdfUrl(pageUrl)
   ) {
     return false;
   }
