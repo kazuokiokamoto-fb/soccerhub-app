@@ -124,8 +124,6 @@ export function isBlockedPath(url: string) {
     lower.includes("/schedule") ||
     lower.includes("/result") ||
     lower.includes("/standings") ||
-    lower.includes("/ticket") ||
-    lower.includes("/goods") ||
     lower.includes("/privacy") ||
     lower.includes("/company") ||
     lower.includes("/feed") ||
@@ -137,7 +135,21 @@ export function isBlockedPath(url: string) {
     lower.includes("visit-school") ||
     lower.includes("visit_school") ||
     lower.includes("school-visit") ||
-    lower.includes("school_visit")
+    lower.includes("school_visit") ||
+    lower.includes("/ticket") ||
+    lower.includes("/goods") ||
+    lower.includes("/shop") ||
+    lower.includes("/samurai") ||
+    lower.includes("/nadeshiko") ||
+    lower.includes("/national") ||
+    lower.includes("/tv") ||
+    lower.includes("/movie") ||
+    lower.includes("/photo") ||
+    lower.includes("/fan") ||
+    lower.includes("/support") ||
+    lower.includes("/ranking") ||
+    lower.includes("/museum") ||
+    lower.includes("/history")
   );
 }
 
@@ -405,12 +417,18 @@ export function buildSeedUrls(baseUrl: string) {
 
 export function extractLinks(html: string, baseUrl: string) {
   const links = new Set<string>();
-  const re = /href=["']([^"']+)["']/gi;
+  const re = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
 
   let match: RegExpExecArray | null;
 
   while ((match = re.exec(html))) {
     const href = match[1];
+
+    const anchorText = String(match[2] || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
 
     if (!href) continue;
     if (href.startsWith("#")) continue;
@@ -429,6 +447,59 @@ export function extractLinks(html: string, baseUrl: string) {
 
       if (!pdf && !sitemap && !sameHost(abs, baseUrl)) continue;
       if (!pdf && !sitemap && isBlockedPath(abs)) continue;
+
+      const decoded = decodeURIComponent(abs.toLowerCase());
+
+      const looksImportant =
+        decoded.includes("selection") ||
+        decoded.includes("tryout") ||
+        decoded.includes("trial") ||
+        decoded.includes("recruit") ||
+        decoded.includes("entry") ||
+        decoded.includes("join") ||
+        decoded.includes("academy") ||
+        decoded.includes("school") ||
+        decoded.includes("junior") ||
+        decoded.includes("youth") ||
+        decoded.includes("u13") ||
+        decoded.includes("u-13") ||
+        decoded.includes("u15") ||
+        decoded.includes("u-15") ||
+        decoded.includes("member") ||
+        decoded.includes("taiken") ||
+        decoded.includes("experience") ||
+        decoded.includes("news") ||
+        decoded.includes("topics") ||
+        decoded.includes("info");
+
+      const anchorLooksImportant =
+        anchorText.includes("セレクション") ||
+        anchorText.includes("選考会") ||
+        anchorText.includes("募集") ||
+        anchorText.includes("体験") ||
+        anchorText.includes("練習会") ||
+        anchorText.includes("ジュニアユース") ||
+        anchorText.includes("アカデミー") ||
+        anchorText.includes("スクール") ||
+        anchorText.includes("u-13") ||
+        anchorText.includes("u13") ||
+        anchorText.includes("u-15") ||
+        anchorText.includes("u15") ||
+        anchorText.includes("新中1") ||
+        anchorText.includes("現小6") ||
+        anchorText.includes("入団") ||
+        anchorText.includes("追加") ||
+        anchorText.includes("エントリー") ||
+        anchorText.includes("新中学1年") ||
+        anchorText.includes("現小学6年") ||
+        anchorText.includes("u-12") ||
+        anchorText.includes("u12") ||
+        anchorText.includes("u-18") ||
+        anchorText.includes("u18");
+
+      if (!pdf && !sitemap && !looksImportant && !anchorLooksImportant) {
+        continue;
+      }
 
       links.add(abs);
     } catch {
