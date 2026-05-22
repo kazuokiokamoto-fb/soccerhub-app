@@ -357,6 +357,14 @@ function hasNegativeContext(text: string) {
   return hasAny(text, NEGATIVE_WORDS);
 }
 
+function hasStrongRecruitDetail(text: string) {
+  return (
+    hasAny(text, RECRUIT_INTENT_WORDS) &&
+    (hasAny(text, SCHEDULE_WORDS) || hasAny(text, APPLICATION_WORDS)) &&
+    (hasAny(text, TARGET_WORDS) || hasAny(text, PLAYER_CONTEXT_WORDS))
+  );
+}
+
 function isIndexLikeUrl(url: string) {
   const normalized = url.endsWith("/") ? url : `${url}/`;
 
@@ -485,7 +493,7 @@ export function isTargetPage(params: {
 
   if (isInstagramUrl(pageUrl)) return false;
   if (isSitemapUrl(pageUrl)) return false;
-  if (isBlockedFile(pageUrl)) return false;
+  if (!isPdfUrl(pageUrl) && isBlockedFile(pageUrl)) return false;
   if (!isPdfUrl(pageUrl) && isBlockedPath(pageUrl)) return false;
   if (!isPdfUrl(pageUrl) && isIndexLikeUrl(pageUrl)) return false;
   if (hasOldYearOnly(text)) return false;
@@ -495,20 +503,30 @@ export function isTargetPage(params: {
   const recruitIntent = hasRecruitIntent(text);
   const trainingIntent = hasTrainingIntent(text);
   const playerContext = hasPlayerContext(text);
+  const bodyLooksStrong = hasStrongRecruitDetail(text);
+  const titleText = `${sourceName} ${pageTitle}`;
 
   if (!selectionIntent && !recruitIntent && !trainingIntent) {
     return false;
   }
 
-  if (hasNegativeContext(text) && !strongSelectionIntent) {
+  if (
+    hasNegativeContext(titleText) &&
+    !strongSelectionIntent &&
+    !bodyLooksStrong
+  ) {
     return false;
   }
 
-  if (!strongSelectionIntent && !playerContext) {
+  if (
+    !strongSelectionIntent &&
+    !playerContext &&
+    !bodyLooksStrong
+  ) {
     return false;
   }
 
-  if (isSelectionDetailPage(text)) {
+  if (isSelectionDetailPage(text) || bodyLooksStrong) {
     return true;
   }
 
