@@ -149,6 +149,19 @@ export function isBlockedPath(url: string) {
     lower.includes("/support") ||
     lower.includes("/ranking") ||
     lower.includes("/museum") ||
+    lower.includes("/national-team") ||
+    lower.includes("/national_team") ||
+    lower.includes("/japan") ||
+    lower.includes("/samuraiblue") ||
+    lower.includes("/nadeshiko") ||
+    lower.includes("/futsal") ||
+    lower.includes("/beachsoccer") ||
+    lower.includes("/referee") ||
+    lower.includes("/committee") ||
+    lower.includes("/about-jfa") ||
+    lower.includes("/association") ||
+    lower.includes("/grass_roots") ||
+    lower.includes("/grassroots") ||
     lower.includes("/history")
   );
 }
@@ -507,7 +520,7 @@ export function extractLinks(html: string, baseUrl: string) {
     }
   }
 
-  return Array.from(links);
+  return Array.from(links).slice(0, 300);
 }
 
 export function extractExternalCandidateLinks(html: string, baseUrl: string) {
