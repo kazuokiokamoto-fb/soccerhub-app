@@ -525,7 +525,7 @@ export function isTargetPage(params: {
 
   if (
     hasNegativeContext(text) &&
-    !bodyLooksStrong &&
+    !isSelectionDetailPage(text) &&
     !isPdfUrl(pageUrl)
   ) {
     return false;
@@ -603,9 +603,11 @@ export function getPagePriority(params: {
     reason = "old_year_only";
   }
 
-  if (hasNegativeContext(text) && !hasStrongSelectionIntent(text, lowerText)) {
-    score -= 100;
-    reason = "negative_context";
+  if (hasNegativeContext(text) && !isSelectionDetailPage(text)) {
+    return {
+      priority: -999,
+      reason: "negative_context",
+    };
   }
 
   if (hasEndedText(text)) {
