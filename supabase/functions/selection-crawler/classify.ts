@@ -495,8 +495,14 @@ export function isTargetPage(params: {
   if (isSitemapUrl(pageUrl)) return false;
   if (!isPdfUrl(pageUrl) && isBlockedFile(pageUrl)) return false;
   if (!isPdfUrl(pageUrl) && isBlockedPath(pageUrl)) return false;
-  if (!isPdfUrl(pageUrl) && isIndexLikeUrl(pageUrl)) return false;
-  if (hasOldYearOnly(text)) return false;
+  if (
+    !isPdfUrl(pageUrl) &&
+    isIndexLikeUrl(pageUrl) &&
+    !hasStrongRecruitDetail(text)
+  ) {
+    return false;
+  }
+  if (hasOldYearOnly(`${pageTitle} ${rawText.slice(0, 2500)}`)) return false;
 
   const strongSelectionIntent = hasStrongSelectionIntent(text, lowerText);
   const selectionIntent = hasSelectionIntent(text, lowerText);
@@ -585,7 +591,7 @@ export function getPagePriority(params: {
   if (hasApplicationContext(text)) score += 15;
   if (hasPlayerContext(text)) score += 20;
 
-  if (hasOldYearOnly(text)) {
+  if (hasOldYearOnly(`${pageTitle} ${rawText.slice(0, 2500)}`)) {
     score -= 120;
     reason = "old_year_only";
   }
