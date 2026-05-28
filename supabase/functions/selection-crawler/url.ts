@@ -184,8 +184,6 @@ export function isThinPath(url: string) {
       "/academy/entry/",
       "/academy/trial/",
       "/academy/tryout/",
-      "/school/",
-      "/academy/",
       "/news/",
       "/topics/",
       "/info/",
@@ -216,7 +214,7 @@ export function looksLikeArticleUrl(url: string) {
 
     if (isThinPath(url)) return false;
 
-    if (
+    return (
       /\/news\/.+/.test(path) ||
       /\/topics\/.+/.test(path) ||
       /\/info\/.+/.test(path) ||
@@ -225,43 +223,11 @@ export function looksLikeArticleUrl(url: string) {
       /\/post\/.+/.test(path) ||
       /\/article\/.+/.test(path) ||
       /\/pickup\/.+/.test(path) ||
-      /\/archives\/.+/.test(path)
-    ) {
-      return true;
-    }
-
-    if (
+      /\/archives\/.+/.test(path) ||
       /\?p=\d+/.test(full) ||
       /\/\d{4}\/\d{1,2}\//.test(path) ||
       /\/\d{5,}\/?$/.test(path)
-    ) {
-      return true;
-    }
-
-    if (
-      path.includes("selection") ||
-      path.includes("tryout") ||
-      path.includes("trial") ||
-      path.includes("recruit") ||
-      path.includes("entry") ||
-      path.includes("join")
-    ) {
-      return getUrlDepth(url) >= 2;
-    }
-
-    if (
-      path.includes("academy") ||
-      path.includes("junior") ||
-      path.includes("youth") ||
-      path.includes("u13") ||
-      path.includes("u-13") ||
-      path.includes("u15") ||
-      path.includes("u-15")
-    ) {
-      return getUrlDepth(url) >= 2;
-    }
-
-    return false;
+    );
   } catch {
     return false;
   }
@@ -282,15 +248,11 @@ export function looksLikeSoccerExternalUrl(url: string) {
       text.includes("soccer") ||
       text.includes("football") ||
       text.includes("fc") ||
-      text.includes("futsal") ||
       text.includes("academy") ||
       text.includes("school") ||
       text.includes("club") ||
-      text.includes("jsc") ||
       text.includes("junior") ||
       text.includes("youth") ||
-      text.includes("u-") ||
-      text.includes("u_") ||
       text.includes("u12") ||
       text.includes("u13") ||
       text.includes("u15") ||
@@ -357,7 +319,6 @@ function linkPriority(url: string) {
 
   if (isThinPath(lower)) score -= 80;
 
-  if (lower.includes("/school/")) score -= 30;
   if (lower.includes("/ticket")) score -= 100;
   if (lower.includes("/fan")) score -= 100;
   if (lower.includes("/goods")) score -= 100;
@@ -467,7 +428,6 @@ export function buildSeedUrls(baseUrl: string) {
 
 export function extractLinks(html: string, baseUrl: string) {
   const links = new Set<string>();
-
   const re = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
 
   let match: RegExpExecArray | null;
@@ -509,6 +469,7 @@ export function extractLinks(html: string, baseUrl: string) {
         decoded.includes("entry") ||
         decoded.includes("join") ||
         decoded.includes("academy") ||
+        decoded.includes("school") ||
         decoded.includes("junior") ||
         decoded.includes("youth") ||
         decoded.includes("u13") ||
@@ -531,6 +492,7 @@ export function extractLinks(html: string, baseUrl: string) {
         anchorText.includes("練習会") ||
         anchorText.includes("ジュニアユース") ||
         anchorText.includes("アカデミー") ||
+        anchorText.includes("スクール") ||
         anchorText.includes("u-13") ||
         anchorText.includes("u13") ||
         anchorText.includes("u-15") ||
@@ -571,7 +533,6 @@ export function extractLinks(html: string, baseUrl: string) {
 export function extractExternalCandidateLinks(html: string, baseUrl: string) {
   const links = new Set<string>();
   const baseHost = getHost(baseUrl);
-
   const re = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
 
   let match: RegExpExecArray | null;
