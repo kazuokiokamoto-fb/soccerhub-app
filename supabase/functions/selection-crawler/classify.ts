@@ -31,7 +31,6 @@ const STRONG_SELECTION_WORDS = [
   "FPセレクション",
   "ゴールキーパーセレクション",
   "入団セレクション",
-  "入会セレクション",
   "選考会",
   "入団選考会",
   "トライアウト",
@@ -46,12 +45,9 @@ const RECRUIT_INTENT_WORDS = [
   "練習参加",
   "体験練習",
   "体験練習会",
-  "練習体験",
   "体験会",
-  "無料体験",
   "無料体験会",
   "セレクション練習会",
-  "トレーニング体験",
   "GK練習会",
   "open training",
   "選手募集",
@@ -63,10 +59,8 @@ const RECRUIT_INTENT_WORDS = [
   "アカデミー生募集",
   "ジュニアユース募集",
   "ユース募集",
-  "ゴールキーパー募集",
   "GK募集",
   "FP募集",
-  "育成選手募集",
   "追加募集",
   "新規募集",
   "募集開始",
@@ -86,7 +80,6 @@ const RECRUIT_INTENT_WORDS = [
   "次年度",
   "活動希望選手",
   "活動希望者",
-  "希望選手",
   "来年度入団希望",
   "入団希望者",
   "所属希望者",
@@ -96,8 +89,6 @@ const RECRUIT_INTENT_WORDS = [
 ];
 
 const TARGET_WORDS = [
-  "年長",
-  "年中",
   "小学",
   "小学生",
   "新小学",
@@ -143,9 +134,7 @@ const TARGET_WORDS = [
   "GK",
   "ＧＫ",
   "ゴールキーパー",
-  "キーパー",
   "女子",
-  "女子選手",
   "レディース",
   "ガールズ",
 ];
@@ -179,12 +168,10 @@ const SCHEDULE_WORDS = [
   "実施日",
   "日時",
   "日程",
-  "スケジュール",
   "開催日時",
   "開催",
   "実施",
   "時間",
-  "開始",
   "受付",
   "受付開始",
   "受付時間",
@@ -264,7 +251,6 @@ const NEGATIVE_WORDS = [
   "イベント開催",
   "グッズ",
   "オンラインショップ",
-  "スクールコーチ",
   "スタッフ募集",
   "アルバイト募集",
   "求人",
@@ -354,6 +340,23 @@ function normalizeText(text: string) {
     .trim();
 }
 
+function buildImportantText(pageTitle: string, rawText: string, sourceName = "") {
+  const title = normalizeText(`${sourceName} ${pageTitle}`);
+  const body = normalizeText(rawText);
+
+  const keywordWindows: string[] = [];
+  const keywords = [...STRONG_SELECTION_WORDS, "募集", "申込", "応募", "エントリー"];
+
+  for (const keyword of keywords) {
+    const index = body.indexOf(keyword);
+    if (index >= 0) {
+      keywordWindows.push(body.slice(Math.max(0, index - 350), index + 1200));
+    }
+  }
+
+  return normalizeText(`${title} ${body.slice(0, 2500)} ${keywordWindows.join(" ")}`);
+}
+
 function isHttpErrorPage(pageTitle: string, rawText: string) {
   const text = `${pageTitle} ${rawText}`.toLowerCase();
 
@@ -364,7 +367,9 @@ function isHttpErrorPage(pageTitle: string, rawText: string) {
     text.includes("forbidden") ||
     pageTitle.includes("404") ||
     pageTitle.includes("403") ||
-    pageTitle.includes("ページエラー")
+    pageTitle.includes("ページエラー") ||
+    pageTitle.includes("お探しのページは見つかりません") ||
+    pageTitle.includes("ページが見つかりません")
   );
 }
 
@@ -375,6 +380,7 @@ function isTopTitle(pageTitle: string) {
     title.includes(" top") ||
     title.endsWith("top") ||
     title.includes("トップ") ||
+    title.includes("ホーム") ||
     title.includes("top｜") ||
     title.includes("top |")
   );
@@ -390,7 +396,8 @@ function isStrongArticleUrl(url: string) {
     /\/academy\/news\/\d+/.test(lower) ||
     /\/academy\/info\/\d+/.test(lower) ||
     /\/academy\/topics\/\d+/.test(lower) ||
-    /\/\d{5,}\/?$/.test(lower)
+    /\/\d{5,}\/?$/.test(lower) ||
+    /[?&]p=\d+/.test(lower)
   );
 }
 
@@ -443,8 +450,7 @@ function isIndexLikeUrl(url: string) {
   const normalized = lower.endsWith("/") ? lower : `${lower}/`;
 
   try {
-    const u = new URL(normalized);
-    const path = u.pathname;
+    const path = new URL(normalized).pathname;
 
     if (
       path === "/" ||
@@ -511,40 +517,39 @@ export function getSelectionKeywordStats(params: {
   const { rawText, pageTitle, pageUrl, sourceName = "" } = params;
 
   const titleText = normalizeText(`${sourceName} ${pageTitle}`);
-  const bodyText = normalizeText(rawText);
-  const allText = `${titleText} ${bodyText}`;
-  const lowerAllText = allText.toLowerCase();
+  const importantText = buildImportantText(pageTitle, rawText, sourceName);
+  const lowerImportantText = importantText.toLowerCase();
 
   const strongCount =
-    countMatches(allText, STRONG_SELECTION_WORDS) +
-    countMatches(lowerAllText, ["selection", "tryout", "trial"]);
+    countMatches(importantText, STRONG_SELECTION_WORDS) +
+    countMatches(lowerImportantText, ["selection", "tryout", "trial"]);
 
-  const recruitCount = countMatches(allText, RECRUIT_INTENT_WORDS);
-  const targetCount = countMatches(allText, TARGET_WORDS);
-  const playerCount = countMatches(allText, PLAYER_CONTEXT_WORDS);
-  const scheduleCount = countMatches(allText, SCHEDULE_WORDS);
-  const applicationCount = countMatches(allText, APPLICATION_WORDS);
-  const venueCount = countMatches(allText, VENUE_WORDS);
-  const detailCount = countMatches(allText, DETAIL_WORDS);
-  const negativeCount = countMatches(allText, NEGATIVE_WORDS);
+  const recruitCount = countMatches(importantText, RECRUIT_INTENT_WORDS);
+  const targetCount = countMatches(importantText, TARGET_WORDS);
+  const playerCount = countMatches(importantText, PLAYER_CONTEXT_WORDS);
+  const scheduleCount = countMatches(importantText, SCHEDULE_WORDS);
+  const applicationCount = countMatches(importantText, APPLICATION_WORDS);
+  const venueCount = countMatches(importantText, VENUE_WORDS);
+  const detailCount = countMatches(importantText, DETAIL_WORDS);
 
   const titleStrongCount =
     countMatches(titleText, STRONG_SELECTION_WORDS) +
     countMatches(titleText.toLowerCase(), ["selection", "tryout", "trial"]);
 
   const titleRecruitCount = countMatches(titleText, RECRUIT_INTENT_WORDS);
+  const negativeCount = countMatches(`${titleText} ${importantText}`, NEGATIVE_WORDS);
 
   const keywordCount =
-    strongCount * 3 +
+    titleStrongCount * 10 +
+    titleRecruitCount * 5 +
+    strongCount * 4 +
     recruitCount * 2 +
     targetCount +
     playerCount +
     scheduleCount +
     applicationCount +
     venueCount +
-    detailCount +
-    titleStrongCount * 4 +
-    titleRecruitCount * 3;
+    detailCount;
 
   return {
     keywordCount,
@@ -559,8 +564,8 @@ export function getSelectionKeywordStats(params: {
     negativeCount,
     titleStrongCount,
     titleRecruitCount,
-    hasDate: hasDateContext(allText),
-    hasEnded: hasEndedText(allText),
+    hasDate: hasDateContext(importantText),
+    hasEnded: hasEndedText(importantText),
     hasOldYearOnly: hasOldYearOnly(`${pageTitle} ${rawText.slice(0, 2500)}`),
     isHttpErrorPage: isHttpErrorPage(pageTitle, rawText),
     isGoodDetailUrl: isGoodDetailUrl(pageUrl),
@@ -640,33 +645,19 @@ export function isTargetPage(params: {
   if (stats.hasOldYearOnly) return false;
   if (stats.hasEnded && stats.strongCount === 0) return false;
 
-  const text = `${sourceName} ${pageTitle} ${rawText}`;
+  if (stats.negativeCount >= 1 && stats.strongCount === 0) return false;
 
-  if (stats.negativeCount >= 1 && !isSelectionDetailPage(text)) {
-    return false;
-  }
+  if (stats.titleStrongCount >= 1) return true;
 
-  if (stats.isStrongArticleUrl && stats.strongCount >= 1) {
-    return true;
-  }
+  if (stats.isStrongArticleUrl && stats.strongCount >= 1) return true;
 
-  if (stats.isGoodDetailUrl && stats.strongCount >= 1) {
-    return true;
-  }
+  if (stats.isGoodDetailUrl && stats.strongCount >= 1) return true;
 
   if (
     stats.isGoodDetailUrl &&
     stats.recruitCount >= 2 &&
     (stats.targetCount >= 1 || stats.playerCount >= 1) &&
     (stats.scheduleCount >= 1 || stats.applicationCount >= 1 || stats.hasDate)
-  ) {
-    return true;
-  }
-
-  if (
-    stats.recruitCount >= 2 &&
-    (stats.scheduleCount >= 1 || stats.applicationCount >= 1 || stats.hasDate) &&
-    (stats.targetCount >= 1 || stats.playerCount >= 1)
   ) {
     return true;
   }
@@ -686,68 +677,20 @@ export function getPagePriority(params: {
   const stats = getSelectionKeywordStats(params);
 
   if (stats.isHttpErrorPage) {
-    return {
-      priority: -999,
-      reason: "http_error_page",
-      keywordCount: 0,
-    };
+    return { priority: -999, reason: "http_error_page", keywordCount: 0 };
   }
 
   if (stats.hasOldYearOnly) {
-    return {
-      priority: -999,
-      reason: "old_year_only",
-      keywordCount: stats.keywordCount,
-    };
-  }
-
-  if (stats.isTopTitle && !stats.isStrongArticleUrl) {
-    return {
-      priority: -999,
-      reason: "top_title",
-      keywordCount: stats.keywordCount,
-    };
-  }
-
-  if (stats.isHardBlockedUrl && !stats.isStrongArticleUrl) {
-    return {
-      priority: -999,
-      reason: "hard_blocked_url",
-      keywordCount: stats.keywordCount,
-    };
+    return { priority: -999, reason: "old_year_only", keywordCount: stats.keywordCount };
   }
 
   if (stats.isIndexLikeUrl) {
-    return {
-      priority: -999,
-      reason: "index_like_url",
-      keywordCount: stats.keywordCount,
-    };
-  }
-
-  if (stats.negativeCount >= 1 && stats.strongCount === 0) {
-    return {
-      priority: -999,
-      reason: "negative_context",
-      keywordCount: stats.keywordCount,
-    };
-  }
-
-  let reason = "keyword_count";
-
-  if (stats.isStrongArticleUrl && stats.strongCount >= 1) {
-    reason = "strong_article_url_with_strong_keyword";
-  } else if (stats.isSelectionLikeUrl && stats.strongCount >= 1) {
-    reason = "selection_like_url_with_strong_keyword";
-  } else if (stats.isSelectionLikeUrl) {
-    reason = "selection_like_url";
-  } else if (stats.strongCount >= 1) {
-    reason = "strong_keyword";
+    return { priority: -999, reason: "index_like_url", keywordCount: stats.keywordCount };
   }
 
   return {
     priority: stats.keywordCount,
-    reason,
+    reason: "keyword_count",
     keywordCount: stats.keywordCount,
   };
 }

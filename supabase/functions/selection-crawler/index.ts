@@ -136,6 +136,7 @@ function shouldRejectByKeywordStats(stats: any) {
   if (stats.hasOldYearOnly) return "old_year_only";
   if (stats.isIndexLikeUrl) return "index_like_url";
   if (stats.isTopTitle && !stats.isStrongArticleUrl) return "top_title";
+
   if (stats.isHardBlockedUrl && !stats.isStrongArticleUrl) {
     return "hard_blocked_url";
   }
@@ -150,6 +151,10 @@ function shouldRejectByKeywordStats(stats: any) {
 }
 
 function buildReason(stats: any) {
+  if (stats.titleStrongCount >= 1) {
+    return "title_selection_keyword";
+  }
+
   if (stats.isStrongArticleUrl && stats.strongCount >= 1) {
     return "article_url_with_selection_keyword";
   }
@@ -175,15 +180,20 @@ function buildReason(stats: any) {
 
 function makeCandidateSortKey(candidate: CandidatePage) {
   const stats = candidate.keywordStats ?? {};
+
   return {
     titleRank: getTitleRank(candidate.pageTitle),
     urlRank: getUrlRank(candidate.pageUrl),
     keywordCount: stats.keywordCount ?? candidate.priority ?? 0,
+    titleStrongCount: stats.titleStrongCount ?? 0,
     strongCount: stats.strongCount ?? 0,
     recruitCount: stats.recruitCount ?? 0,
     targetCount: stats.targetCount ?? 0,
+    scheduleCount: stats.scheduleCount ?? 0,
     applicationCount: stats.applicationCount ?? 0,
     hasDate: stats.hasDate ? 1 : 0,
+    isStrongArticleUrl: stats.isStrongArticleUrl ? 1 : 0,
+    isSelectionLikeUrl: stats.isSelectionLikeUrl ? 1 : 0,
     urlLength: candidate.pageUrl.length,
   };
 }
@@ -194,17 +204,41 @@ function compareCandidates(a: CandidatePage, b: CandidatePage) {
 
   if (ka.titleRank !== kb.titleRank) return ka.titleRank - kb.titleRank;
   if (ka.urlRank !== kb.urlRank) return ka.urlRank - kb.urlRank;
-  if (kb.strongCount !== ka.strongCount) return kb.strongCount - ka.strongCount;
+
+  if (kb.titleStrongCount !== ka.titleStrongCount) {
+    return kb.titleStrongCount - ka.titleStrongCount;
+  }
+
+  if (kb.strongCount !== ka.strongCount) {
+    return kb.strongCount - ka.strongCount;
+  }
+
+  if (kb.isStrongArticleUrl !== ka.isStrongArticleUrl) {
+    return kb.isStrongArticleUrl - ka.isStrongArticleUrl;
+  }
+
+  if (kb.isSelectionLikeUrl !== ka.isSelectionLikeUrl) {
+    return kb.isSelectionLikeUrl - ka.isSelectionLikeUrl;
+  }
+
   if (kb.keywordCount !== ka.keywordCount) {
     return kb.keywordCount - ka.keywordCount;
   }
+
   if (kb.recruitCount !== ka.recruitCount) {
     return kb.recruitCount - ka.recruitCount;
   }
+
   if (kb.applicationCount !== ka.applicationCount) {
     return kb.applicationCount - ka.applicationCount;
   }
+
+  if (kb.scheduleCount !== ka.scheduleCount) {
+    return kb.scheduleCount - ka.scheduleCount;
+  }
+
   if (kb.hasDate !== ka.hasDate) return kb.hasDate - ka.hasDate;
+
   return kb.urlLength - ka.urlLength;
 }
 
@@ -462,6 +496,7 @@ serve(async (req) => {
             pageTitle,
             reason: rejectReason,
             keywordCount: stats.keywordCount,
+            titleStrongCount: stats.titleStrongCount,
             strongCount: stats.strongCount,
             recruitCount: stats.recruitCount,
             textSample: sampleText(rawText),
@@ -483,6 +518,7 @@ serve(async (req) => {
             pageTitle,
             reason: "not_target_page",
             keywordCount: stats.keywordCount,
+            titleStrongCount: stats.titleStrongCount,
             strongCount: stats.strongCount,
             recruitCount: stats.recruitCount,
             textSample: sampleText(rawText),
@@ -519,6 +555,7 @@ serve(async (req) => {
           pageTitle,
           reason: candidate.reason,
           keywordCount: stats.keywordCount,
+          titleStrongCount: stats.titleStrongCount,
           strongCount: stats.strongCount,
           recruitCount: stats.recruitCount,
           description,
@@ -565,6 +602,7 @@ serve(async (req) => {
           pageTitle: candidate.pageTitle,
           reason: candidate.reason,
           keywordCount: candidate.keywordStats?.keywordCount,
+          titleStrongCount: candidate.keywordStats?.titleStrongCount,
           strongCount: candidate.keywordStats?.strongCount,
           recruitCount: candidate.keywordStats?.recruitCount,
           description: candidate.description,

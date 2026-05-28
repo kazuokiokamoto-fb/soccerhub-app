@@ -163,8 +163,7 @@ export function isBlockedPath(url: string) {
     lower.includes("/grassroots") ||
     lower.includes("/en-world/") ||
     lower.includes("/en/") ||
-    lower.includes("/english/") ||
-    lower.includes("/history")
+    lower.includes("/english/")
   );
 }
 
@@ -231,7 +230,11 @@ export function looksLikeArticleUrl(url: string) {
       return true;
     }
 
-    if (/\?p=\d+/.test(full) || /\/\d{4}\/\d{1,2}\//.test(path)) {
+    if (
+      /\?p=\d+/.test(full) ||
+      /\/\d{4}\/\d{1,2}\//.test(path) ||
+      /\/\d{5,}\/?$/.test(path)
+    ) {
       return true;
     }
 
@@ -257,13 +260,6 @@ export function looksLikeArticleUrl(url: string) {
     ) {
       return getUrlDepth(url) >= 2;
     }
-
-    if (/202\d/.test(path) && getUrlDepth(url) >= 2) return true;
-
-    const segments = path.split("/").filter(Boolean);
-    const last = segments.at(-1) || "";
-
-    if (last.length >= 12 && getUrlDepth(url) >= 2) return true;
 
     return false;
   } catch {
@@ -356,6 +352,7 @@ function buildMonthlyInfoPaths() {
 
 function linkPriority(url: string) {
   const lower = decodeURIComponent(url.toLowerCase());
+
   let score = 0;
 
   if (lower.includes("selection")) score += 120;
@@ -368,9 +365,9 @@ function linkPriority(url: string) {
   if (lower.includes("taiken")) score += 60;
   if (lower.includes("experience")) score += 60;
 
-  if (/\?p=\d+/.test(lower)) score += 80;
-  if (/\/\d{5,}\/?$/.test(lower)) score += 70;
-  if (/\/\d{4}\/\d{1,2}\//.test(lower)) score += 45;
+  if (/\?p=\d+/.test(lower)) score += 90;
+  if (/\/\d{5,}\/?$/.test(lower)) score += 80;
+  if (/\/\d{4}\/\d{1,2}\//.test(lower)) score += 60;
 
   if (lower.includes("junior-youth")) score += 45;
   if (lower.includes("junioryouth")) score += 45;
@@ -379,10 +376,10 @@ function linkPriority(url: string) {
   if (lower.includes("u-13") || lower.includes("u13")) score += 30;
   if (lower.includes("u-15") || lower.includes("u15")) score += 25;
 
-  if (lower.includes("/news/")) score += 35;
-  if (lower.includes("/info/")) score += 35;
-  if (lower.includes("/topics/")) score += 25;
-  if (lower.includes("/information/")) score += 25;
+  if (lower.includes("/news/")) score += 45;
+  if (lower.includes("/info/")) score += 45;
+  if (lower.includes("/topics/")) score += 30;
+  if (lower.includes("/information/")) score += 30;
 
   if (isThinPath(lower)) score -= 80;
 
@@ -495,6 +492,7 @@ export function buildSeedUrls(baseUrl: string) {
 
 export function extractLinks(html: string, baseUrl: string) {
   const links = new Set<string>();
+
   const re = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
 
   let match: RegExpExecArray | null;
@@ -592,6 +590,7 @@ export function extractLinks(html: string, baseUrl: string) {
 export function extractExternalCandidateLinks(html: string, baseUrl: string) {
   const links = new Set<string>();
   const baseHost = getHost(baseUrl);
+
   const re = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
 
   let match: RegExpExecArray | null;
