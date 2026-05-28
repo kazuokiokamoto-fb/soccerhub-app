@@ -41,7 +41,6 @@ const STRONG_SELECTION_WORDS = [
 
 const RECRUIT_INTENT_WORDS = [
   ...STRONG_SELECTION_WORDS,
-
   "練習会",
   "合同練習会",
   "練習参加",
@@ -55,7 +54,6 @@ const RECRUIT_INTENT_WORDS = [
   "トレーニング体験",
   "GK練習会",
   "open training",
-
   "選手募集",
   "参加者募集",
   "部員募集",
@@ -75,7 +73,6 @@ const RECRUIT_INTENT_WORDS = [
   "募集案内",
   "募集について",
   "募集のお知らせ",
-
   "新入団",
   "入団",
   "入団募集",
@@ -84,7 +81,6 @@ const RECRUIT_INTENT_WORDS = [
   "入会",
   "入会受付",
   "入会案内",
-
   "新年度",
   "新中1",
   "現小学6年生",
@@ -97,7 +93,6 @@ const RECRUIT_INTENT_WORDS = [
   "来年度入団希望",
   "入団希望者",
   "所属希望者",
-
   "セレクション実施",
   "実施要項",
   "募集要項",
@@ -118,7 +113,6 @@ const TARGET_WORDS = [
   "現中",
   "高校",
   "高校生",
-
   "U6",
   "U7",
   "U8",
@@ -132,7 +126,6 @@ const TARGET_WORDS = [
   "U16",
   "U17",
   "U18",
-
   "U-6",
   "U-7",
   "U-8",
@@ -146,19 +139,16 @@ const TARGET_WORDS = [
   "U-16",
   "U-17",
   "U-18",
-
   "ジュニア",
   "ジュニアユース",
   "ユース",
   "アカデミー",
   "スクール",
   "スペシャルクラス",
-
   "GK",
   "ＧＫ",
   "ゴールキーパー",
   "キーパー",
-
   "女子",
   "女子選手",
   "レディース",
@@ -289,6 +279,14 @@ const NEGATIVE_WORDS = [
   "レポート",
   "キャンペーン",
   "年間チケット",
+  "フェス",
+  "フェスティバル",
+  "ビーチクリーン",
+  "社会貢献",
+  "social_action",
+  "プロジェクト",
+  "作文募集",
+  "クリニック",
 ];
 
 const HARD_BLOCK_PATH_WORDS = [
@@ -302,6 +300,7 @@ const HARD_BLOCK_PATH_WORDS = [
   "/sponsor",
   "/sponsors",
   "/social",
+  "/social_action",
   "/respect",
   "/sdgs",
   "/staff",
@@ -317,6 +316,8 @@ const HARD_BLOCK_PATH_WORDS = [
   "/game",
   "/result",
   "/results",
+  "/event",
+  "/events",
 ];
 
 const SELECTION_URL_WORDS = [
@@ -342,10 +343,32 @@ const SELECTION_URL_WORDS = [
 ];
 
 function normalizeText(text: string) {
-  return text
-    .replace(/\s+/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .trim();
+  return text.replace(/\s+/g, " ").replace(/&nbsp;/g, " ").trim();
+}
+
+function isTopTitle(pageTitle: string) {
+  const title = normalizeText(pageTitle).toLowerCase();
+
+  return (
+    title.includes(" top") ||
+    title.endsWith("top") ||
+    title.includes("トップ") ||
+    title.includes("top｜") ||
+    title.includes("top |")
+  );
+}
+
+function isStrongArticleUrl(url: string) {
+  const lower = decodeURIComponent(url.toLowerCase());
+
+  return (
+    /\/news\/\d+/.test(lower) ||
+    /\/info\/\d+/.test(lower) ||
+    /\/topics\/\d+/.test(lower) ||
+    /\/academy\/news\/\d+/.test(lower) ||
+    /\/academy\/info\/\d+/.test(lower) ||
+    /\/academy\/topics\/\d+/.test(lower)
+  );
 }
 
 function getCurrentYears() {
@@ -396,29 +419,28 @@ function isIndexLikeUrl(url: string) {
   const lower = url.toLowerCase();
   const normalized = lower.endsWith("/") ? lower : `${lower}/`;
 
-  if (normalized.endsWith("/")) {
-    try {
-      const u = new URL(normalized);
-      const path = u.pathname;
-      if (
-        path === "/" ||
-        path === "/news/" ||
-        path === "/info/" ||
-        path === "/information/" ||
-        path === "/topics/" ||
-        path === "/academy/" ||
-        path === "/school/" ||
-        path === "/junior/" ||
-        path === "/junior-youth/" ||
-        path === "/youth/" ||
-        path === "/event/" ||
-        path === "/events/"
-      ) {
-        return true;
-      }
-    } catch {
-      // ignore
+  try {
+    const u = new URL(normalized);
+    const path = u.pathname;
+
+    if (
+      path === "/" ||
+      path === "/news/" ||
+      path === "/info/" ||
+      path === "/information/" ||
+      path === "/topics/" ||
+      path === "/academy/" ||
+      path === "/school/" ||
+      path === "/junior/" ||
+      path === "/junior-youth/" ||
+      path === "/youth/" ||
+      path === "/event/" ||
+      path === "/events/"
+    ) {
+      return true;
     }
+  } catch {
+    // ignore
   }
 
   return (
@@ -429,13 +451,15 @@ function isIndexLikeUrl(url: string) {
 }
 
 function isHardBlockedUrl(url: string) {
-  const lower = url.toLowerCase();
+  const lower = decodeURIComponent(url.toLowerCase());
   return HARD_BLOCK_PATH_WORDS.some((word) => lower.includes(word));
 }
 
 function isSelectionLikeUrl(url: string) {
   const lower = decodeURIComponent(url.toLowerCase());
+
   if (SELECTION_URL_WORDS.some((word) => lower.includes(word))) return true;
+  if (isStrongArticleUrl(lower)) return true;
 
   return (
     lower.includes("/news/") ||
@@ -448,6 +472,7 @@ function isSelectionLikeUrl(url: string) {
 
 function isGoodDetailUrl(url: string) {
   if (isPdfUrl(url)) return true;
+  if (isStrongArticleUrl(url)) return true;
   if (isIndexLikeUrl(url)) return false;
   if (isHardBlockedUrl(url)) return false;
 
@@ -516,8 +541,10 @@ export function getSelectionKeywordStats(params: {
     hasOldYearOnly: hasOldYearOnly(`${pageTitle} ${rawText.slice(0, 2500)}`),
     isGoodDetailUrl: isGoodDetailUrl(pageUrl),
     isSelectionLikeUrl: isSelectionLikeUrl(pageUrl),
+    isStrongArticleUrl: isStrongArticleUrl(pageUrl),
     isIndexLikeUrl: isIndexLikeUrl(pageUrl),
     isHardBlockedUrl: isHardBlockedUrl(pageUrl),
+    isTopTitle: isTopTitle(pageTitle),
   };
 }
 
@@ -525,14 +552,16 @@ export function isSelectionDetailPage(text: string) {
   const stats = getSelectionKeywordStats({
     rawText: text,
     pageTitle: "",
-    pageUrl: "https://example.com/news/detail",
+    pageUrl: "https://example.com/news/00000000/",
   });
 
   return (
     stats.recruitCount >= 1 &&
     (stats.scheduleCount >= 1 || stats.applicationCount >= 1 || stats.hasDate) &&
     (stats.targetCount >= 1 || stats.playerCount >= 1) &&
-    (stats.venueCount >= 1 || stats.detailCount >= 1 || stats.applicationCount >= 1)
+    (stats.venueCount >= 1 ||
+      stats.detailCount >= 1 ||
+      stats.applicationCount >= 1)
   );
 }
 
@@ -578,7 +607,8 @@ export function isTargetPage(params: {
     sourceName,
   });
 
-  if (stats.isHardBlockedUrl && !stats.isSelectionLikeUrl) return false;
+  if (stats.isTopTitle && !stats.isStrongArticleUrl) return false;
+  if (stats.isHardBlockedUrl && !stats.isStrongArticleUrl) return false;
   if (stats.isIndexLikeUrl) return false;
   if (stats.hasOldYearOnly) return false;
 
@@ -588,6 +618,10 @@ export function isTargetPage(params: {
     return false;
   }
 
+  if (stats.isStrongArticleUrl && stats.strongCount >= 1) {
+    return true;
+  }
+
   if (stats.isGoodDetailUrl && stats.strongCount >= 1) {
     return true;
   }
@@ -595,7 +629,8 @@ export function isTargetPage(params: {
   if (
     stats.isGoodDetailUrl &&
     stats.recruitCount >= 2 &&
-    (stats.targetCount >= 1 || stats.playerCount >= 1)
+    (stats.targetCount >= 1 || stats.playerCount >= 1) &&
+    (stats.scheduleCount >= 1 || stats.applicationCount >= 1 || stats.hasDate)
   ) {
     return true;
   }
@@ -615,11 +650,6 @@ export function isTargetPage(params: {
   return false;
 }
 
-/**
- * 旧ロジック互換用。
- * priority方式ではなく、keywordCountを返す。
- * 呼び出し側が priority を期待していても壊れないように残す。
- */
 export function getPagePriority(params: {
   rawText: string;
   pageTitle: string;
@@ -635,7 +665,15 @@ export function getPagePriority(params: {
     };
   }
 
-  if (stats.isHardBlockedUrl && !stats.isSelectionLikeUrl) {
+  if (stats.isTopTitle && !stats.isStrongArticleUrl) {
+    return {
+      priority: -999,
+      reason: "top_title",
+      keywordCount: stats.keywordCount,
+    };
+  }
+
+  if (stats.isHardBlockedUrl && !stats.isStrongArticleUrl) {
     return {
       priority: -999,
       reason: "hard_blocked_url",
@@ -661,7 +699,9 @@ export function getPagePriority(params: {
 
   let reason = "keyword_count";
 
-  if (stats.isSelectionLikeUrl && stats.strongCount >= 1) {
+  if (stats.isStrongArticleUrl && stats.strongCount >= 1) {
+    reason = "strong_article_url_with_strong_keyword";
+  } else if (stats.isSelectionLikeUrl && stats.strongCount >= 1) {
     reason = "selection_like_url_with_strong_keyword";
   } else if (stats.isSelectionLikeUrl) {
     reason = "selection_like_url";
