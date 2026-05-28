@@ -153,7 +153,6 @@ export function isBlockedPath(url: string) {
     lower.includes("/national_team") ||
     lower.includes("/japan") ||
     lower.includes("/samuraiblue") ||
-    lower.includes("/nadeshiko") ||
     lower.includes("/futsal") ||
     lower.includes("/beachsoccer") ||
     lower.includes("/referee") ||
@@ -248,7 +247,6 @@ export function looksLikeArticleUrl(url: string) {
       path.includes("academy") ||
       path.includes("junior") ||
       path.includes("youth") ||
-      path.includes("school") ||
       path.includes("u13") ||
       path.includes("u-13") ||
       path.includes("u15") ||
@@ -320,8 +318,73 @@ function buildSiteSearchPaths(keyword: string) {
     `/info/?s=${q}`,
     `/information/?s=${q}`,
     `/academy/?s=${q}`,
-    `/school/?s=${q}`,
   ];
+}
+
+function buildMonthlyInfoPaths() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  const years = [currentYear + 1, currentYear, currentYear - 1];
+  const months = Array.from({ length: 12 }, (_, i) =>
+    String(i + 1).padStart(2, "0")
+  );
+
+  const paths: string[] = [];
+
+  for (const year of years) {
+    for (const month of months) {
+      paths.push(`/news/${year}/${month}/`);
+      paths.push(`/info/${year}/${month}/`);
+      paths.push(`/topics/${year}/${month}/`);
+      paths.push(`/information/${year}/${month}/`);
+      paths.push(`/academy/news/${year}/${month}/`);
+      paths.push(`/academy/info/${year}/${month}/`);
+    }
+  }
+
+  return paths;
+}
+
+function linkPriority(url: string) {
+  const lower = decodeURIComponent(url.toLowerCase());
+  let score = 0;
+
+  if (lower.includes("selection")) score += 100;
+  if (lower.includes("tryout")) score += 90;
+  if (lower.includes("trial")) score += 80;
+  if (lower.includes("recruit")) score += 70;
+  if (lower.includes("entry")) score += 60;
+  if (lower.includes("boshu")) score += 60;
+  if (lower.includes("nyudan")) score += 60;
+  if (lower.includes("taiken")) score += 50;
+  if (lower.includes("experience")) score += 50;
+
+  if (lower.includes("junior-youth")) score += 45;
+  if (lower.includes("junioryouth")) score += 45;
+  if (lower.includes("youth")) score += 35;
+  if (lower.includes("academy")) score += 30;
+  if (lower.includes("u-13") || lower.includes("u13")) score += 30;
+  if (lower.includes("u-15") || lower.includes("u15")) score += 25;
+
+  if (lower.includes("/news/")) score += 25;
+  if (lower.includes("/info/")) score += 25;
+  if (lower.includes("/topics/")) score += 20;
+  if (lower.includes("/information/")) score += 20;
+
+  if (/\?p=\d+/.test(lower)) score += 40;
+  if (/\/\d{4}\/\d{1,2}\//.test(lower)) score += 30;
+  if (/\/\d{5,}\/?$/.test(lower)) score += 30;
+
+  if (isThinPath(lower)) score -= 50;
+
+  if (lower.includes("/school/")) score -= 20;
+  if (lower.includes("/ticket")) score -= 100;
+  if (lower.includes("/fan")) score -= 100;
+  if (lower.includes("/goods")) score -= 100;
+  if (lower.includes("/shop")) score -= 100;
+
+  return score;
 }
 
 export function buildSeedUrls(baseUrl: string) {
@@ -345,6 +408,7 @@ export function buildSeedUrls(baseUrl: string) {
       "/academy/recruit/",
       "/junior-youth/",
       "/junior_youth/",
+      "/junioryouth/",
       "/jy/",
       "/youth/",
       "/u-13/",
@@ -357,8 +421,6 @@ export function buildSeedUrls(baseUrl: string) {
       "/entry/",
       "/taiken/",
       "/experience/",
-      "/school/",
-      "/academy/",
       "/news/",
       "/topics/",
       "/info/",
@@ -368,20 +430,16 @@ export function buildSeedUrls(baseUrl: string) {
     ];
 
     for (const path of aggressiveSeeds) {
-      try {
-        urls.add(normalizeUrl(new URL(path, base.origin).toString()));
-      } catch {
-        // ignore
-      }
+      urls.add(normalizeUrl(new URL(path, base.origin).toString()));
+    }
+
+    for (const path of buildMonthlyInfoPaths()) {
+      urls.add(normalizeUrl(new URL(path, base.origin).toString()));
     }
 
     for (const keyword of SEARCH_KEYWORDS) {
       for (const path of buildSiteSearchPaths(keyword)) {
-        try {
-          urls.add(normalizeUrl(new URL(path, base.origin).toString()));
-        } catch {
-          // ignore
-        }
+        urls.add(normalizeUrl(new URL(path, base.origin).toString()));
       }
     }
 
@@ -399,10 +457,8 @@ export function buildSeedUrls(baseUrl: string) {
         `${cleanPath}recruit/`,
         `${cleanPath}entry/`,
         `${cleanPath}join/`,
-        `${cleanPath}member/`,
-        `${cleanPath}school/`,
-        `${cleanPath}academy/`,
         `${cleanPath}junior-youth/`,
+        `${cleanPath}junioryouth/`,
         `${cleanPath}youth/`,
         `${cleanPath}u-13/`,
         `${cleanPath}u13/`,
@@ -414,18 +470,16 @@ export function buildSeedUrls(baseUrl: string) {
       ];
 
       for (const path of nested) {
-        try {
-          urls.add(normalizeUrl(new URL(path, base.origin).toString()));
-        } catch {
-          // ignore
-        }
+        urls.add(normalizeUrl(new URL(path, base.origin).toString()));
       }
     }
   } catch {
     urls.add(baseUrl);
   }
 
-  return Array.from(urls).slice(0, 120);
+  return Array.from(urls)
+    .sort((a, b) => linkPriority(b) - linkPriority(a))
+    .slice(0, 120);
 }
 
 export function extractLinks(html: string, baseUrl: string) {
@@ -471,19 +525,18 @@ export function extractLinks(html: string, baseUrl: string) {
         decoded.includes("entry") ||
         decoded.includes("join") ||
         decoded.includes("academy") ||
-        decoded.includes("school") ||
         decoded.includes("junior") ||
         decoded.includes("youth") ||
         decoded.includes("u13") ||
         decoded.includes("u-13") ||
         decoded.includes("u15") ||
         decoded.includes("u-15") ||
-        decoded.includes("member") ||
         decoded.includes("taiken") ||
         decoded.includes("experience") ||
         decoded.includes("news") ||
         decoded.includes("topics") ||
-        decoded.includes("info");
+        decoded.includes("info") ||
+        /\?p=\d+/.test(decoded);
 
       const anchorLooksImportant =
         anchorText.includes("セレクション") ||
@@ -493,7 +546,6 @@ export function extractLinks(html: string, baseUrl: string) {
         anchorText.includes("練習会") ||
         anchorText.includes("ジュニアユース") ||
         anchorText.includes("アカデミー") ||
-        anchorText.includes("スクール") ||
         anchorText.includes("u-13") ||
         anchorText.includes("u13") ||
         anchorText.includes("u-15") ||
@@ -520,7 +572,9 @@ export function extractLinks(html: string, baseUrl: string) {
     }
   }
 
-  return Array.from(links).slice(0, 300);
+  return Array.from(links)
+    .sort((a, b) => linkPriority(b) - linkPriority(a))
+    .slice(0, 300);
 }
 
 export function extractExternalCandidateLinks(html: string, baseUrl: string) {
@@ -565,7 +619,6 @@ export function extractExternalCandidateLinks(html: string, baseUrl: string) {
         anchorText.includes("体験") ||
         anchorText.includes("セレクション") ||
         anchorText.includes("アカデミー") ||
-        anchorText.includes("スクール") ||
         anchorText.includes("クラブ") ||
         anchorText.includes("チーム") ||
         anchorText.includes("ジュニアユース") ||
@@ -580,5 +633,7 @@ export function extractExternalCandidateLinks(html: string, baseUrl: string) {
     }
   }
 
-  return Array.from(links).slice(0, MAX_EXTERNAL_LINKS_PER_PAGE);
+  return Array.from(links)
+    .sort((a, b) => linkPriority(b) - linkPriority(a))
+    .slice(0, MAX_EXTERNAL_LINKS_PER_PAGE);
 }
