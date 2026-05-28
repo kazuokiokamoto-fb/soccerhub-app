@@ -542,6 +542,29 @@ export function getSelectionKeywordStats(params: {
     isTopTitle: isTopTitle(pageTitle),
   };
 }
+
+export function shouldExtractExternalLinks(params: {
+  rawText: string;
+  pageTitle: string;
+  pageUrl: string;
+  sourceName: string;
+}) {
+  if (isHttpErrorPage(params.pageTitle, params.rawText)) {
+    return false;
+  }
+
+  const stats = getSelectionKeywordStats(params);
+
+  return (
+    stats.strongCount >= 1 ||
+    stats.recruitCount >= 2 ||
+    params.rawText.includes("詳しくはこちら") ||
+    params.rawText.includes("詳細はこちら") ||
+    params.rawText.includes("お申し込み") ||
+    params.rawText.includes("申込")
+  );
+}
+
 export function isTargetPage(params: {
   rawText: string;
   pageTitle: string;
