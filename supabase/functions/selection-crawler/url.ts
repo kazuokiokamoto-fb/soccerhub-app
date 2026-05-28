@@ -342,8 +342,6 @@ function buildMonthlyInfoPaths() {
       paths.push(`/info/${year}/${month}/`);
       paths.push(`/topics/${year}/${month}/`);
       paths.push(`/information/${year}/${month}/`);
-      paths.push(`/academy/news/${year}/${month}/`);
-      paths.push(`/academy/info/${year}/${month}/`);
     }
   }
 
