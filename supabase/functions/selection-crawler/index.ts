@@ -203,46 +203,59 @@ function compareCandidates(a: CandidatePage, b: CandidatePage) {
   const ka = makeCandidateSortKey(a);
   const kb = makeCandidateSortKey(b);
 
-  // まず「タイトルにセレクション等があるページ」を最優先
-  if (ka.titleRank !== kb.titleRank) return ka.titleRank - kb.titleRank;
-
-  // 次に「選別キーワード数が多いページ」を優先
-  if (kb.keywordCount !== ka.keywordCount) {
-    return kb.keywordCount - ka.keywordCount;
+  // タイトルにセレクション系
+  if (ka.titleRank !== kb.titleRank) {
+    return ka.titleRank - kb.titleRank;
   }
 
-  // 同点なら強いキーワード数
-  if (kb.titleStrongCount !== ka.titleStrongCount) {
-    return kb.titleStrongCount - ka.titleStrongCount;
-  }
-
-  if (kb.strongCount !== ka.strongCount) {
-    return kb.strongCount - ka.strongCount;
-  }
-
-  if (kb.recruitCount !== ka.recruitCount) {
-    return kb.recruitCount - ka.recruitCount;
-  }
-
-  if (kb.applicationCount !== ka.applicationCount) {
-    return kb.applicationCount - ka.applicationCount;
-  }
-
-  if (kb.scheduleCount !== ka.scheduleCount) {
-    return kb.scheduleCount - ka.scheduleCount;
-  }
-
-  if (kb.hasDate !== ka.hasDate) return kb.hasDate - ka.hasDate;
-
-  // 最後にURLの良さ
-  if (ka.urlRank !== kb.urlRank) return ka.urlRank - kb.urlRank;
-
+  // 記事URLを最優先
   if (kb.isStrongArticleUrl !== ka.isStrongArticleUrl) {
     return kb.isStrongArticleUrl - ka.isStrongArticleUrl;
   }
 
+  // 日付あり優先
+  if (kb.hasDate !== ka.hasDate) {
+    return kb.hasDate - ka.hasDate;
+  }
+
+  // 申込情報あり優先
+  if (kb.applicationCount !== ka.applicationCount) {
+    return kb.applicationCount - ka.applicationCount;
+  }
+
+  // 開催情報あり優先
+  if (kb.scheduleCount !== ka.scheduleCount) {
+    return kb.scheduleCount - ka.scheduleCount;
+  }
+
+  // 募集キーワード
+  if (kb.recruitCount !== ka.recruitCount) {
+    return kb.recruitCount - ka.recruitCount;
+  }
+
+  // 強キーワード
+  if (kb.strongCount !== ka.strongCount) {
+    return kb.strongCount - ka.strongCount;
+  }
+
+  // タイトル強キーワード
+  if (kb.titleStrongCount !== ka.titleStrongCount) {
+    return kb.titleStrongCount - ka.titleStrongCount;
+  }
+
+  // 総キーワード
+  if (kb.keywordCount !== ka.keywordCount) {
+    return kb.keywordCount - ka.keywordCount;
+  }
+
+  // selection系URL
   if (kb.isSelectionLikeUrl !== ka.isSelectionLikeUrl) {
     return kb.isSelectionLikeUrl - ka.isSelectionLikeUrl;
+  }
+
+  // academy固定ページを最後に落とす
+  if (ka.urlRank !== kb.urlRank) {
+    return ka.urlRank - kb.urlRank;
   }
 
   return kb.urlLength - ka.urlLength;
