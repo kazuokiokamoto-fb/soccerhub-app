@@ -328,15 +328,20 @@ function buildMonthlyInfoPaths() {
   const now = new Date();
   const currentYear = now.getFullYear();
 
-  const years = [currentYear + 1, currentYear, currentYear - 1];
-  const months = Array.from({ length: 12 }, (_, i) =>
-    String(i + 1).padStart(2, "0")
-  );
+  const years = [currentYear, currentYear - 1, currentYear + 1];
+
+  const currentMonth = now.getMonth() + 1;
+  const recentMonths: string[] = [];
+
+  for (let i = 0; i < 12; i++) {
+    const m = ((currentMonth - i - 1 + 12) % 12) + 1;
+    recentMonths.push(String(m).padStart(2, "0"));
+  }
 
   const paths: string[] = [];
 
   for (const year of years) {
-    for (const month of months) {
+    for (const month of recentMonths) {
       paths.push(`/news/${year}/${month}/`);
       paths.push(`/info/${year}/${month}/`);
       paths.push(`/topics/${year}/${month}/`);
@@ -353,15 +358,19 @@ function linkPriority(url: string) {
   const lower = decodeURIComponent(url.toLowerCase());
   let score = 0;
 
-  if (lower.includes("selection")) score += 100;
-  if (lower.includes("tryout")) score += 90;
-  if (lower.includes("trial")) score += 80;
-  if (lower.includes("recruit")) score += 70;
-  if (lower.includes("entry")) score += 60;
-  if (lower.includes("boshu")) score += 60;
-  if (lower.includes("nyudan")) score += 60;
-  if (lower.includes("taiken")) score += 50;
-  if (lower.includes("experience")) score += 50;
+  if (lower.includes("selection")) score += 120;
+  if (lower.includes("tryout")) score += 100;
+  if (lower.includes("trial")) score += 90;
+  if (lower.includes("recruit")) score += 80;
+  if (lower.includes("entry")) score += 70;
+  if (lower.includes("boshu")) score += 70;
+  if (lower.includes("nyudan")) score += 70;
+  if (lower.includes("taiken")) score += 60;
+  if (lower.includes("experience")) score += 60;
+
+  if (/\?p=\d+/.test(lower)) score += 80;
+  if (/\/\d{5,}\/?$/.test(lower)) score += 70;
+  if (/\/\d{4}\/\d{1,2}\//.test(lower)) score += 45;
 
   if (lower.includes("junior-youth")) score += 45;
   if (lower.includes("junioryouth")) score += 45;
@@ -370,22 +379,20 @@ function linkPriority(url: string) {
   if (lower.includes("u-13") || lower.includes("u13")) score += 30;
   if (lower.includes("u-15") || lower.includes("u15")) score += 25;
 
-  if (lower.includes("/news/")) score += 25;
-  if (lower.includes("/info/")) score += 25;
-  if (lower.includes("/topics/")) score += 20;
-  if (lower.includes("/information/")) score += 20;
+  if (lower.includes("/news/")) score += 35;
+  if (lower.includes("/info/")) score += 35;
+  if (lower.includes("/topics/")) score += 25;
+  if (lower.includes("/information/")) score += 25;
 
-  if (/\?p=\d+/.test(lower)) score += 40;
-  if (/\/\d{4}\/\d{1,2}\//.test(lower)) score += 30;
-  if (/\/\d{5,}\/?$/.test(lower)) score += 30;
+  if (isThinPath(lower)) score -= 80;
 
-  if (isThinPath(lower)) score -= 50;
-
-  if (lower.includes("/school/")) score -= 20;
+  if (lower.includes("/school/")) score -= 30;
   if (lower.includes("/ticket")) score -= 100;
   if (lower.includes("/fan")) score -= 100;
   if (lower.includes("/goods")) score -= 100;
   if (lower.includes("/shop")) score -= 100;
+  if (lower.includes("/en-world/")) score -= 200;
+  if (lower.includes("/english/")) score -= 200;
 
   return score;
 }
@@ -397,10 +404,6 @@ export function buildSeedUrls(baseUrl: string) {
     const base = new URL(baseUrl);
 
     urls.add(normalizeUrl(base.toString()));
-
-    for (const path of CRAWL_ENTRY_PATHS) {
-      urls.add(normalizeUrl(new URL(path, base.origin).toString()));
-    }
 
     const aggressiveSeeds = [
       "/selection/",
@@ -436,16 +439,6 @@ export function buildSeedUrls(baseUrl: string) {
       urls.add(normalizeUrl(new URL(path, base.origin).toString()));
     }
 
-    for (const path of buildMonthlyInfoPaths()) {
-      urls.add(normalizeUrl(new URL(path, base.origin).toString()));
-    }
-
-    for (const keyword of SEARCH_KEYWORDS) {
-      for (const path of buildSiteSearchPaths(keyword)) {
-        urls.add(normalizeUrl(new URL(path, base.origin).toString()));
-      }
-    }
-
     if (base.pathname && base.pathname !== "/") {
       const cleanPath = base.pathname.endsWith("/")
         ? base.pathname
@@ -476,11 +469,26 @@ export function buildSeedUrls(baseUrl: string) {
         urls.add(normalizeUrl(new URL(path, base.origin).toString()));
       }
     }
+
+    for (const path of buildMonthlyInfoPaths()) {
+      urls.add(normalizeUrl(new URL(path, base.origin).toString()));
+    }
+
+    for (const path of CRAWL_ENTRY_PATHS) {
+      urls.add(normalizeUrl(new URL(path, base.origin).toString()));
+    }
+
+    for (const keyword of SEARCH_KEYWORDS) {
+      for (const path of buildSiteSearchPaths(keyword)) {
+        urls.add(normalizeUrl(new URL(path, base.origin).toString()));
+      }
+    }
   } catch {
     urls.add(baseUrl);
   }
 
   return Array.from(urls)
+    .filter((url) => !isBlockedPath(url))
     .sort((a, b) => linkPriority(b) - linkPriority(a))
     .slice(0, 120);
 }
@@ -539,7 +547,8 @@ export function extractLinks(html: string, baseUrl: string) {
         decoded.includes("news") ||
         decoded.includes("topics") ||
         decoded.includes("info") ||
-        /\?p=\d+/.test(decoded);
+        /\?p=\d+/.test(decoded) ||
+        /\/\d{5,}\/?$/.test(decoded);
 
       const anchorLooksImportant =
         anchorText.includes("セレクション") ||
