@@ -138,13 +138,16 @@ function shouldRejectByKeywordStats(stats: any) {
     return "hard_blocked_url";
   }
 
-  if (stats.negativeCount >= 2 && stats.strongCount === 0 && stats.recruitCount === 0) {
+  if (
+    stats.negativeCount >= 2 &&
+    stats.strongCount === 0 &&
+    stats.recruitCount === 0
+  ) {
     return "negative_context";
   }
 
   if (stats.keywordCount <= 0) return "no_keyword";
 
-  // 一覧っぽいURLでも、セレクション/募集系キーワードがあるなら残す
   if (
     stats.isIndexLikeUrl &&
     stats.titleStrongCount === 0 &&
@@ -159,9 +162,7 @@ function shouldRejectByKeywordStats(stats: any) {
 }
 
 function buildReason(stats: any) {
-  if (stats.titleStrongCount >= 1) {
-    return "title_selection_keyword";
-  }
+  if (stats.titleStrongCount >= 1) return "title_selection_keyword";
 
   if (stats.isStrongArticleUrl && stats.strongCount >= 1) {
     return "article_url_with_selection_keyword";
@@ -171,17 +172,9 @@ function buildReason(stats: any) {
     return "selection_like_url_with_selection_keyword";
   }
 
-  if (stats.isSelectionLikeUrl) {
-    return "selection_like_url";
-  }
-
-  if (stats.strongCount >= 1) {
-    return "selection_keyword";
-  }
-
-  if (stats.recruitCount >= 2) {
-    return "recruit_keywords";
-  }
+  if (stats.isSelectionLikeUrl) return "selection_like_url";
+  if (stats.strongCount >= 1) return "selection_keyword";
+  if (stats.recruitCount >= 2) return "recruit_keywords";
 
   return "keyword_count";
 }
@@ -210,27 +203,21 @@ function compareCandidates(a: CandidatePage, b: CandidatePage) {
   const ka = makeCandidateSortKey(a);
   const kb = makeCandidateSortKey(b);
 
+  // まず「タイトルにセレクション等があるページ」を最優先
   if (ka.titleRank !== kb.titleRank) return ka.titleRank - kb.titleRank;
-  if (ka.urlRank !== kb.urlRank) return ka.urlRank - kb.urlRank;
 
+  // 次に「選別キーワード数が多いページ」を優先
+  if (kb.keywordCount !== ka.keywordCount) {
+    return kb.keywordCount - ka.keywordCount;
+  }
+
+  // 同点なら強いキーワード数
   if (kb.titleStrongCount !== ka.titleStrongCount) {
     return kb.titleStrongCount - ka.titleStrongCount;
   }
 
   if (kb.strongCount !== ka.strongCount) {
     return kb.strongCount - ka.strongCount;
-  }
-
-  if (kb.isStrongArticleUrl !== ka.isStrongArticleUrl) {
-    return kb.isStrongArticleUrl - ka.isStrongArticleUrl;
-  }
-
-  if (kb.isSelectionLikeUrl !== ka.isSelectionLikeUrl) {
-    return kb.isSelectionLikeUrl - ka.isSelectionLikeUrl;
-  }
-
-  if (kb.keywordCount !== ka.keywordCount) {
-    return kb.keywordCount - ka.keywordCount;
   }
 
   if (kb.recruitCount !== ka.recruitCount) {
@@ -246,6 +233,17 @@ function compareCandidates(a: CandidatePage, b: CandidatePage) {
   }
 
   if (kb.hasDate !== ka.hasDate) return kb.hasDate - ka.hasDate;
+
+  // 最後にURLの良さ
+  if (ka.urlRank !== kb.urlRank) return ka.urlRank - kb.urlRank;
+
+  if (kb.isStrongArticleUrl !== ka.isStrongArticleUrl) {
+    return kb.isStrongArticleUrl - ka.isStrongArticleUrl;
+  }
+
+  if (kb.isSelectionLikeUrl !== ka.isSelectionLikeUrl) {
+    return kb.isSelectionLikeUrl - ka.isSelectionLikeUrl;
+  }
 
   return kb.urlLength - ka.urlLength;
 }
