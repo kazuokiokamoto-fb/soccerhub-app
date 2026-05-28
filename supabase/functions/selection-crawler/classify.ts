@@ -36,6 +36,17 @@ const STRONG_SELECTION_WORDS = [
   "selection",
 ];
 
+const TITLE_ALLOW_WORDS = [
+  "セレクション",
+  "選考会",
+  "トライアウト",
+  "選手募集",
+  "参加者募集",
+  "募集",
+  "練習会",
+  "体験会",
+];
+
 const RECRUIT_INTENT_WORDS = [
   ...STRONG_SELECTION_WORDS,
   "練習会",
@@ -333,11 +344,11 @@ function normalizeText(text: string) {
     .trim();
 }
 
-function buildImportantText(
-  pageTitle: string,
-  rawText: string,
-  sourceName = "",
-) {
+function hasTitleAllowWord(pageTitle: string) {
+  return TITLE_ALLOW_WORDS.some((word) => pageTitle.includes(word));
+}
+
+function buildImportantText(pageTitle: string, rawText: string, sourceName = "") {
   const title = normalizeText(`${sourceName} ${pageTitle}`);
   const body = normalizeText(rawText);
   const keywordWindows: string[] = [];
@@ -348,8 +359,6 @@ function buildImportantText(
     "申込",
     "応募",
     "エントリー",
-    "スクール",
-    "アカデミー",
     "U-15",
     "U-18",
     "U-12",
@@ -416,7 +425,6 @@ function isStrongArticleUrl(url: string) {
 
 function hasOldYearOnly(text: string) {
   const currentYear = new Date().getFullYear();
-
   const years = Array.from(text.matchAll(/20\d{2}/g)).map((m) =>
     Number(m[0])
   );
@@ -476,17 +484,13 @@ function isTeamCategoryUrl(url: string) {
 
 function isHardBlockedUrl(url: string) {
   const lower = decodeURIComponent(url.toLowerCase());
-
   return HARD_BLOCK_PATH_WORDS.some((word) => lower.includes(word));
 }
 
 function isSelectionLikeUrl(url: string) {
   const lower = decodeURIComponent(url.toLowerCase());
 
-  if (SELECTION_URL_WORDS.some((word) => lower.includes(word))) {
-    return true;
-  }
-
+  if (SELECTION_URL_WORDS.some((word) => lower.includes(word))) return true;
   if (isStrongArticleUrl(lower)) return true;
 
   return (
@@ -501,9 +505,10 @@ function isSelectionLikeUrl(url: string) {
 function isGoodDetailUrl(url: string) {
   if (isPdfUrl(url)) return true;
   if (isStrongArticleUrl(url)) return true;
+  if (isTeamCategoryUrl(url)) return false;
   if (isHardBlockedUrl(url)) return false;
 
-  return isSelectionLikeUrl(url) || looksLikeArticleUrl(url) || isTeamCategoryUrl(url);
+  return isSelectionLikeUrl(url) || looksLikeArticleUrl(url);
 }
 
 export function getSelectionKeywordStats(params: {
@@ -515,68 +520,27 @@ export function getSelectionKeywordStats(params: {
   const { rawText, pageTitle, pageUrl, sourceName = "" } = params;
 
   const titleText = normalizeText(`${sourceName} ${pageTitle}`);
-
-  const importantText = buildImportantText(
-    pageTitle,
-    rawText,
-    sourceName,
-  );
-
+  const importantText = buildImportantText(pageTitle, rawText, sourceName);
   const lowerImportantText = importantText.toLowerCase();
 
   const strongCount =
     countMatches(importantText, STRONG_SELECTION_WORDS) +
     countMatches(lowerImportantText, ["selection", "tryout", "trial"]);
 
-  const recruitCount = countMatches(
-    importantText,
-    RECRUIT_INTENT_WORDS,
-  );
-
+  const recruitCount = countMatches(importantText, RECRUIT_INTENT_WORDS);
   const targetCount = countMatches(importantText, TARGET_WORDS);
-
-  const playerCount = countMatches(
-    importantText,
-    PLAYER_CONTEXT_WORDS,
-  );
-
-  const scheduleCount = countMatches(
-    importantText,
-    SCHEDULE_WORDS,
-  );
-
-  const applicationCount = countMatches(
-    importantText,
-    APPLICATION_WORDS,
-  );
-
-  const venueCount = countMatches(
-    importantText,
-    VENUE_WORDS,
-  );
-
-  const detailCount = countMatches(
-    importantText,
-    DETAIL_WORDS,
-  );
+  const playerCount = countMatches(importantText, PLAYER_CONTEXT_WORDS);
+  const scheduleCount = countMatches(importantText, SCHEDULE_WORDS);
+  const applicationCount = countMatches(importantText, APPLICATION_WORDS);
+  const venueCount = countMatches(importantText, VENUE_WORDS);
+  const detailCount = countMatches(importantText, DETAIL_WORDS);
 
   const titleStrongCount =
     countMatches(titleText, STRONG_SELECTION_WORDS) +
-    countMatches(titleText.toLowerCase(), [
-      "selection",
-      "tryout",
-      "trial",
-    ]);
+    countMatches(titleText.toLowerCase(), ["selection", "tryout", "trial"]);
 
-  const titleRecruitCount = countMatches(
-    titleText,
-    RECRUIT_INTENT_WORDS,
-  );
-
-  const negativeCount = countMatches(
-    `${titleText} ${importantText}`,
-    NEGATIVE_WORDS,
-  );
+  const titleRecruitCount = countMatches(titleText, RECRUIT_INTENT_WORDS);
+  const negativeCount = countMatches(`${titleText} ${importantText}`, NEGATIVE_WORDS);
 
   const keywordCount =
     titleStrongCount * 10 +
@@ -603,6 +567,7 @@ export function getSelectionKeywordStats(params: {
     negativeCount,
     titleStrongCount,
     titleRecruitCount,
+    hasTitleAllowWord: hasTitleAllowWord(pageTitle),
     hasDate: hasDateContext(importantText),
     hasEnded: hasEndedText(importantText),
     hasOldYearOnly: hasOldYearOnly(
@@ -625,9 +590,7 @@ export function shouldExtractExternalLinks(params: {
   pageUrl: string;
   sourceName: string;
 }) {
-  if (isHttpErrorPage(params.pageTitle, params.rawText)) {
-    return false;
-  }
+  if (isHttpErrorPage(params.pageTitle, params.rawText)) return false;
 
   const stats = getSelectionKeywordStats(params);
 
@@ -652,14 +615,8 @@ export function isTargetPage(params: {
   if (isHttpErrorPage(pageTitle, rawText)) return false;
   if (isInstagramUrl(pageUrl)) return false;
   if (isSitemapUrl(pageUrl)) return false;
-
-  if (!isPdfUrl(pageUrl) && isBlockedFile(pageUrl)) {
-    return false;
-  }
-
-  if (!isPdfUrl(pageUrl) && isBlockedPath(pageUrl)) {
-    return false;
-  }
+  if (!isPdfUrl(pageUrl) && isBlockedFile(pageUrl)) return false;
+  if (!isPdfUrl(pageUrl) && isBlockedPath(pageUrl)) return false;
 
   const stats = getSelectionKeywordStats({
     rawText,
@@ -668,25 +625,23 @@ export function isTargetPage(params: {
     sourceName,
   });
 
-  if (stats.isTopTitle && !stats.isStrongArticleUrl && !stats.isTeamCategoryUrl) {
+  if (stats.isTopTitle && !stats.isStrongArticleUrl) return false;
+  if (stats.isIndexLikeUrl) return false;
+  if (stats.isHardBlockedUrl && !stats.isStrongArticleUrl) return false;
+
+  if (stats.isTeamCategoryUrl && !stats.hasTitleAllowWord) {
     return false;
   }
 
-  if (stats.isIndexLikeUrl) {
+  if (
+    stats.hasOldYearOnly &&
+    stats.titleStrongCount === 0 &&
+    stats.strongCount === 0
+  ) {
     return false;
   }
 
-  if (stats.isHardBlockedUrl && !stats.isStrongArticleUrl) {
-    return false;
-  }
-
-  if (stats.hasOldYearOnly && stats.titleStrongCount === 0 && stats.strongCount === 0) {
-    return false;
-  }
-
-  if (stats.hasEnded && stats.strongCount === 0) {
-    return false;
-  }
+  if (stats.hasEnded && stats.strongCount === 0) return false;
 
   if (
     stats.negativeCount >= 2 &&
@@ -696,16 +651,17 @@ export function isTargetPage(params: {
     return false;
   }
 
-  if (stats.titleStrongCount >= 1) {
-    return true;
-  }
+  if (stats.titleStrongCount >= 1) return true;
 
   if (
     stats.strongCount >= 1 &&
+    (stats.targetCount >= 1 || stats.playerCount >= 1) &&
     (
-      stats.recruitCount >= 1 ||
-      stats.keywordCount >= 18 ||
-      stats.isTeamCategoryUrl
+      stats.applicationCount >= 1 ||
+      stats.scheduleCount >= 1 ||
+      stats.hasDate ||
+      stats.isStrongArticleUrl ||
+      stats.isSelectionLikeUrl
     )
   ) {
     return true;
@@ -713,38 +669,26 @@ export function isTargetPage(params: {
 
   if (
     stats.recruitCount >= 2 &&
+    (stats.targetCount >= 1 || stats.playerCount >= 1) &&
     (
-      stats.targetCount >= 1 ||
-      stats.playerCount >= 1 ||
-      stats.isTeamCategoryUrl
+      stats.applicationCount >= 1 ||
+      stats.scheduleCount >= 1 ||
+      stats.hasDate ||
+      stats.isStrongArticleUrl
     )
-  ) {
-    return true;
-  }
-
-  if (
-    stats.keywordCount >= 18 &&
-    stats.isTeamCategoryUrl
   ) {
     return true;
   }
 
   if (
     stats.keywordCount >= 24 &&
-    (
-      stats.isStrongArticleUrl ||
-      stats.isSelectionLikeUrl ||
-      stats.isGoodDetailUrl
-    )
+    (stats.isStrongArticleUrl || stats.isSelectionLikeUrl || stats.isGoodDetailUrl) &&
+    (stats.applicationCount >= 1 || stats.scheduleCount >= 1 || stats.hasDate)
   ) {
     return true;
   }
 
-  if (
-    isPdfUrl(pageUrl) &&
-    stats.recruitCount >= 1 &&
-    stats.targetCount >= 1
-  ) {
+  if (isPdfUrl(pageUrl) && stats.recruitCount >= 1 && stats.targetCount >= 1) {
     return true;
   }
 
@@ -759,10 +703,14 @@ export function getPagePriority(params: {
   const stats = getSelectionKeywordStats(params);
 
   if (stats.isHttpErrorPage) {
+    return { priority: -999, reason: "http_error_page", keywordCount: 0 };
+  }
+
+  if (stats.isTeamCategoryUrl && !stats.hasTitleAllowWord) {
     return {
       priority: -999,
-      reason: "http_error_page",
-      keywordCount: 0,
+      reason: "team_category_url",
+      keywordCount: stats.keywordCount,
     };
   }
 
@@ -813,7 +761,6 @@ export function buildSelectionDescription(params: {
   const { rawText, pageTitle, maxLength = 160 } = params;
 
   const title = normalizeText(pageTitle);
-
   const body = normalizeText(rawText)
     .replace(title, "")
     .replace(/メニュー|MENU|トップ|HOME|ニュース|NEWS/g, "")
@@ -822,7 +769,6 @@ export function buildSelectionDescription(params: {
   const base = title ? `${title}｜${body}` : body;
 
   if (base.length <= maxLength) return base;
-
   return `${base.slice(0, maxLength).trim()}…`;
 }
 
@@ -836,25 +782,11 @@ export function normalizeSourceRank(
   if (current) return current;
   if (source.organization_type === "j_club") return "J下部";
 
-  if (text.includes("Jリーグ") || text.includes("J下部")) {
-    return "J下部";
-  }
-
-  if (text.includes("T1") || text.includes("1部")) {
-    return "T1 / 1部";
-  }
-
-  if (text.includes("T2") || text.includes("2部")) {
-    return "T2 / 2部";
-  }
-
-  if (text.includes("T3") || text.includes("3部")) {
-    return "T3 / 3部";
-  }
-
-  if (text.includes("T4") || text.includes("4部")) {
-    return "T4 / 4部";
-  }
+  if (text.includes("Jリーグ") || text.includes("J下部")) return "J下部";
+  if (text.includes("T1") || text.includes("1部")) return "T1 / 1部";
+  if (text.includes("T2") || text.includes("2部")) return "T2 / 2部";
+  if (text.includes("T3") || text.includes("3部")) return "T3 / 3部";
+  if (text.includes("T4") || text.includes("4部")) return "T4 / 4部";
 
   if (
     text.includes("地区リーグ") ||
@@ -872,10 +804,7 @@ export function normalizeSourceRank(
     return "女子";
   }
 
-  if (
-    text.includes("スクール") ||
-    text.includes("アカデミー")
-  ) {
+  if (text.includes("スクール") || text.includes("アカデミー")) {
     return "スクール";
   }
 
