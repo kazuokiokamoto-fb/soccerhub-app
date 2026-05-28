@@ -133,19 +133,27 @@ function getTitleRank(pageTitle: string) {
 
 function shouldRejectByKeywordStats(stats: any) {
   if (stats.isHttpErrorPage) return "http_error_page";
-  if (stats.hasOldYearOnly) return "old_year_only";
-  if (stats.isIndexLikeUrl) return "index_like_url";
-  if (stats.isTopTitle && !stats.isStrongArticleUrl) return "top_title";
 
   if (stats.isHardBlockedUrl && !stats.isStrongArticleUrl) {
     return "hard_blocked_url";
   }
 
-  if (stats.negativeCount >= 1 && stats.strongCount === 0) {
+  if (stats.negativeCount >= 2 && stats.strongCount === 0 && stats.recruitCount === 0) {
     return "negative_context";
   }
 
   if (stats.keywordCount <= 0) return "no_keyword";
+
+  // 一覧っぽいURLでも、セレクション/募集系キーワードがあるなら残す
+  if (
+    stats.isIndexLikeUrl &&
+    stats.titleStrongCount === 0 &&
+    stats.strongCount === 0 &&
+    stats.recruitCount < 2 &&
+    stats.keywordCount < 18
+  ) {
+    return "index_like_url";
+  }
 
   return null;
 }
