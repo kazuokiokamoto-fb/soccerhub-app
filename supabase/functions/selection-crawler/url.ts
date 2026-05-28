@@ -216,6 +216,10 @@ export function looksLikeArticleUrl(url: string) {
 
     return (
       /\/news\/.+/.test(path) ||
+      /\/school\/news\/.+/.test(path) ||
+      /\/school\/info\/.+/.test(path) ||
+      /\/academy\/news\/.+/.test(path) ||
+      /\/academy\/info\/.+/.test(path) ||
       /\/topics\/.+/.test(path) ||
       /\/info\/.+/.test(path) ||
       /\/information\/.+/.test(path) ||
@@ -279,6 +283,8 @@ function buildSiteSearchPaths(keyword: string) {
     `/info/?s=${q}`,
     `/information/?s=${q}`,
     `/academy/?s=${q}`,
+    `/school/?s=${q}`,
+    `/school/news/?s=${q}`,
   ];
 }
 
@@ -305,12 +311,19 @@ function linkPriority(url: string) {
   if (/\/\d{5,}\/?$/.test(lower)) score += 80;
   if (/\/\d{4}\/\d{1,2}\//.test(lower)) score += 60;
 
+  if (lower.includes("/school/news/")) score += 80;
+  if (lower.includes("/school/info/")) score += 70;
+  if (lower.includes("/academy/news/")) score += 70;
+  if (lower.includes("/academy/info/")) score += 60;
+
   if (lower.includes("junior-youth")) score += 45;
   if (lower.includes("junioryouth")) score += 45;
   if (lower.includes("youth")) score += 35;
   if (lower.includes("academy")) score += 30;
+  if (lower.includes("school")) score += 25;
   if (lower.includes("u-13") || lower.includes("u13")) score += 30;
   if (lower.includes("u-15") || lower.includes("u15")) score += 25;
+  if (lower.includes("u-12") || lower.includes("u12")) score += 25;
 
   if (lower.includes("/news/")) score += 45;
   if (lower.includes("/info/")) score += 45;
@@ -347,6 +360,15 @@ export function buildSeedUrls(baseUrl: string) {
       "/academy/u15/",
       "/academy/u-15/",
       "/academy/junioryouth/",
+      "/school/",
+      "/school/news/",
+      "/school/info/",
+      "/school/selection/",
+      "/school/recruit/",
+      "/school/entry/",
+      "/school/tryout/",
+      "/school/trial/",
+      "/school/article/",
       "/news/article/",
       "/academy/news/article/",
       "/junior-youth/",
@@ -472,6 +494,8 @@ export function extractLinks(html: string, baseUrl: string) {
         decoded.includes("school") ||
         decoded.includes("junior") ||
         decoded.includes("youth") ||
+        decoded.includes("u12") ||
+        decoded.includes("u-12") ||
         decoded.includes("u13") ||
         decoded.includes("u-13") ||
         decoded.includes("u15") ||
@@ -481,6 +505,10 @@ export function extractLinks(html: string, baseUrl: string) {
         decoded.includes("news") ||
         decoded.includes("topics") ||
         decoded.includes("info") ||
+        decoded.includes("/school/news/") ||
+        decoded.includes("/school/info/") ||
+        decoded.includes("/academy/news/") ||
+        decoded.includes("/academy/info/") ||
         /\?p=\d+/.test(decoded) ||
         /\/\d{5,}\/?$/.test(decoded);
 
@@ -497,6 +525,10 @@ export function extractLinks(html: string, baseUrl: string) {
         anchorText.includes("u13") ||
         anchorText.includes("u-15") ||
         anchorText.includes("u15") ||
+        anchorText.includes("u-12") ||
+        anchorText.includes("u12") ||
+        anchorText.includes("u-18") ||
+        anchorText.includes("u18") ||
         anchorText.includes("新中1") ||
         anchorText.includes("現小6") ||
         anchorText.includes("入団") ||
@@ -504,10 +536,8 @@ export function extractLinks(html: string, baseUrl: string) {
         anchorText.includes("エントリー") ||
         anchorText.includes("新中学1年") ||
         anchorText.includes("現小学6年") ||
-        anchorText.includes("u-12") ||
-        anchorText.includes("u12") ||
-        anchorText.includes("u-18") ||
-        anchorText.includes("u18");
+        anchorText.includes("special class") ||
+        anchorText.includes("special-class");
 
       if (
         !pdf &&
@@ -572,6 +602,7 @@ export function extractExternalCandidateLinks(html: string, baseUrl: string) {
         anchorText.includes("体験") ||
         anchorText.includes("セレクション") ||
         anchorText.includes("アカデミー") ||
+        anchorText.includes("スクール") ||
         anchorText.includes("クラブ") ||
         anchorText.includes("チーム") ||
         anchorText.includes("ジュニアユース") ||
