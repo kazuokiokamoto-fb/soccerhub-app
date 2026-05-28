@@ -78,9 +78,6 @@ const RECRUIT_INTENT_WORDS = [
   "入団募集",
   "加入",
   "加入募集",
-  "入会",
-  "入会受付",
-  "入会案内",
   "新年度",
   "新中1",
   "現小学6年生",
@@ -143,8 +140,6 @@ const TARGET_WORDS = [
   "ジュニアユース",
   "ユース",
   "アカデミー",
-  "スクール",
-  "スペシャルクラス",
   "GK",
   "ＧＫ",
   "ゴールキーパー",
@@ -259,6 +254,9 @@ const NEGATIVE_WORDS = [
   "観戦",
   "チケット",
   "ファンクラブ",
+  "CLUB.T",
+  "シーズンパスポート",
+  "夢パス",
   "パートナー",
   "スポンサー",
   "ホームタウン",
@@ -287,6 +285,11 @@ const NEGATIVE_WORDS = [
   "プロジェクト",
   "作文募集",
   "クリニック",
+  "無料体験受付中",
+  "入会案内",
+  "年間練習回数",
+  "スクール生限定イベント",
+  "サッカースクール生限定",
 ];
 
 const HARD_BLOCK_PATH_WORDS = [
@@ -329,7 +332,6 @@ const SELECTION_URL_WORDS = [
   "entry",
   "academy-recruit",
   "player-recruit",
-  "member",
   "taiken",
   "experience",
   "open-training",
@@ -343,7 +345,27 @@ const SELECTION_URL_WORDS = [
 ];
 
 function normalizeText(text: string) {
-  return text.replace(/\s+/g, " ").replace(/&nbsp;/g, " ").trim();
+  return text
+    .replace(/&nbsp;/g, " ")
+    .replace(/&laquo;/g, "«")
+    .replace(/&raquo;/g, "»")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isHttpErrorPage(pageTitle: string, rawText: string) {
+  const text = `${pageTitle} ${rawText}`.toLowerCase();
+
+  return (
+    text.includes("404 not found") ||
+    text.includes("403 forbidden") ||
+    text.includes("not found") ||
+    text.includes("forbidden") ||
+    pageTitle.includes("404") ||
+    pageTitle.includes("403") ||
+    pageTitle.includes("ページエラー")
+  );
 }
 
 function isTopTitle(pageTitle: string) {
@@ -367,7 +389,8 @@ function isStrongArticleUrl(url: string) {
     /\/topics\/\d+/.test(lower) ||
     /\/academy\/news\/\d+/.test(lower) ||
     /\/academy\/info\/\d+/.test(lower) ||
-    /\/academy\/topics\/\d+/.test(lower)
+    /\/academy\/topics\/\d+/.test(lower) ||
+    /\/\d{5,}\/?$/.test(lower)
   );
 }
 
@@ -539,6 +562,7 @@ export function getSelectionKeywordStats(params: {
     hasDate: hasDateContext(allText),
     hasEnded: hasEndedText(allText),
     hasOldYearOnly: hasOldYearOnly(`${pageTitle} ${rawText.slice(0, 2500)}`),
+    isHttpErrorPage: isHttpErrorPage(pageTitle, rawText),
     isGoodDetailUrl: isGoodDetailUrl(pageUrl),
     isSelectionLikeUrl: isSelectionLikeUrl(pageUrl),
     isStrongArticleUrl: isStrongArticleUrl(pageUrl),
@@ -571,6 +595,8 @@ export function shouldExtractExternalLinks(params: {
   pageUrl: string;
   sourceName: string;
 }) {
+  if (isHttpErrorPage(params.pageTitle, params.rawText)) return false;
+
   const stats = getSelectionKeywordStats(params);
 
   if (!looksLikeArticleUrl(params.pageUrl) && !stats.isSelectionLikeUrl) {
@@ -595,6 +621,7 @@ export function isTargetPage(params: {
 }) {
   const { rawText, pageTitle, pageUrl, sourceName } = params;
 
+  if (isHttpErrorPage(pageTitle, rawText)) return false;
   if (isInstagramUrl(pageUrl)) return false;
   if (isSitemapUrl(pageUrl)) return false;
   if (!isPdfUrl(pageUrl) && isBlockedFile(pageUrl)) return false;
@@ -611,6 +638,7 @@ export function isTargetPage(params: {
   if (stats.isHardBlockedUrl && !stats.isStrongArticleUrl) return false;
   if (stats.isIndexLikeUrl) return false;
   if (stats.hasOldYearOnly) return false;
+  if (stats.hasEnded && stats.strongCount === 0) return false;
 
   const text = `${sourceName} ${pageTitle} ${rawText}`;
 
@@ -656,6 +684,14 @@ export function getPagePriority(params: {
   pageUrl: string;
 }) {
   const stats = getSelectionKeywordStats(params);
+
+  if (stats.isHttpErrorPage) {
+    return {
+      priority: -999,
+      reason: "http_error_page",
+      keywordCount: 0,
+    };
+  }
 
   if (stats.hasOldYearOnly) {
     return {
@@ -726,7 +762,7 @@ export function buildSelectionDescription(params: {
   const title = normalizeText(pageTitle);
   const body = normalizeText(rawText)
     .replace(title, "")
-    .replace(/メニュー|MENU|トップ|HOME/g, "")
+    .replace(/メニュー|MENU|トップ|HOME|ニュース|NEWS/g, "")
     .trim();
 
   const base = title ? `${title}｜${body}` : body;

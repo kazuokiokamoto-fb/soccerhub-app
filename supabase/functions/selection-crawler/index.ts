@@ -36,6 +36,7 @@ import {
 } from "./extract.ts";
 
 import {
+  buildSelectionDescription,
   getPagePriority,
   isTargetPage,
   shouldExtractExternalLinks,
@@ -52,22 +53,66 @@ function pushSample(arr: any[], value: any, max = 12) {
   if (arr.length < max) arr.push(value);
 }
 
+async function readJsonBody(req: Request) {
+  try {
+    const contentType = req.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) return {};
+    return await req.json();
+  } catch {
+    return {};
+  }
+}
+
+function getRequestNumber(params: {
+  url: URL;
+  body: any;
+  key: string;
+  defaultValue: number;
+}) {
+  const fromQuery = params.url.searchParams.get(params.key);
+  const fromBody = params.body?.[params.key];
+
+  const raw = fromQuery ?? fromBody ?? params.defaultValue;
+  const num = Number(raw);
+
+  if (!Number.isFinite(num)) return params.defaultValue;
+  return num;
+}
+
+function isHttpErrorCandidate(candidate: CandidatePage) {
+  const text = `${candidate.pageTitle} ${candidate.rawText}`.toLowerCase();
+
+  return (
+    text.includes("404 not found") ||
+    text.includes("403 forbidden") ||
+    text.includes("not found") ||
+    text.includes("forbidden") ||
+    candidate.pageTitle.includes("404") ||
+    candidate.pageTitle.includes("403") ||
+    candidate.pageTitle.includes("ページエラー")
+  );
+}
+
 function candidateSortScore(candidate: CandidatePage) {
   const url = decodeURIComponent(candidate.pageUrl.toLowerCase());
   const text = `${candidate.pageTitle} ${candidate.rawText}`;
 
   let score = candidate.priority;
 
+  if (isHttpErrorCandidate(candidate)) return -9999;
+
   if (url.includes("selection")) score += 40;
   if (url.includes("tryout")) score += 35;
   if (url.includes("trial")) score += 30;
   if (url.includes("recruit")) score += 25;
   if (url.includes("entry")) score += 20;
-  if (url.includes("academy")) score += 20;
+  if (url.includes("academy")) score += 15;
   if (url.includes("junior-youth")) score += 25;
   if (url.includes("u-13") || url.includes("u13")) score += 25;
   if (url.includes("u-15") || url.includes("u15")) score += 20;
-  if (url.includes("news") || url.includes("info") || url.includes("topics")) score += 10;
+  if (url.includes("news") || url.includes("info") || url.includes("topics")) {
+    score += 15;
+  }
 
   if (text.includes("セレクション")) score += 35;
   if (text.includes("選考会")) score += 30;
@@ -79,7 +124,21 @@ function candidateSortScore(candidate: CandidatePage) {
   if (text.includes("ジュニアユース")) score += 20;
   if (text.includes("新中1") || text.includes("現小6")) score += 20;
   if (text.includes("U-13") || text.includes("U13")) score += 20;
-  if (text.includes("申込") || text.includes("応募") || text.includes("締切")) score += 15;
+  if (text.includes("申込") || text.includes("応募") || text.includes("締切")) {
+    score += 15;
+  }
+
+  if (text.includes("404 Not Found") || text.includes("403 Forbidden")) {
+    score -= 9999;
+  }
+
+  if (text.includes("ファンクラブ")) score -= 200;
+  if (text.includes("CLUB.T")) score -= 200;
+  if (text.includes("チケット")) score -= 150;
+  if (text.includes("シーズンパスポート")) score -= 150;
+  if (text.includes("入会案内") && !text.includes("セレクション")) score -= 120;
+  if (text.includes("無料体験受付中") && !text.includes("セレクション")) score -= 120;
+  if (text.includes("年間練習回数") && !text.includes("セレクション")) score -= 120;
 
   const depth = getUrlDepth(candidate.pageUrl);
   if (depth <= 1) score -= 40;
@@ -90,9 +149,21 @@ function candidateSortScore(candidate: CandidatePage) {
 
 serve(async (req) => {
   const url = new URL(req.url);
+  const body = await readJsonBody(req);
 
-  const offset = Number(url.searchParams.get("offset") || "0");
-  const limit = Number(url.searchParams.get("limit") || "1");
+  const offset = getRequestNumber({
+    url,
+    body,
+    key: "offset",
+    defaultValue: 0,
+  });
+
+  const limit = getRequestNumber({
+    url,
+    body,
+    key: "limit",
+    defaultValue: 1,
+  });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 
@@ -322,7 +393,13 @@ serve(async (req) => {
           continue;
         }
 
-        const candidate = {
+        const description = buildSelectionDescription({
+          rawText,
+          pageTitle,
+          maxLength: 180,
+        });
+
+        const candidateBase = {
           pageUrl,
           pageTitle,
           rawText,
@@ -330,19 +407,28 @@ serve(async (req) => {
           status: fetched.status,
           contentType: fetched.contentType,
           pdf,
-          priority: candidateSortScore({
+          priority: priority.priority,
+          reason: priority.reason,
+          description,
+          summary: description,
+        };
+
+        const candidate = {
+          ...candidateBase,
+          priority: candidateSortScore(candidateBase),
+        };
+
+        if (candidate.priority <= 0) {
+          debug.priorityRejected += 1;
+          pushSample(debug.priorityRejectedSamples, {
             pageUrl,
             pageTitle,
-            rawText,
-            html,
-            status: fetched.status,
-            contentType: fetched.contentType,
-            pdf,
-            priority: priority.priority,
-            reason: priority.reason,
-          }),
-          reason: priority.reason,
-        };
+            priority: candidate.priority,
+            reason: "sort_score_rejected",
+            textSample: sampleText(rawText),
+          });
+          continue;
+        }
 
         candidates.push(candidate);
 
@@ -352,6 +438,7 @@ serve(async (req) => {
           pageTitle,
           priority: candidate.priority,
           reason: candidate.reason,
+          description,
           textSample: sampleText(rawText),
         });
       }
@@ -398,6 +485,7 @@ serve(async (req) => {
           pageTitle: candidate.pageTitle,
           priority: candidate.priority,
           reason: candidate.reason,
+          description: candidate.description,
           textSample: sampleText(candidate.rawText),
         });
 
