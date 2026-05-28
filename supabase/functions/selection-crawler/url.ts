@@ -161,6 +161,9 @@ export function isBlockedPath(url: string) {
     lower.includes("/association") ||
     lower.includes("/grass_roots") ||
     lower.includes("/grassroots") ||
+    lower.includes("/en-world/") ||
+    lower.includes("/en/") ||
+    lower.includes("/english/") ||
     lower.includes("/history")
   );
 }
