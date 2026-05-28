@@ -16,7 +16,6 @@ import {
   buildSeedUrls,
   extractLinks,
   extractExternalCandidateLinks,
-  getUrlDepth,
   isBlockedFile,
   isBlockedPath,
   isInstagramUrl,
@@ -37,7 +36,7 @@ import {
 
 import {
   buildSelectionDescription,
-  getPagePriority,
+  getSelectionKeywordStats,
   isTargetPage,
   shouldExtractExternalLinks,
 } from "./classify.ts";
@@ -71,7 +70,6 @@ function getRequestNumber(params: {
 }) {
   const fromQuery = params.url.searchParams.get(params.key);
   const fromBody = params.body?.[params.key];
-
   const raw = fromQuery ?? fromBody ?? params.defaultValue;
   const num = Number(raw);
 
@@ -83,75 +81,131 @@ function clampNumber(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-function isHttpErrorCandidate(candidate: CandidatePage) {
-  const text = `${candidate.pageTitle} ${candidate.rawText}`.toLowerCase();
+function isHttpErrorPage(pageTitle: string, rawText: string) {
+  const text = `${pageTitle} ${rawText}`.toLowerCase();
 
   return (
     text.includes("404 not found") ||
     text.includes("403 forbidden") ||
     text.includes("not found") ||
     text.includes("forbidden") ||
-    candidate.pageTitle.includes("404") ||
-    candidate.pageTitle.includes("403") ||
-    candidate.pageTitle.includes("ページエラー") ||
-    candidate.pageTitle.includes("お探しのページは見つかりません")
+    pageTitle.includes("404") ||
+    pageTitle.includes("403") ||
+    pageTitle.includes("ページエラー") ||
+    pageTitle.includes("お探しのページは見つかりません") ||
+    pageTitle.includes("ページが見つかりません")
   );
 }
 
-function candidateSortScore(candidate: CandidatePage) {
-  const url = decodeURIComponent(candidate.pageUrl.toLowerCase());
-  const text = `${candidate.pageTitle} ${candidate.rawText}`;
+function getUrlRank(pageUrl: string) {
+  const url = decodeURIComponent(pageUrl.toLowerCase());
 
-  let score = candidate.priority;
+  if (url.includes("selection")) return 1;
+  if (url.includes("tryout")) return 2;
+  if (url.includes("trial")) return 3;
+  if (url.includes("recruit")) return 4;
+  if (url.includes("entry")) return 5;
+  if (url.includes("boshu")) return 6;
+  if (url.includes("nyudan")) return 7;
+  if (url.includes("taiken")) return 8;
+  if (url.includes("experience")) return 9;
+  if (url.includes("/news/") || url.includes("/info/")) return 10;
+  if (url.includes("/topics/") || url.includes("/information/")) return 11;
+  if (url.includes("academy")) return 12;
+  if (url.includes("junior") || url.includes("youth")) return 13;
 
-  if (isHttpErrorCandidate(candidate)) return -9999;
+  return 99;
+}
 
-  if (url.includes("selection")) score += 40;
-  if (url.includes("tryout")) score += 35;
-  if (url.includes("trial")) score += 30;
-  if (url.includes("recruit")) score += 25;
-  if (url.includes("entry")) score += 20;
-  if (url.includes("academy")) score += 15;
-  if (url.includes("junior-youth")) score += 25;
-  if (url.includes("u-13") || url.includes("u13")) score += 25;
-  if (url.includes("u-15") || url.includes("u15")) score += 20;
+function getTitleRank(pageTitle: string) {
+  const title = pageTitle;
 
-  if (url.includes("news") || url.includes("info") || url.includes("topics")) {
-    score += 15;
+  if (title.includes("セレクション")) return 1;
+  if (title.includes("選考会")) return 2;
+  if (title.includes("トライアウト")) return 3;
+  if (title.includes("選手募集")) return 4;
+  if (title.includes("練習会")) return 5;
+  if (title.includes("体験会")) return 6;
+  if (title.includes("募集")) return 7;
+
+  return 99;
+}
+
+function shouldRejectByKeywordStats(stats: any) {
+  if (stats.isHttpErrorPage) return "http_error_page";
+  if (stats.hasOldYearOnly) return "old_year_only";
+  if (stats.isIndexLikeUrl) return "index_like_url";
+  if (stats.isTopTitle && !stats.isStrongArticleUrl) return "top_title";
+  if (stats.isHardBlockedUrl && !stats.isStrongArticleUrl) {
+    return "hard_blocked_url";
   }
 
-  if (text.includes("セレクション")) score += 35;
-  if (text.includes("選考会")) score += 30;
-  if (text.includes("トライアウト")) score += 30;
-  if (text.includes("選手募集")) score += 25;
-  if (text.includes("参加者募集")) score += 20;
-  if (text.includes("体験会")) score += 15;
-  if (text.includes("練習会")) score += 15;
-  if (text.includes("ジュニアユース")) score += 20;
-  if (text.includes("新中1") || text.includes("現小6")) score += 20;
-  if (text.includes("U-13") || text.includes("U13")) score += 20;
-
-  if (text.includes("申込") || text.includes("応募") || text.includes("締切")) {
-    score += 15;
+  if (stats.negativeCount >= 1 && stats.strongCount === 0) {
+    return "negative_context";
   }
 
-  if (text.includes("404 Not Found") || text.includes("403 Forbidden")) {
-    score -= 9999;
+  if (stats.keywordCount <= 0) return "no_keyword";
+
+  return null;
+}
+
+function buildReason(stats: any) {
+  if (stats.isStrongArticleUrl && stats.strongCount >= 1) {
+    return "article_url_with_selection_keyword";
   }
 
-  if (text.includes("ファンクラブ")) score -= 200;
-  if (text.includes("CLUB.T")) score -= 200;
-  if (text.includes("チケット")) score -= 150;
-  if (text.includes("シーズンパスポート")) score -= 150;
-  if (text.includes("入会案内") && !text.includes("セレクション")) score -= 120;
-  if (text.includes("無料体験受付中") && !text.includes("セレクション")) score -= 120;
-  if (text.includes("年間練習回数") && !text.includes("セレクション")) score -= 120;
+  if (stats.isSelectionLikeUrl && stats.strongCount >= 1) {
+    return "selection_like_url_with_selection_keyword";
+  }
 
-  const depth = getUrlDepth(candidate.pageUrl);
-  if (depth <= 1) score -= 40;
-  if (depth >= 3) score += 15;
+  if (stats.isSelectionLikeUrl) {
+    return "selection_like_url";
+  }
 
-  return score;
+  if (stats.strongCount >= 1) {
+    return "selection_keyword";
+  }
+
+  if (stats.recruitCount >= 2) {
+    return "recruit_keywords";
+  }
+
+  return "keyword_count";
+}
+
+function makeCandidateSortKey(candidate: CandidatePage) {
+  const stats = candidate.keywordStats ?? {};
+  return {
+    titleRank: getTitleRank(candidate.pageTitle),
+    urlRank: getUrlRank(candidate.pageUrl),
+    keywordCount: stats.keywordCount ?? candidate.priority ?? 0,
+    strongCount: stats.strongCount ?? 0,
+    recruitCount: stats.recruitCount ?? 0,
+    targetCount: stats.targetCount ?? 0,
+    applicationCount: stats.applicationCount ?? 0,
+    hasDate: stats.hasDate ? 1 : 0,
+    urlLength: candidate.pageUrl.length,
+  };
+}
+
+function compareCandidates(a: CandidatePage, b: CandidatePage) {
+  const ka = makeCandidateSortKey(a);
+  const kb = makeCandidateSortKey(b);
+
+  if (ka.titleRank !== kb.titleRank) return ka.titleRank - kb.titleRank;
+  if (ka.urlRank !== kb.urlRank) return ka.urlRank - kb.urlRank;
+  if (kb.strongCount !== ka.strongCount) return kb.strongCount - ka.strongCount;
+  if (kb.keywordCount !== ka.keywordCount) {
+    return kb.keywordCount - ka.keywordCount;
+  }
+  if (kb.recruitCount !== ka.recruitCount) {
+    return kb.recruitCount - ka.recruitCount;
+  }
+  if (kb.applicationCount !== ka.applicationCount) {
+    return kb.applicationCount - ka.applicationCount;
+  }
+  if (kb.hasDate !== ka.hasDate) return kb.hasDate - ka.hasDate;
+  return kb.urlLength - ka.urlLength;
 }
 
 serve(async (req) => {
@@ -175,7 +229,6 @@ serve(async (req) => {
     defaultValue: 1,
   });
 
-  // 546対策：一度に回すクラブ数は最大5件に制限
   const limit = clampNumber(requestedLimit, 1, 5);
 
   const requestedMaxPagesPerSource = getRequestNumber({
@@ -185,7 +238,6 @@ serve(async (req) => {
     defaultValue: 30,
   });
 
-  // 546対策：1クラブあたり最大60ページまで。通常は30推奨
   const maxPagesPerSource = clampNumber(
     requestedMaxPagesPerSource,
     10,
@@ -195,7 +247,6 @@ serve(async (req) => {
   const queueMaxSize = maxPagesPerSource * 3;
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
-
   const serviceRoleKey =
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
     Deno.env.get("SB_SERVICE_ROLE_KEY");
@@ -251,7 +302,7 @@ serve(async (req) => {
       internalLinks: 0,
       externalLinks: 0,
       targetRejected: 0,
-      priorityRejected: 0,
+      keywordRejected: 0,
       candidates: 0,
       uniqueCandidates: 0,
       selected: 0,
@@ -259,7 +310,7 @@ serve(async (req) => {
       inserted: 0,
       updated: 0,
       targetRejectedSamples: [],
-      priorityRejectedSamples: [],
+      keywordRejectedSamples: [],
       candidateSamples: [],
       selectedSamples: [],
       saveErrors: [],
@@ -384,6 +435,40 @@ serve(async (req) => {
           }
         }
 
+        if (isHttpErrorPage(pageTitle, rawText)) {
+          debug.targetRejected += 1;
+          pushSample(debug.targetRejectedSamples, {
+            pageUrl,
+            pageTitle,
+            reason: "http_error_page",
+            textSample: sampleText(rawText),
+          });
+          continue;
+        }
+
+        const stats = getSelectionKeywordStats({
+          rawText,
+          pageTitle,
+          pageUrl,
+          sourceName: source.name,
+        });
+
+        const rejectReason = shouldRejectByKeywordStats(stats);
+
+        if (rejectReason) {
+          debug.keywordRejected += 1;
+          pushSample(debug.keywordRejectedSamples, {
+            pageUrl,
+            pageTitle,
+            reason: rejectReason,
+            keywordCount: stats.keywordCount,
+            strongCount: stats.strongCount,
+            recruitCount: stats.recruitCount,
+            textSample: sampleText(rawText),
+          });
+          continue;
+        }
+
         const target = isTargetPage({
           rawText,
           pageTitle,
@@ -396,24 +481,10 @@ serve(async (req) => {
           pushSample(debug.targetRejectedSamples, {
             pageUrl,
             pageTitle,
-            textSample: sampleText(rawText),
-          });
-          continue;
-        }
-
-        const priority = getPagePriority({
-          rawText,
-          pageTitle,
-          pageUrl,
-        });
-
-        if (priority.priority <= 0) {
-          debug.priorityRejected += 1;
-          pushSample(debug.priorityRejectedSamples, {
-            pageUrl,
-            pageTitle,
-            priority: priority.priority,
-            reason: priority.reason,
+            reason: "not_target_page",
+            keywordCount: stats.keywordCount,
+            strongCount: stats.strongCount,
+            recruitCount: stats.recruitCount,
             textSample: sampleText(rawText),
           });
           continue;
@@ -425,7 +496,7 @@ serve(async (req) => {
           maxLength: 180,
         });
 
-        const candidateBase = {
+        const candidate = {
           pageUrl,
           pageTitle,
           rawText,
@@ -433,28 +504,12 @@ serve(async (req) => {
           status: fetched.status,
           contentType: fetched.contentType,
           pdf,
-          priority: priority.priority,
-          reason: priority.reason,
+          priority: stats.keywordCount,
+          reason: buildReason(stats),
+          keywordStats: stats,
           description,
           summary: description,
         };
-
-        const candidate = {
-          ...candidateBase,
-          priority: candidateSortScore(candidateBase),
-        };
-
-        if (candidate.priority <= 0) {
-          debug.priorityRejected += 1;
-          pushSample(debug.priorityRejectedSamples, {
-            pageUrl,
-            pageTitle,
-            priority: candidate.priority,
-            reason: "sort_score_rejected",
-            textSample: sampleText(rawText),
-          });
-          continue;
-        }
 
         candidates.push(candidate);
 
@@ -462,8 +517,10 @@ serve(async (req) => {
         pushSample(debug.candidateSamples, {
           pageUrl,
           pageTitle,
-          priority: candidate.priority,
           reason: candidate.reason,
+          keywordCount: stats.keywordCount,
+          strongCount: stats.strongCount,
+          recruitCount: stats.recruitCount,
           description,
           textSample: sampleText(rawText),
         });
@@ -489,7 +546,7 @@ serve(async (req) => {
 
         const existing = uniqueByDuplicateKey.get(key);
 
-        if (!existing || candidate.priority > existing.priority) {
+        if (!existing || compareCandidates(candidate, existing) < 0) {
           uniqueByDuplicateKey.set(key, candidate);
         }
       }
@@ -497,10 +554,7 @@ serve(async (req) => {
       debug.uniqueCandidates = uniqueByDuplicateKey.size;
 
       const selectedCandidates = Array.from(uniqueByDuplicateKey.values())
-        .sort((a, b) => {
-          if (b.priority !== a.priority) return b.priority - a.priority;
-          return b.pageUrl.length - a.pageUrl.length;
-        })
+        .sort(compareCandidates)
         .slice(0, MAX_EVENTS_PER_SOURCE);
 
       debug.selected = selectedCandidates.length;
@@ -509,8 +563,10 @@ serve(async (req) => {
         pushSample(debug.selectedSamples, {
           pageUrl: candidate.pageUrl,
           pageTitle: candidate.pageTitle,
-          priority: candidate.priority,
           reason: candidate.reason,
+          keywordCount: candidate.keywordStats?.keywordCount,
+          strongCount: candidate.keywordStats?.strongCount,
+          recruitCount: candidate.keywordStats?.recruitCount,
           description: candidate.description,
           textSample: sampleText(candidate.rawText),
         });
@@ -568,7 +624,7 @@ serve(async (req) => {
             inserted_events: sourceInsertedEvents,
             updated_events: sourceUpdatedEvents,
             candidate_count: candidates.length,
-            rejected_count: debug.targetRejected + debug.priorityRejected,
+            rejected_count: debug.targetRejected + debug.keywordRejected,
             debug_message: JSON.stringify(debug),
             error_message:
               candidates.length > 0 ? null : "No target candidates found",
@@ -596,7 +652,7 @@ serve(async (req) => {
             inserted_events: sourceInsertedEvents,
             updated_events: sourceUpdatedEvents,
             candidate_count: 0,
-            rejected_count: debug.targetRejected + debug.priorityRejected,
+            rejected_count: debug.targetRejected + debug.keywordRejected,
             debug_message: JSON.stringify(debug),
           })
           .eq("id", logId);
