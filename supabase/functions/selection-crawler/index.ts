@@ -79,6 +79,10 @@ function getRequestNumber(params: {
   return num;
 }
 
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
 function isHttpErrorCandidate(candidate: CandidatePage) {
   const text = `${candidate.pageTitle} ${candidate.rawText}`.toLowerCase();
 
@@ -89,7 +93,8 @@ function isHttpErrorCandidate(candidate: CandidatePage) {
     text.includes("forbidden") ||
     candidate.pageTitle.includes("404") ||
     candidate.pageTitle.includes("403") ||
-    candidate.pageTitle.includes("ページエラー")
+    candidate.pageTitle.includes("ページエラー") ||
+    candidate.pageTitle.includes("お探しのページは見つかりません")
   );
 }
 
@@ -110,6 +115,7 @@ function candidateSortScore(candidate: CandidatePage) {
   if (url.includes("junior-youth")) score += 25;
   if (url.includes("u-13") || url.includes("u13")) score += 25;
   if (url.includes("u-15") || url.includes("u15")) score += 20;
+
   if (url.includes("news") || url.includes("info") || url.includes("topics")) {
     score += 15;
   }
@@ -124,6 +130,7 @@ function candidateSortScore(candidate: CandidatePage) {
   if (text.includes("ジュニアユース")) score += 20;
   if (text.includes("新中1") || text.includes("現小6")) score += 20;
   if (text.includes("U-13") || text.includes("U13")) score += 20;
+
   if (text.includes("申込") || text.includes("応募") || text.includes("締切")) {
     score += 15;
   }
@@ -151,19 +158,41 @@ serve(async (req) => {
   const url = new URL(req.url);
   const body = await readJsonBody(req);
 
-  const offset = getRequestNumber({
-    url,
-    body,
-    key: "offset",
-    defaultValue: 0,
-  });
+  const offset = Math.max(
+    getRequestNumber({
+      url,
+      body,
+      key: "offset",
+      defaultValue: 0,
+    }),
+    0,
+  );
 
-  const limit = getRequestNumber({
+  const requestedLimit = getRequestNumber({
     url,
     body,
     key: "limit",
     defaultValue: 1,
   });
+
+  // 546対策：一度に回すクラブ数は最大5件に制限
+  const limit = clampNumber(requestedLimit, 1, 5);
+
+  const requestedMaxPagesPerSource = getRequestNumber({
+    url,
+    body,
+    key: "maxPagesPerSource",
+    defaultValue: 30,
+  });
+
+  // 546対策：1クラブあたり最大60ページまで。通常は30推奨
+  const maxPagesPerSource = clampNumber(
+    requestedMaxPagesPerSource,
+    10,
+    Math.min(MAX_PAGES_PER_SOURCE, 60),
+  );
+
+  const queueMaxSize = maxPagesPerSource * 3;
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
 
@@ -182,7 +211,7 @@ serve(async (req) => {
     .select("id,name,base_url,organization_type,source_rank,enabled")
     .eq("enabled", true)
     .order("created_at", { ascending: true })
-    .range(offset, offset + Math.max(limit, 1) - 1);
+    .range(offset, offset + limit - 1);
 
   if (error) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });
@@ -217,6 +246,7 @@ serve(async (req) => {
       baseUrl: source.base_url,
       queued: 0,
       fetched: 0,
+      maxPagesPerSource,
       sitemapLinks: 0,
       internalLinks: 0,
       externalLinks: 0,
@@ -237,13 +267,13 @@ serve(async (req) => {
 
     try {
       const seedUrls = buildSeedUrls(source.base_url);
-      const queue = [...seedUrls];
+      const queue = [...seedUrls].slice(0, queueMaxSize);
       const visited = new Set<string>();
       const candidates: CandidatePage[] = [];
 
-      debug.queued = seedUrls.length;
+      debug.queued = queue.length;
 
-      while (queue.length > 0 && visited.size < MAX_PAGES_PER_SOURCE) {
+      while (queue.length > 0 && visited.size < maxPagesPerSource) {
         let pageUrl = normalizeUrl(queue.shift() || "");
 
         if (!pageUrl) continue;
@@ -285,7 +315,6 @@ serve(async (req) => {
 
         if (finalUrl !== pageUrl) {
           if (visited.has(finalUrl)) continue;
-
           pageUrl = finalUrl;
           visited.add(pageUrl);
         }
@@ -309,7 +338,7 @@ serve(async (req) => {
           debug.sitemapLinks += sitemapLinks.length;
 
           for (const link of sitemapLinks) {
-            if (!visited.has(link) && queue.length < MAX_PAGES_PER_SOURCE * 5) {
+            if (!visited.has(link) && queue.length < queueMaxSize) {
               queue.push(link);
             }
           }
@@ -331,7 +360,7 @@ serve(async (req) => {
           debug.internalLinks += foundLinks.length;
 
           for (const link of foundLinks) {
-            if (!visited.has(link) && queue.length < MAX_PAGES_PER_SOURCE * 5) {
+            if (!visited.has(link) && queue.length < queueMaxSize) {
               queue.push(link);
             }
           }
@@ -348,10 +377,7 @@ serve(async (req) => {
             debug.externalLinks += externalLinks.length;
 
             for (const externalLink of externalLinks) {
-              if (
-                !visited.has(externalLink) &&
-                queue.length < MAX_PAGES_PER_SOURCE * 5
-              ) {
+              if (!visited.has(externalLink) && queue.length < queueMaxSize) {
                 queue.push(externalLink);
               }
             }
@@ -585,6 +611,9 @@ serve(async (req) => {
     sourceCount: sources?.length ?? 0,
     offset,
     nextOffset: sources?.length ? offset + sources.length : null,
+    requestedLimit,
+    appliedLimit: limit,
+    maxPagesPerSource,
     remainingLimit: Math.max(limit - (sources?.length ?? 0), 0),
     fetchedPages,
     savedPages,
