@@ -321,31 +321,7 @@ function buildSiteSearchPaths(keyword: string) {
 }
 
 function buildMonthlyInfoPaths() {
-  const now = new Date();
-  const currentYear = now.getFullYear();
-
-  const years = [currentYear, currentYear - 1, currentYear + 1];
-
-  const currentMonth = now.getMonth() + 1;
-  const recentMonths: string[] = [];
-
-  for (let i = 0; i < 12; i++) {
-    const m = ((currentMonth - i - 1 + 12) % 12) + 1;
-    recentMonths.push(String(m).padStart(2, "0"));
-  }
-
-  const paths: string[] = [];
-
-  for (const year of years) {
-    for (const month of recentMonths) {
-      paths.push(`/news/${year}/${month}/`);
-      paths.push(`/info/${year}/${month}/`);
-      paths.push(`/topics/${year}/${month}/`);
-      paths.push(`/information/${year}/${month}/`);
-    }
-  }
-
-  return paths;
+  return [];
 }
 
 function linkPriority(url: string) {
@@ -407,6 +383,11 @@ export function buildSeedUrls(baseUrl: string) {
       "/academy/info/",
       "/academy/topics/",
       "/academy/recruit/",
+      "/academy/u15/",
+      "/academy/u-15/",
+      "/academy/junioryouth/",
+      "/news/article/",
+      "/academy/news/article/",
       "/junior-youth/",
       "/junior_youth/",
       "/junioryouth/",
@@ -463,10 +444,6 @@ export function buildSeedUrls(baseUrl: string) {
       for (const path of nested) {
         urls.add(normalizeUrl(new URL(path, base.origin).toString()));
       }
-    }
-
-    for (const path of buildMonthlyInfoPaths()) {
-      urls.add(normalizeUrl(new URL(path, base.origin).toString()));
     }
 
     for (const path of CRAWL_ENTRY_PATHS) {
@@ -570,7 +547,13 @@ export function extractLinks(html: string, baseUrl: string) {
         anchorText.includes("u-18") ||
         anchorText.includes("u18");
 
-      if (!pdf && !sitemap && !looksImportant && !anchorLooksImportant) {
+      if (
+        !pdf &&
+        !sitemap &&
+        !looksImportant &&
+        !anchorLooksImportant &&
+        !looksLikeArticleUrl(abs)
+      ) {
         continue;
       }
 
@@ -582,7 +565,7 @@ export function extractLinks(html: string, baseUrl: string) {
 
   return Array.from(links)
     .sort((a, b) => linkPriority(b) - linkPriority(a))
-    .slice(0, 300);
+    .slice(0, 1000);
 }
 
 export function extractExternalCandidateLinks(html: string, baseUrl: string) {
