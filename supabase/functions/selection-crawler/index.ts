@@ -203,32 +203,73 @@ function compareCandidates(a: CandidatePage, b: CandidatePage) {
   const ka = makeCandidateSortKey(a);
   const kb = makeCandidateSortKey(b);
 
+  const aTitle = a.pageTitle || "";
+  const bTitle = b.pageTitle || "";
+
+  const aUrl = decodeURIComponent(a.pageUrl.toLowerCase());
+  const bUrl = decodeURIComponent(b.pageUrl.toLowerCase());
+
+  const aHasSelectionTitle =
+    aTitle.includes("セレクション") ||
+    aTitle.includes("選考会") ||
+    aTitle.includes("トライアウト");
+
+  const bHasSelectionTitle =
+    bTitle.includes("セレクション") ||
+    bTitle.includes("選考会") ||
+    bTitle.includes("トライアウト");
+
   // タイトルにセレクション系
-  if (ka.titleRank !== kb.titleRank) {
-    return ka.titleRank - kb.titleRank;
+  if (aHasSelectionTitle !== bHasSelectionTitle) {
+    return bHasSelectionTitle ? 1 : -1;
   }
 
-  // 記事URLを最優先
+  // PDF優先
+  const aPdf = isPdfUrl(a.pageUrl);
+  const bPdf = isPdfUrl(b.pageUrl);
+
+  if (aPdf !== bPdf) {
+    return bPdf ? 1 : -1;
+  }
+
+  // News記事優先
   if (kb.isStrongArticleUrl !== ka.isStrongArticleUrl) {
     return kb.isStrongArticleUrl - ka.isStrongArticleUrl;
   }
 
-  // 日付あり優先
-  if (kb.hasDate !== ka.hasDate) {
-    return kb.hasDate - ka.hasDate;
+  // selection系URL優先
+  const aSelectionUrl =
+    aUrl.includes("selection") ||
+    aUrl.includes("tryout") ||
+    aUrl.includes("recruit") ||
+    aUrl.includes("boshu");
+
+  const bSelectionUrl =
+    bUrl.includes("selection") ||
+    bUrl.includes("tryout") ||
+    bUrl.includes("recruit") ||
+    bUrl.includes("boshu");
+
+  if (aSelectionUrl !== bSelectionUrl) {
+    return bSelectionUrl ? 1 : -1;
   }
 
-  // 申込情報あり優先
+  // 申込情報あり
   if (kb.applicationCount !== ka.applicationCount) {
     return kb.applicationCount - ka.applicationCount;
   }
 
-  // 開催情報あり優先
+  // 日程あり
   if (kb.scheduleCount !== ka.scheduleCount) {
     return kb.scheduleCount - ka.scheduleCount;
   }
 
-  // 募集キーワード
+  // 日付あり
+  if (kb.hasDate !== ka.hasDate) {
+    return kb.hasDate - ka.hasDate;
+  }
+
+  // 募集系
   if (kb.recruitCount !== ka.recruitCount) {
     return kb.recruitCount - ka.recruitCount;
   }
@@ -238,24 +279,33 @@ function compareCandidates(a: CandidatePage, b: CandidatePage) {
     return kb.strongCount - ka.strongCount;
   }
 
-  // タイトル強キーワード
-  if (kb.titleStrongCount !== ka.titleStrongCount) {
-    return kb.titleStrongCount - ka.titleStrongCount;
+  // 固定ページを最後に落とす
+  const aFixed =
+    aUrl.endsWith("/academy/") ||
+    aUrl.endsWith("/school/") ||
+    aUrl.endsWith("/junior/") ||
+    aUrl.endsWith("/junioryouth/") ||
+    aUrl.endsWith("/youth/");
+
+  const bFixed =
+    bUrl.endsWith("/academy/") ||
+    bUrl.endsWith("/school/") ||
+    bUrl.endsWith("/junior/") ||
+    bUrl.endsWith("/junioryouth/") ||
+    bUrl.endsWith("/youth/");
+
+  if (aFixed !== bFixed) {
+    return aFixed ? 1 : -1;
   }
 
-  // 総キーワード
-  if (kb.keywordCount !== ka.keywordCount) {
-    return kb.keywordCount - ka.keywordCount;
-  }
-
-  // selection系URL
-  if (kb.isSelectionLikeUrl !== ka.isSelectionLikeUrl) {
-    return kb.isSelectionLikeUrl - ka.isSelectionLikeUrl;
-  }
-
-  // academy固定ページを最後に落とす
+  // URLランク
   if (ka.urlRank !== kb.urlRank) {
     return ka.urlRank - kb.urlRank;
+  }
+
+  // 最後だけキーワード数
+  if (kb.keywordCount !== ka.keywordCount) {
+    return kb.keywordCount - ka.keywordCount;
   }
 
   return kb.urlLength - ka.urlLength;
@@ -285,11 +335,11 @@ serve(async (req) => {
   const limit = clampNumber(requestedLimit, 1, 5);
 
   const requestedMaxPagesPerSource = getRequestNumber({
-    url,
-    body,
-    key: "maxPagesPerSource",
-    defaultValue: 30,
-  });
+      url,
+      body,
+      key: "maxPagesPerSource",
+      defaultValue: 30,
+    });
 
   const maxPagesPerSource = clampNumber(
     requestedMaxPagesPerSource,
@@ -305,7 +355,10 @@ serve(async (req) => {
     Deno.env.get("SB_SERVICE_ROLE_KEY");
 
   if (!supabaseUrl || !serviceRoleKey) {
-    return Response.json({ ok: false, error: "Missing env" }, { status: 500 });
+    return Response.json(
+      { ok: false, error: "Missing env" },
+      { status: 500 },
+    );
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
@@ -318,7 +371,10 @@ serve(async (req) => {
     .range(offset, offset + limit - 1);
 
   if (error) {
-    return Response.json({ ok: false, error: error.message }, { status: 500 });
+    return Response.json(
+      { ok: false, error: error.message },
+      { status: 500 },
+    );
   }
 
   let fetchedPages = 0;
@@ -372,6 +428,7 @@ serve(async (req) => {
     try {
       const seedUrls = buildSeedUrls(source.base_url);
       const queue = [...seedUrls].slice(0, queueMaxSize);
+
       const visited = new Set<string>();
       const candidates: CandidatePage[] = [];
 
@@ -412,6 +469,7 @@ serve(async (req) => {
             reason: "fetch_failed",
             error: e instanceof Error ? e.message : String(e),
           });
+
           continue;
         }
 
@@ -419,6 +477,7 @@ serve(async (req) => {
 
         if (finalUrl !== pageUrl) {
           if (visited.has(finalUrl)) continue;
+
           pageUrl = finalUrl;
           visited.add(pageUrl);
         }
@@ -428,7 +487,8 @@ serve(async (req) => {
         debug.fetched += 1;
 
         const pdf =
-          isPdfUrl(pageUrl) || String(fetched.contentType || "").includes("pdf");
+          isPdfUrl(pageUrl) ||
+          String(fetched.contentType || "").includes("pdf");
 
         const sitemap =
           isSitemapUrl(pageUrl) ||
@@ -439,6 +499,7 @@ serve(async (req) => {
 
         if (sitemap && html) {
           const sitemapLinks = extractSitemapUrls(html, pageUrl);
+
           debug.sitemapLinks += sitemapLinks.length;
 
           for (const link of sitemapLinks) {
@@ -461,6 +522,7 @@ serve(async (req) => {
           pageTitle = getTitle(html);
 
           const foundLinks = extractLinks(html, pageUrl);
+
           debug.internalLinks += foundLinks.length;
 
           for (const link of foundLinks) {
@@ -477,11 +539,18 @@ serve(async (req) => {
               sourceName: source.name,
             })
           ) {
-            const externalLinks = extractExternalCandidateLinks(html, pageUrl);
+            const externalLinks = extractExternalCandidateLinks(
+              html,
+              pageUrl,
+            );
+
             debug.externalLinks += externalLinks.length;
 
             for (const externalLink of externalLinks) {
-              if (!visited.has(externalLink) && queue.length < queueMaxSize) {
+              if (
+                !visited.has(externalLink) &&
+                queue.length < queueMaxSize
+              ) {
                 queue.push(externalLink);
               }
             }
@@ -490,12 +559,14 @@ serve(async (req) => {
 
         if (isHttpErrorPage(pageTitle, rawText)) {
           debug.targetRejected += 1;
+
           pushSample(debug.targetRejectedSamples, {
             pageUrl,
             pageTitle,
             reason: "http_error_page",
             textSample: sampleText(rawText),
           });
+
           continue;
         }
 
@@ -510,6 +581,7 @@ serve(async (req) => {
 
         if (rejectReason) {
           debug.keywordRejected += 1;
+
           pushSample(debug.keywordRejectedSamples, {
             pageUrl,
             pageTitle,
@@ -520,6 +592,7 @@ serve(async (req) => {
             recruitCount: stats.recruitCount,
             textSample: sampleText(rawText),
           });
+
           continue;
         }
 
@@ -532,6 +605,7 @@ serve(async (req) => {
 
         if (!target) {
           debug.targetRejected += 1;
+
           pushSample(debug.targetRejectedSamples, {
             pageUrl,
             pageTitle,
@@ -542,6 +616,7 @@ serve(async (req) => {
             recruitCount: stats.recruitCount,
             textSample: sampleText(rawText),
           });
+
           continue;
         }
 
@@ -569,6 +644,7 @@ serve(async (req) => {
         candidates.push(candidate);
 
         debug.candidates += 1;
+
         pushSample(debug.candidateSamples, {
           pageUrl,
           pageTitle,
@@ -592,7 +668,9 @@ serve(async (req) => {
           candidate.pageUrl,
         );
 
-        const eventDate = safeDate(extractDateNearKeyword(candidate.rawText));
+        const eventDate = safeDate(
+          extractDateNearKeyword(candidate.rawText),
+        );
 
         const key = buildDuplicateKey({
           title,
@@ -609,7 +687,9 @@ serve(async (req) => {
 
       debug.uniqueCandidates = uniqueByDuplicateKey.size;
 
-      const selectedCandidates = Array.from(uniqueByDuplicateKey.values())
+      const selectedCandidates = Array.from(
+        uniqueByDuplicateKey.values(),
+      )
         .sort(compareCandidates)
         .slice(0, MAX_EVENTS_PER_SOURCE);
 
@@ -652,7 +732,9 @@ serve(async (req) => {
             debug.updated += 1;
           }
         } catch (e) {
-          const message = e instanceof Error ? e.message : String(e);
+          const message = e instanceof Error
+            ? e.message
+            : String(e);
 
           pushSample(debug.saveErrors, {
             pageUrl: candidate.pageUrl,
@@ -660,7 +742,9 @@ serve(async (req) => {
             error: message,
           });
 
-          errors.push(`${source.name}: ${candidate.pageUrl}: ${message}`);
+          errors.push(
+            `${source.name}: ${candidate.pageUrl}: ${message}`,
+          );
         }
       }
 
@@ -681,10 +765,13 @@ serve(async (req) => {
             inserted_events: sourceInsertedEvents,
             updated_events: sourceUpdatedEvents,
             candidate_count: candidates.length,
-            rejected_count: debug.targetRejected + debug.keywordRejected,
+            rejected_count:
+              debug.targetRejected + debug.keywordRejected,
             debug_message: JSON.stringify(debug),
             error_message:
-              candidates.length > 0 ? null : "No target candidates found",
+              candidates.length > 0
+                ? null
+                : "No target candidates found",
           })
           .eq("id", logId);
       }
@@ -693,8 +780,8 @@ serve(async (req) => {
         e instanceof Error
           ? e.message
           : typeof e === "object"
-            ? JSON.stringify(e)
-            : String(e);
+          ? JSON.stringify(e)
+          : String(e);
 
       errors.push(`${source.name}: ${message}`);
 
@@ -709,7 +796,8 @@ serve(async (req) => {
             inserted_events: sourceInsertedEvents,
             updated_events: sourceUpdatedEvents,
             candidate_count: 0,
-            rejected_count: debug.targetRejected + debug.keywordRejected,
+            rejected_count:
+              debug.targetRejected + debug.keywordRejected,
             debug_message: JSON.stringify(debug),
           })
           .eq("id", logId);
@@ -723,11 +811,16 @@ serve(async (req) => {
     ok: errors.length === 0,
     sourceCount: sources?.length ?? 0,
     offset,
-    nextOffset: sources?.length ? offset + sources.length : null,
+    nextOffset: sources?.length
+      ? offset + sources.length
+      : null,
     requestedLimit,
     appliedLimit: limit,
     maxPagesPerSource,
-    remainingLimit: Math.max(limit - (sources?.length ?? 0), 0),
+    remainingLimit: Math.max(
+      limit - (sources?.length ?? 0),
+      0,
+    ),
     fetchedPages,
     savedPages,
     insertedEvents,
