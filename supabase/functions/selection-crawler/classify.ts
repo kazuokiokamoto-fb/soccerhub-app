@@ -45,6 +45,11 @@ const TITLE_ALLOW_WORDS = [
   "募集",
   "練習会",
   "体験会",
+  "無料体験",
+  "体験申し込み",
+  "スクール無料体験",
+  "Special Class",
+  "スペシャルクラス",
 ];
 
 const RECRUIT_INTENT_WORDS = [
@@ -55,7 +60,10 @@ const RECRUIT_INTENT_WORDS = [
   "体験練習",
   "体験練習会",
   "体験会",
+  "無料体験",
   "無料体験会",
+  "体験申し込み",
+  "スクール無料体験",
   "セレクション練習会",
   "GK練習会",
   "選手募集",
@@ -65,6 +73,7 @@ const RECRUIT_INTENT_WORDS = [
   "メンバー募集",
   "クラブ生募集",
   "アカデミー生募集",
+  "スクール生募集",
   "ジュニアユース募集",
   "ユース募集",
   "GK募集",
@@ -163,14 +172,20 @@ const PLAYER_CONTEXT_WORDS = [
   "セレクション",
   "練習会",
   "体験練習",
+  "体験会",
+  "無料体験",
   "ジュニアユース",
   "ユース",
   "アカデミー",
   "スクール",
+  "U-12",
+  "U12",
   "U-13",
   "U13",
   "U-15",
   "U15",
+  "U-18",
+  "U18",
 ];
 
 const SCHEDULE_WORDS = [
@@ -191,10 +206,12 @@ const SCHEDULE_WORDS = [
 const APPLICATION_WORDS = [
   "申込",
   "申し込み",
+  "申込み",
   "応募",
   "エントリー",
   "応募フォーム",
   "申込フォーム",
+  "申し込みフォーム",
   "専用フォーム",
   "Googleフォーム",
   "フォーム",
@@ -328,10 +345,14 @@ const SELECTION_URL_WORDS = [
   "renshukai",
   "boshu",
   "nyudan",
+  "u12",
+  "u-12",
   "u13",
   "u-13",
   "u15",
   "u-15",
+  "u18",
+  "u-18",
 ];
 
 function normalizeText(text: string) {
@@ -357,11 +378,16 @@ function buildImportantText(pageTitle: string, rawText: string, sourceName = "")
     ...STRONG_SELECTION_WORDS,
     "募集",
     "申込",
+    "申し込み",
     "応募",
     "エントリー",
+    "体験",
+    "無料体験",
+    "スクール",
+    "アカデミー",
+    "U-12",
     "U-15",
     "U-18",
-    "U-12",
     "ジュニアユース",
     "ユース",
   ];
@@ -418,6 +444,7 @@ function isStrongArticleUrl(url: string) {
     /\/academy\/news\/\d+/.test(lower) ||
     /\/academy\/info\/\d+/.test(lower) ||
     /\/academy\/topics\/\d+/.test(lower) ||
+    /\/school\/news\/.+/.test(lower) ||
     /\/\d{5,}\/?$/.test(lower) ||
     /[?&]p=\d+/.test(lower)
   );
@@ -482,6 +509,10 @@ function isTeamCategoryUrl(url: string) {
   );
 }
 
+function isSchoolUrl(url: string) {
+  return decodeURIComponent(url.toLowerCase()).includes("/school/");
+}
+
 function isHardBlockedUrl(url: string) {
   const lower = decodeURIComponent(url.toLowerCase());
   return HARD_BLOCK_PATH_WORDS.some((word) => lower.includes(word));
@@ -496,6 +527,7 @@ function isSelectionLikeUrl(url: string) {
   return (
     lower.includes("/news/") ||
     lower.includes("/academy/news/") ||
+    lower.includes("/school/news/") ||
     lower.includes("/information/") ||
     lower.includes("/topics/") ||
     lower.includes("/info/")
@@ -505,10 +537,14 @@ function isSelectionLikeUrl(url: string) {
 function isGoodDetailUrl(url: string) {
   if (isPdfUrl(url)) return true;
   if (isStrongArticleUrl(url)) return true;
-  if (isTeamCategoryUrl(url)) return false;
   if (isHardBlockedUrl(url)) return false;
 
-  return isSelectionLikeUrl(url) || looksLikeArticleUrl(url);
+  return (
+    isSelectionLikeUrl(url) ||
+    looksLikeArticleUrl(url) ||
+    isSchoolUrl(url) ||
+    isTeamCategoryUrl(url)
+  );
 }
 
 export function getSelectionKeywordStats(params: {
@@ -540,7 +576,10 @@ export function getSelectionKeywordStats(params: {
     countMatches(titleText.toLowerCase(), ["selection", "tryout", "trial"]);
 
   const titleRecruitCount = countMatches(titleText, RECRUIT_INTENT_WORDS);
-  const negativeCount = countMatches(`${titleText} ${importantText}`, NEGATIVE_WORDS);
+  const negativeCount = countMatches(
+    `${titleText} ${importantText}`,
+    NEGATIVE_WORDS,
+  );
 
   const keywordCount =
     titleStrongCount * 10 +
@@ -579,6 +618,7 @@ export function getSelectionKeywordStats(params: {
     isStrongArticleUrl: isStrongArticleUrl(pageUrl),
     isIndexLikeUrl: isIndexLikeUrl(pageUrl),
     isTeamCategoryUrl: isTeamCategoryUrl(pageUrl),
+    isSchoolUrl: isSchoolUrl(pageUrl),
     isHardBlockedUrl: isHardBlockedUrl(pageUrl),
     isTopTitle: isTopTitle(pageTitle),
   };
@@ -596,7 +636,8 @@ export function shouldExtractExternalLinks(params: {
 
   return (
     stats.strongCount >= 1 ||
-    stats.recruitCount >= 2 ||
+    stats.recruitCount >= 1 ||
+    stats.isSchoolUrl ||
     params.rawText.includes("詳しくはこちら") ||
     params.rawText.includes("詳細はこちら") ||
     params.rawText.includes("お申し込み") ||
@@ -625,18 +666,18 @@ export function isTargetPage(params: {
     sourceName,
   });
 
-  if (stats.isTopTitle && !stats.isStrongArticleUrl) return false;
-  if (stats.isIndexLikeUrl) return false;
-  if (stats.isHardBlockedUrl && !stats.isStrongArticleUrl) return false;
-
-  if (stats.isTeamCategoryUrl && !stats.hasTitleAllowWord) {
+  if (stats.isTopTitle && !stats.isStrongArticleUrl && !stats.isSchoolUrl) {
     return false;
   }
+
+  if (stats.isIndexLikeUrl) return false;
+  if (stats.isHardBlockedUrl && !stats.isStrongArticleUrl) return false;
 
   if (
     stats.hasOldYearOnly &&
     stats.titleStrongCount === 0 &&
-    stats.strongCount === 0
+    stats.strongCount === 0 &&
+    !stats.isSchoolUrl
   ) {
     return false;
   }
@@ -654,14 +695,27 @@ export function isTargetPage(params: {
   if (stats.titleStrongCount >= 1) return true;
 
   if (
+    stats.isSchoolUrl &&
+    (
+      stats.recruitCount >= 1 ||
+      stats.applicationCount >= 1 ||
+      stats.hasTitleAllowWord ||
+      stats.keywordCount >= 12
+    )
+  ) {
+    return true;
+  }
+
+  if (
     stats.strongCount >= 1 &&
-    (stats.targetCount >= 1 || stats.playerCount >= 1) &&
+    (stats.targetCount >= 1 || stats.playerCount >= 1 || stats.isSchoolUrl) &&
     (
       stats.applicationCount >= 1 ||
       stats.scheduleCount >= 1 ||
       stats.hasDate ||
       stats.isStrongArticleUrl ||
-      stats.isSelectionLikeUrl
+      stats.isSelectionLikeUrl ||
+      stats.isSchoolUrl
     )
   ) {
     return true;
@@ -669,21 +723,20 @@ export function isTargetPage(params: {
 
   if (
     stats.recruitCount >= 2 &&
-    (stats.targetCount >= 1 || stats.playerCount >= 1) &&
-    (
-      stats.applicationCount >= 1 ||
-      stats.scheduleCount >= 1 ||
-      stats.hasDate ||
-      stats.isStrongArticleUrl
-    )
+    (stats.targetCount >= 1 || stats.playerCount >= 1 || stats.isSchoolUrl)
   ) {
     return true;
   }
 
   if (
-    stats.keywordCount >= 24 &&
-    (stats.isStrongArticleUrl || stats.isSelectionLikeUrl || stats.isGoodDetailUrl) &&
-    (stats.applicationCount >= 1 || stats.scheduleCount >= 1 || stats.hasDate)
+    stats.keywordCount >= 18 &&
+    (
+      stats.isStrongArticleUrl ||
+      stats.isSelectionLikeUrl ||
+      stats.isGoodDetailUrl ||
+      stats.isTeamCategoryUrl ||
+      stats.isSchoolUrl
+    )
   ) {
     return true;
   }
@@ -706,18 +759,11 @@ export function getPagePriority(params: {
     return { priority: -999, reason: "http_error_page", keywordCount: 0 };
   }
 
-  if (stats.isTeamCategoryUrl && !stats.hasTitleAllowWord) {
-    return {
-      priority: -999,
-      reason: "team_category_url",
-      keywordCount: stats.keywordCount,
-    };
-  }
-
   if (
     stats.hasOldYearOnly &&
     stats.titleStrongCount === 0 &&
-    stats.strongCount === 0
+    stats.strongCount === 0 &&
+    !stats.isSchoolUrl
   ) {
     return {
       priority: -999,
