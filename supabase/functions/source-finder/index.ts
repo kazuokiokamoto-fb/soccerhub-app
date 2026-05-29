@@ -3,9 +3,9 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const MAX_SOURCES = 80;
-const MAX_PAGES_PER_SOURCE = 8;
-const MAX_INSERT = 300;
+const MAX_SOURCES = 20;
+const MAX_PAGES_PER_SOURCE = 3;
+const MAX_INSERT = 50;
 
 function clean(text: string) {
   return String(text ?? "").replace(/\s+/g, " ").trim();
