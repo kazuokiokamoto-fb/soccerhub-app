@@ -3,51 +3,48 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const MAX_SEEDS = 30;
-const MAX_PAGES_PER_SEED = 5;
-const MAX_INSERT = 300;
+const MAX_SEEDS = 50;
+const MAX_PAGES_PER_SEED = 15;
+const MAX_INSERT = 800;
 
 const DEFAULT_DIRECTORY_SEEDS = [
-  {
-    name: "関東クラブユースサッカー連盟",
-    url: "https://www.kanto-cy.com/",
-    prefecture: "関東",
-  },
-  {
-    name: "東京都クラブユースサッカー連盟",
-    url: "https://tokyo-cy.jp/",
-    prefecture: "東京都",
-  },
-  {
-    name: "神奈川県クラブユースサッカー連盟",
-    url: "https://kanagawa-cy.com/",
-    prefecture: "神奈川県",
-  },
-  {
-    name: "埼玉県クラブユースサッカー連盟",
-    url: "https://saitama-cy.com/",
-    prefecture: "埼玉県",
-  },
-  {
-    name: "千葉県クラブユースサッカー連盟",
-    url: "https://chiba-cy.com/",
-    prefecture: "千葉県",
-  },
-  {
-    name: "茨城県クラブユースサッカー連盟",
-    url: "https://ibaraki-cy.com/",
-    prefecture: "茨城県",
-  },
-  {
-    name: "栃木県クラブユースサッカー連盟",
-    url: "https://tochigi-cy.com/",
-    prefecture: "栃木県",
-  },
-  {
-    name: "群馬県クラブユースサッカー連盟",
-    url: "https://gunma-cy.com/",
-    prefecture: "群馬県",
-  },
+  { name: "関東クラブユースサッカー連盟", url: "https://www.kanto-cy.com/", prefecture: "関東" },
+  { name: "東京都クラブユースサッカー連盟", url: "https://tokyo-cy.jp/", prefecture: "東京都" },
+  { name: "神奈川県クラブユースサッカー連盟", url: "https://kanagawa-cy.com/", prefecture: "神奈川県" },
+  { name: "埼玉県クラブユースサッカー連盟", url: "https://saitama-cy.com/", prefecture: "埼玉県" },
+  { name: "千葉県クラブユースサッカー連盟", url: "https://chiba-cy.com/", prefecture: "千葉県" },
+  { name: "茨城県クラブユースサッカー連盟", url: "https://ibaraki-cy.com/", prefecture: "茨城県" },
+  { name: "栃木県クラブユースサッカー連盟", url: "https://tochigi-cy.com/", prefecture: "栃木県" },
+  { name: "群馬県クラブユースサッカー連盟", url: "https://gunma-cy.com/", prefecture: "群馬県" },
+
+  { name: "東京都サッカー協会", url: "https://www.tokyofa.or.jp/", prefecture: "東京都" },
+  { name: "神奈川県サッカー協会", url: "https://kanagawa-fa.gr.jp/", prefecture: "神奈川県" },
+  { name: "埼玉県サッカー協会", url: "https://www.saitamafa.or.jp/", prefecture: "埼玉県" },
+  { name: "千葉県サッカー協会", url: "https://chiba-fa.gr.jp/", prefecture: "千葉県" },
+  { name: "茨城県サッカー協会", url: "https://www.ibaraki-fa.jp/", prefecture: "茨城県" },
+  { name: "栃木県サッカー協会", url: "https://www.tfa.or.jp/", prefecture: "栃木県" },
+  { name: "群馬県サッカー協会", url: "https://www.gunma-fa.com/", prefecture: "群馬県" },
+];
+
+const BAD_HOST_WORDS = [
+  "instagram.com",
+  "facebook.com",
+  "twitter.com",
+  "x.com",
+  "youtube.com",
+  "youtu.be",
+  "line.me",
+  "lin.ee",
+  "tiktok.com",
+  "google.com",
+  "yahoo.co.jp",
+  "wikipedia.org",
+  "ameblo.jp",
+  "c-sqr.net",
+  "amebaownd.com",
+  "note.com",
+  "lit.link",
+  "linktr.ee",
 ];
 
 function clean(text: string) {
@@ -81,40 +78,22 @@ function hostOf(url: string) {
   }
 }
 
-function originOf(url: string) {
-  try {
-    const u = new URL(url);
-    return `${u.protocol}//${u.hostname}/`;
-  } catch {
-    return url;
-  }
-}
-
 function sameHost(a: string, b: string) {
   return hostOf(a) === hostOf(b);
 }
 
 function isBadUrl(url: string) {
   const lower = decodeURIComponent(url.toLowerCase());
+  const host = hostOf(url);
 
   return (
     !lower.startsWith("http") ||
-    lower.includes("instagram.com") ||
-    lower.includes("facebook.com") ||
-    lower.includes("twitter.com") ||
-    lower.includes("x.com/") ||
-    lower.includes("youtube.com") ||
-    lower.includes("youtu.be") ||
-    lower.includes("line.me") ||
-    lower.includes("lin.ee") ||
-    lower.includes("tiktok.com") ||
+    BAD_HOST_WORDS.some((w) => host.includes(w) || lower.includes(w)) ||
     lower.includes("google.com/maps") ||
     lower.includes("goo.gl/maps") ||
     lower.includes("maps.app.goo.gl") ||
     lower.includes("amazon.") ||
     lower.includes("rakuten.") ||
-    lower.includes("yahoo.co.jp") ||
-    lower.includes("wikipedia.org") ||
     lower.includes(".jpg") ||
     lower.includes(".jpeg") ||
     lower.includes(".png") ||
@@ -142,6 +121,8 @@ function looksDirectoryPage(url: string, anchorText = "") {
     lower.includes("league") ||
     lower.includes("u15") ||
     lower.includes("u-15") ||
+    lower.includes("u12") ||
+    lower.includes("u-12") ||
     lower.includes("junior") ||
     lower.includes("youth") ||
     lower.includes("加盟") ||
@@ -149,7 +130,9 @@ function looksDirectoryPage(url: string, anchorText = "") {
     lower.includes("クラブ") ||
     lower.includes("一覧") ||
     lower.includes("リンク") ||
-    lower.includes("参加")
+    lower.includes("参加") ||
+    lower.includes("大会") ||
+    lower.includes("リーグ")
   );
 }
 
@@ -170,6 +153,8 @@ function looksSoccerText(text: string) {
     t.includes("スクール") ||
     t.includes("U-15") ||
     t.includes("U15") ||
+    t.includes("U-12") ||
+    t.includes("U12") ||
     t.includes("JY")
   );
 }
@@ -189,6 +174,8 @@ function looksSoccerUrl(url: string) {
     lower.includes("youth") ||
     lower.includes("u15") ||
     lower.includes("u-15") ||
+    lower.includes("u12") ||
+    lower.includes("u-12") ||
     lower.includes("jryouth") ||
     lower.includes("jy")
   );
@@ -220,6 +207,29 @@ function normalizeName(anchorText: string, url: string) {
     .trim();
 
   return host || url;
+}
+
+function buildBaseUrl(url: string) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+
+    if (
+      host.includes("wixsite.com") ||
+      host.includes("jimdo.com") ||
+      host.includes("jimdofree.com") ||
+      host.includes("webnode.jp")
+    ) {
+      const parts = u.pathname.split("/").filter(Boolean);
+      if (parts.length > 0) {
+        return `${u.protocol}//${u.hostname}/${parts[0]}/`;
+      }
+    }
+
+    return `${u.protocol}//${u.hostname}/`;
+  } catch {
+    return url;
+  }
 }
 
 function inferOrganizationType(name: string, url: string) {
@@ -319,22 +329,17 @@ async function fetchHtml(url: string) {
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "user-agent":
-          "Mozilla/5.0 source-directory-crawler/1.0 (+selection crawler)",
+        "user-agent": "Mozilla/5.0 source-directory-crawler/2.0",
         accept: "text/html,application/xhtml+xml",
       },
     });
 
-    const contentType = res.headers.get("content-type") || "";
-    const finalUrl = normalizeUrl(res.url || url);
-    const html = await res.text();
-
     return {
       ok: res.ok,
       status: res.status,
-      contentType,
-      finalUrl,
-      html,
+      contentType: res.headers.get("content-type") || "",
+      finalUrl: normalizeUrl(res.url || url),
+      html: await res.text(),
     };
   } finally {
     clearTimeout(timeout);
@@ -360,10 +365,7 @@ serve(async (req) => {
     Deno.env.get("SB_SERVICE_ROLE_KEY");
 
   if (!supabaseUrl || !serviceRoleKey) {
-    return Response.json(
-      { ok: false, error: "Missing Supabase env" },
-      { status: 500 },
-    );
+    return Response.json({ ok: false, error: "Missing Supabase env" }, { status: 500 });
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
@@ -373,13 +375,8 @@ serve(async (req) => {
     : DEFAULT_DIRECTORY_SEEDS;
 
   const targetSeeds = seeds.slice(0, Number(body?.maxSeeds ?? MAX_SEEDS));
-
-  const maxPagesPerSeed = Math.min(
-    Number(body?.maxPagesPerSeed ?? MAX_PAGES_PER_SEED),
-    20,
-  );
-
-  const maxInsert = Math.min(Number(body?.maxInsert ?? MAX_INSERT), 1000);
+  const maxPagesPerSeed = Math.min(Number(body?.maxPagesPerSeed ?? MAX_PAGES_PER_SEED), 50);
+  const maxInsert = Math.min(Number(body?.maxInsert ?? MAX_INSERT), 1500);
 
   const { data: existingRows } = await supabase
     .from("selection_sources")
@@ -437,46 +434,35 @@ serve(async (req) => {
         if (isBadUrl(linkUrl)) continue;
 
         if (sameHost(linkUrl, seed.url)) {
-          if (
-            !visited.has(linkUrl) &&
-            looksDirectoryPage(linkUrl, link.text) &&
-            queue.length < maxPagesPerSeed * 4
-          ) {
+          if (!visited.has(linkUrl) && looksDirectoryPage(linkUrl, link.text)) {
             queue.push(linkUrl);
           }
           continue;
         }
 
-        if (existingHosts.has(linkHost)) continue;
+        if (!looksSoccerUrl(linkUrl) && !looksSoccerText(link.text)) continue;
 
-        if (!looksSoccerUrl(linkUrl) && !looksSoccerText(link.text)) {
-          continue;
-        }
-
-        const name = normalizeName(link.text, linkUrl);
-
-        if (!name || name.length < 2) continue;
-
-        const baseUrl = originOf(linkUrl);
+        const baseUrl = buildBaseUrl(linkUrl);
         const key = hostOf(baseUrl);
 
         if (!key) continue;
         if (existingHosts.has(key)) continue;
+        if (candidates.has(key)) continue;
 
-        if (!candidates.has(key)) {
-          candidates.set(key, {
-            name,
-            base_url: baseUrl,
-            organization_type: inferOrganizationType(name, baseUrl),
-            enabled: true,
-            crawl_type: "web",
-            crawl_interval_minutes: 10080,
-            source_rank: inferRank(name, baseUrl),
-            found_from_seed: seed.name,
-            found_from_url: pageUrl,
-            anchor_text: link.text,
-          });
-        }
+        const name = normalizeName(link.text, linkUrl);
+
+        candidates.set(key, {
+          name,
+          base_url: baseUrl,
+          organization_type: inferOrganizationType(name, baseUrl),
+          enabled: true,
+          crawl_type: "web",
+          crawl_interval_minutes: 10080,
+          source_rank: inferRank(name, baseUrl),
+          found_from_seed: seed.name,
+          found_from_url: pageUrl,
+          anchor_text: link.text,
+        });
       }
     }
   }
@@ -533,8 +519,8 @@ serve(async (req) => {
     inserted,
     skipped,
     errors,
-    checkedPages: checkedPages.slice(0, 50),
+    checkedPages: checkedPages.slice(0, 80),
     insertedRows,
-    skippedRows: skippedRows.slice(0, 50),
+    skippedRows: skippedRows.slice(0, 80),
   });
 });
