@@ -274,8 +274,6 @@ const NEGATIVE_WORDS = [
   "パートナー",
   "スポンサー",
   "ホームタウン",
-  "イベント情報",
-  "イベント開催",
   "グッズ",
   "オンラインショップ",
   "スタッフ募集",
@@ -345,14 +343,6 @@ const SELECTION_URL_WORDS = [
   "renshukai",
   "boshu",
   "nyudan",
-  "u12",
-  "u-12",
-  "u13",
-  "u-13",
-  "u15",
-  "u-15",
-  "u18",
-  "u-18",
 ];
 
 function normalizeText(text: string) {
@@ -383,8 +373,6 @@ function buildImportantText(pageTitle: string, rawText: string, sourceName = "")
     "エントリー",
     "体験",
     "無料体験",
-    "スクール",
-    "アカデミー",
     "U-12",
     "U-15",
     "U-18",
@@ -491,7 +479,7 @@ function isIndexLikeUrl(url: string) {
   );
 }
 
-function isTeamCategoryUrl(url: string) {
+function isFixedCategoryUrl(url: string) {
   const lower = decodeURIComponent(url.toLowerCase());
 
   return (
@@ -511,6 +499,18 @@ function isTeamCategoryUrl(url: string) {
 
 function isSchoolUrl(url: string) {
   return decodeURIComponent(url.toLowerCase()).includes("/school/");
+}
+
+function isSchoolDetailUrl(url: string) {
+  const lower = decodeURIComponent(url.toLowerCase());
+
+  if (!lower.includes("/school/")) return false;
+  if (lower.endsWith("/school/")) return false;
+  if (lower.endsWith("/school/news/")) return false;
+  if (lower.endsWith("/school/info/")) return false;
+  if (lower.endsWith("/school/topics/")) return false;
+
+  return true;
 }
 
 function isHardBlockedUrl(url: string) {
@@ -537,14 +537,11 @@ function isSelectionLikeUrl(url: string) {
 function isGoodDetailUrl(url: string) {
   if (isPdfUrl(url)) return true;
   if (isStrongArticleUrl(url)) return true;
+  if (isSchoolDetailUrl(url)) return true;
+  if (isFixedCategoryUrl(url)) return false;
   if (isHardBlockedUrl(url)) return false;
 
-  return (
-    isSelectionLikeUrl(url) ||
-    looksLikeArticleUrl(url) ||
-    isSchoolUrl(url) ||
-    isTeamCategoryUrl(url)
-  );
+  return isSelectionLikeUrl(url) || looksLikeArticleUrl(url);
 }
 
 export function getSelectionKeywordStats(params: {
@@ -576,6 +573,7 @@ export function getSelectionKeywordStats(params: {
     countMatches(titleText.toLowerCase(), ["selection", "tryout", "trial"]);
 
   const titleRecruitCount = countMatches(titleText, RECRUIT_INTENT_WORDS);
+
   const negativeCount = countMatches(
     `${titleText} ${importantText}`,
     NEGATIVE_WORDS,
@@ -617,8 +615,9 @@ export function getSelectionKeywordStats(params: {
     isSelectionLikeUrl: isSelectionLikeUrl(pageUrl),
     isStrongArticleUrl: isStrongArticleUrl(pageUrl),
     isIndexLikeUrl: isIndexLikeUrl(pageUrl),
-    isTeamCategoryUrl: isTeamCategoryUrl(pageUrl),
+    isFixedCategoryUrl: isFixedCategoryUrl(pageUrl),
     isSchoolUrl: isSchoolUrl(pageUrl),
+    isSchoolDetailUrl: isSchoolDetailUrl(pageUrl),
     isHardBlockedUrl: isHardBlockedUrl(pageUrl),
     isTopTitle: isTopTitle(pageTitle),
   };
@@ -666,18 +665,26 @@ export function isTargetPage(params: {
     sourceName,
   });
 
-  if (stats.isTopTitle && !stats.isStrongArticleUrl && !stats.isSchoolUrl) {
+  if (stats.isIndexLikeUrl) return false;
+  if (stats.isHardBlockedUrl && !stats.isStrongArticleUrl) return false;
+
+  if (stats.isFixedCategoryUrl && !stats.hasTitleAllowWord) {
     return false;
   }
 
-  if (stats.isIndexLikeUrl) return false;
-  if (stats.isHardBlockedUrl && !stats.isStrongArticleUrl) return false;
+  if (
+    stats.isTopTitle &&
+    !stats.isStrongArticleUrl &&
+    !stats.isSchoolDetailUrl
+  ) {
+    return false;
+  }
 
   if (
     stats.hasOldYearOnly &&
     stats.titleStrongCount === 0 &&
     stats.strongCount === 0 &&
-    !stats.isSchoolUrl
+    !stats.isSchoolDetailUrl
   ) {
     return false;
   }
@@ -695,12 +702,11 @@ export function isTargetPage(params: {
   if (stats.titleStrongCount >= 1) return true;
 
   if (
-    stats.isSchoolUrl &&
+    stats.isSchoolDetailUrl &&
     (
       stats.recruitCount >= 1 ||
       stats.applicationCount >= 1 ||
-      stats.hasTitleAllowWord ||
-      stats.keywordCount >= 12
+      stats.hasTitleAllowWord
     )
   ) {
     return true;
@@ -708,14 +714,13 @@ export function isTargetPage(params: {
 
   if (
     stats.strongCount >= 1 &&
-    (stats.targetCount >= 1 || stats.playerCount >= 1 || stats.isSchoolUrl) &&
+    (stats.targetCount >= 1 || stats.playerCount >= 1) &&
     (
       stats.applicationCount >= 1 ||
       stats.scheduleCount >= 1 ||
       stats.hasDate ||
       stats.isStrongArticleUrl ||
-      stats.isSelectionLikeUrl ||
-      stats.isSchoolUrl
+      stats.isSelectionLikeUrl
     )
   ) {
     return true;
@@ -723,19 +728,30 @@ export function isTargetPage(params: {
 
   if (
     stats.recruitCount >= 2 &&
-    (stats.targetCount >= 1 || stats.playerCount >= 1 || stats.isSchoolUrl)
+    (stats.targetCount >= 1 || stats.playerCount >= 1) &&
+    (
+      stats.applicationCount >= 1 ||
+      stats.scheduleCount >= 1 ||
+      stats.hasDate ||
+      stats.isStrongArticleUrl ||
+      stats.isSchoolDetailUrl
+    )
   ) {
     return true;
   }
 
   if (
-    stats.keywordCount >= 18 &&
+    stats.isGoodDetailUrl &&
     (
-      stats.isStrongArticleUrl ||
-      stats.isSelectionLikeUrl ||
-      stats.isGoodDetailUrl ||
-      stats.isTeamCategoryUrl ||
-      stats.isSchoolUrl
+      stats.strongCount >= 1 ||
+      stats.recruitCount >= 1 ||
+      stats.hasTitleAllowWord
+    ) &&
+    (
+      stats.applicationCount >= 1 ||
+      stats.scheduleCount >= 1 ||
+      stats.hasDate ||
+      stats.isSchoolDetailUrl
     )
   ) {
     return true;
@@ -759,11 +775,19 @@ export function getPagePriority(params: {
     return { priority: -999, reason: "http_error_page", keywordCount: 0 };
   }
 
+  if (stats.isFixedCategoryUrl && !stats.hasTitleAllowWord) {
+    return {
+      priority: -999,
+      reason: "fixed_category_url",
+      keywordCount: stats.keywordCount,
+    };
+  }
+
   if (
     stats.hasOldYearOnly &&
     stats.titleStrongCount === 0 &&
     stats.strongCount === 0 &&
-    !stats.isSchoolUrl
+    !stats.isSchoolDetailUrl
   ) {
     return {
       priority: -999,
