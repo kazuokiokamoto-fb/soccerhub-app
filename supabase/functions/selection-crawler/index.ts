@@ -117,20 +117,6 @@ function getUrlRank(pageUrl: string) {
   return 99;
 }
 
-function getTitleRank(pageTitle: string) {
-  const title = pageTitle;
-
-  if (title.includes("セレクション")) return 1;
-  if (title.includes("選考会")) return 2;
-  if (title.includes("トライアウト")) return 3;
-  if (title.includes("選手募集")) return 4;
-  if (title.includes("練習会")) return 5;
-  if (title.includes("体験会")) return 6;
-  if (title.includes("募集")) return 7;
-
-  return 99;
-}
-
 function shouldRejectByKeywordStats(stats: any) {
   if (stats.isHttpErrorPage) return "http_error_page";
 
@@ -176,20 +162,17 @@ function buildReason(stats: any) {
   if (stats.strongCount >= 1) return "selection_keyword";
   if (stats.recruitCount >= 2) return "recruit_keywords";
 
-  return "keyword_count";
+  return "keyword_match";
 }
 
 function makeCandidateSortKey(candidate: CandidatePage) {
   const stats = candidate.keywordStats ?? {};
 
   return {
-    titleRank: getTitleRank(candidate.pageTitle),
     urlRank: getUrlRank(candidate.pageUrl),
-    keywordCount: stats.keywordCount ?? candidate.priority ?? 0,
     titleStrongCount: stats.titleStrongCount ?? 0,
     strongCount: stats.strongCount ?? 0,
     recruitCount: stats.recruitCount ?? 0,
-    targetCount: stats.targetCount ?? 0,
     scheduleCount: stats.scheduleCount ?? 0,
     applicationCount: stats.applicationCount ?? 0,
     hasDate: stats.hasDate ? 1 : 0,
@@ -219,12 +202,10 @@ function compareCandidates(a: CandidatePage, b: CandidatePage) {
     bTitle.includes("選考会") ||
     bTitle.includes("トライアウト");
 
-  // タイトルにセレクション系
   if (aHasSelectionTitle !== bHasSelectionTitle) {
     return bHasSelectionTitle ? 1 : -1;
   }
 
-  // PDF優先
   const aPdf = isPdfUrl(a.pageUrl);
   const bPdf = isPdfUrl(b.pageUrl);
 
@@ -232,12 +213,10 @@ function compareCandidates(a: CandidatePage, b: CandidatePage) {
     return bPdf ? 1 : -1;
   }
 
-  // News記事優先
   if (kb.isStrongArticleUrl !== ka.isStrongArticleUrl) {
     return kb.isStrongArticleUrl - ka.isStrongArticleUrl;
   }
 
-  // selection系URL優先
   const aSelectionUrl =
     aUrl.includes("selection") ||
     aUrl.includes("tryout") ||
@@ -254,32 +233,26 @@ function compareCandidates(a: CandidatePage, b: CandidatePage) {
     return bSelectionUrl ? 1 : -1;
   }
 
-  // 申込情報あり
   if (kb.applicationCount !== ka.applicationCount) {
     return kb.applicationCount - ka.applicationCount;
   }
 
-  // 日程あり
   if (kb.scheduleCount !== ka.scheduleCount) {
     return kb.scheduleCount - ka.scheduleCount;
   }
 
-  // 日付あり
   if (kb.hasDate !== ka.hasDate) {
     return kb.hasDate - ka.hasDate;
   }
 
-  // 募集系
   if (kb.recruitCount !== ka.recruitCount) {
     return kb.recruitCount - ka.recruitCount;
   }
 
-  // 強キーワード
   if (kb.strongCount !== ka.strongCount) {
     return kb.strongCount - ka.strongCount;
   }
 
-  // 固定ページを最後に落とす
   const aFixed =
     aUrl.endsWith("/academy/") ||
     aUrl.endsWith("/school/") ||
@@ -298,14 +271,8 @@ function compareCandidates(a: CandidatePage, b: CandidatePage) {
     return aFixed ? 1 : -1;
   }
 
-  // URLランク
   if (ka.urlRank !== kb.urlRank) {
     return ka.urlRank - kb.urlRank;
-  }
-
-  // 最後だけキーワード数
-  if (kb.keywordCount !== ka.keywordCount) {
-    return kb.keywordCount - ka.keywordCount;
   }
 
   return kb.urlLength - ka.urlLength;
@@ -335,11 +302,11 @@ serve(async (req) => {
   const limit = clampNumber(requestedLimit, 1, 5);
 
   const requestedMaxPagesPerSource = getRequestNumber({
-      url,
-      body,
-      key: "maxPagesPerSource",
-      defaultValue: 30,
-    });
+    url,
+    body,
+    key: "maxPagesPerSource",
+    defaultValue: 30,
+  });
 
   const maxPagesPerSource = clampNumber(
     requestedMaxPagesPerSource,
@@ -634,7 +601,7 @@ serve(async (req) => {
           status: fetched.status,
           contentType: fetched.contentType,
           pdf,
-          priority: stats.keywordCount,
+          priority: 0,
           reason: buildReason(stats),
           keywordStats: stats,
           description,
@@ -732,9 +699,7 @@ serve(async (req) => {
             debug.updated += 1;
           }
         } catch (e) {
-          const message = e instanceof Error
-            ? e.message
-            : String(e);
+          const message = e instanceof Error ? e.message : String(e);
 
           pushSample(debug.saveErrors, {
             pageUrl: candidate.pageUrl,
@@ -780,8 +745,8 @@ serve(async (req) => {
         e instanceof Error
           ? e.message
           : typeof e === "object"
-          ? JSON.stringify(e)
-          : String(e);
+            ? JSON.stringify(e)
+            : String(e);
 
       errors.push(`${source.name}: ${message}`);
 
