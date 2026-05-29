@@ -2,7 +2,6 @@ import type { CandidatePage, SelectionSource } from "./types.ts";
 import {
   buildDuplicateKey,
   buildSummary,
-  buildTitle,
   displayStatusFromDates,
   extractCategories,
   extractCity,
@@ -28,7 +27,105 @@ export async function sha256(text: string) {
 export function cleanDbText(value?: string | null) {
   return String(value ?? "")
     .replace(/\u0000/g, "")
-    .replace(/\x00/g, "");
+    .replace(/\x00/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanTitleText(value?: string | null) {
+  return cleanDbText(value)
+    .replace(/｜/g, " ")
+    .replace(/\|/g, " ")
+    .replace(/公式サイト.*$/g, "")
+    .replace(/公式ウェブサイト.*$/g, "")
+    .replace(/サッカークラブ公式.*$/g, "")
+    .replace(/MENU.*$/g, "")
+    .replace(/メニュー.*$/g, "")
+    .replace(/NEWS.*$/g, "")
+    .replace(/ニュース.*$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isWeakPageTitle(title: string) {
+  const t = cleanTitleText(title);
+
+  if (!t) return true;
+  if (t === "アカデミー") return true;
+  if (t === "スクール") return true;
+  if (t === "ニュース") return true;
+  if (t === "NEWS") return true;
+  if (t === "ホーム") return true;
+  if (t === "TOP") return true;
+  if (t.includes("404")) return true;
+  if (t.includes("Not Found")) return true;
+
+  return false;
+}
+
+function extractUsefulTitleFromText(rawText: string) {
+  const text = cleanDbText(rawText);
+
+  const patterns = [
+    /20\d{2}年度[^。]{0,60}(セレクション|練習会|選手募集|募集要項|体験会)[^。]{0,60}/,
+    /20\d{2}年[^。]{0,60}(セレクション|練習会|選手募集|募集要項|体験会)[^。]{0,60}/,
+    /第\d+期生[^。]{0,60}(セレクション|練習会|選手募集|募集要項)[^。]{0,60}/,
+    /新U-?\d{1,2}[^。]{0,50}(セレクション|練習会|体験会|募集)[^。]{0,50}/,
+    /U-?\d{1,2}[^。]{0,50}(セレクション|練習会|体験会|募集)[^。]{0,50}/,
+    /ジュニアユース[^。]{0,60}(セレクション|練習会|選手募集|募集要項)[^。]{0,60}/,
+    /ユース[^。]{0,60}(セレクション|練習会|選手募集|募集要項)[^。]{0,60}/,
+    /スペシャルクラス[^。]{0,60}(セレクション|体験|募集)[^。]{0,60}/,
+    /無料体験[^。]{0,60}(申込|申し込み|受付|募集)[^。]{0,60}/,
+    /セレクション[^。]{0,80}/,
+    /練習会[^。]{0,80}/,
+    /選手募集[^。]{0,80}/,
+    /体験会[^。]{0,80}/,
+    /無料体験[^。]{0,80}/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[0]) {
+      return cleanTitleText(match[0]).slice(0, 90);
+    }
+  }
+
+  return "";
+}
+
+function buildCleanEventTitle(params: {
+  pageTitle: string;
+  sourceName: string;
+  rawText: string;
+  pageUrl: string;
+}) {
+  const { pageTitle, sourceName, rawText, pageUrl } = params;
+
+  const cleanSourceName = cleanTitleText(sourceName);
+  const cleanPageTitle = cleanTitleText(pageTitle);
+  const textTitle = extractUsefulTitleFromText(rawText);
+
+  let title = "";
+
+  if (!isWeakPageTitle(cleanPageTitle)) {
+    title = cleanPageTitle;
+  } else if (textTitle) {
+    title = textTitle;
+  }
+
+  if (!title) {
+    title = textTitle || cleanPageTitle || cleanSourceName || pageUrl;
+  }
+
+  if (
+    cleanSourceName &&
+    !title.includes(cleanSourceName) &&
+    title.length < 80
+  ) {
+    title = `${cleanSourceName} ${title}`;
+  }
+
+  return cleanDbText(title).slice(0, 120);
 }
 
 export function normalizeOrganizationType(value?: string | null) {
@@ -106,9 +203,12 @@ export async function saveCandidateEvent(params: {
   const cleanSourceName = cleanDbText(source.name);
   const cleanPageUrl = cleanDbText(pageUrl);
 
-  const title = cleanDbText(
-    buildTitle(cleanPageTitle, cleanSourceName, rawText, cleanPageUrl),
-  );
+  const title = buildCleanEventTitle({
+    pageTitle: cleanPageTitle,
+    sourceName: cleanSourceName,
+    rawText,
+    pageUrl: cleanPageUrl,
+  });
 
   const eventDate = safeDate(extractDateNearKeyword(rawText));
   const deadline = safeDate(extractDeadline(rawText));
