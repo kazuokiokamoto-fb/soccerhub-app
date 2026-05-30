@@ -28,7 +28,7 @@ function normalizeTeamName(value: string) {
     .replace(/^[-・●■□◆◇★☆○◎\s]+/g, "")
     .replace(/[-・●■□◆◇★☆○◎\s]+$/g, "")
     .replace(/^\d+[.\s、)）]+/g, "")
-    .replace(/^(チーム名|クラブ名|団体名|参加チーム|対戦|HOME|AWAY)[:：]*/i, "")
+    .replace(/^(チーム|チーム名|クラブ名|団体名|参加チーム|所属チーム|対戦|HOME|AWAY)[:：\s]*/i, "")
     .replace(/試合結果.*$/g, "")
     .replace(/試合日程.*$/g, "")
     .replace(/日程.*$/g, "")
@@ -49,10 +49,13 @@ function markerCount(t: string) {
 
 function looksTeamName(value: string) {
   const t = normalizeTeamName(value);
-  if (t.length < 2) return false;
-  if (t.length > 38) return false;
 
+  if (t.length < 3) return false;
+  if (t.length > 36) return false;
   if (markerCount(t) >= 3) return false;
+
+  const exactBad = ["FC", "SC", "FCJY", "SC U-15", "FCジュニア", "SCジュニア"];
+  if (exactBad.includes(t)) return false;
 
   const bad = [
     "サッカー協会", "連盟", "委員会", "大会", "リーグ", "ブロック",
@@ -60,7 +63,9 @@ function looksTeamName(value: string) {
     "要項", "申込書", "参加申込", "お問い合わせ", "プライバシー",
     "ニュース", "お知らせ", "会場", "グラウンド", "一覧", "詳細",
     "PDF", "Excel", "xlsx", "xls", "動画", "ハイライト", "研修会",
-    "プレーオフ", "マッチNo", "勝者", "敗者", "キャンパス", "スポーツセンター",
+    "プレーオフ", "マッチNo", "勝者", "敗者", "キャンパス",
+    "スポーツセンター", "クラブハウス", "住所", "監督", "コーチ",
+    "代表", "社長", "ダイレクター", "担当", "問い合わせ", "LINE",
   ];
 
   if (bad.some((w) => t.includes(w))) return false;
@@ -104,7 +109,7 @@ async function fetchText(url: string) {
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "user-agent": "Mozilla/5.0 team-directory-crawler/4.0",
+        "user-agent": "Mozilla/5.0 team-directory-crawler/5.0",
         accept: "text/html,application/xhtml+xml,text/plain,*/*",
       },
     });
@@ -118,6 +123,34 @@ async function fetchText(url: string) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function extractTitleTeam(html: string) {
+  const candidates: string[] = [];
+
+  const h1 = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
+  if (h1) candidates.push(clean(h1[1]));
+
+  const title = html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
+  if (title) {
+    candidates.push(
+      clean(title[1])
+        .replace(/｜.*$/g, "")
+        .replace(/\|.*$/g, "")
+        .replace(/-.*$/g, "")
+    );
+  }
+
+  for (const c of candidates) {
+    const name = normalizeTeamName(c);
+    if (looksTeamName(name)) return name;
+  }
+
+  return null;
+}
+
+function isIndividualTeamPage(url: string) {
+  return /\/team\/[^/]+\/?$/i.test(url);
 }
 
 function splitCandidateText(text: string) {
@@ -134,27 +167,21 @@ function splitCandidateText(text: string) {
     .filter(Boolean);
 }
 
-function extractTeamsFromHtml(html: string) {
+function extractTeamsFromHtml(html: string, url: string) {
   const teams = new Set<string>();
 
-  const blocks: string[] = [];
+  if (isIndividualTeamPage(url)) {
+    const one = extractTitleTeam(html);
+    if (one) return [one];
+  }
 
+  const blocks: string[] = [];
   const cellRe = /<(td|th|li|option)\b[^>]*>([\s\S]*?)<\/\1>/gi;
   let m;
 
   while ((m = cellRe.exec(html))) {
     const text = clean(m[2]);
     if (text) blocks.push(text);
-  }
-
-  const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
-  while ((m = rowRe.exec(html))) {
-    const rowHtml = m[1];
-    const cells = [...rowHtml.matchAll(/<(td|th)\b[^>]*>([\s\S]*?)<\/\1>/gi)]
-      .map((x) => clean(x[2]))
-      .filter(Boolean);
-
-    for (const c of cells) blocks.push(c);
   }
 
   const patterns = [
@@ -242,10 +269,9 @@ serve(async (req) => {
     }
 
     scanned += 1;
-
     if (!page.ok) continue;
 
-    const teams = extractTeamsFromHtml(page.text);
+    const teams = extractTeamsFromHtml(page.text, page.finalUrl || seed.url);
     candidateTeams += teams.length;
 
     for (const teamName of teams) {
@@ -273,7 +299,6 @@ serve(async (req) => {
       }
 
       inserted += 1;
-
       if (sampleInserted.length < 50) sampleInserted.push(data);
     }
 
