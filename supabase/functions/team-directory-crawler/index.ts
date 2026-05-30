@@ -3,8 +3,8 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const DEFAULT_LIMIT = 500;
-const DEFAULT_MAX_INSERT = 10000;
+const DEFAULT_LIMIT = 80;
+const DEFAULT_MAX_INSERT = 5000;
 
 function clean(text: string) {
   return String(text ?? "")
@@ -24,15 +24,11 @@ function clean(text: string) {
 }
 
 function normalizeTeamName(value: string) {
-  let t = clean(value)
+  return clean(value)
     .replace(/^[-・●■□◆◇★☆○◎\s]+/g, "")
     .replace(/[-・●■□◆◇★☆○◎\s]+$/g, "")
     .replace(/^\d+[.\s、)）]+/g, "")
     .replace(/^(チーム名|クラブ名|団体名|参加チーム|対戦|HOME|AWAY)[:：]*/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  t = t
     .replace(/試合結果.*$/g, "")
     .replace(/試合日程.*$/g, "")
     .replace(/日程.*$/g, "")
@@ -44,44 +40,27 @@ function normalizeTeamName(value: string) {
     .replace(/会場.*$/g, "")
     .replace(/Kick.*$/gi, "")
     .trim();
+}
 
-  return t;
+function markerCount(t: string) {
+  const m = t.match(/FC|ＦＣ|SC|ＳＣ|JY|U-?12|U-?15|U-?18|少年団|ジュニアユース|サッカークラブ|フットボールクラブ/gi);
+  return m ? m.length : 0;
 }
 
 function looksTeamName(value: string) {
   const t = normalizeTeamName(value);
   if (t.length < 2) return false;
-  if (t.length > 45) return false;
+  if (t.length > 38) return false;
+
+  if (markerCount(t) >= 3) return false;
 
   const bad = [
-    "サッカー協会",
-    "連盟",
-    "委員会",
-    "大会",
-    "リーグ",
-    "ブロック",
-    "ラウンド",
-    "トーナメント",
-    "予選",
-    "決勝",
-    "順位",
-    "日程",
-    "結果",
-    "要項",
-    "申込書",
-    "参加申込",
-    "お問い合わせ",
-    "プライバシー",
-    "ニュース",
-    "お知らせ",
-    "会場",
-    "グラウンド",
-    "一覧",
-    "詳細",
-    "PDF",
-    "Excel",
-    "xlsx",
-    "xls",
+    "サッカー協会", "連盟", "委員会", "大会", "リーグ", "ブロック",
+    "ラウンド", "トーナメント", "予選", "決勝", "順位", "日程", "結果",
+    "要項", "申込書", "参加申込", "お問い合わせ", "プライバシー",
+    "ニュース", "お知らせ", "会場", "グラウンド", "一覧", "詳細",
+    "PDF", "Excel", "xlsx", "xls", "動画", "ハイライト", "研修会",
+    "プレーオフ", "マッチNo", "勝者", "敗者", "キャンパス", "スポーツセンター",
   ];
 
   if (bad.some((w) => t.includes(w))) return false;
@@ -92,20 +71,17 @@ function looksTeamName(value: string) {
     /(^|[^A-Za-z])F\.?C\.?([^A-Za-z]|$)/i.test(t) ||
     /(^|[^A-Za-z])S\.?C\.?([^A-Za-z]|$)/i.test(t) ||
     /JY/i.test(t) ||
-    /Jr/i.test(t) ||
     /U-?12/i.test(t) ||
     /U-?15/i.test(t) ||
+    /U-?18/i.test(t) ||
     t.includes("サッカー") ||
     t.includes("フットボール") ||
     t.includes("クラブ") ||
     t.includes("少年団") ||
-    t.includes("ジュニア") ||
     t.includes("ジュニアユース") ||
     t.includes("ユース") ||
     t.includes("アカデミー") ||
     t.includes("スクール") ||
-    t.includes("スポーツ少年団") ||
-    t.includes("SS") ||
     t.includes("ＦＣ") ||
     t.includes("ＳＣ")
   );
@@ -113,37 +89,10 @@ function looksTeamName(value: string) {
 
 function inferCategory(name: string) {
   const t = name.toLowerCase();
-
-  if (name.includes("女子") || name.includes("レディース") || name.includes("ガールズ")) {
-    return "ladies";
-  }
-
-  if (
-    t.includes("school") ||
-    name.includes("スクール") ||
-    name.includes("アカデミー")
-  ) {
-    return "school";
-  }
-
-  if (
-    name.includes("少年団") ||
-    name.includes("U-12") ||
-    name.includes("U12") ||
-    name.includes("ジュニア")
-  ) {
-    return "junior";
-  }
-
+  if (name.includes("女子") || name.includes("レディース") || name.includes("ガールズ")) return "ladies";
+  if (t.includes("school") || name.includes("スクール") || name.includes("アカデミー")) return "school";
+  if (name.includes("少年団") || name.includes("U-12") || name.includes("U12") || name.includes("ジュニア")) return "junior";
   return "club_team";
-}
-
-function hostOf(url: string) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
-  } catch {
-    return "";
-  }
 }
 
 async function fetchText(url: string) {
@@ -155,7 +104,7 @@ async function fetchText(url: string) {
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "user-agent": "Mozilla/5.0 team-directory-crawler/3.0",
+        "user-agent": "Mozilla/5.0 team-directory-crawler/4.0",
         accept: "text/html,application/xhtml+xml,text/plain,*/*",
       },
     });
@@ -171,44 +120,61 @@ async function fetchText(url: string) {
   }
 }
 
+function splitCandidateText(text: string) {
+  let t = clean(text);
+
+  t = t
+    .replace(/\s+(?=(?:FC|ＦＣ|SC|ＳＣ)\b)/g, "\n")
+    .replace(/(U-?12|U-?15|U-?18)\s+(?=[A-Za-z一-龥ぁ-んァ-ヶー])/gi, "$1\n")
+    .replace(/\s+(?=[一-龥ぁ-んァ-ヶーA-Za-z0-9 .'-]{2,20}(?:FC|ＦＣ|SC|ＳＣ))/g, "\n");
+
+  return t
+    .split(/[\n\r\t、,|｜／\/;；]+/g)
+    .map(normalizeTeamName)
+    .filter(Boolean);
+}
+
 function extractTeamsFromHtml(html: string) {
   const teams = new Set<string>();
 
-  const cellTexts: string[] = [];
+  const blocks: string[] = [];
 
-  const cellRe = /<(td|th|li|p|span|div|a)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+  const cellRe = /<(td|th|li|option)\b[^>]*>([\s\S]*?)<\/\1>/gi;
   let m;
 
   while ((m = cellRe.exec(html))) {
     const text = clean(m[2]);
-    if (text) cellTexts.push(text);
+    if (text) blocks.push(text);
   }
 
-  const plain = clean(html);
+  const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+  while ((m = rowRe.exec(html))) {
+    const rowHtml = m[1];
+    const cells = [...rowHtml.matchAll(/<(td|th)\b[^>]*>([\s\S]*?)<\/\1>/gi)]
+      .map((x) => clean(x[2]))
+      .filter(Boolean);
 
-  const chunks = [
-    ...cellTexts,
-    ...plain.split(/[、,|｜／\/\n\r\t;；]+/g),
-  ]
-    .map(normalizeTeamName)
-    .filter(Boolean);
-
-  for (const chunk of chunks) {
-    if (looksTeamName(chunk)) teams.add(normalizeTeamName(chunk));
+    for (const c of cells) blocks.push(c);
   }
 
   const patterns = [
-    /([A-Za-z0-9 .'\-]{1,35}\s?(?:FC|SC|JY|SS)(?:[A-Za-z0-9 .'\-]{0,20})?)/gi,
-    /((?:FC|SC|F\.C\.|S\.C\.)\s?[A-Za-z0-9 .'\-ぁ-んァ-ヶー一-龥]{2,35})/gi,
-    /([一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,35}(?:FC|ＦＣ|SC|ＳＣ|サッカークラブ|フットボールクラブ|少年団|ジュニアユース|ユース|アカデミー|スクール))/g,
-    /((?:FC|ＦＣ|SC|ＳＣ)[一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,35})/g,
+    /(?:^|\s)([A-Za-z0-9 .'\-]{1,28}\s?(?:FC|SC|JY|SS)(?:\s?U-?1[258])?)(?=\s|$)/gi,
+    /(?:^|\s)((?:FC|SC|F\.C\.|S\.C\.)\s?[A-Za-z0-9 .'\-ぁ-んァ-ヶー一-龥]{2,24})(?=\s|$)/gi,
+    /([一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,24}(?:FC|ＦＣ|SC|ＳＣ|サッカークラブ|フットボールクラブ|少年団|ジュニアユース|ユース|アカデミー|スクール))/g,
+    /((?:FC|ＦＣ|SC|ＳＣ)[一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,24})/g,
   ];
 
-  for (const re of patterns) {
-    let match;
-    while ((match = re.exec(plain))) {
-      const name = normalizeTeamName(match[1]);
-      if (looksTeamName(name)) teams.add(name);
+  for (const block of blocks) {
+    for (const part of splitCandidateText(block)) {
+      if (looksTeamName(part)) teams.add(normalizeTeamName(part));
+    }
+
+    for (const re of patterns) {
+      let match;
+      while ((match = re.exec(block))) {
+        const name = normalizeTeamName(match[1]);
+        if (looksTeamName(name)) teams.add(name);
+      }
     }
   }
 
@@ -239,9 +205,9 @@ serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, serviceRole);
 
-  const limit = Math.min(Number(body.limit ?? DEFAULT_LIMIT), 2000);
+  const limit = Math.min(Number(body.limit ?? DEFAULT_LIMIT), 500);
   const offset = Number(body.offset ?? 0);
-  const maxInsert = Math.min(Number(body.maxInsert ?? DEFAULT_MAX_INSERT), 20000);
+  const maxInsert = Math.min(Number(body.maxInsert ?? DEFAULT_MAX_INSERT), 10000);
 
   const { data: seeds, error: seedError } = await supabase
     .from("team_directory_seeds")
