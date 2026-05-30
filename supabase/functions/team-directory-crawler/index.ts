@@ -3,54 +3,8 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const DEFAULT_MAX_PAGES = 500;
-const DEFAULT_MAX_INSERT = 5000;
-
-const SEEDS = [
-  { name: "関東クラブユースサッカー連盟", url: "https://www.kanto-cy.com/", prefecture: "関東" },
-
-  { name: "東京都サッカー協会", url: "https://www.tokyofa.or.jp/", prefecture: "東京都" },
-  { name: "東京都クラブユースサッカー連盟", url: "https://tokyo-cy.jp/", prefecture: "東京都" },
-  { name: "東京都少年サッカー連盟", url: "https://www.tjfl.jp/", prefecture: "東京都" },
-
-  { name: "神奈川県サッカー協会", url: "https://kanagawa-fa.gr.jp/", prefecture: "神奈川県" },
-  { name: "神奈川県クラブユースサッカー連盟", url: "https://kanagawa-cy.com/", prefecture: "神奈川県" },
-
-  { name: "埼玉県サッカー協会", url: "https://www.saitamafa.or.jp/", prefecture: "埼玉県" },
-  { name: "埼玉県クラブユースサッカー連盟", url: "https://saitama-cy.com/", prefecture: "埼玉県" },
-  { name: "埼玉県第4種少年サッカー連盟", url: "https://www.saitama-u12.com/", prefecture: "埼玉県" },
-
-  { name: "千葉県サッカー協会", url: "https://chiba-fa.gr.jp/", prefecture: "千葉県" },
-  { name: "千葉県クラブユースサッカー連盟", url: "https://chiba-cy.com/", prefecture: "千葉県" },
-
-  { name: "茨城県サッカー協会", url: "https://www.ibaraki-fa.jp/", prefecture: "茨城県" },
-  { name: "茨城県クラブユースサッカー連盟", url: "https://ibaraki-cy.com/", prefecture: "茨城県" },
-
-  { name: "栃木県サッカー協会", url: "https://www.tfa.or.jp/", prefecture: "栃木県" },
-  { name: "栃木県クラブユースサッカー連盟", url: "https://tochigi-cy.com/", prefecture: "栃木県" },
-
-  { name: "群馬県サッカー協会", url: "https://www.gunma-fa.com/", prefecture: "群馬県" },
-  { name: "群馬県クラブユースサッカー連盟", url: "https://gunma-cy.com/", prefecture: "群馬県" },
-
-  { name: "高円宮杯 JFA U-15 関東", url: "https://www.kanto-cy.com/", prefecture: "関東" },
-  { name: "Tリーグ 東京", url: "https://tokyo-cy.jp/", prefecture: "東京都" },
-  { name: "神奈川U-15リーグ", url: "https://kanagawa-cy.com/", prefecture: "神奈川県" },
-  { name: "埼玉U-15リーグ", url: "https://saitama-cy.com/", prefecture: "埼玉県" },
-  { name: "千葉U-15リーグ", url: "https://chiba-cy.com/", prefecture: "千葉県" }
-];
-
-const GOOD_PATH_WORDS = [
-  "team", "club", "member", "link", "league", "u15", "u-15", "u12", "u-12",
-  "junior", "youth", "competition", "result", "schedule", "match",
-  "加盟", "チーム", "クラブ", "一覧", "リンク", "参加", "大会", "リーグ",
-  "高円宮", "t1", "t2", "t3", "第4種", "少年", "ジュニア", "中学"
-];
-
-const BAD_HOST_WORDS = [
-  "instagram.com", "facebook.com", "twitter.com", "x.com", "youtube.com",
-  "youtu.be", "line.me", "lin.ee", "tiktok.com", "google.com", "yahoo.co.jp",
-  "wikipedia.org", "amazon.", "rakuten."
-];
+const DEFAULT_LIMIT = 500;
+const DEFAULT_MAX_INSERT = 10000;
 
 function clean(text: string) {
   return String(text ?? "")
@@ -64,18 +18,124 @@ function clean(text: string) {
     .replace(/&#x27;/g, "'")
     .replace(/&#39;/g, "'")
     .replace(/&quot;/g, '"')
+    .replace(/\u3000/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function normalizeUrl(url: string) {
-  try {
-    const u = new URL(url);
-    u.hash = "";
-    return u.toString();
-  } catch {
-    return "";
+function normalizeTeamName(value: string) {
+  let t = clean(value)
+    .replace(/^[-・●■□◆◇★☆○◎\s]+/g, "")
+    .replace(/[-・●■□◆◇★☆○◎\s]+$/g, "")
+    .replace(/^\d+[.\s、)）]+/g, "")
+    .replace(/^(チーム名|クラブ名|団体名|参加チーム|対戦|HOME|AWAY)[:：]*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  t = t
+    .replace(/試合結果.*$/g, "")
+    .replace(/試合日程.*$/g, "")
+    .replace(/日程.*$/g, "")
+    .replace(/結果.*$/g, "")
+    .replace(/順位.*$/g, "")
+    .replace(/勝点.*$/g, "")
+    .replace(/得点.*$/g, "")
+    .replace(/失点.*$/g, "")
+    .replace(/会場.*$/g, "")
+    .replace(/Kick.*$/gi, "")
+    .trim();
+
+  return t;
+}
+
+function looksTeamName(value: string) {
+  const t = normalizeTeamName(value);
+  if (t.length < 2) return false;
+  if (t.length > 45) return false;
+
+  const bad = [
+    "サッカー協会",
+    "連盟",
+    "委員会",
+    "大会",
+    "リーグ",
+    "ブロック",
+    "ラウンド",
+    "トーナメント",
+    "予選",
+    "決勝",
+    "順位",
+    "日程",
+    "結果",
+    "要項",
+    "申込書",
+    "参加申込",
+    "お問い合わせ",
+    "プライバシー",
+    "ニュース",
+    "お知らせ",
+    "会場",
+    "グラウンド",
+    "一覧",
+    "詳細",
+    "PDF",
+    "Excel",
+    "xlsx",
+    "xls",
+  ];
+
+  if (bad.some((w) => t.includes(w))) return false;
+
+  return (
+    /(^|[^A-Za-z])FC([^A-Za-z]|$)/i.test(t) ||
+    /(^|[^A-Za-z])SC([^A-Za-z]|$)/i.test(t) ||
+    /(^|[^A-Za-z])F\.?C\.?([^A-Za-z]|$)/i.test(t) ||
+    /(^|[^A-Za-z])S\.?C\.?([^A-Za-z]|$)/i.test(t) ||
+    /JY/i.test(t) ||
+    /Jr/i.test(t) ||
+    /U-?12/i.test(t) ||
+    /U-?15/i.test(t) ||
+    t.includes("サッカー") ||
+    t.includes("フットボール") ||
+    t.includes("クラブ") ||
+    t.includes("少年団") ||
+    t.includes("ジュニア") ||
+    t.includes("ジュニアユース") ||
+    t.includes("ユース") ||
+    t.includes("アカデミー") ||
+    t.includes("スクール") ||
+    t.includes("スポーツ少年団") ||
+    t.includes("SS") ||
+    t.includes("ＦＣ") ||
+    t.includes("ＳＣ")
+  );
+}
+
+function inferCategory(name: string) {
+  const t = name.toLowerCase();
+
+  if (name.includes("女子") || name.includes("レディース") || name.includes("ガールズ")) {
+    return "ladies";
   }
+
+  if (
+    t.includes("school") ||
+    name.includes("スクール") ||
+    name.includes("アカデミー")
+  ) {
+    return "school";
+  }
+
+  if (
+    name.includes("少年団") ||
+    name.includes("U-12") ||
+    name.includes("U12") ||
+    name.includes("ジュニア")
+  ) {
+    return "junior";
+  }
+
+  return "club_team";
 }
 
 function hostOf(url: string) {
@@ -86,135 +146,67 @@ function hostOf(url: string) {
   }
 }
 
-function isBadUrl(url: string) {
-  const lower = decodeURIComponent(String(url).toLowerCase());
-  const host = hostOf(url);
+async function fetchText(url: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
 
-  return (
-    !lower.startsWith("http") ||
-    BAD_HOST_WORDS.some((w) => host.includes(w) || lower.includes(w)) ||
-    lower.includes("google.com/maps") ||
-    lower.includes("goo.gl/maps") ||
-    lower.includes("maps.app.goo.gl") ||
-    lower.includes(".jpg") ||
-    lower.includes(".jpeg") ||
-    lower.includes(".png") ||
-    lower.includes(".webp") ||
-    lower.includes(".gif") ||
-    lower.includes(".css") ||
-    lower.includes(".js") ||
-    lower.includes(".svg") ||
-    lower.includes(".ico") ||
-    lower.includes(".zip") ||
-    lower.includes(".mp4") ||
-    lower.includes(".mov")
-  );
+  try {
+    const res = await fetch(url, {
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        "user-agent": "Mozilla/5.0 team-directory-crawler/3.0",
+        accept: "text/html,application/xhtml+xml,text/plain,*/*",
+      },
+    });
+
+    return {
+      ok: res.ok,
+      status: res.status,
+      finalUrl: res.url || url,
+      text: await res.text(),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
-function isUsefulPage(url: string, text = "") {
-  const lower = decodeURIComponent(`${url} ${text}`.toLowerCase());
-  return GOOD_PATH_WORDS.some((w) => lower.includes(w));
-}
+function extractTeamsFromHtml(html: string) {
+  const teams = new Set<string>();
 
-function normalizeTeamName(name: string) {
-  return clean(name)
-    .replace(/^[-・●■□◆◇★☆○◎\s]+/g, "")
-    .replace(/[-・●■□◆◇★☆○◎\s]+$/g, "")
-    .replace(/^\d+[.\s、)）]+/g, "")
-    .replace(/\s+/g, " ")
-    .replace(/試合結果.*$/g, "")
-    .replace(/日程.*$/g, "")
-    .replace(/公式.*$/g, "")
-    .trim();
-}
+  const cellTexts: string[] = [];
 
-function looksTeamName(text: string) {
-  const t = normalizeTeamName(text);
-  if (t.length < 3) return false;
-  if (t.length > 50) return false;
+  const cellRe = /<(td|th|li|p|span|div|a)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+  let m;
 
-  if (
-    t.includes("サッカー協会") ||
-    t.includes("連盟") ||
-    t.includes("大会") ||
-    t.includes("リーグ") ||
-    t.includes("要項") ||
-    t.includes("結果") ||
-    t.includes("日程") ||
-    t.includes("順位") ||
-    t.includes("お問い合わせ") ||
-    t.includes("プライバシー")
-  ) return false;
-
-  return (
-    /(^|[^A-Z])FC([^A-Z]|$)/i.test(t) ||
-    /(^|[^A-Z])SC([^A-Z]|$)/i.test(t) ||
-    /JY/i.test(t) ||
-    /U-?15/i.test(t) ||
-    /U-?12/i.test(t) ||
-    t.includes("サッカー") ||
-    t.includes("フットボール") ||
-    t.includes("クラブ") ||
-    t.includes("ジュニアユース") ||
-    t.includes("ユース") ||
-    t.includes("アカデミー") ||
-    t.includes("スクール") ||
-    t.includes("少年団")
-  );
-}
-
-function inferCategory(name: string) {
-  const t = name.toLowerCase();
-  if (t.includes("school") || name.includes("スクール") || name.includes("アカデミー")) return "school";
-  if (name.includes("女子") || name.includes("レディース") || name.includes("ガールズ")) return "ladies";
-  if (name.includes("少年団") || name.includes("U-12") || name.includes("U12")) return "junior";
-  return "club_team";
-}
-
-function extractLinks(html: string, baseUrl: string) {
-  const links: { url: string; text: string }[] = [];
-  const re = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-
-  let match;
-  while ((match = re.exec(html))) {
-    const href = match[1];
-    const text = clean(String(match[2] || ""));
-    if (!href) continue;
-    if (href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("javascript:")) continue;
-
-    try {
-      const url = normalizeUrl(new URL(href, baseUrl).toString());
-      if (!url || isBadUrl(url)) continue;
-      links.push({ url, text });
-    } catch {}
+  while ((m = cellRe.exec(html))) {
+    const text = clean(m[2]);
+    if (text) cellTexts.push(text);
   }
 
-  return links;
-}
+  const plain = clean(html);
 
-function extractTeamNames(html: string) {
-  const teams = new Set<string>();
-  const text = clean(html);
-
-  const chunks = text
-    .split(/[\n\r\t|｜、,;；／/]+/)
+  const chunks = [
+    ...cellTexts,
+    ...plain.split(/[、,|｜／\/\n\r\t;；]+/g),
+  ]
     .map(normalizeTeamName)
     .filter(Boolean);
 
   for (const chunk of chunks) {
-    if (looksTeamName(chunk)) teams.add(chunk);
+    if (looksTeamName(chunk)) teams.add(normalizeTeamName(chunk));
   }
 
   const patterns = [
-    /([A-Za-z0-9 .'\-]{1,35}\s?(?:FC|SC|JY)(?:[A-Za-z0-9 .'\-]{0,20})?)/gi,
-    /((?:FC|SC)\s?[A-Za-z0-9 .'\-]{2,35})/gi,
-    /([一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,35}(?:FC|ＦＣ|SC|ＳＣ|サッカークラブ|ジュニアユース|ユース|少年団|アカデミー|スクール))/g,
+    /([A-Za-z0-9 .'\-]{1,35}\s?(?:FC|SC|JY|SS)(?:[A-Za-z0-9 .'\-]{0,20})?)/gi,
+    /((?:FC|SC|F\.C\.|S\.C\.)\s?[A-Za-z0-9 .'\-ぁ-んァ-ヶー一-龥]{2,35})/gi,
+    /([一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,35}(?:FC|ＦＣ|SC|ＳＣ|サッカークラブ|フットボールクラブ|少年団|ジュニアユース|ユース|アカデミー|スクール))/g,
     /((?:FC|ＦＣ|SC|ＳＣ)[一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,35})/g,
   ];
 
   for (const re of patterns) {
     let match;
-    while ((match = re.exec(text))) {
+    while ((match = re.exec(plain))) {
       const name = normalizeTeamName(match[1]);
       if (looksTeamName(name)) teams.add(name);
     }
@@ -223,33 +215,7 @@ function extractTeamNames(html: string) {
   return [...teams];
 }
 
-async function fetchHtml(url: string) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12000);
-
-  try {
-    const res = await fetch(url, {
-      redirect: "follow",
-      signal: controller.signal,
-      headers: {
-        "user-agent": "Mozilla/5.0 team-directory-crawler/2.0",
-        accept: "text/html,application/xhtml+xml,text/plain,*/*",
-      },
-    });
-
-    return {
-      ok: res.ok,
-      status: res.status,
-      url: normalizeUrl(res.url || url),
-      contentType: res.headers.get("content-type") || "",
-      html: await res.text(),
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function readJsonBody(req: Request) {
+async function readBody(req: Request) {
   try {
     const ct = req.headers.get("content-type") || "";
     if (!ct.includes("application/json")) return {};
@@ -260,7 +226,7 @@ async function readJsonBody(req: Request) {
 }
 
 serve(async (req) => {
-  const body = await readJsonBody(req);
+  const body = await readBody(req);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
   const serviceRole =
@@ -273,97 +239,98 @@ serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, serviceRole);
 
-  const maxPages = Math.min(Number(body?.maxPages ?? DEFAULT_MAX_PAGES), 2000);
-  const maxInsert = Math.min(Number(body?.maxInsert ?? DEFAULT_MAX_INSERT), 10000);
+  const limit = Math.min(Number(body.limit ?? DEFAULT_LIMIT), 2000);
+  const offset = Number(body.offset ?? 0);
+  const maxInsert = Math.min(Number(body.maxInsert ?? DEFAULT_MAX_INSERT), 20000);
 
-  const queue = SEEDS.map((s) => ({ ...s, url: normalizeUrl(s.url) }));
-  const visited = new Set<string>();
-  const found = new Map<string, any>();
+  const { data: seeds, error: seedError } = await supabase
+    .from("team_directory_seeds")
+    .select("id,name,url,prefecture,seed_type")
+    .eq("enabled", true)
+    .order("created_at", { ascending: true })
+    .range(offset, offset + limit - 1);
 
+  if (seedError) {
+    return Response.json({ ok: false, error: seedError.message }, { status: 500 });
+  }
+
+  let scanned = 0;
+  let candidateTeams = 0;
+  let inserted = 0;
+  let skipped = 0;
+
+  const sampleInserted: any[] = [];
+  const sampleTeams: any[] = [];
   const errors: any[] = [];
-  const checkedPages: any[] = [];
 
-  while (queue.length > 0 && visited.size < maxPages && found.size < maxInsert) {
-    const item = queue.shift();
-    if (!item?.url) continue;
-
-    const url = normalizeUrl(item.url);
-    if (!url || visited.has(url) || isBadUrl(url)) continue;
-
-    visited.add(url);
+  for (const seed of seeds ?? []) {
+    if (inserted >= maxInsert) break;
 
     let page;
+
     try {
-      page = await fetchHtml(url);
+      page = await fetchText(seed.url);
     } catch (e) {
-      errors.push({ url, error: e instanceof Error ? e.message : String(e) });
+      errors.push({ seed: seed.name, url: seed.url, error: String(e) });
       continue;
     }
 
-    checkedPages.push({ url, status: page.status, seed: item.name });
+    scanned += 1;
 
     if (!page.ok) continue;
 
-    const teams = extractTeamNames(page.html);
+    const teams = extractTeamsFromHtml(page.text);
+    candidateTeams += teams.length;
 
-    for (const team of teams) {
-      const key = normalizeTeamName(team).toLowerCase();
-      if (!key || found.has(key)) continue;
+    for (const teamName of teams) {
+      if (inserted >= maxInsert) break;
 
-      found.set(key, {
-        team_name: normalizeTeamName(team),
-        prefecture: item.prefecture,
-        category: inferCategory(team),
-        source_name: item.name,
-        source_url: page.url || url,
+      const row = {
+        team_name: teamName,
+        prefecture: seed.prefecture,
+        category: inferCategory(teamName),
+        source_name: seed.name,
+        source_url: page.finalUrl || seed.url,
+        official_url: null,
         status: "needs_url",
+      };
+
+      const { data, error } = await supabase
+        .from("team_directory")
+        .insert(row)
+        .select("id,team_name,prefecture,category,source_name")
+        .single();
+
+      if (error) {
+        skipped += 1;
+        continue;
+      }
+
+      inserted += 1;
+
+      if (sampleInserted.length < 50) sampleInserted.push(data);
+    }
+
+    if (sampleTeams.length < 50 && teams.length > 0) {
+      sampleTeams.push({
+        seed: seed.name,
+        url: seed.url,
+        teams: teams.slice(0, 20),
       });
     }
-
-    const links = extractLinks(page.html, page.url || url);
-
-    for (const link of links) {
-      const same = hostOf(link.url) === hostOf(page.url || url);
-      if (!same) continue;
-      if (!isUsefulPage(link.url, link.text)) continue;
-      if (!visited.has(link.url) && queue.length < maxPages * 3) {
-        queue.push({
-          name: item.name,
-          url: link.url,
-          prefecture: item.prefecture,
-        });
-      }
-    }
-  }
-
-  let inserted = 0;
-  let skipped = 0;
-  const sampleInserted: any[] = [];
-
-  for (const row of Array.from(found.values()).slice(0, maxInsert)) {
-    const { data, error } = await supabase
-      .from("team_directory")
-      .insert(row)
-      .select("id,team_name,prefecture,category,source_name")
-      .single();
-
-    if (error) {
-      skipped += 1;
-      continue;
-    }
-
-    inserted += 1;
-    if (sampleInserted.length < 50) sampleInserted.push(data);
   }
 
   return Response.json({
     ok: true,
-    scannedPages: visited.size,
-    candidateTeams: found.size,
+    offset,
+    limit,
+    seedCount: seeds?.length ?? 0,
+    scanned,
+    candidateTeams,
     inserted,
     skipped,
-    errors: errors.slice(0, 50),
-    checkedPages: checkedPages.slice(0, 80),
+    sampleTeams,
     sampleInserted,
+    errors: errors.slice(0, 50),
   });
 });
