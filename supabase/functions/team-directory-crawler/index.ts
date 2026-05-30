@@ -3,8 +3,22 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const DEFAULT_LIMIT = 80;
-const DEFAULT_MAX_INSERT = 5000;
+const DEFAULT_MAX_INSERT = 500;
+
+const TARGET_SEED_TYPES = [
+  "u12_team_list",
+  "u15_team_list",
+  "u18_team_list",
+  "club_list",
+  "women_team_list",
+  "adult_team_list",
+  "team_list",
+  "junior_team_list",
+  "u12",
+  "u15",
+  "u12_block",
+  "block_page",
+];
 
 function clean(text: string) {
   return String(text ?? "")
@@ -51,21 +65,80 @@ function looksTeamName(value: string) {
   const t = normalizeTeamName(value);
 
   if (t.length < 3) return false;
-  if (t.length > 36) return false;
-  if (markerCount(t) >= 3) return false;
+  if (t.length > 40) return false;
+  if (markerCount(t) >= 4) return false;
 
-  const exactBad = ["FC", "SC", "FCJY", "SC U-15", "FCジュニア", "SCジュニア"];
+  const exactBad = [
+    "FC",
+    "SC",
+    "FCJY",
+    "SC U-15",
+    "FCジュニア",
+    "SCジュニア",
+    "クラブ",
+    "クラブ（U-15）",
+    "クラブ（U-18）",
+    "サッカー",
+    "フットボール",
+  ];
   if (exactBad.includes(t)) return false;
 
   const bad = [
-    "サッカー協会", "連盟", "委員会", "大会", "リーグ", "ブロック",
-    "ラウンド", "トーナメント", "予選", "決勝", "順位", "日程", "結果",
-    "要項", "申込書", "参加申込", "お問い合わせ", "プライバシー",
-    "ニュース", "お知らせ", "会場", "グラウンド", "一覧", "詳細",
-    "PDF", "Excel", "xlsx", "xls", "動画", "ハイライト", "研修会",
-    "プレーオフ", "マッチNo", "勝者", "敗者", "キャンパス",
-    "スポーツセンター", "クラブハウス", "住所", "監督", "コーチ",
-    "代表", "社長", "ダイレクター", "担当", "問い合わせ", "LINE",
+    "サッカー協会",
+    "連盟",
+    "委員会",
+    "大会",
+    "リーグ",
+    "ブロック",
+    "ラウンド",
+    "トーナメント",
+    "予選",
+    "決勝",
+    "順位",
+    "日程",
+    "結果",
+    "要項",
+    "申込書",
+    "参加申込",
+    "お問い合わせ",
+    "プライバシー",
+    "ニュース",
+    "お知らせ",
+    "会場",
+    "グラウンド",
+    "一覧",
+    "詳細",
+    "PDF",
+    "Excel",
+    "xlsx",
+    "xls",
+    "動画",
+    "ハイライト",
+    "研修会",
+    "プレーオフ",
+    "マッチNo",
+    "勝者",
+    "敗者",
+    "キャンパス",
+    "スポーツセンター",
+    "クラブハウス",
+    "住所",
+    "監督",
+    "コーチ",
+    "代表",
+    "社長",
+    "ダイレクター",
+    "担当",
+    "問い合わせ",
+    "LINE",
+    "審判",
+    "ビーチサッカー",
+    "フェスティバル",
+    "ビジョン",
+    "部会",
+    "参加資格",
+    "申請",
+    "登録",
   ];
 
   if (bad.some((w) => t.includes(w))) return false;
@@ -102,14 +175,14 @@ function inferCategory(name: string) {
 
 async function fetchText(url: string) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeout = setTimeout(() => controller.abort(), 12000);
 
   try {
     const res = await fetch(url, {
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "user-agent": "Mozilla/5.0 team-directory-crawler/5.0",
+        "user-agent": "Mozilla/5.0 team-directory-crawler/6.0",
         accept: "text/html,application/xhtml+xml,text/plain,*/*",
       },
     });
@@ -137,7 +210,7 @@ function extractTitleTeam(html: string) {
       clean(title[1])
         .replace(/｜.*$/g, "")
         .replace(/\|.*$/g, "")
-        .replace(/-.*$/g, "")
+        .replace(/\s-\s.*$/g, "")
     );
   }
 
@@ -159,7 +232,7 @@ function splitCandidateText(text: string) {
   t = t
     .replace(/\s+(?=(?:FC|ＦＣ|SC|ＳＣ)\b)/g, "\n")
     .replace(/(U-?12|U-?15|U-?18)\s+(?=[A-Za-z一-龥ぁ-んァ-ヶー])/gi, "$1\n")
-    .replace(/\s+(?=[一-龥ぁ-んァ-ヶーA-Za-z0-9 .'-]{2,20}(?:FC|ＦＣ|SC|ＳＣ))/g, "\n");
+    .replace(/\s+(?=[一-龥ぁ-んァ-ヶーA-Za-z0-9 .'-]{2,24}(?:FC|ＦＣ|SC|ＳＣ))/g, "\n");
 
   return t
     .split(/[\n\r\t、,|｜／\/;；]+/g)
@@ -176,7 +249,8 @@ function extractTeamsFromHtml(html: string, url: string) {
   }
 
   const blocks: string[] = [];
-  const cellRe = /<(td|th|li|option)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+
+  const cellRe = /<(td|th|li|option|h1|h2|h3|h4)\b[^>]*>([\s\S]*?)<\/\1>/gi;
   let m;
 
   while ((m = cellRe.exec(html))) {
@@ -186,14 +260,15 @@ function extractTeamsFromHtml(html: string, url: string) {
 
   const patterns = [
     /(?:^|\s)([A-Za-z0-9 .'\-]{1,28}\s?(?:FC|SC|JY|SS)(?:\s?U-?1[258])?)(?=\s|$)/gi,
-    /(?:^|\s)((?:FC|SC|F\.C\.|S\.C\.)\s?[A-Za-z0-9 .'\-ぁ-んァ-ヶー一-龥]{2,24})(?=\s|$)/gi,
-    /([一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,24}(?:FC|ＦＣ|SC|ＳＣ|サッカークラブ|フットボールクラブ|少年団|ジュニアユース|ユース|アカデミー|スクール))/g,
-    /((?:FC|ＦＣ|SC|ＳＣ)[一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,24})/g,
+    /(?:^|\s)((?:FC|SC|F\.C\.|S\.C\.)\s?[A-Za-z0-9 .'\-ぁ-んァ-ヶー一-龥]{2,28})(?=\s|$)/gi,
+    /([一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,28}(?:FC|ＦＣ|SC|ＳＣ|サッカークラブ|フットボールクラブ|少年団|ジュニアユース|ユース|アカデミー|スクール))/g,
+    /((?:FC|ＦＣ|SC|ＳＣ)[一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,28})/g,
   ];
 
   for (const block of blocks) {
     for (const part of splitCandidateText(block)) {
-      if (looksTeamName(part)) teams.add(normalizeTeamName(part));
+      const name = normalizeTeamName(part);
+      if (looksTeamName(name)) teams.add(name);
     }
 
     for (const re of patterns) {
@@ -231,97 +306,131 @@ serve(async (req) => {
   }
 
   const supabase = createClient(supabaseUrl, serviceRole);
+  const maxInsert = Math.min(Number(body.maxInsert ?? DEFAULT_MAX_INSERT), 2000);
 
-  const limit = Math.min(Number(body.limit ?? DEFAULT_LIMIT), 500);
-  const offset = Number(body.offset ?? 0);
-  const maxInsert = Math.min(Number(body.maxInsert ?? DEFAULT_MAX_INSERT), 10000);
-
-  const { data: seeds, error: seedError } = await supabase
+  const { data: seed, error: seedError } = await supabase
     .from("team_directory_seeds")
     .select("id,name,url,prefecture,seed_type")
     .eq("enabled", true)
+    .is("processed_at", null)
+    .in("seed_type", TARGET_SEED_TYPES)
     .order("created_at", { ascending: true })
-    .range(offset, offset + limit - 1);
+    .limit(1)
+    .maybeSingle();
 
   if (seedError) {
     return Response.json({ ok: false, error: seedError.message }, { status: 500 });
   }
 
-  let scanned = 0;
-  let candidateTeams = 0;
+  if (!seed) {
+    return Response.json({
+      ok: true,
+      message: "No pending team directory seeds",
+      processed: 0,
+      inserted: 0,
+      skipped: 0,
+    });
+  }
+
+  await supabase
+    .from("team_directory_seeds")
+    .update({ process_status: "processing" })
+    .eq("id", seed.id);
+
+  let page;
+
+  try {
+    page = await fetchText(seed.url);
+  } catch (e) {
+    await supabase
+      .from("team_directory_seeds")
+      .update({
+        processed_at: new Date().toISOString(),
+        process_status: "error",
+        process_error: String(e),
+      })
+      .eq("id", seed.id);
+
+    return Response.json({
+      ok: false,
+      processed: 1,
+      seed,
+      error: String(e),
+    });
+  }
+
+  if (!page.ok) {
+    await supabase
+      .from("team_directory_seeds")
+      .update({
+        processed_at: new Date().toISOString(),
+        process_status: "error",
+        process_error: `HTTP ${page.status}`,
+      })
+      .eq("id", seed.id);
+
+    return Response.json({
+      ok: false,
+      processed: 1,
+      seed,
+      status: page.status,
+    });
+  }
+
+  const teams = extractTeamsFromHtml(page.text, page.finalUrl || seed.url);
+
   let inserted = 0;
   let skipped = 0;
-
   const sampleInserted: any[] = [];
-  const sampleTeams: any[] = [];
-  const errors: any[] = [];
 
-  for (const seed of seeds ?? []) {
-    if (inserted >= maxInsert) break;
+  for (const teamName of teams.slice(0, maxInsert)) {
+    const row = {
+      team_name: teamName,
+      prefecture: seed.prefecture,
+      category: inferCategory(teamName),
+      source_name: seed.name,
+      source_url: page.finalUrl || seed.url,
+      official_url: null,
+      status: "needs_url",
+    };
 
-    let page;
+    const { data, error } = await supabase
+      .from("team_directory")
+      .insert(row)
+      .select("id,team_name,prefecture,category,source_name")
+      .single();
 
-    try {
-      page = await fetchText(seed.url);
-    } catch (e) {
-      errors.push({ seed: seed.name, url: seed.url, error: String(e) });
+    if (error) {
+      skipped += 1;
       continue;
     }
 
-    scanned += 1;
-    if (!page.ok) continue;
-
-    const teams = extractTeamsFromHtml(page.text, page.finalUrl || seed.url);
-    candidateTeams += teams.length;
-
-    for (const teamName of teams) {
-      if (inserted >= maxInsert) break;
-
-      const row = {
-        team_name: teamName,
-        prefecture: seed.prefecture,
-        category: inferCategory(teamName),
-        source_name: seed.name,
-        source_url: page.finalUrl || seed.url,
-        official_url: null,
-        status: "needs_url",
-      };
-
-      const { data, error } = await supabase
-        .from("team_directory")
-        .insert(row)
-        .select("id,team_name,prefecture,category,source_name")
-        .single();
-
-      if (error) {
-        skipped += 1;
-        continue;
-      }
-
-      inserted += 1;
-      if (sampleInserted.length < 50) sampleInserted.push(data);
-    }
-
-    if (sampleTeams.length < 50 && teams.length > 0) {
-      sampleTeams.push({
-        seed: seed.name,
-        url: seed.url,
-        teams: teams.slice(0, 20),
-      });
-    }
+    inserted += 1;
+    if (sampleInserted.length < 50) sampleInserted.push(data);
   }
+
+  await supabase
+    .from("team_directory_seeds")
+    .update({
+      processed_at: new Date().toISOString(),
+      process_status: "done",
+      process_error: null,
+    })
+    .eq("id", seed.id);
 
   return Response.json({
     ok: true,
-    offset,
-    limit,
-    seedCount: seeds?.length ?? 0,
-    scanned,
-    candidateTeams,
+    processed: 1,
+    seed: {
+      id: seed.id,
+      name: seed.name,
+      url: seed.url,
+      seed_type: seed.seed_type,
+      prefecture: seed.prefecture,
+    },
+    candidateTeams: teams.length,
     inserted,
     skipped,
-    sampleTeams,
     sampleInserted,
-    errors: errors.slice(0, 50),
   });
 });
