@@ -3,25 +3,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const BASE_SEEDS = [
-  ["関東クラブユースサッカー連盟", "https://www.kanto-cy.com/", "関東"],
-  ["東京都サッカー協会", "https://www.tokyofa.or.jp/", "東京都"],
-  ["東京都クラブユースサッカー連盟", "https://tokyo-cy.jp/", "東京都"],
-  ["東京都少年サッカー連盟", "https://www.tjfl.jp/", "東京都"],
-  ["神奈川県サッカー協会", "https://kanagawa-fa.gr.jp/", "神奈川県"],
-  ["神奈川県クラブユース", "https://kanagawa-fa.gr.jp/club_u15/", "神奈川県"],
-  ["埼玉県サッカー協会", "https://www.saitamafa.or.jp/", "埼玉県"],
-  ["埼玉県第4種少年サッカー連盟", "https://www.saitama-u12.com/", "埼玉県"],
-  ["千葉県サッカー協会", "https://chiba-fa.gr.jp/", "千葉県"],
-  ["千葉県クラブユースサッカー連盟", "https://chiba-cy.com/", "千葉県"],
-  ["茨城県サッカー協会", "https://www.ibaraki-fa.jp/", "茨城県"],
-  ["茨城県クラブユースサッカー連盟", "https://ibaraki-cy.com/", "茨城県"],
-  ["栃木県サッカー協会", "https://www.tfa.or.jp/", "栃木県"],
-  ["栃木県クラブユースサッカー連盟", "https://tochigi-cy.com/", "栃木県"],
-  ["群馬県サッカー協会", "https://www.gunma-fa.com/", "群馬県"],
-  ["群馬県クラブユースサッカー連盟", "https://gunma-cy.com/", "群馬県"],
-];
-
 const GOOD_WORDS = [
   "チーム一覧",
   "登録チーム",
@@ -56,39 +37,31 @@ const GOOD_WORDS = [
 ];
 
 const BAD_WORDS = [
-  "news",
-  "post",
-  "schedule",
-  "result",
-  "match",
-  "event",
-  "blog",
-  "column",
-  "contact",
-  "privacy",
-  "access",
-  "pdf",
-  "xlsx",
-  "xls",
-  "jpg",
-  "png",
-  "動画",
-  "結果",
-  "日程",
-  "大会",
-  "試合",
-  "要項",
-  "申込書",
-  "お問い合わせ",
-  "ニュース",
-  "お知らせ",
-  "ブログ",
-  "コラム",
-  "会場",
+  "facebook",
+  "instagram",
+  "twitter",
+  "x.com",
+  "youtube",
+  "line.me",
+  "mailto:",
+  "tel:",
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".gif",
+  ".webp",
+  ".svg",
+  ".css",
+  ".js",
+  ".zip",
+  ".mp4",
+  ".mov",
 ];
 
 function clean(v: string) {
   return String(v ?? "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
@@ -128,13 +101,24 @@ function inferSeedType(text: string, url: string) {
   return "team_list";
 }
 
+function isBadUrl(url: string) {
+  const s = decodeURIComponent(String(url).toLowerCase());
+  return BAD_WORDS.some((w) => s.includes(w));
+}
+
 function isGoodTeamListLink(url: string, text = "") {
   const s = decodeURIComponent(`${url} ${text}`.toLowerCase());
-
   if (!url.startsWith("http")) return false;
-  if (BAD_WORDS.some((w) => s.includes(w.toLowerCase()))) return false;
-
+  if (isBadUrl(url)) return false;
   return GOOD_WORDS.some((w) => s.includes(w.toLowerCase()));
+}
+
+function shouldQueueLink(url: string, text = "") {
+  const s = decodeURIComponent(`${url} ${text}`.toLowerCase());
+  if (!url.startsWith("http")) return false;
+  if (isBadUrl(url)) return false;
+
+  return /team|teams|club|clubs|member|u12|u15|u18|entry|registration|チーム|クラブ|登録|加盟|所属|一覧|少年|ジュニア|ユース|種|連盟/.test(s);
 }
 
 function extractLinks(html: string, baseUrl: string) {
@@ -163,14 +147,14 @@ function extractLinks(html: string, baseUrl: string) {
 
 async function fetchHtml(url: string) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeout = setTimeout(() => controller.abort(), 10000);
 
   try {
     const res = await fetch(url, {
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "user-agent": "Mozilla/5.0 team-list-seed-builder/1.0",
+        "user-agent": "Mozilla/5.0 team-list-seed-builder/2.0",
         accept: "text/html,application/xhtml+xml,text/plain,*/*",
       },
     });
@@ -210,99 +194,159 @@ serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, serviceRole);
 
-  const maxPagesPerBase = Math.min(Number(body.maxPagesPerBase ?? 30), 80);
-  const maxInsert = Math.min(Number(body.maxInsert ?? 500), 3000);
+  const maxLinks = Math.min(Number(body.maxLinks ?? 80), 150);
 
-  const candidates = new Map<string, any>();
-  const checkedPages: any[] = [];
-  const errors: any[] = [];
+  const { data: job, error: jobError } = await supabase
+    .from("team_seed_jobs")
+    .select("*")
+    .eq("status", "pending")
+    .order("depth", { ascending: true })
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
 
-  for (const [baseName, baseUrl, prefecture] of BASE_SEEDS) {
-    const queue = [normalizeUrl(baseUrl)];
-    const visited = new Set<string>();
+  if (jobError) {
+    return Response.json({ ok: false, error: jobError.message }, { status: 500 });
+  }
 
-    while (queue.length && visited.size < maxPagesPerBase) {
-      const pageUrl = queue.shift();
-      if (!pageUrl || visited.has(pageUrl)) continue;
+  if (!job) {
+    return Response.json({
+      ok: true,
+      message: "No pending jobs",
+      processed: 0,
+      insertedSeeds: 0,
+      insertedJobs: 0,
+    });
+  }
 
-      visited.add(pageUrl);
+  await supabase
+    .from("team_seed_jobs")
+    .update({ status: "processing" })
+    .eq("id", job.id);
 
-      let page;
-      try {
-        page = await fetchHtml(pageUrl);
-      } catch (e) {
-        errors.push({ baseName, url: pageUrl, error: String(e) });
-        continue;
+  let page;
+
+  try {
+    page = await fetchHtml(job.url);
+  } catch (e) {
+    await supabase
+      .from("team_seed_jobs")
+      .update({
+        status: "error",
+        processed_at: new Date().toISOString(),
+        error: String(e),
+      })
+      .eq("id", job.id);
+
+    return Response.json({
+      ok: false,
+      processed: 1,
+      job: job.url,
+      error: String(e),
+    });
+  }
+
+  if (!page.ok) {
+    await supabase
+      .from("team_seed_jobs")
+      .update({
+        status: "error",
+        processed_at: new Date().toISOString(),
+        error: `HTTP ${page.status}`,
+      })
+      .eq("id", job.id);
+
+    return Response.json({
+      ok: false,
+      processed: 1,
+      job: job.url,
+      status: page.status,
+    });
+  }
+
+  const links = extractLinks(page.html, page.finalUrl || job.url).slice(0, maxLinks);
+
+  let insertedSeeds = 0;
+  let insertedJobs = 0;
+  const sampleSeeds: any[] = [];
+  const sampleJobs: any[] = [];
+
+  for (const link of links) {
+    if (hostOf(link.url) !== hostOf(page.finalUrl || job.url)) continue;
+
+    const good = isGoodTeamListLink(link.url, link.text);
+    const queue = shouldQueueLink(link.url, link.text);
+
+    if (good) {
+      const row = {
+        name: clean(`${job.name} ${link.text || link.url}`).slice(0, 160),
+        url: link.url,
+        prefecture: job.prefecture,
+        seed_type: inferSeedType(link.text, link.url),
+        enabled: true,
+      };
+
+      const { data, error } = await supabase
+        .from("team_directory_seeds")
+        .insert(row)
+        .select("id,name,url,prefecture,seed_type")
+        .single();
+
+      if (!error) {
+        insertedSeeds++;
+        if (sampleSeeds.length < 20) sampleSeeds.push(data);
       }
+    }
 
-      checkedPages.push({ baseName, url: pageUrl, status: page.status });
+    if (queue && Number(job.depth ?? 0) < 3) {
+      const nextJob = {
+        name: clean(`${job.name} ${link.text || link.url}`).slice(0, 160),
+        url: link.url,
+        prefecture: job.prefecture,
+        source_type: good ? "team_list_candidate" : "crawl_candidate",
+        depth: Number(job.depth ?? 0) + 1,
+        status: "pending",
+      };
 
-      if (!page.ok) continue;
+      const { data, error } = await supabase
+        .from("team_seed_jobs")
+        .insert(nextJob)
+        .select("id,name,url,depth")
+        .single();
 
-      const links = extractLinks(page.html, page.finalUrl || pageUrl);
-
-      for (const link of links) {
-        const sameHost = hostOf(link.url) === hostOf(page.finalUrl || pageUrl);
-        if (!sameHost) continue;
-
-        const good = isGoodTeamListLink(link.url, link.text);
-
-        if (good) {
-          const key = link.url;
-          if (!candidates.has(key)) {
-            candidates.set(key, {
-              name: clean(`${baseName} ${link.text || link.url}`).slice(0, 160),
-              url: link.url,
-              prefecture,
-              seed_type: inferSeedType(link.text, link.url),
-              enabled: true,
-            });
-          }
-        }
-
-        const shouldFollow =
-          good ||
-          /team|club|member|u12|u15|u18|少年|ジュニア|クラブ|登録|加盟|チーム|種|連盟/i.test(
-            decodeURIComponent(`${link.url} ${link.text}`),
-          );
-
-        if (shouldFollow && !visited.has(link.url) && queue.length < maxPagesPerBase * 3) {
-          queue.push(link.url);
-        }
+      if (!error) {
+        insertedJobs++;
+        if (sampleJobs.length < 20) sampleJobs.push(data);
       }
     }
   }
 
-  const rows = Array.from(candidates.values()).slice(0, maxInsert);
-
-  let inserted = 0;
-  let skipped = 0;
-  const insertedRows: any[] = [];
-
-  for (const row of rows) {
-    const { data, error } = await supabase
-      .from("team_directory_seeds")
-      .insert(row)
-      .select("id,name,url,prefecture,seed_type,enabled")
-      .single();
-
-    if (error) {
-      skipped++;
-      continue;
-    }
-
-    inserted++;
-    if (insertedRows.length < 80) insertedRows.push(data);
-  }
+  await supabase
+    .from("team_seed_jobs")
+    .update({
+      status: "done",
+      processed_at: new Date().toISOString(),
+      error: null,
+    })
+    .eq("id", job.id);
 
   return Response.json({
     ok: true,
-    checkedPageCount: checkedPages.length,
-    candidateCount: rows.length,
-    inserted,
-    skipped,
-    checkedPages: checkedPages.slice(0, 80),
-    insertedRows,
-    errors: errors.slice(0, 50),
+    processed: 1,
+    job: {
+      id: job.id,
+      name: job.name,
+      url: job.url,
+      depth: job.depth,
+    },
+    fetched: {
+      status: page.status,
+      finalUrl: page.finalUrl,
+      linkCount: links.length,
+    },
+    insertedSeeds,
+    insertedJobs,
+    sampleSeeds,
+    sampleJobs,
   });
 });
