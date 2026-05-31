@@ -3,6 +3,27 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const DEFAULT_LIMIT = 1;
+
+const TARGET_SOURCE_TYPES = [
+  "fa",
+  "club_youth",
+  "u12",
+  "u12_block",
+  "u15",
+  "u15_team_list",
+  "u18_team_list",
+  "women_team_list",
+  "adult_team_list",
+  "team_list",
+  "club_list",
+  "junior_team_list",
+  "block_page",
+  "area_page",
+  "link_page",
+  "seed_page",
+];
+
 const GOOD_WORDS = [
   "team",
   "teams",
@@ -31,6 +52,9 @@ const GOOD_WORDS = [
   "所属チーム",
   "チーム紹介",
   "クラブ紹介",
+  "加盟クラブ",
+  "登録クラブ",
+  "所属クラブ",
   "リンク",
   "関連リンク",
   "ブロック",
@@ -121,6 +145,8 @@ function clean(v: string) {
   return String(v ?? "")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
@@ -170,30 +196,51 @@ function linkScore(url: string, text = "") {
     if (s.includes(w.toLowerCase())) score += 10;
   }
 
-  if (s.includes("team") || s.includes("club")) score += 10;
-  if (s.includes("チーム一覧") || s.includes("加盟チーム") || s.includes("登録チーム")) score += 40;
-  if (s.includes("クラブ一覧") || s.includes("少年団一覧")) score += 40;
+  if (s.includes("チーム一覧")) score += 60;
+  if (s.includes("加盟チーム")) score += 60;
+  if (s.includes("登録チーム")) score += 60;
+  if (s.includes("クラブ一覧")) score += 60;
+  if (s.includes("加盟クラブ")) score += 60;
+  if (s.includes("登録クラブ")) score += 60;
+  if (s.includes("少年団一覧")) score += 50;
+  if (s.includes("チーム紹介")) score += 45;
+  if (s.includes("クラブ紹介")) score += 45;
+  if (s.includes("team") || s.includes("club")) score += 20;
+  if (s.includes("member")) score += 20;
   if (s.includes("リンク") || s.includes("link")) score += 20;
   if (s.includes("ブロック") || s.includes("地区")) score += 15;
 
   return score;
 }
 
-function isGoodLink(url: string, text = "") {
-  return linkScore(url, text) >= 10;
-}
-
 function inferSeedType(url: string, text = "") {
   const s = `${url} ${text}`.toLowerCase();
 
-  if (s.includes("チーム一覧") || s.includes("加盟チーム") || s.includes("登録チーム")) return "team_list";
-  if (s.includes("クラブ一覧") || s.includes("club")) return "club_list";
+  if (
+    s.includes("チーム一覧") ||
+    s.includes("加盟チーム") ||
+    s.includes("登録チーム") ||
+    s.includes("参加チーム") ||
+    s.includes("所属チーム")
+  ) {
+    return "team_list";
+  }
+
+  if (
+    s.includes("クラブ一覧") ||
+    s.includes("加盟クラブ") ||
+    s.includes("登録クラブ") ||
+    s.includes("所属クラブ")
+  ) {
+    return "club_list";
+  }
+
   if (s.includes("少年団")) return "junior_team_list";
   if (s.includes("ブロック") || s.includes("block")) return "block_page";
   if (s.includes("地区") || s.includes("area") || s.includes("district")) return "area_page";
   if (s.includes("link") || s.includes("リンク")) return "link_page";
 
-  return "seed_page";
+  return "team_list_candidate";
 }
 
 function extractLinks(html: string, baseUrl: string) {
@@ -222,7 +269,14 @@ function extractLinks(html: string, baseUrl: string) {
     } catch {}
   }
 
-  return links.sort((a, b) => b.score - a.score);
+  const seen = new Set<string>();
+  return links
+    .sort((a, b) => b.score - a.score)
+    .filter((x) => {
+      if (seen.has(x.url)) return false;
+      seen.add(x.url);
+      return true;
+    });
 }
 
 async function fetchHtml(url: string) {
@@ -234,16 +288,48 @@ async function fetchHtml(url: string) {
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "user-agent": "Mozilla/5.0 team-seed-expander/2.0",
+        "user-agent": "Mozilla/5.0 team-list-seed-builder/3.0",
         accept: "text/html,application/xhtml+xml,text/plain,*/*",
       },
     });
+
+    const buffer = await res.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+
+    let utf8 = "";
+    let sjis = "";
+
+    try {
+      utf8 = new TextDecoder("utf-8").decode(bytes);
+    } catch {
+      utf8 = "";
+    }
+
+    try {
+      sjis = new TextDecoder("shift-jis").decode(bytes);
+    } catch {
+      sjis = "";
+    }
+
+    const head = utf8.slice(0, 3000).toLowerCase();
+
+    const saysSjis =
+      head.includes("shift_jis") ||
+      head.includes("shift-jis") ||
+      head.includes("charset=windows-31j") ||
+      head.includes("charset=x-sjis");
+
+    const utf8Bad = (utf8.match(/�|縺|譁|荳|繧|蜷|陦|隕|螟/g) || []).length;
+    const sjisBad = (sjis.match(/�|縺|譁|荳|繧|蜷|陦|隕|螟/g) || []).length;
+
+    const html = saysSjis || sjisBad < utf8Bad ? sjis : utf8;
 
     return {
       ok: res.ok,
       status: res.status,
       finalUrl: normalizeUrl(res.url || url),
-      html: await res.text(),
+      html,
+      encoding: saysSjis || sjisBad < utf8Bad ? "shift-jis" : "utf-8",
     };
   } finally {
     clearTimeout(timeout);
@@ -274,16 +360,17 @@ serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, serviceRole);
 
-  const limit = Math.min(Number(body.limit ?? 200), 2000);
-  const offset = Number(body.offset ?? 0);
+  const limit = Math.min(Number(body.limit ?? DEFAULT_LIMIT), 10);
   const maxNewPerSeed = Math.min(Number(body.maxNewPerSeed ?? 30), 100);
 
   const { data: seeds, error } = await supabase
     .from("team_directory_seeds")
     .select("*")
     .eq("enabled", true)
+    .is("processed_at", null)
+    .in("seed_type", TARGET_SOURCE_TYPES)
     .order("created_at", { ascending: true })
-    .range(offset, offset + limit - 1);
+    .limit(limit);
 
   if (error) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });
@@ -300,15 +387,45 @@ serve(async (req) => {
   for (const seed of seeds ?? []) {
     checked++;
 
+    await supabase
+      .from("team_directory_seeds")
+      .update({
+        process_status: "seed_building",
+        process_error: null,
+      })
+      .eq("id", seed.id);
+
     let page;
+
     try {
       page = await fetchHtml(seed.url);
     } catch (e) {
       errors.push({ seed: seed.name, url: seed.url, error: String(e) });
+
+      await supabase
+        .from("team_directory_seeds")
+        .update({
+          processed_at: new Date().toISOString(),
+          process_status: "seed_build_error",
+          process_error: String(e),
+        })
+        .eq("id", seed.id);
+
       continue;
     }
 
-    if (!page.ok) continue;
+    if (!page.ok) {
+      await supabase
+        .from("team_directory_seeds")
+        .update({
+          processed_at: new Date().toISOString(),
+          process_status: "seed_build_error",
+          process_error: `HTTP ${page.status}`,
+        })
+        .eq("id", seed.id);
+
+      continue;
+    }
 
     const links = extractLinks(page.html, page.finalUrl || seed.url);
     candidateLinks += links.length;
@@ -319,9 +436,17 @@ serve(async (req) => {
       if (perSeed >= maxNewPerSeed) break;
 
       if (hostOf(link.url) !== hostOf(seed.url)) continue;
-      if (!isGoodLink(link.url, link.text)) continue;
 
+      const seedType = inferSeedType(link.url, link.text);
       const name = clean(`${seed.name} ${link.text || link.url}`).slice(0, 120);
+
+      const exists = await supabase
+        .from("team_directory_seeds")
+        .select("id")
+        .eq("url", link.url)
+        .maybeSingle();
+
+      if (exists.data?.id) continue;
 
       const { data, error: insertError } = await supabase
         .from("team_directory_seeds")
@@ -329,8 +454,11 @@ serve(async (req) => {
           name,
           url: link.url,
           prefecture: seed.prefecture,
-          seed_type: inferSeedType(link.url, link.text),
+          seed_type: seedType,
           enabled: true,
+          process_status: null,
+          processed_at: null,
+          process_error: null,
         })
         .select("id,name,url,prefecture,seed_type")
         .single();
@@ -347,14 +475,23 @@ serve(async (req) => {
           text: link.text,
           url: link.url,
           score: link.score,
+          seed_type: seedType,
         });
       }
     }
+
+    await supabase
+      .from("team_directory_seeds")
+      .update({
+        processed_at: new Date().toISOString(),
+        process_status: "seed_build_done",
+        process_error: null,
+      })
+      .eq("id", seed.id);
   }
 
   return Response.json({
     ok: true,
-    offset,
     limit,
     checked,
     candidateLinks,
