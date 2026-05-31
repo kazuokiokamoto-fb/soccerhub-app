@@ -8,6 +8,14 @@ const TARGET_TYPES = [
   "club_list",
   "team_list",
   "junior_team_list",
+
+  // 追加
+  "u12",
+  "u15",
+  "fa",
+  "expanded_page",
+
+  // 既存
   "u12_team_list",
   "u15_team_list",
   "u18_team_list",
