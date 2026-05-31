@@ -10,6 +10,7 @@ const TARGET_SEED_TYPES = [
   "u15_team_list",
   "u18_team_list",
   "club_list",
+  "club_youth",
   "women_team_list",
   "adult_team_list",
   "team_list",
