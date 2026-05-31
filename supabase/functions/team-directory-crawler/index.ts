@@ -42,6 +42,7 @@ function normalizeTeamName(value: string) {
     .replace(/^[-・●■□◆◇★☆○◎\s]+/g, "")
     .replace(/[-・●■□◆◇★☆○◎\s]+$/g, "")
     .replace(/^\d+[.\s、)）]+/g, "")
+    .replace(/^[A-Z]{1,4}\d{0,2}\s+/g, "")
     .replace(/^(チーム|チーム名|クラブ名|団体名|参加チーム|所属チーム|対戦|HOME|AWAY)[:：\s]*/i, "")
     .replace(/試合結果.*$/g, "")
     .replace(/試合日程.*$/g, "")
@@ -53,6 +54,7 @@ function normalizeTeamName(value: string) {
     .replace(/失点.*$/g, "")
     .replace(/会場.*$/g, "")
     .replace(/Kick.*$/gi, "")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -65,13 +67,16 @@ function looksTeamName(value: string) {
   const t = normalizeTeamName(value);
 
   if (t.length < 3) return false;
-  if (t.length > 40) return false;
+  if (t.length > 42) return false;
   if (markerCount(t) >= 4) return false;
 
   const exactBad = [
     "FC",
     "SC",
     "FCJY",
+    "U-15",
+    "U-18",
+    "U-12",
     "SC U-15",
     "FCジュニア",
     "SCジュニア",
@@ -80,6 +85,10 @@ function looksTeamName(value: string) {
     "クラブ（U-18）",
     "サッカー",
     "フットボール",
+    "日本クラブユース",
+    "東京都クラブユース",
+    "高円宮杯U-15",
+    "高円宮杯 JFA U-18",
   ];
   if (exactBad.includes(t)) return false;
 
@@ -139,6 +148,22 @@ function looksTeamName(value: string) {
     "参加資格",
     "申請",
     "登録",
+    "ガイドライン",
+    "活動の再開",
+    "募集",
+    "速報",
+    "第",
+    "回",
+    "年度",
+    "開催",
+    "中止",
+    "更新",
+    "廃止",
+    "報告",
+    "様式",
+    "ダウンロード",
+    "社会人・大学生",
+    "カテゴリー",
   ];
 
   if (bad.some((w) => t.includes(w))) return false;
@@ -182,7 +207,7 @@ async function fetchText(url: string) {
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "user-agent": "Mozilla/5.0 team-directory-crawler/6.0",
+        "user-agent": "Mozilla/5.0 team-directory-crawler/7.0",
         accept: "text/html,application/xhtml+xml,text/plain,*/*",
       },
     });
@@ -211,6 +236,8 @@ function extractTitleTeam(html: string) {
         .replace(/｜.*$/g, "")
         .replace(/\|.*$/g, "")
         .replace(/\s-\s.*$/g, "")
+        .replace(/ – .*$/g, "")
+        .replace(/ — .*$/g, "")
     );
   }
 
@@ -223,7 +250,7 @@ function extractTitleTeam(html: string) {
 }
 
 function isIndividualTeamPage(url: string) {
-  return /\/team\/[^/]+\/?$/i.test(url);
+  return /\/team\/[^/]+\/?$/i.test(url) || /\/teams\/[^/]+\/?$/i.test(url);
 }
 
 function splitCandidateText(text: string) {
@@ -259,10 +286,10 @@ function extractTeamsFromHtml(html: string, url: string) {
   }
 
   const patterns = [
-    /(?:^|\s)([A-Za-z0-9 .'\-]{1,28}\s?(?:FC|SC|JY|SS)(?:\s?U-?1[258])?)(?=\s|$)/gi,
-    /(?:^|\s)((?:FC|SC|F\.C\.|S\.C\.)\s?[A-Za-z0-9 .'\-ぁ-んァ-ヶー一-龥]{2,28})(?=\s|$)/gi,
-    /([一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,28}(?:FC|ＦＣ|SC|ＳＣ|サッカークラブ|フットボールクラブ|少年団|ジュニアユース|ユース|アカデミー|スクール))/g,
-    /((?:FC|ＦＣ|SC|ＳＣ)[一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,28})/g,
+    /(?:^|\s)([A-Za-z0-9 .'\-]{1,30}\s?(?:FC|SC|JY|SS)(?:\s?U-?1[258])?)(?=\s|$)/gi,
+    /(?:^|\s)((?:FC|SC|F\.C\.|S\.C\.)\s?[A-Za-z0-9 .'\-ぁ-んァ-ヶー一-龥]{2,30})(?=\s|$)/gi,
+    /([一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,30}(?:FC|ＦＣ|SC|ＳＣ|サッカークラブ|フットボールクラブ|少年団|ジュニアユース|ユース|アカデミー|スクール))/g,
+    /((?:FC|ＦＣ|SC|ＳＣ)[一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,30})/g,
   ];
 
   for (const block of blocks) {
