@@ -16,15 +16,55 @@ const TARGET_SEED_TYPES = [
   "junior_team_list",
   "u12",
   "u15",
+  "u18",
   "u12_block",
+  "u15_block",
   "block_page",
+  "school_list",
+  "academy_list",
 ];
 
-function clean(text: string) {
-  return String(text ?? "")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
+const BAD_PAGE_URL_WORDS = [
+  "result",
+  "results",
+  "schedule",
+  "match",
+  "game",
+  "score",
+  "ranking",
+  "standings",
+  "tournament",
+  "league",
+  "news",
+  "notice",
+  "topics",
+  "pdf",
+  ".pdf",
+  ".xls",
+  ".xlsx",
+  "download",
+];
+
+const GOOD_PAGE_URL_WORDS = [
+  "team",
+  "teams",
+  "club",
+  "clubs",
+  "member",
+  "members",
+  "list",
+  "directory",
+  "u12",
+  "u15",
+  "u18",
+  "junior",
+  "youth",
+  "school",
+  "academy",
+];
+
+function htmlDecode(s: string) {
+  return String(s ?? "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
@@ -32,18 +72,44 @@ function clean(text: string) {
     .replace(/&#x27;/g, "'")
     .replace(/&#39;/g, "'")
     .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&yen;/g, "¥");
+}
+
+function clean(text: string) {
+  return htmlDecode(String(text ?? ""))
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(li|tr|td|th|p|div|h1|h2|h3|h4|option)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
     .replace(/\u3000/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s+/g, "\n")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n{2,}/g, "\n")
     .trim();
 }
 
 function normalizeTeamName(value: string) {
-  return clean(value)
-    .replace(/^[-・●■□◆◇★☆○◎\s]+/g, "")
-    .replace(/[-・●■□◆◇★☆○◎\s]+$/g, "")
-    .replace(/^\d+[.\s、)）]+/g, "")
+  let t = clean(value);
+
+  t = t
+    .replace(/[【】「」『』［］\[\]]/g, " ")
+    .replace(/^[-・●■□◆◇★☆○◎▶▷▼▽◇◆※＊*+\s]+/g, "")
+    .replace(/[-・●■□◆◇★☆○◎▶▷▼▽◇◆※＊*+\s]+$/g, "")
+    .replace(/^\d+[.\s、,)）:：-]+/g, "")
+    .replace(/^[①-⑳]\s*/g, "")
     .replace(/^[A-Z]{1,4}\d{0,2}\s+/g, "")
-    .replace(/^(チーム|チーム名|クラブ名|団体名|参加チーム|所属チーム|対戦|HOME|AWAY)[:：\s]*/i, "")
+    .replace(/^(チーム|チーム名|クラブ名|団体名|参加チーム|所属チーム|対戦|HOME|AWAY|ホーム|アウェイ)[:：\s]*/i, "")
+    .replace(/\s*(vs|VS|ｖｓ|対)\s*.*/g, "")
+    .replace(/.*\s*(vs|VS|ｖｓ|対)\s*/g, "")
+    .replace(/\(?\d+\)?\s*[-−－]\s*\(?\d+\)?/g, " ")
+    .replace(/\b\d{1,2}[:：]\d{2}\b/g, " ")
+    .replace(/^\d{4}[年度年].*$/g, "")
+    .replace(/^第\d+.*$/g, "")
     .replace(/試合結果.*$/g, "")
     .replace(/試合日程.*$/g, "")
     .replace(/日程.*$/g, "")
@@ -56,23 +122,48 @@ function normalizeTeamName(value: string) {
     .replace(/Kick.*$/gi, "")
     .replace(/\s+/g, " ")
     .trim();
+
+  return t;
+}
+
+function hasMojibake(t: string) {
+  return /�|縺|譁|荳|繧|蜷|髙|陦|隕|螟|邱|怜|笘|譛|謇|蟆|莉/.test(t);
 }
 
 function markerCount(t: string) {
-  const m = t.match(/FC|ＦＣ|SC|ＳＣ|JY|U-?12|U-?15|U-?18|少年団|ジュニアユース|サッカークラブ|フットボールクラブ/gi);
+  const m = t.match(/FC|ＦＣ|SC|ＳＣ|F\.C\.|S\.C\.|JY|U-?12|U-?15|U-?18|少年団|ジュニアユース|サッカークラブ|フットボールクラブ/gi);
   return m ? m.length : 0;
+}
+
+function looksBadPage(url: string) {
+  const u = String(url || "").toLowerCase();
+  const bad = BAD_PAGE_URL_WORDS.some((w) => u.includes(w));
+  const good = GOOD_PAGE_URL_WORDS.some((w) => u.includes(w));
+  return bad && !good;
 }
 
 function looksTeamName(value: string) {
   const t = normalizeTeamName(value);
 
+  if (!t) return false;
   if (t.length < 3) return false;
-  if (t.length > 42) return false;
+  if (t.length > 38) return false;
+  if (hasMojibake(t)) return false;
   if (markerCount(t) >= 4) return false;
+
+  if (/^[0-9\s\-:：.]+$/.test(t)) return false;
+  if (/^[A-Za-z]{1,2}$/.test(t)) return false;
+  if (/^\d{4}/.test(t)) return false;
+  if (/\d{1,2}\s*[-−－]\s*\d{1,2}/.test(t)) return false;
+  if (/(vs|VS|ｖｓ|対)/.test(t)) return false;
+  if (/https?:\/\//i.test(t)) return false;
+  if (/@/.test(t)) return false;
 
   const exactBad = [
     "FC",
     "SC",
+    "F.C.",
+    "S.C.",
     "FCJY",
     "U-15",
     "U-18",
@@ -89,10 +180,14 @@ function looksTeamName(value: string) {
     "東京都クラブユース",
     "高円宮杯U-15",
     "高円宮杯 JFA U-18",
+    "３種クラブ",
+    "3種クラブ",
+    "女子（U-15）",
+    "【女子】女子（U-15）",
   ];
   if (exactBad.includes(t)) return false;
 
-  const bad = [
+  const badWords = [
     "サッカー協会",
     "連盟",
     "委員会",
@@ -103,16 +198,22 @@ function looksTeamName(value: string) {
     "トーナメント",
     "予選",
     "決勝",
+    "準決勝",
     "順位",
     "日程",
     "結果",
+    "星取表",
+    "戦績",
     "要項",
+    "規約",
     "申込書",
     "参加申込",
     "お問い合わせ",
+    "問合せ",
     "プライバシー",
     "ニュース",
     "お知らせ",
+    "新着",
     "会場",
     "グラウンド",
     "一覧",
@@ -124,6 +225,7 @@ function looksTeamName(value: string) {
     "動画",
     "ハイライト",
     "研修会",
+    "講習会",
     "プレーオフ",
     "マッチNo",
     "勝者",
@@ -142,18 +244,19 @@ function looksTeamName(value: string) {
     "LINE",
     "審判",
     "ビーチサッカー",
+    "フットサル",
     "フェスティバル",
     "ビジョン",
+    "宣言",
+    "基本的な考え方",
     "部会",
     "参加資格",
     "申請",
     "登録",
     "ガイドライン",
     "活動の再開",
-    "募集",
+    "募集要項",
     "速報",
-    "第",
-    "回",
     "年度",
     "開催",
     "中止",
@@ -164,9 +267,21 @@ function looksTeamName(value: string) {
     "ダウンロード",
     "社会人・大学生",
     "カテゴリー",
+    "選手権",
+    "総体",
+    "新人戦",
+    "関東大会",
+    "全国大会",
+    "キッズ",
+    "技術",
+    "育成",
+    "安全",
+    "アクセス",
+    "利用",
+    "個人情報",
   ];
 
-  if (bad.some((w) => t.includes(w))) return false;
+  if (badWords.some((w) => t.includes(w))) return false;
 
   return (
     /(^|[^A-Za-z])FC([^A-Za-z]|$)/i.test(t) ||
@@ -192,8 +307,11 @@ function looksTeamName(value: string) {
 
 function inferCategory(name: string) {
   const t = name.toLowerCase();
+
   if (name.includes("女子") || name.includes("レディース") || name.includes("ガールズ")) return "ladies";
   if (t.includes("school") || name.includes("スクール") || name.includes("アカデミー")) return "school";
+  if (name.includes("U-18") || name.includes("U18") || name.includes("ユース")) return "youth";
+  if (name.includes("U-15") || name.includes("U15") || name.includes("ジュニアユース") || /JY/i.test(name)) return "junior_youth";
   if (name.includes("少年団") || name.includes("U-12") || name.includes("U12") || name.includes("ジュニア")) return "junior";
   return "club_team";
 }
@@ -207,16 +325,47 @@ async function fetchText(url: string) {
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "user-agent": "Mozilla/5.0 team-directory-crawler/7.0",
+        "user-agent": "Mozilla/5.0 team-directory-crawler/8.0",
         accept: "text/html,application/xhtml+xml,text/plain,*/*",
       },
     });
+
+    const buffer = await res.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+
+    let utf8 = "";
+    let sjis = "";
+
+    try {
+      utf8 = new TextDecoder("utf-8").decode(bytes);
+    } catch {
+      utf8 = "";
+    }
+
+    try {
+      sjis = new TextDecoder("shift-jis").decode(bytes);
+    } catch {
+      sjis = "";
+    }
+
+    const htmlHead = utf8.slice(0, 3000).toLowerCase();
+    const saysSjis =
+      htmlHead.includes("shift_jis") ||
+      htmlHead.includes("shift-jis") ||
+      htmlHead.includes("charset=windows-31j") ||
+      htmlHead.includes("charset=x-sjis");
+
+    const utf8Bad = (utf8.match(/�|縺|譁|荳|繧|蜷|陦|隕|螟/g) || []).length;
+    const sjisBad = (sjis.match(/�|縺|譁|荳|繧|蜷|陦|隕|螟/g) || []).length;
+
+    const text = saysSjis || sjisBad < utf8Bad ? sjis : utf8;
 
     return {
       ok: res.ok,
       status: res.status,
       finalUrl: res.url || url,
-      text: await res.text(),
+      text,
+      encoding: saysSjis || sjisBad < utf8Bad ? "shift-jis" : "utf-8",
     };
   } finally {
     clearTimeout(timeout);
@@ -250,7 +399,7 @@ function extractTitleTeam(html: string) {
 }
 
 function isIndividualTeamPage(url: string) {
-  return /\/team\/[^/]+\/?$/i.test(url) || /\/teams\/[^/]+\/?$/i.test(url);
+  return /\/team\/[^/]+\/?$/i.test(url) || /\/teams\/[^/]+\/?$/i.test(url) || /\/club\/[^/]+\/?$/i.test(url);
 }
 
 function splitCandidateText(text: string) {
@@ -259,7 +408,7 @@ function splitCandidateText(text: string) {
   t = t
     .replace(/\s+(?=(?:FC|ＦＣ|SC|ＳＣ)\b)/g, "\n")
     .replace(/(U-?12|U-?15|U-?18)\s+(?=[A-Za-z一-龥ぁ-んァ-ヶー])/gi, "$1\n")
-    .replace(/\s+(?=[一-龥ぁ-んァ-ヶーA-Za-z0-9 .'-]{2,24}(?:FC|ＦＣ|SC|ＳＣ))/g, "\n");
+    .replace(/\s+(?=[一-龥ぁ-んァ-ヶーA-Za-z0-9 .'\-]{2,24}(?:FC|ＦＣ|SC|ＳＣ))/g, "\n");
 
   return t
     .split(/[\n\r\t、,|｜／\/;；]+/g)
@@ -270,6 +419,10 @@ function splitCandidateText(text: string) {
 function extractTeamsFromHtml(html: string, url: string) {
   const teams = new Set<string>();
 
+  if (looksBadPage(url)) {
+    return [];
+  }
+
   if (isIndividualTeamPage(url)) {
     const one = extractTitleTeam(html);
     if (one) return [one];
@@ -277,12 +430,12 @@ function extractTeamsFromHtml(html: string, url: string) {
 
   const blocks: string[] = [];
 
-  const cellRe = /<(td|th|li|option|h1|h2|h3|h4)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+  const tableRe = /<(td|th|li|option|h1|h2|h3|h4|a|span|p)\b[^>]*>([\s\S]*?)<\/\1>/gi;
   let m;
 
-  while ((m = cellRe.exec(html))) {
+  while ((m = tableRe.exec(html))) {
     const text = clean(m[2]);
-    if (text) blocks.push(text);
+    if (text && text.length <= 160) blocks.push(text);
   }
 
   const patterns = [
@@ -293,6 +446,17 @@ function extractTeamsFromHtml(html: string, url: string) {
   ];
 
   for (const block of blocks) {
+    if (
+      block.includes("サッカーファミリー安全宣言") ||
+      block.includes("基本的な考え方") ||
+      block.includes("ガイドライン") ||
+      block.includes("申請") ||
+      block.includes("登録") ||
+      block.includes("審判")
+    ) {
+      continue;
+    }
+
     for (const part of splitCandidateText(block)) {
       const name = normalizeTeamName(part);
       if (looksTeamName(name)) teams.add(name);
@@ -307,7 +471,7 @@ function extractTeamsFromHtml(html: string, url: string) {
     }
   }
 
-  return [...teams];
+  return [...teams].sort((a, b) => a.localeCompare(b, "ja"));
 }
 
 async function readBody(req: Request) {
@@ -361,8 +525,31 @@ serve(async (req) => {
 
   await supabase
     .from("team_directory_seeds")
-    .update({ process_status: "processing" })
+    .update({
+      process_status: "processing",
+      process_error: null,
+    })
     .eq("id", seed.id);
+
+  if (looksBadPage(seed.url)) {
+    await supabase
+      .from("team_directory_seeds")
+      .update({
+        processed_at: new Date().toISOString(),
+        process_status: "skipped_bad_page",
+        process_error: "Skipped because URL looks like result/schedule/news page",
+      })
+      .eq("id", seed.id);
+
+    return Response.json({
+      ok: true,
+      processed: 1,
+      inserted: 0,
+      skipped: 0,
+      seed,
+      message: "Skipped bad page URL",
+    });
+  }
 
   let page;
 
@@ -409,6 +596,7 @@ serve(async (req) => {
   let inserted = 0;
   let skipped = 0;
   const sampleInserted: any[] = [];
+  const sampleCandidates = teams.slice(0, 80);
 
   for (const teamName of teams.slice(0, maxInsert)) {
     const row = {
@@ -455,9 +643,11 @@ serve(async (req) => {
       seed_type: seed.seed_type,
       prefecture: seed.prefecture,
     },
+    encoding: page.encoding,
     candidateTeams: teams.length,
     inserted,
     skipped,
+    sampleCandidates,
     sampleInserted,
   });
 });
