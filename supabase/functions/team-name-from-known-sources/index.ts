@@ -105,6 +105,16 @@ function hasBadWord(t: string) {
     "FC U-18",
     "SC U-15",
     "FC U-15",
+    "ダイレクター",
+    "統括",
+    "第",
+    "回",
+    "FCジュニア",
+    "FCJY",
+    "SC U-18",
+    "SC U-15",
+    "SC相模原U",
+    "JFAアカデミー",    
   ];
 
   return bad.some((w) => t.includes(w));
