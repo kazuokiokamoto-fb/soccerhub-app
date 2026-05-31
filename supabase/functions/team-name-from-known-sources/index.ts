@@ -98,6 +98,13 @@ function hasBadWord(t: string) {
     "勝点",
     "得点",
     "失点",
+    "第",
+    "回",
+    "東京都クラブユース",
+    "SC U-18",
+    "FC U-18",
+    "SC U-15",
+    "FC U-15",
   ];
 
   return bad.some((w) => t.includes(w));
