@@ -14,24 +14,60 @@ type TeamSeed = {
   urls: string[];
 };
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const EXTRA_KEYWORDS = [
+  "サッカー協会",
+  "少年サッカー連盟",
+  "4種委員会",
+  "4種リーグ",
+  "地区サッカー協会",
+  "クラブユースサッカー連盟",
+  "クラブユース",
+  "ジュニアサッカー",
+  "ジュニアユース",
+  "少年団",
+  "チーム一覧",
+  "加盟チーム",
+  "登録チーム",
+  "参加チーム",
+];
+
 function normalizeUrl(url: string) {
   try {
-    const u = new URL(url);
+    const u = new URL(String(url ?? "").trim());
     u.hash = "";
+
+    if (
+      (u.pathname === "" || u.pathname === "/") &&
+      !u.search
+    ) {
+      u.pathname = "/";
+    }
+
     return u.toString();
   } catch {
-    return url;
+    return String(url ?? "").trim();
   }
 }
 
 function cleanText(value: any) {
-  return String(value ?? "").replace(/\u0000/g, "").trim();
+  return String(value ?? "")
+    .replace(/\u0000/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function guessOrganizationType(seed: TeamSeed) {
   if (seed.organization_type) return seed.organization_type;
   if (seed.name.includes("スクール")) return "school";
   if (seed.name.includes("アカデミー")) return "club_team";
+  if (seed.name.includes("クラブユース")) return "club_team";
+  if (seed.name.includes("少年団")) return "club_team";
   return "club_team";
 }
 
@@ -39,22 +75,27 @@ function guessSourceRank(seed: TeamSeed) {
   if (seed.source_rank) return seed.source_rank;
   if (seed.name.includes("JFA")) return "その他";
   if (seed.name.includes("スクール")) return "スクール";
+  if (seed.name.includes("クラブユース")) return "街クラブ";
   return "その他";
 }
 
 function buildSourceRows(seed: TeamSeed) {
-  return seed.urls.map((url) => ({
-    name: cleanText(seed.name),
-    base_url: normalizeUrl(url),
-    organization_type: guessOrganizationType(seed),
-    source_rank: guessSourceRank(seed),
-    enabled: true,
-  }));
+  return seed.urls
+    .map((url) => normalizeUrl(url))
+    .filter(Boolean)
+    .map((url) => ({
+      name: cleanText(seed.name),
+      base_url: url,
+      organization_type: guessOrganizationType(seed),
+      source_rank: guessSourceRank(seed),
+      enabled: true,
+    }));
 }
 
 /**
- * まずはここに関東チームを増やしていきます。
- * urls は公式サイト・募集ページ・スクールページなど、分かる範囲でOKです。
+ * selection_sources に追加する既知ソース。
+ * これは「セレクション情報収集用」です。
+ * team_directory_seeds とは別テーブルです。
  */
 const TEAM_SEEDS: TeamSeed[] = [
   {
@@ -113,6 +154,10 @@ async function readJsonBody(req: Request) {
 }
 
 serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: CORS_HEADERS });
+  }
+
   const body = await readJsonBody(req);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
@@ -122,8 +167,8 @@ serve(async (req) => {
 
   if (!supabaseUrl || !serviceRoleKey) {
     return Response.json(
-      { ok: false, error: "Missing env" },
-      { status: 500 },
+      { ok: false, error: "Missing Supabase env" },
+      { status: 500, headers: CORS_HEADERS },
     );
   }
 
@@ -131,11 +176,11 @@ serve(async (req) => {
 
   const limit = Math.max(1, Math.min(Number(body?.limit ?? 999), 999));
   const seeds = TEAM_SEEDS.slice(0, limit);
-
   const rows = seeds.flatMap(buildSourceRows);
 
   let inserted = 0;
   let skipped = 0;
+
   const errors: any[] = [];
   const insertedRows: any[] = [];
   const skippedRows: any[] = [];
@@ -150,6 +195,7 @@ serve(async (req) => {
     if (existingError) {
       errors.push({
         base_url: row.base_url,
+        phase: "select_existing",
         error: existingError.message,
       });
       continue;
@@ -168,9 +214,27 @@ serve(async (req) => {
       .single();
 
     if (error) {
+      const message = String(error.message ?? "");
+
+      if (
+        message.includes("duplicate key value") ||
+        message.includes("selection_sources") ||
+        error.code === "23505"
+      ) {
+        skipped += 1;
+        skippedRows.push({
+          name: row.name,
+          base_url: row.base_url,
+          reason: "duplicate",
+        });
+        continue;
+      }
+
       errors.push({
         base_url: row.base_url,
+        phase: "insert",
         error: error.message,
+        code: error.code,
       });
       continue;
     }
@@ -179,14 +243,19 @@ serve(async (req) => {
     insertedRows.push(data);
   }
 
-  return Response.json({
-    ok: errors.length === 0,
-    seedCount: seeds.length,
-    candidateUrlCount: rows.length,
-    inserted,
-    skipped,
-    errors,
-    insertedRows,
-    skippedRows,
-  });
+  return Response.json(
+    {
+      ok: errors.length === 0,
+      mode: "selection_sources_seed_insert",
+      seedCount: seeds.length,
+      candidateUrlCount: rows.length,
+      inserted,
+      skipped,
+      errors,
+      insertedRows,
+      skippedRows,
+      extraKeywords: EXTRA_KEYWORDS,
+    },
+    { headers: CORS_HEADERS },
+  );
 });

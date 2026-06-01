@@ -5,14 +5,44 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const DEFAULT_LIMIT = 1;
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const TEAM_LIST_HINTS = [
+  "チーム一覧",
+  "加盟チーム",
+  "登録チーム",
+  "参加チーム",
+  "所属チーム",
+  "クラブ一覧",
+  "会員チーム",
+  "少年団一覧",
+];
+
+const DISTRICT_HINTS = [
+  "市サッカー協会",
+  "地区サッカー協会",
+  "4種委員会",
+  "少年サッカー連盟",
+];
+
 const TARGET_SOURCE_TYPES = [
   "fa",
   "club_youth",
+
   "u12",
+  "u12_team_list",
   "u12_block",
+
   "u15",
   "u15_team_list",
+
+  "u18",
   "u18_team_list",
+
   "women_team_list",
   "adult_team_list",
   "team_list",
@@ -22,6 +52,8 @@ const TARGET_SOURCE_TYPES = [
   "area_page",
   "link_page",
   "seed_page",
+  "expanded_page",
+  "team_list_candidate",
 ];
 
 const GOOD_WORDS = [
@@ -147,6 +179,8 @@ function clean(v: string) {
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(li|tr|td|th|p|div|h1|h2|h3|h4|a)>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
@@ -156,7 +190,10 @@ function clean(v: string) {
     .replace(/&#39;/g, "'")
     .replace(/&quot;/g, '"')
     .replace(/\u3000/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s+/g, "\n")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n{2,}/g, "\n")
     .trim();
 }
 
@@ -170,8 +207,13 @@ function hostOf(url: string) {
 
 function normalizeUrl(url: string) {
   try {
-    const u = new URL(url);
+    const u = new URL(String(url ?? "").trim());
     u.hash = "";
+
+    if ((u.pathname === "" || u.pathname === "/") && !u.search) {
+      u.pathname = "/";
+    }
+
     return u.toString();
   } catch {
     return "";
@@ -183,17 +225,37 @@ function isFileUrl(url: string) {
   return /\.(pdf|xlsx|xls|doc|docx|ppt|pptx|jpg|jpeg|png|gif|webp|zip|css|js|svg|ico|mp4|mov)(\?|$)/i.test(s);
 }
 
+function safeDecode(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function hasAny(value: string, words: string[]) {
+  return words.some((w) => value.includes(w.toLowerCase()));
+}
+
 function linkScore(url: string, text = "") {
-  const s = decodeURIComponent(`${url} ${text}`.toLowerCase());
+  const s = safeDecode(`${url} ${text}`).toLowerCase();
 
   if (!url.startsWith("http")) return -999;
   if (isFileUrl(url)) return -999;
-  if (BAD_WORDS.some((w) => s.includes(w.toLowerCase()))) return -100;
+  if (hasAny(s, BAD_WORDS)) return -100;
 
   let score = 0;
 
   for (const w of GOOD_WORDS) {
     if (s.includes(w.toLowerCase())) score += 10;
+  }
+
+  for (const w of TEAM_LIST_HINTS) {
+    if (s.includes(w.toLowerCase())) score += 60;
+  }
+
+  for (const w of DISTRICT_HINTS) {
+    if (s.includes(w.toLowerCase())) score += 35;
   }
 
   if (s.includes("チーム一覧")) score += 60;
@@ -214,7 +276,7 @@ function linkScore(url: string, text = "") {
 }
 
 function inferSeedType(url: string, text = "") {
-  const s = `${url} ${text}`.toLowerCase();
+  const s = safeDecode(`${url} ${text}`).toLowerCase();
 
   if (
     s.includes("チーム一覧") ||
@@ -249,7 +311,7 @@ function extractLinks(html: string, baseUrl: string) {
   let m;
 
   while ((m = re.exec(html))) {
-    const href = m[1];
+    const href = String(m[1] ?? "").trim();
     const text = clean(m[2]);
 
     if (!href) continue;
@@ -270,11 +332,13 @@ function extractLinks(html: string, baseUrl: string) {
   }
 
   const seen = new Set<string>();
+
   return links
     .sort((a, b) => b.score - a.score)
     .filter((x) => {
-      if (seen.has(x.url)) return false;
-      seen.add(x.url);
+      const key = x.url.toLowerCase().trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
       return true;
     });
 }
@@ -288,7 +352,7 @@ async function fetchHtml(url: string) {
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "user-agent": "Mozilla/5.0 team-list-seed-builder/3.0",
+        "user-agent": "Mozilla/5.0 team-list-seed-builder/4.0",
         accept: "text/html,application/xhtml+xml,text/plain,*/*",
       },
     });
@@ -347,6 +411,10 @@ async function readBody(req: Request) {
 }
 
 serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: CORS_HEADERS });
+  }
+
   const body = await readBody(req);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || Deno.env.get("SB_URL");
@@ -355,13 +423,16 @@ serve(async (req) => {
     Deno.env.get("SB_SERVICE_ROLE_KEY");
 
   if (!supabaseUrl || !serviceRole) {
-    return Response.json({ ok: false, error: "Missing Supabase env" }, { status: 500 });
+    return Response.json(
+      { ok: false, error: "Missing Supabase env" },
+      { status: 500, headers: CORS_HEADERS },
+    );
   }
 
   const supabase = createClient(supabaseUrl, serviceRole);
 
-  const limit = Math.min(Number(body.limit ?? DEFAULT_LIMIT), 10);
-  const maxNewPerSeed = Math.min(Number(body.maxNewPerSeed ?? 30), 100);
+  const limit = Math.max(1, Math.min(Number(body.limit ?? DEFAULT_LIMIT), 10));
+  const maxNewPerSeed = Math.max(1, Math.min(Number(body.maxNewPerSeed ?? 30), 100));
 
   const { data: seeds, error } = await supabase
     .from("team_directory_seeds")
@@ -373,10 +444,14 @@ serve(async (req) => {
     .limit(limit);
 
   if (error) {
-    return Response.json({ ok: false, error: error.message }, { status: 500 });
+    return Response.json(
+      { ok: false, error: error.message },
+      { status: 500, headers: CORS_HEADERS },
+    );
   }
 
   let inserted = 0;
+  let skipped = 0;
   let checked = 0;
   let candidateLinks = 0;
 
@@ -434,19 +509,31 @@ serve(async (req) => {
 
     for (const link of links) {
       if (perSeed >= maxNewPerSeed) break;
-
-      if (hostOf(link.url) !== hostOf(seed.url)) continue;
+      if (hostOf(link.url) !== hostOf(page.finalUrl || seed.url)) continue;
 
       const seedType = inferSeedType(link.url, link.text);
       const name = clean(`${seed.name} ${link.text || link.url}`).slice(0, 120);
 
-      const exists = await supabase
+      const { data: existing, error: existsError } = await supabase
         .from("team_directory_seeds")
         .select("id")
         .eq("url", link.url)
         .maybeSingle();
 
-      if (exists.data?.id) continue;
+      if (existsError) {
+        errors.push({
+          from: seed.name,
+          url: link.url,
+          phase: "select_existing",
+          error: existsError.message,
+        });
+        continue;
+      }
+
+      if (existing?.id) {
+        skipped++;
+        continue;
+      }
 
       const { data, error: insertError } = await supabase
         .from("team_directory_seeds")
@@ -463,7 +550,21 @@ serve(async (req) => {
         .select("id,name,url,prefecture,seed_type")
         .single();
 
-      if (insertError) continue;
+      if (insertError) {
+        if (insertError.code === "23505") {
+          skipped++;
+          continue;
+        }
+
+        errors.push({
+          from: seed.name,
+          url: link.url,
+          phase: "insert",
+          error: insertError.message,
+          code: insertError.code,
+        });
+        continue;
+      }
 
       inserted++;
       perSeed++;
@@ -490,14 +591,19 @@ serve(async (req) => {
       .eq("id", seed.id);
   }
 
-  return Response.json({
-    ok: true,
-    limit,
-    checked,
-    candidateLinks,
-    inserted,
-    insertedRows,
-    sampleLinks,
-    errors: errors.slice(0, 30),
-  });
+  return Response.json(
+    {
+      ok: true,
+      mode: "team_list_seed_builder",
+      limit,
+      checked,
+      candidateLinks,
+      inserted,
+      skipped,
+      insertedRows,
+      sampleLinks,
+      errors: errors.slice(0, 30),
+    },
+    { headers: CORS_HEADERS },
+  );
 });
