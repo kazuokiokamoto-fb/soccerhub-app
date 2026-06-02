@@ -3,49 +3,144 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const DEFAULT_LIMIT = 1;
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const GOOD_WORDS = [
+const TEAM_LIST_HINTS = [
   "チーム一覧",
-  "登録チーム",
   "加盟チーム",
-  "加盟クラブ",
-  "所属チーム",
-  "所属クラブ",
+  "登録チーム",
   "参加チーム",
+  "所属チーム",
   "クラブ一覧",
+  "会員チーム",
+  "少年団一覧",
   "チームリスト",
+  "登録クラブ",
+  "加盟クラブ",
+  "所属クラブ",
   "チーム紹介",
   "クラブ紹介",
-  "少年団一覧",
-  "登録クラブ",
-  "会員チーム",
-  "member",
-  "members",
+];
+
+const DISTRICT_HINTS = [
+  "市サッカー協会",
+  "地区サッカー協会",
+  "4種委員会",
+  "少年サッカー連盟",
+  "少年サッカー",
+  "第1ブロック",
+  "第2ブロック",
+  "第3ブロック",
+  "第4ブロック",
+  "第5ブロック",
+  "第6ブロック",
+  "第7ブロック",
+  "第8ブロック",
+  "第9ブロック",
+  "第10ブロック",
+  "第11ブロック",
+  "第12ブロック",
+  "第13ブロック",
+  "第14ブロック",
+  "第15ブロック",
+  "第16ブロック",
+];
+
+const TARGET_SOURCE_TYPES = [
+  "fa",
+  "club_youth",
+
+  "u12",
+  "u12_team_list",
+  "u12_block",
+
+  "u15",
+  "u15_team_list",
+
+  "u18",
+  "u18_team_list",
+
+  "women_team_list",
+  "adult_team_list",
+  "team_list",
+  "club_list",
+  "junior_team_list",
+  "block_page",
+  "area_page",
+  "link_page",
+  "seed_page",
+  "expanded_page",
+  "team_list_candidate",
+];
+
+const GOOD_WORDS = [
   "team",
   "teams",
   "club",
   "clubs",
-  "u12",
-  "u-12",
-  "u15",
-  "u-15",
-  "u18",
-  "u-18",
-  "少年",
-  "ジュニア",
-  "ジュニアユース",
-  "クラブユース",
-  "高体連",
-  "中体連",
-  "社会人",
-  "女子",
-  "スクール",
-  "アカデミー",
+  "member",
+  "members",
+  "link",
+  "links",
+  "organization",
+  "association",
+  "block",
+  "area",
+  "district",
+  "league",
+  "entry",
+  "registration",
+
+  "加盟",
+  "登録",
+  "チーム",
+  "クラブ",
+  "少年団",
+  "団一覧",
+  "チーム一覧",
+  "クラブ一覧",
+  "加盟チーム",
+  "登録チーム",
+  "参加チーム",
+  "所属チーム",
+  "チーム紹介",
+  "クラブ紹介",
+  "加盟クラブ",
+  "登録クラブ",
+  "所属クラブ",
+  "リンク",
+  "関連リンク",
+  "ブロック",
+  "地区",
+  "支部",
+  "市区町村",
+  "リーグ",
+  "大会",
+  "参加",
+  "出場",
+
+  "第1ブロック",
+  "第2ブロック",
+  "第3ブロック",
+  "第4ブロック",
+  "第5ブロック",
+  "第6ブロック",
+  "第7ブロック",
+  "第8ブロック",
+  "第9ブロック",
+  "第10ブロック",
+  "第11ブロック",
+  "第12ブロック",
+  "第13ブロック",
+  "第14ブロック",
+  "第15ブロック",
+  "第16ブロック",
 ];
 
 const BAD_WORDS = [
@@ -57,47 +152,48 @@ const BAD_WORDS = [
   "line.me",
   "mailto:",
   "tel:",
-  ".jpg",
-  ".jpeg",
-  ".png",
-  ".gif",
-  ".webp",
-  ".svg",
-  ".css",
-  ".js",
-  ".zip",
-  ".mp4",
-  ".mov",
-  ".pdf",
-  ".xlsx",
-  ".xls",
-  ".doc",
-  ".docx",
-  "試合結果",
-  "日程",
-  "スケジュール",
+
+  "jpg",
+  "jpeg",
+  "png",
+  "gif",
+  "webp",
+  "svg",
+  "css",
+  "js",
+  "zip",
+  "mp4",
+  "mov",
+
+  "calendar",
+  "ranking",
+  "rank",
+  "score",
+  "news",
+  "download",
+
+  "順位",
+  "星取表",
   "組合せ",
   "組み合わせ",
-  "星取表",
-  "順位",
+  "ニュース",
+  "お知らせ",
+  "ダウンロード",
+  "会場",
+  "アクセス",
+  "予選",
+  "決勝",
+  "ラウンド",
 ];
 
-const TRUSTED_EXTERNAL_DOMAINS = [
-  "sportsite.jp",
-  "matsudo-fa4shu.com",
-  "yakirisc.net",
-  "ifa4chuo.com",
-  "gc-model.com",
-  "clubyouth.net",
-  "tcyl.jp",
-  "chiba-senior-fc.com",
-  "pcs.co.jp",
-  "ibaraki-fa.jp",
-  "chiba-fa.gr.jp",
-  "tochigi-fa.gr.jp",
-  "tfa.or.jp",
-  "yamanashi-football.com",
-  "yamanashi-cy.com",
+const FILE_WORDS = [
+  "pdf",
+  "xlsx",
+  "xls",
+  "doc",
+  "docx",
+  "ppt",
+  "pptx",
 ];
 
 function clean(v: string) {
@@ -124,11 +220,20 @@ function clean(v: string) {
     .trim();
 }
 
-function safeDecode(v: string) {
+function cleanHref(v: string) {
+  return String(v ?? "")
+    .trim()
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'");
+}
+
+function hostOf(url: string) {
   try {
-    return decodeURIComponent(v);
+    return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
   } catch {
-    return v;
+    return "";
   }
 }
 
@@ -147,69 +252,57 @@ function normalizeUrl(url: string) {
   }
 }
 
-function hostOf(url: string) {
+function isFileUrl(url: string) {
+  const s = url.toLowerCase();
+  return /\.(pdf|xlsx|xls|doc|docx|ppt|pptx|jpg|jpeg|png|gif|webp|zip|css|js|svg|ico|mp4|mov)(\?|$)/i.test(s);
+}
+
+function safeDecode(value: string) {
   try {
-    return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+    return decodeURIComponent(value);
   } catch {
-    return "";
+    return value;
   }
 }
 
-function isTrustedExternal(url: string) {
-  const host = hostOf(url);
-  return TRUSTED_EXTERNAL_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`));
+function hasAny(value: string, words: string[]) {
+  return words.some((w) => value.includes(w.toLowerCase()));
 }
 
-function inferSeedType(text: string, url: string) {
-  const s = safeDecode(`${text} ${url}`).toLowerCase();
-
-  if (s.includes("u12") || s.includes("u-12") || s.includes("少年") || s.includes("4種")) {
-    return "u12_team_list";
-  }
-
-  if (
-    s.includes("u15") ||
-    s.includes("u-15") ||
-    s.includes("3種") ||
-    s.includes("ジュニアユース") ||
-    s.includes("クラブユース")
-  ) {
-    return "u15_team_list";
-  }
-
-  if (s.includes("u18") || s.includes("u-18") || s.includes("2種") || s.includes("高体連")) {
-    return "u18_team_list";
-  }
-
-  if (s.includes("女子") || s.includes("women") || s.includes("ladies")) {
-    return "women_team_list";
-  }
-
-  if (s.includes("school") || s.includes("スクール") || s.includes("academy") || s.includes("アカデミー")) {
-    return "school_list";
-  }
-
-  if (s.includes("社会人") || s.includes("1種")) {
-    return "adult_team_list";
-  }
-
-  if (s.includes("club") || s.includes("クラブ")) {
-    return "club_list";
-  }
-
-  return "team_list";
-}
-
-function isBadUrl(url: string) {
-  const s = safeDecode(String(url).toLowerCase());
-  return BAD_WORDS.some((w) => s.includes(w.toLowerCase()));
+function hasStrongTeamWord(s: string) {
+  return (
+    s.includes("チーム一覧") ||
+    s.includes("加盟チーム") ||
+    s.includes("登録チーム") ||
+    s.includes("参加チーム") ||
+    s.includes("所属チーム") ||
+    s.includes("クラブ一覧") ||
+    s.includes("加盟クラブ") ||
+    s.includes("登録クラブ") ||
+    s.includes("チーム紹介") ||
+    s.includes("クラブ紹介") ||
+    s.includes("少年団一覧") ||
+    s.includes("登録クラブ") ||
+    s.includes("チームリスト") ||
+    s.includes("team") ||
+    s.includes("teams") ||
+    s.includes("club") ||
+    s.includes("clubs") ||
+    s.includes("member") ||
+    s.includes("members")
+  );
 }
 
 function linkScore(url: string, text = "") {
   const s = safeDecode(`${url} ${text}`).toLowerCase();
 
   if (!url.startsWith("http")) return -999;
-  if (isBadUrl(url)) return -999;
+  if (isFileUrl(url)) return -999;
+
+  if (hasAny(s, FILE_WORDS)) return -999;
+
+  // 大会・リーグページでも「参加チーム一覧」「登録チーム」等なら残す
+  if (!hasStrongTeamWord(s) && hasAny(s, BAD_WORDS)) return -100;
 
   let score = 0;
 
@@ -217,39 +310,103 @@ function linkScore(url: string, text = "") {
     if (s.includes(w.toLowerCase())) score += 10;
   }
 
+  for (const w of TEAM_LIST_HINTS) {
+    if (s.includes(w.toLowerCase())) score += 60;
+  }
+
+  for (const w of DISTRICT_HINTS) {
+    if (s.includes(w.toLowerCase())) score += 35;
+  }
+
   if (s.includes("チーム一覧")) score += 90;
   if (s.includes("加盟チーム")) score += 90;
   if (s.includes("登録チーム")) score += 90;
-  if (s.includes("所属チーム")) score += 90;
-  if (s.includes("登録クラブ")) score += 90;
-  if (s.includes("加盟クラブ")) score += 90;
-  if (s.includes("チーム紹介")) score += 80;
-  if (s.includes("クラブ紹介")) score += 80;
+  if (s.includes("参加チーム")) score += 80;
+  if (s.includes("所属チーム")) score += 80;
+  if (s.includes("クラブ一覧")) score += 80;
+  if (s.includes("加盟クラブ")) score += 80;
+  if (s.includes("登録クラブ")) score += 80;
   if (s.includes("少年団一覧")) score += 70;
-  if (s.includes("team")) score += 25;
-  if (s.includes("club")) score += 25;
+  if (s.includes("チーム紹介")) score += 60;
+  if (s.includes("クラブ紹介")) score += 60;
+
+  if (s.includes("team") || s.includes("club")) score += 25;
   if (s.includes("member")) score += 25;
-  if (s.includes("登録")) score += 20;
-  if (s.includes("加盟")) score += 20;
-  if (s.includes("所属")) score += 20;
-  if (s.includes("一覧")) score += 20;
-  if (s.includes("連盟")) score += 10;
-  if (s.includes("協会")) score += 10;
+  if (s.includes("リンク") || s.includes("link")) score += 20;
+  if (s.includes("ブロック") || s.includes("地区")) score += 20;
+  if (s.includes("リーグ") && hasStrongTeamWord(s)) score += 15;
+  if (s.includes("大会") && hasStrongTeamWord(s)) score += 10;
 
   return score;
 }
 
-function isGoodTeamListLink(url: string, text = "") {
-  return linkScore(url, text) >= 20;
-}
-
-function shouldQueueLink(url: string, text = "") {
+function inferSeedType(url: string, text = "") {
   const s = safeDecode(`${url} ${text}`).toLowerCase();
 
-  if (!url.startsWith("http")) return false;
-  if (isBadUrl(url)) return false;
+  if (
+    s.includes("u12") ||
+    s.includes("u-12") ||
+    s.includes("4種") ||
+    s.includes("少年") ||
+    s.includes("ジュニア")
+  ) {
+    return "u12_team_list";
+  }
 
-  return /team|teams|club|clubs|member|u12|u-12|u15|u-15|u18|u-18|entry|registration|チーム|クラブ|登録|加盟|所属|一覧|少年|ジュニア|ユース|種|連盟|協会|地区|ブロック/.test(s);
+  if (
+    s.includes("u15") ||
+    s.includes("u-15") ||
+    s.includes("3種") ||
+    s.includes("中体連") ||
+    s.includes("ジュニアユース") ||
+    s.includes("クラブユース")
+  ) {
+    return "u15_team_list";
+  }
+
+  if (
+    s.includes("u18") ||
+    s.includes("u-18") ||
+    s.includes("2種") ||
+    s.includes("高体連") ||
+    s.includes("高校")
+  ) {
+    return "u18_team_list";
+  }
+
+  if (s.includes("女子") || s.includes("women") || s.includes("ladies")) {
+    return "women_team_list";
+  }
+
+  if (s.includes("社会人") || s.includes("1種")) {
+    return "adult_team_list";
+  }
+
+  if (
+    s.includes("チーム一覧") ||
+    s.includes("加盟チーム") ||
+    s.includes("登録チーム") ||
+    s.includes("参加チーム") ||
+    s.includes("所属チーム")
+  ) {
+    return "team_list";
+  }
+
+  if (
+    s.includes("クラブ一覧") ||
+    s.includes("加盟クラブ") ||
+    s.includes("登録クラブ") ||
+    s.includes("所属クラブ")
+  ) {
+    return "club_list";
+  }
+
+  if (s.includes("少年団")) return "junior_team_list";
+  if (s.includes("ブロック") || s.includes("block")) return "block_page";
+  if (s.includes("地区") || s.includes("area") || s.includes("district")) return "area_page";
+  if (s.includes("link") || s.includes("リンク")) return "link_page";
+
+  return "team_list_candidate";
 }
 
 function extractLinks(html: string, baseUrl: string) {
@@ -258,7 +415,7 @@ function extractLinks(html: string, baseUrl: string) {
   let m;
 
   while ((m = re.exec(html))) {
-    const href = String(m[1] ?? "").trim();
+    const href = cleanHref(m[1]);
     const text = clean(m[2]);
 
     if (!href) continue;
@@ -299,7 +456,7 @@ async function fetchHtml(url: string) {
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "user-agent": "Mozilla/5.0 team-seed-expander/3.0",
+        "user-agent": "Mozilla/5.0 team-list-seed-builder/5.0",
         accept: "text/html,application/xhtml+xml,text/plain,*/*",
       },
     });
@@ -333,11 +490,13 @@ async function fetchHtml(url: string) {
     const utf8Bad = (utf8.match(/�|縺|譁|荳|繧|蜷|陦|隕|螟/g) || []).length;
     const sjisBad = (sjis.match(/�|縺|譁|荳|繧|蜷|陦|隕|螟/g) || []).length;
 
+    const html = saysSjis || sjisBad < utf8Bad ? sjis : utf8;
+
     return {
       ok: res.ok,
       status: res.status,
       finalUrl: normalizeUrl(res.url || url),
-      html: saysSjis || sjisBad < utf8Bad ? sjis : utf8,
+      html,
       encoding: saysSjis || sjisBad < utf8Bad ? "shift-jis" : "utf-8",
     };
   } finally {
@@ -376,231 +535,177 @@ serve(async (req) => {
 
   const supabase = createClient(supabaseUrl, serviceRole);
 
-  const maxLinks = Math.max(1, Math.min(Number(body.maxLinks ?? 100), 200));
-  const maxDepth = Math.max(1, Math.min(Number(body.maxDepth ?? 3), 5));
+  const limit = Math.max(1, Math.min(Number(body.limit ?? DEFAULT_LIMIT), 10));
+  const maxNewPerSeed = Math.max(1, Math.min(Number(body.maxNewPerSeed ?? 30), 100));
 
-  const { data: job, error: jobError } = await supabase
-    .from("team_seed_jobs")
+  const { data: seeds, error } = await supabase
+    .from("team_directory_seeds")
     .select("*")
-    .eq("status", "pending")
-    .order("depth", { ascending: true })
+    .eq("enabled", true)
+    .is("processed_at", null)
+    .in("seed_type", TARGET_SOURCE_TYPES)
     .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .limit(limit);
 
-  if (jobError) {
+  if (error) {
     return Response.json(
-      { ok: false, error: jobError.message },
+      { ok: false, error: error.message },
       { status: 500, headers: CORS_HEADERS },
     );
   }
 
-  if (!job) {
-    return Response.json(
-      {
-        ok: true,
-        message: "No pending jobs",
-        processed: 0,
-        insertedSeeds: 0,
-        insertedJobs: 0,
-      },
-      { headers: CORS_HEADERS },
-    );
-  }
+  let inserted = 0;
+  let skipped = 0;
+  let checked = 0;
+  let candidateLinks = 0;
 
-  await supabase
-    .from("team_seed_jobs")
-    .update({ status: "processing" })
-    .eq("id", job.id);
-
-  let page;
-
-  try {
-    page = await fetchHtml(job.url);
-  } catch (e) {
-    await supabase
-      .from("team_seed_jobs")
-      .update({
-        status: "error",
-        processed_at: new Date().toISOString(),
-        error: String(e),
-      })
-      .eq("id", job.id);
-
-    return Response.json(
-      {
-        ok: false,
-        processed: 1,
-        job: job.url,
-        error: String(e),
-      },
-      { status: 500, headers: CORS_HEADERS },
-    );
-  }
-
-  if (!page.ok) {
-    await supabase
-      .from("team_seed_jobs")
-      .update({
-        status: "error",
-        processed_at: new Date().toISOString(),
-        error: `HTTP ${page.status}`,
-      })
-      .eq("id", job.id);
-
-    return Response.json(
-      {
-        ok: false,
-        processed: 1,
-        job: job.url,
-        status: page.status,
-      },
-      { status: 500, headers: CORS_HEADERS },
-    );
-  }
-
-  const baseHost = hostOf(page.finalUrl || job.url);
-  const links = extractLinks(page.html, page.finalUrl || job.url).slice(0, maxLinks);
-
-  let insertedSeeds = 0;
-  let insertedJobs = 0;
-  let skippedSeeds = 0;
-  let skippedJobs = 0;
-
-  const sampleSeeds: any[] = [];
-  const sampleJobs: any[] = [];
+  const insertedRows: any[] = [];
+  const sampleLinks: any[] = [];
   const errors: any[] = [];
 
-  for (const link of links) {
-    const sameHost = hostOf(link.url) === baseHost;
-    const trustedExternal = isTrustedExternal(link.url);
+  for (const seed of seeds ?? []) {
+    checked++;
 
-    if (!sameHost && !trustedExternal) continue;
-
-    const good = isGoodTeamListLink(link.url, link.text);
-    const queue = shouldQueueLink(link.url, link.text);
-
-    if (good) {
-      const row = {
-        name: clean(`${job.name} ${link.text || link.url}`).slice(0, 160),
-        url: link.url,
-        prefecture: job.prefecture,
-        seed_type: inferSeedType(link.text, link.url),
-        enabled: true,
-        process_status: null,
-        processed_at: null,
+    await supabase
+      .from("team_directory_seeds")
+      .update({
+        process_status: "seed_building",
         process_error: null,
-      };
+      })
+      .eq("id", seed.id);
 
-      const { data: existing } = await supabase
+    let page;
+
+    try {
+      page = await fetchHtml(seed.url);
+    } catch (e) {
+      errors.push({ seed: seed.name, url: seed.url, error: String(e) });
+
+      await supabase
+        .from("team_directory_seeds")
+        .update({
+          processed_at: new Date().toISOString(),
+          process_status: "seed_build_error",
+          process_error: String(e),
+        })
+        .eq("id", seed.id);
+
+      continue;
+    }
+
+    if (!page.ok) {
+      await supabase
+        .from("team_directory_seeds")
+        .update({
+          processed_at: new Date().toISOString(),
+          process_status: "seed_build_error",
+          process_error: `HTTP ${page.status}`,
+        })
+        .eq("id", seed.id);
+
+      continue;
+    }
+
+    const links = extractLinks(page.html, page.finalUrl || seed.url);
+    candidateLinks += links.length;
+
+    let perSeed = 0;
+
+    for (const link of links) {
+      if (perSeed >= maxNewPerSeed) break;
+      if (hostOf(link.url) !== hostOf(page.finalUrl || seed.url)) continue;
+
+      const seedType = inferSeedType(link.url, link.text);
+      const name = clean(`${seed.name} ${link.text || link.url}`).slice(0, 120);
+
+      const { data: existing, error: existsError } = await supabase
         .from("team_directory_seeds")
         .select("id")
-        .eq("url", row.url)
+        .eq("url", link.url)
         .maybeSingle();
+
+      if (existsError) {
+        errors.push({
+          from: seed.name,
+          url: link.url,
+          phase: "select_existing",
+          error: existsError.message,
+        });
+        continue;
+      }
 
       if (existing?.id) {
-        skippedSeeds++;
-      } else {
-        const { data, error } = await supabase
-          .from("team_directory_seeds")
-          .insert(row)
-          .select("id,name,url,prefecture,seed_type")
-          .single();
+        skipped++;
+        continue;
+      }
 
-        if (error) {
-          if (error.code === "23505") {
-            skippedSeeds++;
-          } else {
-            errors.push({
-              phase: "insert_seed",
-              url: row.url,
-              error: error.message,
-              code: error.code,
-            });
-          }
-        } else {
-          insertedSeeds++;
-          if (sampleSeeds.length < 20) sampleSeeds.push(data);
+      const { data, error: insertError } = await supabase
+        .from("team_directory_seeds")
+        .insert({
+          name,
+          url: link.url,
+          prefecture: seed.prefecture,
+          seed_type: seedType,
+          enabled: true,
+          process_status: null,
+          processed_at: null,
+          process_error: null,
+        })
+        .select("id,name,url,prefecture,seed_type")
+        .single();
+
+      if (insertError) {
+        if (insertError.code === "23505") {
+          skipped++;
+          continue;
         }
+
+        errors.push({
+          from: seed.name,
+          url: link.url,
+          phase: "insert",
+          error: insertError.message,
+          code: insertError.code,
+        });
+        continue;
+      }
+
+      inserted++;
+      perSeed++;
+
+      if (insertedRows.length < 50) insertedRows.push(data);
+      if (sampleLinks.length < 50) {
+        sampleLinks.push({
+          from: seed.name,
+          text: link.text,
+          url: link.url,
+          score: link.score,
+          seed_type: seedType,
+        });
       }
     }
 
-    if (queue && Number(job.depth ?? 0) < maxDepth) {
-      const nextJob = {
-        name: clean(`${job.name} ${link.text || link.url}`).slice(0, 160),
-        url: link.url,
-        prefecture: job.prefecture,
-        source_type: good ? "team_list_candidate" : "crawl_candidate",
-        depth: Number(job.depth ?? 0) + 1,
-        status: "pending",
-      };
-
-      const { data: existingJob } = await supabase
-        .from("team_seed_jobs")
-        .select("id")
-        .eq("url", nextJob.url)
-        .maybeSingle();
-
-      if (existingJob?.id) {
-        skippedJobs++;
-      } else {
-        const { data, error } = await supabase
-          .from("team_seed_jobs")
-          .insert(nextJob)
-          .select("id,name,url,depth")
-          .single();
-
-        if (error) {
-          if (error.code === "23505") {
-            skippedJobs++;
-          } else {
-            errors.push({
-              phase: "insert_job",
-              url: nextJob.url,
-              error: error.message,
-              code: error.code,
-            });
-          }
-        } else {
-          insertedJobs++;
-          if (sampleJobs.length < 20) sampleJobs.push(data);
-        }
-      }
-    }
+    await supabase
+      .from("team_directory_seeds")
+      .update({
+        processed_at: new Date().toISOString(),
+        process_status: "seed_build_done",
+        process_error: null,
+      })
+      .eq("id", seed.id);
   }
-
-  await supabase
-    .from("team_seed_jobs")
-    .update({
-      status: "done",
-      processed_at: new Date().toISOString(),
-      error: null,
-    })
-    .eq("id", job.id);
 
   return Response.json(
     {
-      ok: errors.length === 0,
-      mode: "team_seed_jobs_expander",
-      processed: 1,
-      job: {
-        id: job.id,
-        name: job.name,
-        url: job.url,
-        depth: job.depth,
-      },
-      fetched: {
-        status: page.status,
-        finalUrl: page.finalUrl,
-        encoding: page.encoding,
-        linkCount: links.length,
-      },
-      insertedSeeds,
-      insertedJobs,
-      skippedSeeds,
-      skippedJobs,
-      sampleSeeds,
-      sampleJobs,
+      ok: true,
+      mode: "team_list_seed_builder",
+      limit,
+      checked,
+      candidateLinks,
+      inserted,
+      skipped,
+      insertedRows,
+      sampleLinks,
       errors: errors.slice(0, 30),
     },
     { headers: CORS_HEADERS },
