@@ -20,6 +20,12 @@ const TEAM_LIST_HINTS = [
   "クラブ一覧",
   "会員チーム",
   "少年団一覧",
+  "チームリスト",
+  "登録クラブ",
+  "加盟クラブ",
+  "所属クラブ",
+  "チーム紹介",
+  "クラブ紹介",
 ];
 
 const DISTRICT_HINTS = [
@@ -27,6 +33,23 @@ const DISTRICT_HINTS = [
   "地区サッカー協会",
   "4種委員会",
   "少年サッカー連盟",
+  "少年サッカー",
+  "第1ブロック",
+  "第2ブロック",
+  "第3ブロック",
+  "第4ブロック",
+  "第5ブロック",
+  "第6ブロック",
+  "第7ブロック",
+  "第8ブロック",
+  "第9ブロック",
+  "第10ブロック",
+  "第11ブロック",
+  "第12ブロック",
+  "第13ブロック",
+  "第14ブロック",
+  "第15ブロック",
+  "第16ブロック",
 ];
 
 const TARGET_SOURCE_TYPES = [
@@ -70,6 +93,10 @@ const GOOD_WORDS = [
   "block",
   "area",
   "district",
+  "league",
+  "entry",
+  "registration",
+
   "加盟",
   "登録",
   "チーム",
@@ -93,6 +120,11 @@ const GOOD_WORDS = [
   "地区",
   "支部",
   "市区町村",
+  "リーグ",
+  "大会",
+  "参加",
+  "出場",
+
   "第1ブロック",
   "第2ブロック",
   "第3ブロック",
@@ -112,31 +144,6 @@ const GOOD_WORDS = [
 ];
 
 const BAD_WORDS = [
-  "result",
-  "results",
-  "schedule",
-  "match",
-  "competition",
-  "tournament",
-  "calendar",
-  "ranking",
-  "rank",
-  "score",
-  "news",
-  "entry",
-  "application",
-  "download",
-  "pdf",
-  "xlsx",
-  "xls",
-  "doc",
-  "docx",
-  "jpg",
-  "png",
-  "gif",
-  "zip",
-  "css",
-  "js",
   "facebook",
   "instagram",
   "twitter",
@@ -145,32 +152,48 @@ const BAD_WORDS = [
   "line.me",
   "mailto:",
   "tel:",
-  "試合",
-  "結果",
-  "日程",
-  "大会",
-  "トーナメント",
+
+  "jpg",
+  "jpeg",
+  "png",
+  "gif",
+  "webp",
+  "svg",
+  "css",
+  "js",
+  "zip",
+  "mp4",
+  "mov",
+
+  "calendar",
+  "ranking",
+  "rank",
+  "score",
+  "news",
+  "download",
+
   "順位",
   "星取表",
   "組合せ",
   "組み合わせ",
-  "スケジュール",
   "ニュース",
   "お知らせ",
-  "申込",
-  "申込み",
-  "要項",
   "ダウンロード",
   "会場",
   "アクセス",
   "予選",
   "決勝",
   "ラウンド",
-  "リーグ戦",
-  "高円宮",
-  "1次",
-  "2次",
-  "3次",
+];
+
+const FILE_WORDS = [
+  "pdf",
+  "xlsx",
+  "xls",
+  "doc",
+  "docx",
+  "ppt",
+  "pptx",
 ];
 
 function clean(v: string) {
@@ -195,6 +218,15 @@ function clean(v: string) {
     .replace(/\s+\n/g, "\n")
     .replace(/\n{2,}/g, "\n")
     .trim();
+}
+
+function cleanHref(v: string) {
+  return String(v ?? "")
+    .trim()
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'");
 }
 
 function hostOf(url: string) {
@@ -237,12 +269,40 @@ function hasAny(value: string, words: string[]) {
   return words.some((w) => value.includes(w.toLowerCase()));
 }
 
+function hasStrongTeamWord(s: string) {
+  return (
+    s.includes("チーム一覧") ||
+    s.includes("加盟チーム") ||
+    s.includes("登録チーム") ||
+    s.includes("参加チーム") ||
+    s.includes("所属チーム") ||
+    s.includes("クラブ一覧") ||
+    s.includes("加盟クラブ") ||
+    s.includes("登録クラブ") ||
+    s.includes("チーム紹介") ||
+    s.includes("クラブ紹介") ||
+    s.includes("少年団一覧") ||
+    s.includes("登録クラブ") ||
+    s.includes("チームリスト") ||
+    s.includes("team") ||
+    s.includes("teams") ||
+    s.includes("club") ||
+    s.includes("clubs") ||
+    s.includes("member") ||
+    s.includes("members")
+  );
+}
+
 function linkScore(url: string, text = "") {
   const s = safeDecode(`${url} ${text}`).toLowerCase();
 
   if (!url.startsWith("http")) return -999;
   if (isFileUrl(url)) return -999;
-  if (hasAny(s, BAD_WORDS)) return -100;
+
+  if (hasAny(s, FILE_WORDS)) return -999;
+
+  // 大会・リーグページでも「参加チーム一覧」「登録チーム」等なら残す
+  if (!hasStrongTeamWord(s) && hasAny(s, BAD_WORDS)) return -100;
 
   let score = 0;
 
@@ -258,25 +318,69 @@ function linkScore(url: string, text = "") {
     if (s.includes(w.toLowerCase())) score += 35;
   }
 
-  if (s.includes("チーム一覧")) score += 60;
-  if (s.includes("加盟チーム")) score += 60;
-  if (s.includes("登録チーム")) score += 60;
-  if (s.includes("クラブ一覧")) score += 60;
-  if (s.includes("加盟クラブ")) score += 60;
-  if (s.includes("登録クラブ")) score += 60;
-  if (s.includes("少年団一覧")) score += 50;
-  if (s.includes("チーム紹介")) score += 45;
-  if (s.includes("クラブ紹介")) score += 45;
-  if (s.includes("team") || s.includes("club")) score += 20;
-  if (s.includes("member")) score += 20;
+  if (s.includes("チーム一覧")) score += 90;
+  if (s.includes("加盟チーム")) score += 90;
+  if (s.includes("登録チーム")) score += 90;
+  if (s.includes("参加チーム")) score += 80;
+  if (s.includes("所属チーム")) score += 80;
+  if (s.includes("クラブ一覧")) score += 80;
+  if (s.includes("加盟クラブ")) score += 80;
+  if (s.includes("登録クラブ")) score += 80;
+  if (s.includes("少年団一覧")) score += 70;
+  if (s.includes("チーム紹介")) score += 60;
+  if (s.includes("クラブ紹介")) score += 60;
+
+  if (s.includes("team") || s.includes("club")) score += 25;
+  if (s.includes("member")) score += 25;
   if (s.includes("リンク") || s.includes("link")) score += 20;
-  if (s.includes("ブロック") || s.includes("地区")) score += 15;
+  if (s.includes("ブロック") || s.includes("地区")) score += 20;
+  if (s.includes("リーグ") && hasStrongTeamWord(s)) score += 15;
+  if (s.includes("大会") && hasStrongTeamWord(s)) score += 10;
 
   return score;
 }
 
 function inferSeedType(url: string, text = "") {
   const s = safeDecode(`${url} ${text}`).toLowerCase();
+
+  if (
+    s.includes("u12") ||
+    s.includes("u-12") ||
+    s.includes("4種") ||
+    s.includes("少年") ||
+    s.includes("ジュニア")
+  ) {
+    return "u12_team_list";
+  }
+
+  if (
+    s.includes("u15") ||
+    s.includes("u-15") ||
+    s.includes("3種") ||
+    s.includes("中体連") ||
+    s.includes("ジュニアユース") ||
+    s.includes("クラブユース")
+  ) {
+    return "u15_team_list";
+  }
+
+  if (
+    s.includes("u18") ||
+    s.includes("u-18") ||
+    s.includes("2種") ||
+    s.includes("高体連") ||
+    s.includes("高校")
+  ) {
+    return "u18_team_list";
+  }
+
+  if (s.includes("女子") || s.includes("women") || s.includes("ladies")) {
+    return "women_team_list";
+  }
+
+  if (s.includes("社会人") || s.includes("1種")) {
+    return "adult_team_list";
+  }
 
   if (
     s.includes("チーム一覧") ||
@@ -311,7 +415,7 @@ function extractLinks(html: string, baseUrl: string) {
   let m;
 
   while ((m = re.exec(html))) {
-    const href = String(m[1] ?? "").trim();
+    const href = cleanHref(m[1]);
     const text = clean(m[2]);
 
     if (!href) continue;
@@ -352,7 +456,7 @@ async function fetchHtml(url: string) {
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "user-agent": "Mozilla/5.0 team-list-seed-builder/4.0",
+        "user-agent": "Mozilla/5.0 team-list-seed-builder/5.0",
         accept: "text/html,application/xhtml+xml,text/plain,*/*",
       },
     });
