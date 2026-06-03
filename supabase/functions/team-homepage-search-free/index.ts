@@ -43,6 +43,16 @@ const BAD_HOSTS = [
   "tochigi-cy.com",
   "gunma-cy.com",
   "saitama-u12.com",
+  "juniorsoccer-news.com",
+  "junior-soccer.jp",
+  "jy-soccer.jp",
+  "koko-soccer.com",
+  "soccer-history.com",
+  "clubyouth-u15.com",
+  "clubyouth-u18.com",
+  "jr-youth-navi.com",
+  "sposearch.com",
+  "momonga-net.com",
 ];
 
 const GOOD_WORDS = [
