@@ -1,3 +1,4 @@
 nohup: ignoring input
 ---- homepage-search-free 1 ----
 {"ok":true,"mode":"team_homepage_search_free","limit":3,"minScore":90,"checked":3,"found":1,"notFound":2,"searchErrors":0,"results":[{"team_name":"ＦＣ ＫＡＳＵＫＡＢＥ Ｕ－１２","status":"not_found"},{"team_name":"ＦＣ ＫＩＬＯＮＧＡ","status":"not_found"},{"team_name":"ＦＣ 八潮","official_url":"https://jy-soccer.jp/","found_url":"https://jy-soccer.jp/contents/team/fc-yashio/","title":"Fc八潮 | ジュニアユースサッカーリサーチ｜サカリサ","score":140,"status":"found","team_homepages_error":"duplicate key value violates unique constraint \"team_homepages_unique_url\"","selection_sources_error":"duplicate key value violates unique constraint \"selection_sources_base_url_key\""}]}
+---- homepage-search-free 2 ----
