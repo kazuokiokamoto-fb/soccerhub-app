@@ -13,18 +13,46 @@ const POSITIVE_KEYWORDS = [
   "選考会",
   "追加セレクション",
   "体験練習会",
+  "体験参加",
+  "体験入部",
   "練習会",
+  "練習参加",
+  "練習体験",
+  "練習見学",
   "新入団",
   "新入団募集",
   "入団募集",
   "団員募集",
   "選手募集",
+  "入部",
+  "入団",
+  "募集",
   "ジュニアユース",
   "U-15",
   "U15",
   "U-18",
   "U18",
   "GKセレクション",
+];
+
+const MUST_HAVE_ACTION_WORDS = [
+  "セレクション",
+  "選考会",
+  "体験練習会",
+  "体験参加",
+  "体験入部",
+  "練習会",
+  "練習参加",
+  "練習体験",
+  "練習見学",
+  "新入団",
+  "新入団募集",
+  "入団募集",
+  "団員募集",
+  "選手募集",
+  "入部",
+  "入団",
+  "募集",
 ];
 
 const NEGATIVE_KEYWORDS = [
@@ -39,6 +67,8 @@ const NEGATIVE_KEYWORDS = [
   "メンバー表",
   "チーム一覧",
   "加盟チーム",
+  "リーグ戦",
+  "対戦表",
   "pdf",
 ];
 
@@ -157,26 +187,48 @@ function classifyCandidate(item: {
   }
 
   const positives = matchedWords(lower, POSITIVE_KEYWORDS);
+  const actionWords = matchedWords(lower, MUST_HAVE_ACTION_WORDS);
   const negatives = matchedWords(lower, NEGATIVE_KEYWORDS);
+
+  // 重要：ジュニアユース/U15/U18だけでは保存しない
+  if (actionWords.length === 0) {
+    return {
+      ok: false,
+      score: 0,
+      matched: positives,
+      excluded_reason: "no_action_word",
+    };
+  }
 
   let score = positives.length * 10;
 
-  if (lower.includes("セレクション")) score += 30;
-  if (lower.includes("選考会")) score += 25;
-  if (lower.includes("体験練習会")) score += 20;
-  if (lower.includes("練習会")) score += 12;
-  if (lower.includes("新入団")) score += 18;
-  if (lower.includes("募集")) score += 12;
-  if (lower.includes("ジュニアユース")) score += 10;
-  if (lower.includes("u-15") || lower.includes("u15")) score += 10;
-  if (lower.includes("u-18") || lower.includes("u18")) score += 10;
+  if (lower.includes("セレクション")) score += 40;
+  if (lower.includes("選考会")) score += 35;
+  if (lower.includes("体験練習会")) score += 30;
+  if (lower.includes("体験参加")) score += 22;
+  if (lower.includes("体験入部")) score += 22;
+  if (lower.includes("練習会")) score += 20;
+  if (lower.includes("練習参加")) score += 18;
+  if (lower.includes("練習体験")) score += 18;
+  if (lower.includes("練習見学")) score += 18;
+  if (lower.includes("新入団")) score += 25;
+  if (lower.includes("募集")) score += 18;
+  if (lower.includes("入部")) score += 14;
+  if (lower.includes("入団")) score += 14;
 
-  if (lower.includes("試合結果")) score -= 30;
-  if (lower.includes("大会結果")) score -= 30;
-  if (lower.includes("チーム一覧")) score -= 25;
-  if (lower.includes("加盟チーム")) score -= 20;
+  if (lower.includes("ジュニアユース")) score += 8;
+  if (lower.includes("u-15") || lower.includes("u15")) score += 8;
+  if (lower.includes("u-18") || lower.includes("u18")) score += 8;
 
-  if (negatives.length >= 2 && positives.length === 0) {
+  if (lower.includes("試合結果")) score -= 40;
+  if (lower.includes("大会結果")) score -= 40;
+  if (lower.includes("速報")) score -= 25;
+  if (lower.includes("チーム一覧")) score -= 30;
+  if (lower.includes("加盟チーム")) score -= 25;
+  if (lower.includes("リーグ戦")) score -= 20;
+  if (lower.includes("対戦表")) score -= 20;
+
+  if (negatives.length >= 2 && score < 60) {
     return {
       ok: false,
       score,
@@ -185,13 +237,13 @@ function classifyCandidate(item: {
     };
   }
 
-  const ok = score >= 20 && positives.length > 0;
+  const ok = score >= 25;
 
   return {
     ok,
     score,
     matched: positives,
-    excluded_reason: ok ? null : "low_score_or_no_positive_keyword",
+    excluded_reason: ok ? null : "low_score",
   };
 }
 
@@ -204,7 +256,8 @@ async function duckDuckGoSearch(query: string) {
     headers: {
       "user-agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
-      "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "accept":
+        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "accept-language": "ja,en-US;q=0.9,en;q=0.8",
     },
   });
@@ -218,23 +271,37 @@ async function duckDuckGoSearch(query: string) {
   const results: any[] = [];
   const seen = new Set<string>();
 
-  const blockRe = /<div[^>]+class="[^"]*result[^"]*"[\s\S]*?<\/div>\s*<\/div>/gi;
+  const blockRe =
+    /<div[^>]+class="[^"]*result[^"]*"[\s\S]*?<\/div>\s*<\/div>/gi;
+
   const blocks = html.match(blockRe) || [];
 
   for (const block of blocks) {
-    const linkMatch = block.match(/<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+    const linkMatch = block.match(
+      /<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i,
+    );
+
     if (!linkMatch) continue;
 
     const href = extractDuckUrl(linkMatch[1]);
+
     if (!href) continue;
     if (isBlockedUrl(href)) continue;
     if (seen.has(href)) continue;
 
     const title = stripTags(linkMatch[2]);
-    const snippetMatch = block.match(/<a[^>]+class="[^"]*result__snippet[^"]*"[\s\S]*?>([\s\S]*?)<\/a>/i)
-      || block.match(/<div[^>]+class="[^"]*result__snippet[^"]*"[\s\S]*?>([\s\S]*?)<\/div>/i);
 
-    const snippet = snippetMatch ? stripTags(snippetMatch[1]) : stripTags(block).slice(0, 400);
+    const snippetMatch =
+      block.match(
+        /<a[^>]+class="[^"]*result__snippet[^"]*"[\s\S]*?>([\s\S]*?)<\/a>/i,
+      ) ||
+      block.match(
+        /<div[^>]+class="[^"]*result__snippet[^"]*"[\s\S]*?>([\s\S]*?)<\/div>/i,
+      );
+
+    const snippet = snippetMatch
+      ? stripTags(snippetMatch[1])
+      : stripTags(block).slice(0, 400);
 
     seen.add(href);
 
@@ -295,7 +362,7 @@ async function runOneJob(job: any) {
         title: r.title,
         url: r.url,
         snippet: r.snippet,
-        source_type: "duckduckgo_html",
+        source_type: "duckduckgo_html_refined",
         status: "candidate",
         matched_keywords: judged.matched,
         excluded_reason: judged.excluded_reason,
@@ -372,7 +439,7 @@ serve(async (req) => {
 
     return json({
       ok: true,
-      mode: "duckduckgo_html",
+      mode: "duckduckgo_html_refined",
       claimed: jobs.length,
       results,
     });
