@@ -24,7 +24,6 @@ const POSITIVE_KEYWORDS = [
   "U15",
   "U-18",
   "U18",
-  "ゴールキーパーセレクション",
   "GKセレクション",
 ];
 
@@ -98,16 +97,12 @@ function isBlockedUrl(url: string) {
   if (BLOCKED_EXTENSIONS.some((ext) => u.includes(ext))) return true;
 
   const blockedHosts = [
+    "duckduckgo.com",
     "google.com",
-    "www.google.com",
     "youtube.com",
     "youtu.be",
     "maps.google",
-    "google.com/maps",
     "translate.google",
-    "webcache.googleusercontent.com",
-    "support.google.com",
-    "accounts.google.com",
   ];
 
   try {
@@ -120,28 +115,28 @@ function isBlockedUrl(url: string) {
   return false;
 }
 
-function extractGoogleUrl(rawHref: string) {
-  let href = decodeHtml(rawHref || "").trim();
+function extractDuckUrl(href: string) {
+  let url = decodeHtml(href || "").trim();
 
-  if (!href) return null;
+  if (!url) return null;
 
-  if (href.startsWith("/url?")) {
-    const full = new URL("https://www.google.com" + href);
-    href = full.searchParams.get("q") || "";
+  if (url.startsWith("//duckduckgo.com/l/?")) {
+    url = "https:" + url;
   }
 
-  if (href.startsWith("https://www.google.com/url?")) {
-    const full = new URL(href);
-    href = full.searchParams.get("q") || "";
+  if (url.includes("duckduckgo.com/l/?")) {
+    try {
+      const u = new URL(url);
+      const uddg = u.searchParams.get("uddg");
+      if (uddg) url = decodeURIComponent(uddg);
+    } catch {
+      return null;
+    }
   }
 
-  if (!href.startsWith("http://") && !href.startsWith("https://")) {
-    return null;
-  }
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
 
-  href = href.split("#")[0];
-
-  return href;
+  return url.split("#")[0];
 }
 
 function classifyCandidate(item: {
@@ -164,15 +159,6 @@ function classifyCandidate(item: {
   const positives = matchedWords(lower, POSITIVE_KEYWORDS);
   const negatives = matchedWords(lower, NEGATIVE_KEYWORDS);
 
-  if (negatives.length >= 2 && positives.length === 0) {
-    return {
-      ok: false,
-      score: 0,
-      matched: positives,
-      excluded_reason: `negative_keywords:${negatives.join(",")}`,
-    };
-  }
-
   let score = positives.length * 10;
 
   if (lower.includes("セレクション")) score += 30;
@@ -190,6 +176,15 @@ function classifyCandidate(item: {
   if (lower.includes("チーム一覧")) score -= 25;
   if (lower.includes("加盟チーム")) score -= 20;
 
+  if (negatives.length >= 2 && positives.length === 0) {
+    return {
+      ok: false,
+      score,
+      matched: positives,
+      excluded_reason: `negative_keywords:${negatives.join(",")}`,
+    };
+  }
+
   const ok = score >= 20 && positives.length > 0;
 
   return {
@@ -200,20 +195,16 @@ function classifyCandidate(item: {
   };
 }
 
-async function googleSearchFree(query: string) {
-  const url = new URL("https://www.google.com/search");
+async function duckDuckGoSearch(query: string) {
+  const url = new URL("https://duckduckgo.com/html/");
   url.searchParams.set("q", query);
-  url.searchParams.set("num", "10");
-  url.searchParams.set("hl", "ja");
-  url.searchParams.set("gl", "jp");
-  url.searchParams.set("pws", "0");
+  url.searchParams.set("kl", "jp-jp");
 
   const res = await fetch(url.toString(), {
     headers: {
       "user-agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-      "accept":
-        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36",
+      "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "accept-language": "ja,en-US;q=0.9,en;q=0.8",
     },
   });
@@ -221,38 +212,29 @@ async function googleSearchFree(query: string) {
   const html = await res.text();
 
   if (!res.ok) {
-    throw new Error(`Google free search failed: ${res.status}`);
-  }
-
-  if (
-    html.includes("unusual traffic") ||
-    html.includes("Our systems have detected unusual traffic") ||
-    html.includes("/sorry/")
-  ) {
-    throw new Error("Google blocked the request");
+    throw new Error(`DuckDuckGo search failed: ${res.status}`);
   }
 
   const results: any[] = [];
   const seen = new Set<string>();
 
-  const anchorRe = /<a\s+[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  const blockRe = /<div[^>]+class="[^"]*result[^"]*"[\s\S]*?<\/div>\s*<\/div>/gi;
+  const blocks = html.match(blockRe) || [];
 
-  let m;
-  while ((m = anchorRe.exec(html)) !== null) {
-    const href = extractGoogleUrl(m[1]);
+  for (const block of blocks) {
+    const linkMatch = block.match(/<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+    if (!linkMatch) continue;
+
+    const href = extractDuckUrl(linkMatch[1]);
     if (!href) continue;
     if (isBlockedUrl(href)) continue;
     if (seen.has(href)) continue;
 
-    const title = stripTags(m[2]);
-    if (!title || title.length < 2) continue;
+    const title = stripTags(linkMatch[2]);
+    const snippetMatch = block.match(/<a[^>]+class="[^"]*result__snippet[^"]*"[\s\S]*?>([\s\S]*?)<\/a>/i)
+      || block.match(/<div[^>]+class="[^"]*result__snippet[^"]*"[\s\S]*?>([\s\S]*?)<\/div>/i);
 
-    const around = html.slice(
-      Math.max(0, m.index - 300),
-      Math.min(html.length, m.index + 900),
-    );
-
-    const snippet = stripTags(around).slice(0, 500);
+    const snippet = snippetMatch ? stripTags(snippetMatch[1]) : stripTags(block).slice(0, 400);
 
     seen.add(href);
 
@@ -285,7 +267,7 @@ async function runOneJob(job: any) {
     .from("selection_search_jobs")
     .update({
       status: "running",
-      tried_count: job.tried_count + 1,
+      tried_count: Number(job.tried_count || 0) + 1,
       updated_at: new Date().toISOString(),
     })
     .eq("id", job.id);
@@ -293,14 +275,12 @@ async function runOneJob(job: any) {
   if (startError) throw startError;
 
   try {
-    const results = await googleSearchFree(job.query);
+    const results = await duckDuckGoSearch(job.query);
 
     let saved = 0;
     let rejected = 0;
 
     for (const r of results) {
-      if (!r.url) continue;
-
       const judged = classifyCandidate(r);
 
       if (!judged.ok) {
@@ -315,7 +295,7 @@ async function runOneJob(job: any) {
         title: r.title,
         url: r.url,
         snippet: r.snippet,
-        source_type: "google_search_free",
+        source_type: "duckduckgo_html",
         status: "candidate",
         matched_keywords: judged.matched,
         excluded_reason: judged.excluded_reason,
@@ -378,7 +358,6 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
 
-    // 無料検索はブロック回避のため少なめ推奨
     const limit = Math.min(Number(body.limit || 1), 3);
 
     const jobs = await claimJobs(limit);
@@ -388,14 +367,12 @@ serve(async (req) => {
     for (const job of jobs) {
       const r = await runOneJob(job);
       results.push(r);
-
-      // 連続アクセスを少し避ける
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
     return json({
       ok: true,
-      mode: "google_search_free",
+      mode: "duckduckgo_html",
       claimed: jobs.length,
       results,
     });
