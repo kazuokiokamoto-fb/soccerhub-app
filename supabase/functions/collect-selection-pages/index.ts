@@ -6,11 +6,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// Google Custom Search JSON API を使う場合
-// 既存利用者向け。新規利用可否はGoogle側の状況に注意。
-const GOOGLE_CSE_KEY = Deno.env.get("GOOGLE_CSE_KEY") || "";
-const GOOGLE_CSE_CX = Deno.env.get("GOOGLE_CSE_CX") || "";
-
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
 const POSITIVE_KEYWORDS = [
@@ -45,7 +40,7 @@ const NEGATIVE_KEYWORDS = [
   "メンバー表",
   "チーム一覧",
   "加盟チーム",
-  "PDF",
+  "pdf",
 ];
 
 const BLOCKED_EXTENSIONS = [
@@ -75,8 +70,20 @@ function normalizeText(s: string | null | undefined) {
   return String(s || "").toLowerCase();
 }
 
-function includesAny(text: string, words: string[]) {
-  return words.some((w) => text.includes(w.toLowerCase()));
+function decodeHtml(s: string) {
+  return String(s || "")
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", `"`)
+    .replaceAll("&#39;", "'")
+    .replaceAll("&nbsp;", " ");
+}
+
+function stripTags(s: string) {
+  return decodeHtml(String(s || "").replace(/<[^>]*>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function matchedWords(text: string, words: string[]) {
@@ -86,18 +93,55 @@ function matchedWords(text: string, words: string[]) {
 
 function isBlockedUrl(url: string) {
   const u = normalizeText(url);
+
+  if (!u.startsWith("http://") && !u.startsWith("https://")) return true;
   if (BLOCKED_EXTENSIONS.some((ext) => u.includes(ext))) return true;
 
   const blockedHosts = [
+    "google.com",
+    "www.google.com",
     "youtube.com",
     "youtu.be",
     "maps.google",
     "google.com/maps",
+    "translate.google",
+    "webcache.googleusercontent.com",
+    "support.google.com",
+    "accounts.google.com",
   ];
 
-  if (blockedHosts.some((h) => u.includes(h))) return true;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (blockedHosts.some((h) => host.includes(h))) return true;
+  } catch {
+    return true;
+  }
 
   return false;
+}
+
+function extractGoogleUrl(rawHref: string) {
+  let href = decodeHtml(rawHref || "").trim();
+
+  if (!href) return null;
+
+  if (href.startsWith("/url?")) {
+    const full = new URL("https://www.google.com" + href);
+    href = full.searchParams.get("q") || "";
+  }
+
+  if (href.startsWith("https://www.google.com/url?")) {
+    const full = new URL(href);
+    href = full.searchParams.get("q") || "";
+  }
+
+  if (!href.startsWith("http://") && !href.startsWith("https://")) {
+    return null;
+  }
+
+  href = href.split("#")[0];
+
+  return href;
 }
 
 function classifyCandidate(item: {
@@ -134,6 +178,7 @@ function classifyCandidate(item: {
   if (lower.includes("セレクション")) score += 30;
   if (lower.includes("選考会")) score += 25;
   if (lower.includes("体験練習会")) score += 20;
+  if (lower.includes("練習会")) score += 12;
   if (lower.includes("新入団")) score += 18;
   if (lower.includes("募集")) score += 12;
   if (lower.includes("ジュニアユース")) score += 10;
@@ -143,6 +188,7 @@ function classifyCandidate(item: {
   if (lower.includes("試合結果")) score -= 30;
   if (lower.includes("大会結果")) score -= 30;
   if (lower.includes("チーム一覧")) score -= 25;
+  if (lower.includes("加盟チーム")) score -= 20;
 
   const ok = score >= 20 && positives.length > 0;
 
@@ -154,34 +200,72 @@ function classifyCandidate(item: {
   };
 }
 
-async function googleSearch(query: string, start = 1) {
-  if (!GOOGLE_CSE_KEY || !GOOGLE_CSE_CX) {
-    throw new Error("GOOGLE_CSE_KEY / GOOGLE_CSE_CX is not set");
-  }
-
-  const url = new URL("https://www.googleapis.com/customsearch/v1");
-  url.searchParams.set("key", GOOGLE_CSE_KEY);
-  url.searchParams.set("cx", GOOGLE_CSE_CX);
+async function googleSearchFree(query: string) {
+  const url = new URL("https://www.google.com/search");
   url.searchParams.set("q", query);
   url.searchParams.set("num", "10");
-  url.searchParams.set("start", String(start));
-  url.searchParams.set("lr", "lang_ja");
-  url.searchParams.set("safe", "off");
+  url.searchParams.set("hl", "ja");
+  url.searchParams.set("gl", "jp");
+  url.searchParams.set("pws", "0");
 
-  const res = await fetch(url.toString());
+  const res = await fetch(url.toString(), {
+    headers: {
+      "user-agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+      "accept":
+        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "accept-language": "ja,en-US;q=0.9,en;q=0.8",
+    },
+  });
+
+  const html = await res.text();
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Google search failed: ${res.status} ${text}`);
+    throw new Error(`Google free search failed: ${res.status}`);
   }
 
-  const data = await res.json();
+  if (
+    html.includes("unusual traffic") ||
+    html.includes("Our systems have detected unusual traffic") ||
+    html.includes("/sorry/")
+  ) {
+    throw new Error("Google blocked the request");
+  }
 
-  return (data.items || []).map((item: any) => ({
-    title: item.title || "",
-    url: item.link || "",
-    snippet: item.snippet || "",
-  }));
+  const results: any[] = [];
+  const seen = new Set<string>();
+
+  const anchorRe = /<a\s+[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+
+  let m;
+  while ((m = anchorRe.exec(html)) !== null) {
+    const href = extractGoogleUrl(m[1]);
+    if (!href) continue;
+    if (isBlockedUrl(href)) continue;
+    if (seen.has(href)) continue;
+
+    const title = stripTags(m[2]);
+    if (!title || title.length < 2) continue;
+
+    const around = html.slice(
+      Math.max(0, m.index - 300),
+      Math.min(html.length, m.index + 900),
+    );
+
+    const snippet = stripTags(around).slice(0, 500);
+
+    seen.add(href);
+
+    results.push({
+      title,
+      url: href,
+      snippet,
+    });
+
+    if (results.length >= 10) break;
+  }
+
+  return results;
 }
 
 async function claimJobs(limit: number) {
@@ -209,7 +293,7 @@ async function runOneJob(job: any) {
   if (startError) throw startError;
 
   try {
-    const results = await googleSearch(job.query, 1);
+    const results = await googleSearchFree(job.query);
 
     let saved = 0;
     let rejected = 0;
@@ -231,7 +315,7 @@ async function runOneJob(job: any) {
         title: r.title,
         url: r.url,
         snippet: r.snippet,
-        source_type: "google_cse",
+        source_type: "google_search_free",
         status: "candidate",
         matched_keywords: judged.matched,
         excluded_reason: judged.excluded_reason,
@@ -269,10 +353,12 @@ async function runOneJob(job: any) {
       total: results.length,
     };
   } catch (e) {
+    const nextTried = Number(job.tried_count || 0) + 1;
+
     const { error: failError } = await supabase
       .from("selection_search_jobs")
       .update({
-        status: job.tried_count + 1 >= 3 ? "failed" : "pending",
+        status: nextTried >= 3 ? "failed" : "pending",
         last_error: String(e?.message || e),
         updated_at: new Date().toISOString(),
       })
@@ -292,7 +378,8 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
 
-    const limit = Math.min(Number(body.limit || 3), 10);
+    // 無料検索はブロック回避のため少なめ推奨
+    const limit = Math.min(Number(body.limit || 1), 3);
 
     const jobs = await claimJobs(limit);
 
@@ -301,10 +388,14 @@ serve(async (req) => {
     for (const job of jobs) {
       const r = await runOneJob(job);
       results.push(r);
+
+      // 連続アクセスを少し避ける
+      await new Promise((resolve) => setTimeout(resolve, 1200));
     }
 
     return json({
       ok: true,
+      mode: "google_search_free",
       claimed: jobs.length,
       results,
     });
