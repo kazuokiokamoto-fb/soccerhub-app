@@ -3,7 +3,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 
+import { supabase } from "@/app/lib/supabase";
 import { fetchSelectionEvents } from "@/app/lib/selections";
 import type { SelectionEvent } from "@/app/types/selection";
 
@@ -39,23 +41,35 @@ type StatusFilter =
   | "開催終了"
   | "日程未定";
 
+type SelectionPageCandidate = {
+  id: string;
+  prefecture: string | null;
+  municipality: string | null;
+  query: string | null;
+  title: string | null;
+  url: string;
+  score: number | null;
+  matched_keywords: string[] | null;
+  created_at: string | null;
+};
+
 const SOURCE_PREFECTURE_MAP: Record<string, string> = {
-  "鹿島アントラーズ": "茨城県",
-  "水戸ホーリーホック": "茨城県",
-  "浦和レッズ": "埼玉県",
-  "RB大宮アルディージャ": "埼玉県",
+  鹿島アントラーズ: "茨城県",
+  水戸ホーリーホック: "茨城県",
+  浦和レッズ: "埼玉県",
+  RB大宮アルディージャ: "埼玉県",
   "ジェフユナイテッド市原・千葉": "千葉県",
-  "柏レイソル": "千葉県",
-  "FC東京": "東京都",
-  "東京ヴェルディ": "東京都",
-  "FC町田ゼルビア": "東京都",
-  "川崎フロンターレ": "神奈川県",
+  柏レイソル: "千葉県",
+  FC東京: "東京都",
+  東京ヴェルディ: "東京都",
+  FC町田ゼルビア: "東京都",
+  川崎フロンターレ: "神奈川県",
   "横浜F・マリノス": "神奈川県",
-  "横浜FC": "神奈川県",
-  "湘南ベルマーレ": "神奈川県",
-  "栃木SC": "栃木県",
-  "ザスパ群馬": "群馬県",
-  "ヴァンフォーレ甲府": "山梨県",
+  横浜FC: "神奈川県",
+  湘南ベルマーレ: "神奈川県",
+  栃木SC: "栃木県",
+  ザスパ群馬: "群馬県",
+  ヴァンフォーレ甲府: "山梨県",
 };
 
 function formatDate(date?: string | null) {
@@ -96,7 +110,7 @@ function rankLabel(rank?: string | null, prefecture?: string | null) {
   return "未設定";
 }
 
-function rankSelectLabel(rank: RankFilter, prefecture: string) {
+function rankSelectLabel(rank: RankFilter) {
   if (rank === "all") return "ランクすべて";
   if (rank === "j_academy") return "J下部";
   if (rank === "pref_top") return "T1 / 1部";
@@ -106,11 +120,10 @@ function rankSelectLabel(rank: RankFilter, prefecture: string) {
   if (rank === "district") return "地区リーグ";
   if (rank === "school") return "スクール";
   if (rank === "girls") return "女子";
-
   return "ランク未設定";
 }
 
-function statusStyle(status?: string): React.CSSProperties {
+function statusStyle(status?: string): CSSProperties {
   if (status === "募集中") {
     return {
       background: "#ecfdf3",
@@ -145,6 +158,7 @@ function sortNewestFirst(rows: SelectionEvent[]) {
 export default function SelectionListPage() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<SelectionEvent[]>([]);
+  const [candidates, setCandidates] = useState<SelectionPageCandidate[]>([]);
 
   const [keyword, setKeyword] = useState("");
   const [prefecture, setPrefecture] = useState("all");
@@ -162,10 +176,25 @@ export default function SelectionListPage() {
 
     async function load() {
       setLoading(true);
+
       const rows = await fetchSelectionEvents();
+
+      const { data: candidateRows, error } = await supabase
+        .from("public_selection_page_candidates")
+        .select(
+          "id,prefecture,municipality,query,title,url,score,matched_keywords,created_at"
+        )
+        .order("score", { ascending: false })
+        .limit(1000);
+
       if (!active) return;
 
+      if (error) {
+        console.error("selection candidates load error", error);
+      }
+
       setItems(sortNewestFirst(rows));
+      setCandidates((candidateRows || []) as SelectionPageCandidate[]);
       setLoading(false);
     }
 
@@ -181,24 +210,33 @@ export default function SelectionListPage() {
 
   const prefectures = useMemo(() => {
     return Array.from(
-      new Set(items.map((v) => inferredPrefecture(v)).filter(Boolean).map(String))
+      new Set([
+        ...items.map((v) => inferredPrefecture(v)).filter(Boolean).map(String),
+        ...candidates.map((v) => v.prefecture).filter(Boolean).map(String),
+      ])
     ).sort((a, b) => a.localeCompare(b, "ja"));
-  }, [items]);
+  }, [items, candidates]);
 
   const cities = useMemo(() => {
     return Array.from(
-      new Set(
-        items
+      new Set([
+        ...items
           .filter((v) => {
             const itemPrefecture = inferredPrefecture(v);
             return prefecture === "all" || itemPrefecture === prefecture;
           })
           .map((v) => v.city)
           .filter(Boolean)
-          .map(String)
-      )
+          .map(String),
+
+        ...candidates
+          .filter((v) => prefecture === "all" || v.prefecture === prefecture)
+          .map((v) => v.municipality)
+          .filter(Boolean)
+          .map(String),
+      ])
     ).sort((a, b) => a.localeCompare(b, "ja"));
-  }, [items, prefecture]);
+  }, [items, candidates, prefecture]);
 
   const filteredItems = useMemo(() => {
     const q = keyword.trim().toLowerCase();
@@ -251,6 +289,32 @@ export default function SelectionListPage() {
     category,
     selectedDate,
   ]);
+
+  const filteredCandidates = useMemo(() => {
+    const q = keyword.trim().toLowerCase();
+
+    return candidates.filter((item) => {
+      if (prefecture !== "all" && item.prefecture !== prefecture) return false;
+      if (city !== "all" && item.municipality !== city) return false;
+
+      if (q) {
+        const hay = [
+          item.title,
+          item.prefecture,
+          item.municipality,
+          item.query,
+          item.url,
+          ...(item.matched_keywords ?? []),
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        if (!hay.includes(q)) return false;
+      }
+
+      return true;
+    });
+  }, [candidates, keyword, prefecture, city]);
 
   const selectionItemsByDate = useMemo(() => {
     const map = new Map<string, CalendarItem[]>();
@@ -346,21 +410,15 @@ export default function SelectionListPage() {
             onChange={(e) => setRank(e.target.value as RankFilter)}
             style={select}
           >
-            <option value="all">{rankSelectLabel("all", prefecture)}</option>
-            <option value="j_academy">
-              {rankSelectLabel("j_academy", prefecture)}
-            </option>
-            <option value="pref_top">
-              {rankSelectLabel("pref_top", prefecture)}
-            </option>
-            <option value="pref_2">{rankSelectLabel("pref_2", prefecture)}</option>
-            <option value="pref_3">{rankSelectLabel("pref_3", prefecture)}</option>
-            <option value="pref_4">{rankSelectLabel("pref_4", prefecture)}</option>
-            <option value="district">
-              {rankSelectLabel("district", prefecture)}
-            </option>
-            <option value="school">{rankSelectLabel("school", prefecture)}</option>
-            <option value="girls">{rankSelectLabel("girls", prefecture)}</option>
+            <option value="all">{rankSelectLabel("all")}</option>
+            <option value="j_academy">{rankSelectLabel("j_academy")}</option>
+            <option value="pref_top">{rankSelectLabel("pref_top")}</option>
+            <option value="pref_2">{rankSelectLabel("pref_2")}</option>
+            <option value="pref_3">{rankSelectLabel("pref_3")}</option>
+            <option value="pref_4">{rankSelectLabel("pref_4")}</option>
+            <option value="district">{rankSelectLabel("district")}</option>
+            <option value="school">{rankSelectLabel("school")}</option>
+            <option value="girls">{rankSelectLabel("girls")}</option>
           </select>
 
           <select
@@ -391,7 +449,8 @@ export default function SelectionListPage() {
 
         <div style={filterFooter}>
           <div className="ui-meta">
-            {selectedDateText} / 表示件数：{filteredItems.length}件
+            {selectedDateText} / 確定情報：{filteredItems.length}件 / 候補：
+            {filteredCandidates.length}件
           </div>
 
           <button type="button" className="sh-btn" onClick={clearFilters}>
@@ -426,80 +485,142 @@ export default function SelectionListPage() {
         <div className="ui-card" style={emptyBox}>
           読み込み中…
         </div>
-      ) : filteredItems.length === 0 ? (
-        <div className="ui-card" style={emptyBox}>
-          条件に合うセレクション情報がありません
-        </div>
       ) : (
-        <section style={listWrap}>
-          {filteredItems.map((item) => {
-            const itemPrefecture = inferredPrefecture(item);
-            const itemRank =
-              (item as SelectionEvent & { source_rank?: string }).source_rank || null;
+        <>
+          {filteredItems.length > 0 ? (
+            <section style={listWrap}>
+              <div className="ui-title" style={sectionTitle}>
+                確定セレクション情報
+              </div>
 
-            return (
-              <Link
-                key={item.id}
-                href={`/selection/${item.id}`}
-                style={linkStyle}
-              >
-                <article className="ui-card" style={card}>
-                  <div style={cardTop}>
-                    <span style={rankBadge}>
-                      {rankLabel(itemRank, itemPrefecture || undefined)}
-                    </span>
+              {filteredItems.map((item) => {
+                const itemPrefecture = inferredPrefecture(item);
+                const itemRank =
+                  (item as SelectionEvent & { source_rank?: string }).source_rank ||
+                  null;
 
-                    <span
-                      style={{
-                        ...statusBadge,
-                        ...statusStyle(item.display_status),
-                      }}
-                    >
-                      {item.display_status}
-                    </span>
-                  </div>
-
-                  <h2 style={cardTitle}>{item.title}</h2>
-
-                  <div className="ui-meta" style={orgName}>
-                    {item.organization_name || "団体名未設定"}
-                  </div>
-
-                  {item.target_categories?.length > 0 ? (
-                    <div style={tagWrap}>
-                      {item.target_categories.map((cat) => (
-                        <span key={categoryLabel(cat) || cat} style={tag}>
-                          {categoryLabel(cat) || cat}
+                return (
+                  <Link
+                    key={item.id}
+                    href={`/selection/${item.id}`}
+                    style={linkStyle}
+                  >
+                    <article className="ui-card" style={card}>
+                      <div style={cardTop}>
+                        <span style={rankBadge}>
+                          {rankLabel(itemRank, itemPrefecture || undefined)}
                         </span>
-                      ))}
-                    </div>
-                  ) : null}
 
-                  <div style={infoGrid}>
-                    <div>
-                      <div style={label}>開催日</div>
-                      <div style={value}>{formatDate(item.event_date)}</div>
-                    </div>
-
-                    <div>
-                      <div style={label}>地域</div>
-                      <div style={value}>
-                        {[itemPrefecture, item.city].filter(Boolean).join(" ") ||
-                          "未定"}
+                        <span
+                          style={{
+                            ...statusBadge,
+                            ...statusStyle(item.display_status),
+                          }}
+                        >
+                          {item.display_status}
+                        </span>
                       </div>
+
+                      <h2 style={cardTitle}>{item.title}</h2>
+
+                      <div className="ui-meta" style={orgName}>
+                        {item.organization_name || "団体名未設定"}
+                      </div>
+
+                      {item.target_categories?.length > 0 ? (
+                        <div style={tagWrap}>
+                          {item.target_categories.map((cat) => (
+                            <span key={categoryLabel(cat) || cat} style={tag}>
+                              {categoryLabel(cat) || cat}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <div style={infoGrid}>
+                        <div>
+                          <div style={label}>開催日</div>
+                          <div style={value}>{formatDate(item.event_date)}</div>
+                        </div>
+
+                        <div>
+                          <div style={label}>地域</div>
+                          <div style={value}>
+                            {[itemPrefecture, item.city].filter(Boolean).join(" ") ||
+                              "未定"}
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  </Link>
+                );
+              })}
+            </section>
+          ) : null}
+
+          {filteredCandidates.length > 0 ? (
+            <section style={listWrap}>
+              <div className="ui-title" style={sectionTitle}>
+                募集・セレクション候補ページ
+              </div>
+
+              {filteredCandidates.map((item) => (
+                <a
+                  key={item.id}
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={linkStyle}
+                >
+                  <article className="ui-card" style={card}>
+                    <div style={cardTop}>
+                      <span style={rankBadge}>候補</span>
+                      <span style={candidateScoreBadge}>
+                        score: {item.score ?? 0}
+                      </span>
                     </div>
-                  </div>
-                </article>
-              </Link>
-            );
-          })}
-        </section>
+
+                    <h2 style={cardTitle}>{item.title || item.url}</h2>
+
+                    <div className="ui-meta" style={orgName}>
+                      {[item.prefecture, item.municipality]
+                        .filter(Boolean)
+                        .join(" ") || "地域未設定"}
+                    </div>
+
+                    {item.query ? (
+                      <div className="ui-meta" style={queryText}>
+                        検索語：{item.query}
+                      </div>
+                    ) : null}
+
+                    {item.matched_keywords?.length ? (
+                      <div style={tagWrap}>
+                        {item.matched_keywords.map((kw) => (
+                          <span key={`${item.id}-${kw}`} style={tag}>
+                            {kw}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </article>
+                </a>
+              ))}
+            </section>
+          ) : null}
+
+          {filteredItems.length === 0 && filteredCandidates.length === 0 ? (
+            <div className="ui-card" style={emptyBox}>
+              条件に合うセレクション情報がありません
+            </div>
+          ) : null}
+        </>
       )}
     </main>
   );
 }
 
-const wrap: React.CSSProperties = {
+const wrap: CSSProperties = {
   padding: 16,
   maxWidth: 900,
   margin: "0 auto",
@@ -507,23 +628,23 @@ const wrap: React.CSSProperties = {
   gap: 12,
 };
 
-const topBar: React.CSSProperties = {
+const topBar: CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 12,
 };
 
-const pageTitle: React.CSSProperties = {
+const pageTitle: CSSProperties = {
   fontSize: 22,
   fontWeight: 900,
   color: "#16391f",
 };
 
-const searchBox: React.CSSProperties = {
+const searchBox: CSSProperties = {
   padding: 14,
 };
 
-const searchHeader: React.CSSProperties = {
+const searchHeader: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
@@ -532,11 +653,16 @@ const searchHeader: React.CSSProperties = {
   marginBottom: 10,
 };
 
-const searchTitle: React.CSSProperties = {
+const searchTitle: CSSProperties = {
   fontSize: 18,
 };
 
-const input: React.CSSProperties = {
+const sectionTitle: CSSProperties = {
+  fontSize: 18,
+  marginTop: 8,
+};
+
+const input: CSSProperties = {
   width: "100%",
   boxSizing: "border-box",
   padding: "12px 12px",
@@ -547,14 +673,14 @@ const input: React.CSSProperties = {
   background: "#fff",
 };
 
-const filterGrid: React.CSSProperties = {
+const filterGrid: CSSProperties = {
   marginTop: 10,
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
   gap: 8,
 };
 
-const select: React.CSSProperties = {
+const select: CSSProperties = {
   width: "100%",
   boxSizing: "border-box",
   padding: "11px 10px",
@@ -564,7 +690,7 @@ const select: React.CSSProperties = {
   fontSize: 14,
 };
 
-const filterFooter: React.CSSProperties = {
+const filterFooter: CSSProperties = {
   marginTop: 10,
   display: "flex",
   justifyContent: "space-between",
@@ -573,43 +699,43 @@ const filterFooter: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
-const calendarBox: React.CSSProperties = {
+const calendarBox: CSSProperties = {
   padding: 14,
 };
 
-const calendarTitle: React.CSSProperties = {
+const calendarTitle: CSSProperties = {
   fontSize: 18,
   fontWeight: 900,
   color: "#16391f",
 };
 
-const calendarHint: React.CSSProperties = {
+const calendarHint: CSSProperties = {
   marginTop: 4,
   marginBottom: 10,
 };
 
-const listWrap: React.CSSProperties = {
+const listWrap: CSSProperties = {
   display: "grid",
   gap: 10,
 };
 
-const linkStyle: React.CSSProperties = {
+const linkStyle: CSSProperties = {
   textDecoration: "none",
   color: "inherit",
 };
 
-const card: React.CSSProperties = {
+const card: CSSProperties = {
   padding: 14,
 };
 
-const cardTop: React.CSSProperties = {
+const cardTop: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   gap: 8,
   alignItems: "center",
 };
 
-const rankBadge: React.CSSProperties = {
+const rankBadge: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   minHeight: 26,
@@ -622,7 +748,7 @@ const rankBadge: React.CSSProperties = {
   fontWeight: 900,
 };
 
-const statusBadge: React.CSSProperties = {
+const statusBadge: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   minHeight: 26,
@@ -632,44 +758,55 @@ const statusBadge: React.CSSProperties = {
   fontWeight: 900,
 };
 
-const cardTitle: React.CSSProperties = {
+const candidateScoreBadge: CSSProperties = {
+  ...statusBadge,
+  background: "#eef2ff",
+  color: "#3730a3",
+  border: "1px solid #c7d2fe",
+};
+
+const cardTitle: CSSProperties = {
   margin: "10px 0 0",
   fontSize: 18,
   lineHeight: 1.45,
   color: "#111827",
 };
 
-const orgName: React.CSSProperties = {
+const orgName: CSSProperties = {
   marginTop: 6,
 };
 
-const infoGrid: React.CSSProperties = {
+const queryText: CSSProperties = {
+  marginTop: 4,
+};
+
+const infoGrid: CSSProperties = {
   marginTop: 12,
   display: "grid",
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 10,
 };
 
-const label: React.CSSProperties = {
+const label: CSSProperties = {
   fontSize: 12,
   color: "#6b7280",
   marginBottom: 3,
 };
 
-const value: React.CSSProperties = {
+const value: CSSProperties = {
   fontSize: 14,
   fontWeight: 800,
   color: "#1f2937",
 };
 
-const tagWrap: React.CSSProperties = {
+const tagWrap: CSSProperties = {
   marginTop: 12,
   display: "flex",
   flexWrap: "wrap",
   gap: 6,
 };
 
-const tag: React.CSSProperties = {
+const tag: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   minHeight: 26,
@@ -681,7 +818,7 @@ const tag: React.CSSProperties = {
   fontWeight: 700,
 };
 
-const emptyBox: React.CSSProperties = {
+const emptyBox: CSSProperties = {
   padding: 22,
   textAlign: "center",
 };
