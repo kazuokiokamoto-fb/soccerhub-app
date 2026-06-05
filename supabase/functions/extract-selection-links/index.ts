@@ -210,6 +210,18 @@ function scoreLink(item: { title: string; url: string; context: string }) {
     };
   }
 
+  const directText = `${item.title} ${item.url}`.toLowerCase();
+  const directSoccerMatched = matchedFrom(directText, SOCCER_WORDS);
+
+  if (directSoccerMatched.length === 0 && !soccerDomain) {
+    return {
+      ok: false,
+      score: 0,
+      matched,
+      reason: "no_direct_soccer_word",
+    };
+  }
+
   if (soccerMatched.length === 0 && !soccerDomain) {
     return {
       ok: false,
