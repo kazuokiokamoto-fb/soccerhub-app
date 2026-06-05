@@ -14,6 +14,7 @@ const TARGET_SOURCE_TYPES = [
 ];
 
 const BAD_DOMAINS = [
+  "instagram.com",
   "jmty.jp",
   "labola.jp",
   "net-menber.com",
@@ -283,10 +284,25 @@ function extractCategories(text: string) {
 }
 
 function extractGender(text: string) {
-  const t = String(text || "");
-  if (t.includes("女子") || t.includes("レディース") || t.toLowerCase().includes("women")) return "female";
-  if (t.includes("男子")) return "male";
-  return "mixed";
+  const t = String(text || "").toLowerCase();
+
+  if (
+    t.includes("女子") ||
+    t.includes("レディース") ||
+    t.includes("women") ||
+    t.includes("girls")
+  ) {
+    return "girls";
+  }
+
+  if (
+    t.includes("男子") ||
+    t.includes("boys")
+  ) {
+    return "boys";
+  }
+
+  return "any";
 }
 
 function displayStatus(eventDate: string | null, deadline: string | null, text: string) {
@@ -346,7 +362,29 @@ async function claimCandidates(limit: number) {
 
   return (data || []).filter((row) => {
     if (!row?.url) return false;
+
     if (isBadDomain(row.url)) return false;
+
+    const title = String(row.title || "");
+    const url = String(row.url || "").toLowerCase();
+
+    if (
+      title.includes("お問い合わせ") ||
+      title.includes("contact") ||
+      title.includes("Instagram") ||
+      title.includes("インスタ")
+    ) {
+      return false;
+    }
+
+    if (
+      url.includes("/contact") ||
+      url.includes("/inquiry") ||
+      url.includes("/toiawase")
+    ) {
+      return false;
+    }
+
     return true;
   });
 }
