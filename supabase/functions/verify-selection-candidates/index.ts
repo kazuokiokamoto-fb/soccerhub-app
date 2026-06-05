@@ -398,6 +398,8 @@ async function fetchHtml(url: string) {
 }
 
 async function claimCandidates(limit: number) {
+  const fetchLimit = Math.max(limit * 20, 50);
+
   const { data, error } = await supabase
     .from("selection_page_candidates")
     .select("*")
@@ -405,47 +407,49 @@ async function claimCandidates(limit: number) {
     .gte("score", 100)
     .or("verified_status.is.null,verified_status.eq.pending,verified_status.eq.unchecked")
     .order("score", { ascending: false })
-    .limit(limit);
+    .limit(fetchLimit);
 
   if (error) throw error;
 
-  return (data || []).filter((row) => {
-    if (!row?.url) return false;
+  return (data || [])
+    .filter((row) => {
+      if (!row?.url) return false;
 
-    if (isBadDomain(row.url)) return false;
+      if (isBadDomain(row.url)) return false;
 
-    const title = String(row.title || "");
-    const lowerTitle = title.toLowerCase();
-    const url = String(row.url || "").toLowerCase();
+      const title = String(row.title || "");
+      const lowerTitle = title.toLowerCase();
+      const url = String(row.url || "").toLowerCase();
 
-    if (
-      title.includes("お問い合わせ") ||
-      title.includes("問合せ") ||
-      title.includes("問い合わせ") ||
-      lowerTitle.includes("contact") ||
-      title.includes("Instagram") ||
-      title.includes("インスタ") ||
-      title.includes("Facebook") ||
-      title.includes("公式サイト") ||
-      title.includes("オフィシャルサイト") ||
-      title.includes("公式Web") ||
-      title.endsWith("HP")
-    ) {
-      return false;
-    }
+      if (
+        title.includes("お問い合わせ") ||
+        title.includes("問合せ") ||
+        title.includes("問い合わせ") ||
+        lowerTitle.includes("contact") ||
+        title.includes("Instagram") ||
+        title.includes("インスタ") ||
+        title.includes("Facebook") ||
+        title.includes("公式サイト") ||
+        title.includes("オフィシャルサイト") ||
+        title.includes("公式Web") ||
+        title.endsWith("HP")
+      ) {
+        return false;
+      }
 
-    if (
-      url.includes("/contact") ||
-      url.includes("/inquiry") ||
-      url.includes("/toiawase")
-    ) {
-      return false;
-    }
+      if (
+        url.includes("/contact") ||
+        url.includes("/inquiry") ||
+        url.includes("/toiawase")
+      ) {
+        return false;
+      }
 
-    if (isLikelyTopPage(row.url)) return false;
+      if (isLikelyTopPage(row.url)) return false;
 
-    return true;
-  });
+      return true;
+    })
+    .slice(0, limit);
 }
 
 async function upsertEvent(candidate: any, html: string) {
