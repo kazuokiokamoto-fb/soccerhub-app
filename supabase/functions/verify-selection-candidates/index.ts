@@ -56,6 +56,20 @@ const STRONG_WORDS = [
   "募集",
 ];
 
+const EVENT_PAGE_WORDS = [
+  "セレクション",
+  "選考会",
+  "体験練習会",
+  "体験会",
+  "練習会",
+  "練習参加",
+  "練習体験",
+  "選手募集",
+  "新入団",
+  "入団",
+  "入部",
+];
+
 const SOCCER_WORDS = [
   "サッカー",
   "soccer",
@@ -130,6 +144,19 @@ function hostOf(url: string) {
   } catch {
     return "";
   }
+}
+
+function pathOf(url: string) {
+  try {
+    return new URL(url).pathname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isLikelyTopPage(url: string) {
+  const p = pathOf(url);
+  return p === "/" || p === "" || p === "/index.html" || p === "/index.htm" || p === "/index";
 }
 
 function includesAny(text: string, words: string[]) {
@@ -209,7 +236,12 @@ function extractDates(text: string) {
     let y = baseYear;
     let d = validDate(y, month, day);
 
-    if (d && d.getTime() < new Date(currentYear, now.getMonth(), now.getDate()).getTime() - 1000 * 60 * 60 * 24 * 60) {
+    if (
+      d &&
+      d.getTime() <
+        new Date(currentYear, now.getMonth(), now.getDate()).getTime() -
+          1000 * 60 * 60 * 24 * 60
+    ) {
       d = validDate(y + 1, month, day);
     }
 
@@ -295,10 +327,7 @@ function extractGender(text: string) {
     return "girls";
   }
 
-  if (
-    t.includes("男子") ||
-    t.includes("boys")
-  ) {
+  if (t.includes("男子") || t.includes("boys")) {
     return "boys";
   }
 
@@ -308,7 +337,11 @@ function extractGender(text: string) {
 function displayStatus(eventDate: string | null, deadline: string | null, text: string) {
   const today = toDateString(new Date())!;
 
-  if (text.includes("募集終了") || text.includes("受付終了") || text.includes("締め切りました")) {
+  if (
+    text.includes("募集終了") ||
+    text.includes("受付終了") ||
+    text.includes("締め切りました")
+  ) {
     return "申込終了";
   }
 
@@ -329,20 +362,36 @@ async function fetchHtml(url: string) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
 
+  const headers = {
+    "user-agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+    "accept":
+      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "accept-language": "ja,en-US;q=0.9,en;q=0.8",
+  };
+
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: {
-        "user-agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
-        "accept":
-          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "accept-language": "ja,en-US;q=0.9,en;q=0.8",
-      },
+      headers,
     });
 
-    if (!res.ok) throw new Error(`fetch failed ${res.status}`);
-    return await res.text();
+    if (res.ok) return await res.text();
+
+    if (url.startsWith("http://")) {
+      const httpsUrl = url.replace("http://", "https://");
+
+      const retry = await fetch(httpsUrl, {
+        signal: controller.signal,
+        headers,
+      });
+
+      if (retry.ok) return await retry.text();
+
+      throw new Error(`fetch failed ${res.status}, retry https failed ${retry.status}`);
+    }
+
+    throw new Error(`fetch failed ${res.status}`);
   } finally {
     clearTimeout(timer);
   }
@@ -366,13 +415,21 @@ async function claimCandidates(limit: number) {
     if (isBadDomain(row.url)) return false;
 
     const title = String(row.title || "");
+    const lowerTitle = title.toLowerCase();
     const url = String(row.url || "").toLowerCase();
 
     if (
       title.includes("お問い合わせ") ||
-      title.includes("contact") ||
+      title.includes("問合せ") ||
+      title.includes("問い合わせ") ||
+      lowerTitle.includes("contact") ||
       title.includes("Instagram") ||
-      title.includes("インスタ")
+      title.includes("インスタ") ||
+      title.includes("Facebook") ||
+      title.includes("公式サイト") ||
+      title.includes("オフィシャルサイト") ||
+      title.includes("公式Web") ||
+      title.endsWith("HP")
     ) {
       return false;
     }
@@ -385,6 +442,8 @@ async function claimCandidates(limit: number) {
       return false;
     }
 
+    if (isLikelyTopPage(row.url)) return false;
+
     return true;
   });
 }
@@ -393,6 +452,26 @@ async function upsertEvent(candidate: any, html: string) {
   const pageText = stripTags(html);
   const title = getTitle(html, candidate.title || "");
   const fullText = compactText(`${title} ${candidate.title || ""} ${candidate.snippet || ""} ${pageText}`, 30000);
+
+  if (!includesAny(fullText, EVENT_PAGE_WORDS)) {
+    await supabase
+      .from("selection_page_candidates")
+      .update({
+        verified_status: "rejected",
+        verified_score: Number(candidate.score || 0),
+        verified_reason: "no_event_page_word",
+        checked_at: nowIso(),
+        page_text: pageText.slice(0, 15000),
+        updated_at: nowIso(),
+      })
+      .eq("id", candidate.id);
+
+    return {
+      status: "rejected",
+      reason: "no_event_page_word",
+      verifiedScore: Number(candidate.score || 0),
+    };
+  }
 
   const strong = matchedWords(fullText, STRONG_WORDS);
   const soccer = matchedWords(fullText, SOCCER_WORDS);
@@ -466,7 +545,7 @@ async function upsertEvent(candidate: any, html: string) {
     updated_at: nowIso(),
     source_type: "verified_candidate",
     pdf_url: null,
-    instagram_url: candidate.url.includes("instagram.com") ? candidate.url : null,
+    instagram_url: null,
     external_url: candidate.url,
     extraction_status: "verified",
     extraction_error: null,
