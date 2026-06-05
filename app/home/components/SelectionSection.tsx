@@ -6,7 +6,14 @@ import { useEffect, useState } from "react";
 import { fetchSelectionEvents } from "@/app/lib/selections";
 import type { SelectionEvent } from "@/app/types/selection";
 
-export function SelectionSection() {
+type SelectionSectionProps = {
+  eventCount?: number;
+  candidateCount?: number;
+};
+
+export function SelectionSection(props: SelectionSectionProps) {
+  const { eventCount, candidateCount } = props;
+
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<SelectionEvent[]>([]);
   const [errorText, setErrorText] = useState("");
@@ -15,6 +22,12 @@ export function SelectionSection() {
     let active = true;
 
     async function load() {
+      // HomeCalendar 側から件数を渡している場合は、ここでは再取得しない
+      if (typeof eventCount === "number") {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setErrorText("");
 
@@ -43,7 +56,15 @@ export function SelectionSection() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [eventCount]);
+
+  const fixedCount =
+    typeof eventCount === "number" ? eventCount : items.length;
+
+  const candidateTotal =
+    typeof candidateCount === "number" ? candidateCount : 0;
+
+  const totalCount = fixedCount + candidateTotal;
 
   return (
     <Link href="/selection" style={sectionLink}>
@@ -59,13 +80,14 @@ export function SelectionSection() {
         <div style={summaryInnerCompactBox} className="ui-card-soft">
           <div>
             <div style={summaryCountLineCompact} className="ui-title">
-              掲載件数：{loading ? "読み込み中…" : `${items.length}件`}
+              掲載件数：
+              {loading ? "読み込み中…" : `${totalCount.toLocaleString()}件`}
             </div>
 
             <div style={summarySubTight} className="ui-meta">
               {errorText
                 ? `取得エラー：${errorText}`
-                : "J下部組織・強豪チーム・スクール等"}
+                : `確定情報 ${fixedCount.toLocaleString()}件 / 候補 ${candidateTotal.toLocaleString()}件`}
             </div>
           </div>
         </div>

@@ -10,10 +10,7 @@ import { categoryLabel } from "@/app/lib/categories";
 import { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
 import { useMatchData } from "@/app/match/hooks/useMatchData";
 
-import {
-  startOfMonth,
-  ymdToday,
-} from "@/app/match/utils/date";
+import { startOfMonth, ymdToday } from "@/app/match/utils/date";
 import { matchesSlotFilters } from "@/app/match/utils/filters";
 
 import type { StrengthRank } from "@/app/components/StrengthRankPicker";
@@ -222,10 +219,9 @@ function formatScheduleDate(ymd: string) {
   return `${m}/${d}`;
 }
 
-export default function HomeCalendar(props: {
-  initialPanelMode?: PanelMode;
-}) {
+export default function HomeCalendar(props: { initialPanelMode?: PanelMode }) {
   const { initialPanelMode = "none" } = props;
+  void initialPanelMode;
 
   const { user, loading: authLoading } = useAuth();
   const authUserId = user?.id ?? "";
@@ -238,6 +234,9 @@ export default function HomeCalendar(props: {
     MyScheduleItem[]
   >([]);
   const [myScheduleLoading, setMyScheduleLoading] = useState(false);
+
+  const [selectionEventCount, setSelectionEventCount] = useState(0);
+  const [selectionCandidateCount, setSelectionCandidateCount] = useState(0);
 
   const { filters } = useMatchFilters();
 
@@ -260,13 +259,56 @@ export default function HomeCalendar(props: {
   });
 
   const loading = loadingBase || loadingMonth;
+  void loading;
+
   const currentUserId = authUserId || meId;
+  void currentUserId;
 
   const myTeamIds = useMemo(() => myTeams.map((t: any) => t.id), [myTeams]);
 
   const teamMap = useMemo(() => {
     return new Map(allTeams.map((t) => [t.id, t]));
   }, [allTeams]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadSelectionCounts() {
+      try {
+        const { count: eventCount, error: eventError } = await supabase
+          .from("selection_events")
+          .select("id", { count: "exact", head: true });
+
+        if (eventError) {
+          console.error("selection event count error:", eventError);
+        }
+
+        const { count: candidateCount, error: candidateError } = await supabase
+          .from("public_selection_page_candidates")
+          .select("id", { count: "exact", head: true });
+
+        if (candidateError) {
+          console.error("selection candidate count error:", candidateError);
+        }
+
+        if (!active) return;
+
+        setSelectionEventCount(eventCount ?? 0);
+        setSelectionCandidateCount(candidateCount ?? 0);
+      } catch (e) {
+        console.error("loadSelectionCounts catch:", e);
+        if (!active) return;
+        setSelectionEventCount(0);
+        setSelectionCandidateCount(0);
+      }
+    }
+
+    void loadSelectionCounts();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const hasAnyActiveFilter = useMemo(() => {
     return (
@@ -290,6 +332,7 @@ export default function HomeCalendar(props: {
       matchesSlotFilters(s, teamMap as any, filters)
     );
   }, [slotsInMonth, teamMap, filters, hasAnyActiveFilter]);
+  void filteredSlotsInMonth;
 
   const filteredTeams = useMemo(() => {
     if (!hasAnyActiveFilter) return allTeams;
@@ -495,12 +538,12 @@ export default function HomeCalendar(props: {
       <Link href="/match/my-schedule" style={sectionLink}>
         <section style={summaryBoxClickable} className="ui-card">
           <div style={summaryCardTop}>
-          <div style={summaryDateText} className="ui-title">
-            マイスケジュール
-          </div>
+            <div style={summaryDateText} className="ui-title">
+              マイスケジュール
+            </div>
 
-          <span style={sectionCtaSmall}>予定一覧</span>
-        </div>
+            <span style={sectionCtaSmall}>予定一覧</span>
+          </div>
 
           <div style={summaryInnerCompactBox} className="ui-card-soft">
             {myScheduleLoading ? (
@@ -567,7 +610,10 @@ export default function HomeCalendar(props: {
         </section>
       </Link>
 
-      <SelectionSection />
+      <SelectionSection
+        eventCount={selectionEventCount}
+        candidateCount={selectionCandidateCount}
+      />
 
       <MatchHelpModals
         showStrengthHelp={showStrengthHelp}
@@ -632,13 +678,6 @@ const summaryInnerCompactBox: React.CSSProperties = {
   gap: 10,
 };
 
-const summaryActionRowCompact: React.CSSProperties = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-  justifyContent: "flex-end",
-};
-
 const summaryCountLineCompact: React.CSSProperties = {
   fontSize: 15,
   lineHeight: 1.5,
@@ -692,18 +731,6 @@ const scheduleRoleBadge: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 900,
   border: "1px solid #dce9df",
-};
-
-const sectionCta: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  minHeight: 40,
-  padding: "0 16px",
-  borderRadius: 999,
-  background: "#0f7a35",
-  color: "#fff",
-  fontSize: 14,
-  fontWeight: 900,
 };
 
 const sectionCtaSmall: React.CSSProperties = {

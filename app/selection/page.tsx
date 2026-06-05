@@ -185,7 +185,7 @@ export default function SelectionListPage() {
           "id,prefecture,municipality,query,title,url,score,matched_keywords,created_at"
         )
         .order("score", { ascending: false })
-        .limit(1000);
+        .limit(10000);
 
       if (!active) return;
 
