@@ -435,7 +435,7 @@ async function upsertEvent(candidate: any, html: string) {
     crawl_page_id: null,
     title: title || candidate.title || "セレクション情報",
     organization_name: candidate.title || title || null,
-    organization_type: "candidate",
+    organization_type: "club_team",
     target_categories: categories,
     gender,
     prefecture: candidate.prefecture || null,
