@@ -265,21 +265,8 @@ function scoreLink(item: { title: string; url: string; context: string }) {
   const actionMatched = matchedFrom(text, ACTION_WORDS);
   const soccerMatched = matchedFrom(text, SOCCER_WORDS);
 
-  const soccerDomain = hasStrongSoccerDomain(item.url);
-
   if (actionMatched.length === 0) {
     return { ok: false, score: 0, matched, reason: "no_action_word" };
-  }
-
-  const directText = `${item.title} ${item.url}`.toLowerCase();
-  const directSoccerMatched = matchedFrom(directText, SOCCER_WORDS);
-
-  if (directSoccerMatched.length === 0 && !soccerDomain) {
-    return { ok: false, score: 0, matched, reason: "no_direct_soccer_word" };
-  }
-
-  if (soccerMatched.length === 0 && !soccerDomain) {
-    return { ok: false, score: 0, matched, reason: "no_soccer_word" };
   }
 
   let score = matched.length * 10;
@@ -294,9 +281,11 @@ function scoreLink(item: { title: string; url: string; context: string }) {
   if (text.includes("ジュニアユース")) score += 10;
   if (text.includes("u-15") || text.includes("u15")) score += 8;
   if (text.includes("u-18") || text.includes("u18")) score += 8;
+
   if (text.includes("サッカー")) score += 10;
   if (text.includes("football")) score += 8;
   if (text.includes("soccer")) score += 8;
+  if (soccerMatched.length > 0) score += soccerMatched.length * 3;
 
   score += getFreshnessPenalty(text);
 
@@ -308,12 +297,13 @@ function scoreLink(item: { title: string; url: string; context: string }) {
   if (h.includes("instagram.com")) score += 5;
   if (h.includes("sgrum.com")) score += 10;
   if (h.includes("footballnavi.jp")) score += 10;
+  if (hasStrongSoccerDomain(item.url)) score += 10;
 
   return {
-    ok: score >= 30,
+    ok: score >= 25,
     score,
     matched,
-    reason: score >= 30 ? null : "low_score_or_old_info",
+    reason: score >= 25 ? null : "low_score_or_old_info",
   };
 }
 
@@ -478,7 +468,7 @@ serve(async (req) => {
 
     return json({
       ok: true,
-      mode: "extract-selection-links-date-aware",
+      mode: "extract-selection-links-loose-first-pass",
       claimed: parents.length,
       results,
     });
