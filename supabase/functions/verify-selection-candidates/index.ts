@@ -15,6 +15,7 @@ const TARGET_SOURCE_TYPES = [
 
 const BAD_DOMAINS = [
   "instagram.com",
+  "junior-soccer.jp",
   "jmty.jp",
   "labola.jp",
   "net-menber.com",
@@ -542,7 +543,7 @@ async function upsertEvent(candidate: any, html: string) {
     fetched_at: nowIso(),
     raw_text: pageText.slice(0, 20000),
     content_hash: hash,
-    status: "active",
+    status: "published",
     display_status: statusText,
     is_featured: false,
     last_seen_at: nowIso(),
