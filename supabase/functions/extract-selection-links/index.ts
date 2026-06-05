@@ -192,6 +192,72 @@ function hasStrongSoccerDomain(url: string) {
   return STRONG_SOCCER_DOMAINS.some((d) => h.includes(d));
 }
 
+function getFreshnessPenalty(text: string) {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  let penalty = 0;
+
+  const fiscalYearMatches = text.match(/20\d{2}年度/g) || [];
+  const fiscalYears = fiscalYearMatches
+    .map((v) => Number(v.replace("年度", "")))
+    .filter(Boolean);
+
+  if (fiscalYears.length > 0) {
+    const maxFiscalYear = Math.max(...fiscalYears);
+
+    if (maxFiscalYear < currentYear) {
+      penalty -= Math.min((currentYear - maxFiscalYear) * 40, 160);
+    }
+
+    if (maxFiscalYear > currentYear) {
+      penalty += 20;
+    }
+  }
+
+  if (text.includes("昨年度")) penalty -= 80;
+  if (text.includes("募集終了")) penalty -= 80;
+  if (text.includes("受付終了")) penalty -= 80;
+  if (text.includes("終了しました")) penalty -= 80;
+  if (text.includes("締め切りました")) penalty -= 80;
+
+  const dated: Date[] = [];
+
+  const jpDateRe = /(20\d{2})年\s*(\d{1,2})月\s*(\d{1,2})日/g;
+  let m;
+  while ((m = jpDateRe.exec(text)) !== null) {
+    dated.push(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  }
+
+  const slashDateRe = /(20\d{2})[\/.-](\d{1,2})[\/.-](\d{1,2})/g;
+  while ((m = slashDateRe.exec(text)) !== null) {
+    dated.push(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  }
+
+  const shortDateRe = /(\d{1,2})[\/月](\d{1,2})(?:日)?/g;
+  while ((m = shortDateRe.exec(text)) !== null) {
+    const month = Number(m[1]);
+    const day = Number(m[2]);
+
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      dated.push(new Date(currentYear, month - 1, day));
+    }
+  }
+
+  if (dated.length > 0) {
+    const today = new Date(currentYear, now.getMonth(), now.getDate());
+    const maxDate = new Date(Math.max(...dated.map((d) => d.getTime())));
+
+    if (maxDate < today) {
+      penalty -= 60;
+    } else {
+      penalty += 20;
+    }
+  }
+
+  return penalty;
+}
+
 function scoreLink(item: { title: string; url: string; context: string }) {
   const text = `${item.title} ${item.url} ${item.context}`.toLowerCase();
 
@@ -202,33 +268,18 @@ function scoreLink(item: { title: string; url: string; context: string }) {
   const soccerDomain = hasStrongSoccerDomain(item.url);
 
   if (actionMatched.length === 0) {
-    return {
-      ok: false,
-      score: 0,
-      matched,
-      reason: "no_action_word",
-    };
+    return { ok: false, score: 0, matched, reason: "no_action_word" };
   }
 
   const directText = `${item.title} ${item.url}`.toLowerCase();
   const directSoccerMatched = matchedFrom(directText, SOCCER_WORDS);
 
   if (directSoccerMatched.length === 0 && !soccerDomain) {
-    return {
-      ok: false,
-      score: 0,
-      matched,
-      reason: "no_direct_soccer_word",
-    };
+    return { ok: false, score: 0, matched, reason: "no_direct_soccer_word" };
   }
 
   if (soccerMatched.length === 0 && !soccerDomain) {
-    return {
-      ok: false,
-      score: 0,
-      matched,
-      reason: "no_soccer_word",
-    };
+    return { ok: false, score: 0, matched, reason: "no_soccer_word" };
   }
 
   let score = matched.length * 10;
@@ -247,6 +298,8 @@ function scoreLink(item: { title: string; url: string; context: string }) {
   if (text.includes("football")) score += 8;
   if (text.includes("soccer")) score += 8;
 
+  score += getFreshnessPenalty(text);
+
   const h = hostOf(item.url);
 
   if (h.includes("juniorsoccer-news.com")) score -= 20;
@@ -260,7 +313,7 @@ function scoreLink(item: { title: string; url: string; context: string }) {
     ok: score >= 30,
     score,
     matched,
-    reason: score >= 30 ? null : "low_score",
+    reason: score >= 30 ? null : "low_score_or_old_info",
   };
 }
 
@@ -269,7 +322,8 @@ async function fetchHtml(url: string) {
     headers: {
       "user-agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
-      "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "accept":
+        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "accept-language": "ja,en-US;q=0.9,en;q=0.8",
     },
   });
@@ -301,9 +355,7 @@ function extractLinks(html: string, baseUrl: string) {
 
     const judged = scoreLink({ title, url, context });
 
-    if (!judged.ok) {
-      continue;
-    }
+    if (!judged.ok) continue;
 
     seen.add(url);
 
@@ -426,7 +478,7 @@ serve(async (req) => {
 
     return json({
       ok: true,
-      mode: "extract-selection-links-refined",
+      mode: "extract-selection-links-date-aware",
       claimed: parents.length,
       results,
     });
