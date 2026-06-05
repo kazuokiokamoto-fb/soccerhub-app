@@ -155,6 +155,33 @@ function sortNewestFirst(rows: SelectionEvent[]) {
   });
 }
 
+async function fetchAllSelectionCandidates() {
+  const pageSize = 1000;
+  let from = 0;
+  const all: SelectionPageCandidate[] = [];
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("public_selection_page_candidates")
+      .select(
+        "id,prefecture,municipality,query,title,url,score,matched_keywords,created_at"
+      )
+      .order("score", { ascending: false })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+
+    const rows = (data || []) as SelectionPageCandidate[];
+    all.push(...rows);
+
+    if (rows.length < pageSize) break;
+
+    from += pageSize;
+  }
+
+  return all;
+}
+
 export default function SelectionListPage() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<SelectionEvent[]>([]);
@@ -177,25 +204,29 @@ export default function SelectionListPage() {
     async function load() {
       setLoading(true);
 
-      const rows = await fetchSelectionEvents();
+      try {
+        const rows = await fetchSelectionEvents();
 
-      const { data: candidateRows, error } = await supabase
-        .from("public_selection_page_candidates")
-        .select(
-          "id,prefecture,municipality,query,title,url,score,matched_keywords,created_at"
-        )
-        .order("score", { ascending: false })
-        .limit(10000);
+        let candidateRows: SelectionPageCandidate[] = [];
 
-      if (!active) return;
+        try {
+          candidateRows = await fetchAllSelectionCandidates();
+        } catch (error) {
+          console.error("selection candidates load error", error);
+        }
 
-      if (error) {
-        console.error("selection candidates load error", error);
+        if (!active) return;
+
+        setItems(sortNewestFirst(rows));
+        setCandidates(candidateRows);
+      } catch (e) {
+        console.error("selection page load error", e);
+        if (!active) return;
+        setItems([]);
+        setCandidates([]);
+      } finally {
+        if (active) setLoading(false);
       }
-
-      setItems(sortNewestFirst(rows));
-      setCandidates((candidateRows || []) as SelectionPageCandidate[]);
-      setLoading(false);
     }
 
     void load();
