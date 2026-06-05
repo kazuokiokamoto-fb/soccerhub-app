@@ -509,23 +509,49 @@ async function runOne(parent: any) {
 serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
-    const limit = Math.min(Number(body.limit || 3), 10);
 
-    const parents = await claimSummaryPages(limit);
+    const batchSize = Math.min(Number(body.batchSize || body.limit || 20), 30);
+    const maxBatches = Math.min(Number(body.maxBatches || 20), 50);
+
+    let totalClaimed = 0;
+    let totalInserted = 0;
+    let totalSkipped = 0;
+    let batches = 0;
 
     const results = [];
 
-    for (const parent of parents) {
-      const r = await runOne(parent);
-      results.push(r);
-      await new Promise((resolve) => setTimeout(resolve, 800));
+    for (let i = 0; i < maxBatches; i++) {
+      const parents = await claimSummaryPages(batchSize);
+
+      if (!parents.length) {
+        break;
+      }
+
+      batches++;
+      totalClaimed += parents.length;
+
+      for (const parent of parents) {
+        const r = await runOne(parent);
+        results.push(r);
+
+        totalInserted += Number(r.inserted || 0);
+        totalSkipped += Number(r.skipped || 0);
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
     }
 
     return json({
       ok: true,
-      mode: "extract-selection-links-all-ages",
-      claimed: parents.length,
-      results,
+      mode: "extract-selection-links-all-ages-loop",
+      finished: batches < maxBatches,
+      batchSize,
+      maxBatches,
+      batches,
+      totalClaimed,
+      totalInserted,
+      totalSkipped,
+      results: results.slice(-30),
     });
   } catch (e) {
     return json(
