@@ -15,6 +15,7 @@ const TARGET_SOURCE_TYPES = [
 
 const BAD_DOMAINS = [
   "instagram.com",
+  "facebook.com",
   "junior-soccer.jp",
   "jmty.jp",
   "labola.jp",
@@ -196,6 +197,12 @@ function toDateString(d: Date | null) {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function isPastDate(date: string | null) {
+  if (!date) return false;
+  const today = toDateString(new Date())!;
+  return date < today;
 }
 
 function validDate(y: number, m: number, d: number) {
@@ -415,7 +422,6 @@ async function claimCandidates(limit: number) {
   return (data || [])
     .filter((row) => {
       if (!row?.url) return false;
-
       if (isBadDomain(row.url)) return false;
 
       const title = String(row.title || "");
@@ -508,6 +514,28 @@ async function upsertEvent(candidate: any, html: string) {
   }
 
   const eventDate = extractEventDate(fullText);
+
+  if (isPastDate(eventDate)) {
+    await supabase
+      .from("selection_page_candidates")
+      .update({
+        verified_status: "rejected",
+        verified_score: verifiedScore,
+        verified_reason: `past_event_date:${eventDate}`,
+        checked_at: nowIso(),
+        page_text: pageText.slice(0, 15000),
+        updated_at: nowIso(),
+      })
+      .eq("id", candidate.id);
+
+    return {
+      status: "rejected",
+      reason: `past_event_date:${eventDate}`,
+      verifiedScore,
+      eventDate,
+    };
+  }
+
   const deadline = extractDeadline(fullText);
   const categories = extractCategories(fullText);
   const gender = extractGender(fullText);
