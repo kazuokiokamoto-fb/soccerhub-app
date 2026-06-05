@@ -22,6 +22,8 @@ const BAD_DOMAINS = [
   "youtu.be",
   "line.me",
   "maps.google",
+  "flic.kr",
+  "flickr.com",
 ];
 
 const BAD_EXT = [
@@ -55,8 +57,14 @@ const GOOD_WORDS = [
   "募集",
   "選手募集",
   "団員募集",
+  "部員募集",
+  "メンバー募集",
   "ジュニアユース",
   "ユース",
+  "社会人",
+  "女子",
+  "レディース",
+  "シニア",
   "u-15",
   "u15",
   "u-18",
@@ -80,6 +88,8 @@ const ACTION_WORDS = [
   "募集",
   "選手募集",
   "団員募集",
+  "部員募集",
+  "メンバー募集",
 ];
 
 const SOCCER_WORDS = [
@@ -95,6 +105,9 @@ const SOCCER_WORDS = [
   "s.c.",
   "ジュニアユース",
   "ユース",
+  "社会人サッカー",
+  "女子サッカー",
+  "レディース",
   "u-15",
   "u15",
   "u-18",
@@ -106,6 +119,23 @@ const SOCCER_WORDS = [
   "クラブユース",
   "jユース",
   "j下部",
+];
+
+const BAD_WORDS = [
+  "オープンキャンパス",
+  "学校説明会",
+  "入試説明会",
+  "入学説明会",
+  "入学試験",
+  "入試",
+  "写真素材",
+  "加盟チーム一覧",
+  "チーム一覧",
+  "メンバー表",
+  "試合結果",
+  "大会結果",
+  "順位表",
+  "星取表",
 ];
 
 const STRONG_SOCCER_DOMAINS = [
@@ -264,9 +294,19 @@ function scoreLink(item: { title: string; url: string; context: string }) {
   const matched = matchedWords(text);
   const actionMatched = matchedFrom(text, ACTION_WORDS);
   const soccerMatched = matchedFrom(text, SOCCER_WORDS);
+  const badMatched = matchedFrom(text, BAD_WORDS);
 
   if (actionMatched.length === 0) {
     return { ok: false, score: 0, matched, reason: "no_action_word" };
+  }
+
+  if (badMatched.length > 0 && soccerMatched.length === 0 && !hasStrongSoccerDomain(item.url)) {
+    return {
+      ok: false,
+      score: 0,
+      matched,
+      reason: `bad_word:${badMatched.join(",")}`,
+    };
   }
 
   let score = matched.length * 10;
@@ -276,16 +316,31 @@ function scoreLink(item: { title: string; url: string; context: string }) {
   if (text.includes("体験練習会")) score += 30;
   if (text.includes("体験会")) score += 20;
   if (text.includes("練習会")) score += 20;
+  if (text.includes("練習参加")) score += 18;
+  if (text.includes("練習体験")) score += 18;
   if (text.includes("新入団")) score += 25;
+  if (text.includes("入団")) score += 15;
+  if (text.includes("入部")) score += 15;
   if (text.includes("募集")) score += 18;
+  if (text.includes("選手募集")) score += 20;
+  if (text.includes("部員募集")) score += 16;
+  if (text.includes("メンバー募集")) score += 16;
+
   if (text.includes("ジュニアユース")) score += 10;
+  if (text.includes("ユース")) score += 8;
+  if (text.includes("社会人")) score += 8;
+  if (text.includes("女子")) score += 8;
+  if (text.includes("レディース")) score += 8;
+  if (text.includes("シニア")) score += 8;
   if (text.includes("u-15") || text.includes("u15")) score += 8;
   if (text.includes("u-18") || text.includes("u18")) score += 8;
 
-  if (text.includes("サッカー")) score += 10;
+  if (text.includes("サッカー")) score += 15;
   if (text.includes("football")) score += 8;
   if (text.includes("soccer")) score += 8;
   if (soccerMatched.length > 0) score += soccerMatched.length * 3;
+
+  if (badMatched.length > 0) score -= badMatched.length * 25;
 
   score += getFreshnessPenalty(text);
 
@@ -468,7 +523,7 @@ serve(async (req) => {
 
     return json({
       ok: true,
-      mode: "extract-selection-links-loose-first-pass",
+      mode: "extract-selection-links-all-ages",
       claimed: parents.length,
       results,
     });
