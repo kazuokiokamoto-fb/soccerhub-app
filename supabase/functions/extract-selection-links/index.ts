@@ -65,6 +65,57 @@ const GOOD_WORDS = [
   "u12",
 ];
 
+const ACTION_WORDS = [
+  "セレクション",
+  "選考会",
+  "体験練習会",
+  "体験会",
+  "練習会",
+  "練習参加",
+  "練習体験",
+  "練習見学",
+  "新入団",
+  "入団",
+  "入部",
+  "募集",
+  "選手募集",
+  "団員募集",
+];
+
+const SOCCER_WORDS = [
+  "サッカー",
+  "soccer",
+  "football",
+  "フットボール",
+  "fc",
+  "f.c",
+  "f.c.",
+  "sc",
+  "s.c",
+  "s.c.",
+  "ジュニアユース",
+  "ユース",
+  "u-15",
+  "u15",
+  "u-18",
+  "u18",
+  "u-12",
+  "u12",
+  "u-13",
+  "u13",
+  "クラブユース",
+  "jユース",
+  "j下部",
+];
+
+const STRONG_SOCCER_DOMAINS = [
+  "footballnavi.jp",
+  "sgrum.com",
+  "soccerpla.jp",
+  "soccer-selection.com",
+  "goal-selection.net",
+];
+
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
@@ -127,14 +178,46 @@ function absUrl(href: string, baseUrl: string) {
   }
 }
 
-function matchedWords(text: string) {
+function matchedFrom(text: string, words: string[]) {
   const t = String(text || "").toLowerCase();
-  return GOOD_WORDS.filter((w) => t.includes(w.toLowerCase()));
+  return words.filter((w) => t.includes(w.toLowerCase()));
+}
+
+function matchedWords(text: string) {
+  return matchedFrom(text, GOOD_WORDS);
+}
+
+function hasStrongSoccerDomain(url: string) {
+  const h = hostOf(url);
+  return STRONG_SOCCER_DOMAINS.some((d) => h.includes(d));
 }
 
 function scoreLink(item: { title: string; url: string; context: string }) {
   const text = `${item.title} ${item.url} ${item.context}`.toLowerCase();
+
   const matched = matchedWords(text);
+  const actionMatched = matchedFrom(text, ACTION_WORDS);
+  const soccerMatched = matchedFrom(text, SOCCER_WORDS);
+
+  const soccerDomain = hasStrongSoccerDomain(item.url);
+
+  if (actionMatched.length === 0) {
+    return {
+      ok: false,
+      score: 0,
+      matched,
+      reason: "no_action_word",
+    };
+  }
+
+  if (soccerMatched.length === 0 && !soccerDomain) {
+    return {
+      ok: false,
+      score: 0,
+      matched,
+      reason: "no_soccer_word",
+    };
+  }
 
   let score = matched.length * 10;
 
@@ -148,6 +231,9 @@ function scoreLink(item: { title: string; url: string; context: string }) {
   if (text.includes("ジュニアユース")) score += 10;
   if (text.includes("u-15") || text.includes("u15")) score += 8;
   if (text.includes("u-18") || text.includes("u18")) score += 8;
+  if (text.includes("サッカー")) score += 10;
+  if (text.includes("football")) score += 8;
+  if (text.includes("soccer")) score += 8;
 
   const h = hostOf(item.url);
 
@@ -158,7 +244,12 @@ function scoreLink(item: { title: string; url: string; context: string }) {
   if (h.includes("sgrum.com")) score += 10;
   if (h.includes("footballnavi.jp")) score += 10;
 
-  return { score, matched };
+  return {
+    ok: score >= 30,
+    score,
+    matched,
+    reason: score >= 30 ? null : "low_score",
+  };
 }
 
 async function fetchHtml(url: string) {
@@ -193,12 +284,14 @@ function extractLinks(html: string, baseUrl: string) {
 
     const title = stripTags(m[2]);
     const context = stripTags(
-      html.slice(Math.max(0, m.index - 250), Math.min(html.length, m.index + 500)),
+      html.slice(Math.max(0, m.index - 350), Math.min(html.length, m.index + 700)),
     );
 
     const judged = scoreLink({ title, url, context });
 
-    if (judged.score < 25 && judged.matched.length === 0) continue;
+    if (!judged.ok) {
+      continue;
+    }
 
     seen.add(url);
 
@@ -208,6 +301,7 @@ function extractLinks(html: string, baseUrl: string) {
       context,
       score: judged.score,
       matched: judged.matched,
+      reason: judged.reason,
     });
   }
 
@@ -254,6 +348,7 @@ async function runOne(parent: any) {
         status: "candidate",
         matched_keywords: link.matched,
         score: link.score,
+        excluded_reason: null,
         discovered_from: "summary_page",
         parent_url: parent.url,
         link_depth: 1,
@@ -319,7 +414,7 @@ serve(async (req) => {
 
     return json({
       ok: true,
-      mode: "extract-selection-links",
+      mode: "extract-selection-links-refined",
       claimed: parents.length,
       results,
     });
