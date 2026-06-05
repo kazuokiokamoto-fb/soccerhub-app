@@ -338,7 +338,7 @@ async function claimCandidates(limit: number) {
     .select("*")
     .in("source_type", TARGET_SOURCE_TYPES)
     .gte("score", 100)
-    .or("verified_status.is.null,verified_status.eq.pending")
+    .or("verified_status.is.null,verified_status.eq.pending,verified_status.eq.unchecked")
     .order("score", { ascending: false })
     .limit(limit);
 
