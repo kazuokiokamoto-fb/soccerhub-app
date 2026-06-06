@@ -11,10 +11,11 @@ export async function fetchSelectionEvents(): Promise<SelectionEvent[]> {
   const { data, error } = await supabase
     .from("selection_events_public")
     .select("*")
-    .gte("event_date", today)
+    .or(`event_date.gte.${today},event_date.is.null`)
+    .order("event_date", { ascending: true, nullsFirst: false })
     .order("fetched_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
-    .limit(200);
+    .limit(300);
 
   if (error) {
     console.error("fetchSelectionEvents error:", error);
