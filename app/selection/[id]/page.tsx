@@ -281,6 +281,7 @@ const summary: CSSProperties = {
 const actionButton: CSSProperties = {
   textDecoration: "none",
   flexShrink: 0,
+  marginLeft: "auto",
 };
 
 const heroInfoGrid: CSSProperties = {

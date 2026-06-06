@@ -342,6 +342,28 @@ function extractGender(text: string) {
   return "any";
 }
 
+async function lookupSourceRankFromAliases(text: string) {
+  const { data, error } = await supabase
+    .from("team_rank_aliases")
+    .select("keyword, source_rank");
+
+  if (error) {
+    console.error("team_rank_aliases lookup error", error);
+    return null;
+  }
+
+  const t = String(text || "").toLowerCase();
+
+  for (const row of data || []) {
+    const keyword = String(row.keyword || "").toLowerCase();
+    if (keyword && t.includes(keyword)) {
+      return row.source_rank;
+    }
+  }
+
+  return null;
+}
+
 function inferSourceRank(text: string, organizationName: string | null) {
   const t = `${text} ${organizationName || ""}`.toLowerCase();
 
@@ -637,6 +659,11 @@ async function upsertEvent(candidate: any, html: string) {
   const categories = extractCategories(fullText);
   const gender = extractGender(fullText);
   const statusText = displayStatus(eventDate, deadline, fullText);
+  
+  const sourceRank =
+    (await lookupSourceRankFromAliases(`${fullText} ${candidate.title || ""} ${title}`)) ||
+    inferSourceRank(fullText, candidate.title || title);  
+
   const hash = await sha256(`${candidate.url}|${title}|${eventDate || ""}|${deadline || ""}`);
 
   const eventRow = {
@@ -680,7 +707,7 @@ async function upsertEvent(candidate: any, html: string) {
     extraction_status: "verified",
     extraction_error: null,
     duplicate_key: hash,
-    source_rank: inferSourceRank(fullText, candidate.title || title),
+    source_rank: sourceRank,
   };
 
   const { data: existing, error: existingError } = await supabase
