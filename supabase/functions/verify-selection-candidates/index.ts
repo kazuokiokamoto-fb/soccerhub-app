@@ -145,28 +145,15 @@ function looksMojibake(text: string) {
 
 const BAD_URL_PATTERNS = [
   "/news/list",
-  "/news/?",
-  "/school/news",
   "?ym=",
   "/category/",
   "/tag/",
   "/archive/",
   "/archives/",
-  "/article",
-  "/blog/",
-  "/page3",
-  "/free9/",
-  "/single.html",
-  "/school/",
-  "/taiken/",
-  "/trial/",
+  "/school/news",
   "/apply-trial",
   "/education-program",
   "/personal",
-  "/news/",
-  "/info/",
-  "/blog",
-  "/single-post/",  
 ];
 
 function json(data: unknown, status = 200) {
@@ -737,14 +724,6 @@ async function upsertEvent(candidate: any, html: string) {
   verifiedScore += strong.length * 16;
   verifiedScore += soccer.length * 6;
 
-  if (isSummaryDomain(candidate.url)) {
-    return await rejectCandidate(
-      candidate,
-      "summary_site",
-      verifiedScore,
-      pageText,
-    );
-  }
   if (includesAny(fullText, ["募集終了", "受付終了", "締め切りました"])) verifiedScore -= 20;
   if (!includesAny(fullText, SOCCER_WORDS)) verifiedScore -= 35;
 
