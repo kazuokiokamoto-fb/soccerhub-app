@@ -667,9 +667,33 @@ async function claimCandidates(limit: number) {
 
   if (error) throw error;
 
-  return (data || [])
-    .filter((row) => !shouldRejectBeforeFetch(row))
-    .slice(0, limit);
+  const acceptedRows = [];
+  const rejectedIds = [];
+
+  for (const row of data || []) {
+    if (shouldRejectBeforeFetch(row)) {
+      rejectedIds.push(row.id);
+    } else {
+      acceptedRows.push(row);
+    }
+
+    if (acceptedRows.length >= limit) break;
+  }
+
+  if (rejectedIds.length > 0) {
+    await supabase
+      .from("selection_page_candidates")
+      .update({
+        verified_status: "rejected",
+        verified_score: 0,
+        verified_reason: "pre_reject_bad_or_top_page",
+        checked_at: nowIso(),
+        updated_at: nowIso(),
+      })
+      .in("id", rejectedIds);
+  }
+
+  return acceptedRows;
 }
 
 async function rejectCandidate(candidate: any, reason: string, verifiedScore: number, pageText = "") {
