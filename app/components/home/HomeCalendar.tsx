@@ -212,6 +212,12 @@ function teamMatchesFilters(
   return true;
 }
 
+function sevenDaysAgoYmd() {
+  const d = new Date();
+  d.setDate(d.getDate() - 7);
+  return d.toISOString().slice(0, 10);
+}
+
 function formatScheduleDate(ymd: string) {
   if (!ymd) return "";
   const [y, m, d] = ymd.split("-").map(Number);
@@ -236,7 +242,7 @@ export default function HomeCalendar(props: { initialPanelMode?: PanelMode }) {
   const [myScheduleLoading, setMyScheduleLoading] = useState(false);
 
   const [selectionEventCount, setSelectionEventCount] = useState(0);
-  const [selectionCandidateCount, setSelectionCandidateCount] = useState(0);
+  const [selectionNewCount, setSelectionNewCount] = useState(0);
 
   const { filters } = useMatchFilters();
 
@@ -275,31 +281,43 @@ export default function HomeCalendar(props: { initialPanelMode?: PanelMode }) {
 
     async function loadSelectionCounts() {
       try {
+        const today = ymdToday();
+        const sevenDaysAgo = sevenDaysAgoYmd();
+
         const { count: eventCount, error: eventError } = await supabase
-          .from("selection_events")
-          .select("id", { count: "exact", head: true });
+          .from("selection_events_public")
+          .select("id", { count: "exact", head: true })
+          .or(
+            `event_date.gte.${today},event_date.is.null`
+          );
 
         if (eventError) {
-          console.error("selection event count error:", eventError);
+          console.error("selection count error:", eventError);
         }
 
-        const { count: candidateCount, error: candidateError } = await supabase
-          .from("public_selection_page_candidates")
-          .select("id", { count: "exact", head: true });
+        const { count: newCount, error: newError } = await supabase
+          .from("selection_events_public")
+          .select("id", { count: "exact", head: true })
+          .gte("created_at", `${sevenDaysAgo}T00:00:00`)
+          .or(
+            `event_date.gte.${today},event_date.is.null`
+          );
 
-        if (candidateError) {
-          console.error("selection candidate count error:", candidateError);
+        if (newError) {
+          console.error("selection new count error:", newError);
         }
 
         if (!active) return;
 
         setSelectionEventCount(eventCount ?? 0);
-        setSelectionCandidateCount(candidateCount ?? 0);
+        setSelectionNewCount(newCount ?? 0);
       } catch (e) {
         console.error("loadSelectionCounts catch:", e);
+
         if (!active) return;
+
         setSelectionEventCount(0);
-        setSelectionCandidateCount(0);
+        setSelectionNewCount(0);
       }
     }
 
@@ -612,7 +630,7 @@ export default function HomeCalendar(props: { initialPanelMode?: PanelMode }) {
 
       <SelectionSection
         eventCount={selectionEventCount}
-        candidateCount={selectionCandidateCount}
+        newCount={selectionNewCount}
       />
 
       <MatchHelpModals

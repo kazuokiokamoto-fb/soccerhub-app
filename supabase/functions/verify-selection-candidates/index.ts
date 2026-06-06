@@ -367,6 +367,7 @@ async function lookupSourceRankFromAliases(text: string) {
 function inferSourceRank(text: string, organizationName: string | null) {
   const t = `${text} ${organizationName || ""}`.toLowerCase();
 
+  // 1. Jクラブ・J下部を最優先
   if (
     t.includes("jfaアカデミー") ||
     t.includes("鹿島アントラーズ") ||
@@ -383,31 +384,13 @@ function inferSourceRank(text: string, organizationName: string | null) {
     t.includes("横浜fc") ||
     t.includes("湘南ベルマーレ") ||
     t.includes("栃木sc") ||
-    t.includes("ザスパ群馬")
+    t.includes("ザスパ群馬") ||
+    t.includes("ヴァンフォーレ甲府")
   ) {
     return "j_academy";
   }
 
-  if (
-    t.includes("女子") ||
-    t.includes("レディース") ||
-    t.includes("women") ||
-    t.includes("girls") ||
-    t.includes("femminile")
-  ) {
-    return "girls";
-  }
-
-  if (
-    t.includes("高校") ||
-    t.includes("高等学校") ||
-    t.includes("中学校") ||
-    t.includes("大学") ||
-    t.includes("学校法人")
-  ) {
-    return "school";
-  }
-
+  // 2. 強豪名一致
   if (
     t.includes("ラルクヴェール") ||
     t.includes("wings") ||
@@ -432,11 +415,39 @@ function inferSourceRank(text: string, organizationName: string | null) {
     t.includes("プログレッソ") ||
     t.includes("エスペランサ") ||
     t.includes("バディー") ||
-    t.includes("バディ")
+    t.includes("バディ") ||
+    t.includes("fc kasukabe") ||
+    t.includes("ヴィアージャ") ||
+    t.includes("ブリオベッカ") ||
+    t.includes("ちふれasエルフェン")
   ) {
     return "pref_top";
   }
 
+  // 3. 女子
+  if (
+    t.includes("女子") ||
+    t.includes("レディース") ||
+    t.includes("women") ||
+    t.includes("girls") ||
+    t.includes("femminile")
+  ) {
+    return "girls";
+  }
+
+  // 4. スクールは school
+  if (
+    t.includes("スクール") ||
+    t.includes("school") ||
+    t.includes("クーバー") ||
+    t.includes("malva") ||
+    t.includes("soltilo") ||
+    t.includes("レアル・マドリード")
+  ) {
+    return "school";
+  }
+
+  // 5. ジュニアユース / U-15 / クラブユースは pref_2
   if (
     t.includes("ジュニアユース") ||
     t.includes("u-15") ||
@@ -449,13 +460,23 @@ function inferSourceRank(text: string, organizationName: string | null) {
     return "pref_2";
   }
 
+  // 6. 学校系
   if (
-    t.includes("スクール") ||
-    t.includes("school") ||
+    t.includes("高校") ||
+    t.includes("高等学校") ||
+    t.includes("中学校") ||
+    t.includes("大学") ||
+    t.includes("学校法人")
+  ) {
+    return "school";
+  }
+
+  // 7. academy / アカデミー単体では school にしない
+  if (
     t.includes("academy") ||
     t.includes("アカデミー")
   ) {
-    return "school";
+    return "pref_2";
   }
 
   return "district";

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
-import { supabase } from "@/app/lib/supabase";
 import { fetchSelectionEvents } from "@/app/lib/selections";
 import type { SelectionEvent } from "@/app/types/selection";
 
@@ -39,19 +38,8 @@ type StatusFilter =
   | "募集中"
   | "申込終了"
   | "開催終了"
-  | "日程未定";
-
-type SelectionPageCandidate = {
-  id: string;
-  prefecture: string | null;
-  municipality: string | null;
-  query: string | null;
-  title: string | null;
-  url: string;
-  score: number | null;
-  matched_keywords: string[] | null;
-  created_at: string | null;
-};
+  | "日程未定"
+  | "日付未取得";
 
 const SOURCE_PREFECTURE_MAP: Record<string, string> = {
   鹿島アントラーズ: "茨城県",
@@ -72,16 +60,38 @@ const SOURCE_PREFECTURE_MAP: Record<string, string> = {
   ヴァンフォーレ甲府: "山梨県",
 };
 
+function todayYmd() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function sevenDaysAgoTime() {
+  return Date.now() - 1000 * 60 * 60 * 24 * 7;
+}
+
 function formatDate(date?: string | null) {
   if (!date) return "未定";
   return new Date(date).toLocaleDateString("ja-JP");
+}
+
+function ymdOnly(date?: string | null) {
+  if (!date) return "";
+  return String(date).slice(0, 10);
+}
+
+function isVisibleEvent(item: SelectionEvent) {
+  if (!item.event_date) return true;
+  return item.event_date >= todayYmd();
+}
+
+function isNewArrival(item: SelectionEvent) {
+  const t = new Date(item.created_at || item.fetched_at || 0).getTime();
+  return Number.isFinite(t) && t >= sevenDaysAgoTime();
 }
 
 function inferredPrefecture(item: SelectionEvent) {
   if (item.prefecture) return item.prefecture;
 
   const name = item.organization_name || "";
-
   const matched = Object.keys(SOURCE_PREFECTURE_MAP).find((key) =>
     name.includes(key)
   );
@@ -155,37 +165,9 @@ function sortNewestFirst(rows: SelectionEvent[]) {
   });
 }
 
-async function fetchAllSelectionCandidates() {
-  const pageSize = 1000;
-  let from = 0;
-  const all: SelectionPageCandidate[] = [];
-
-  while (true) {
-    const { data, error } = await supabase
-      .from("public_selection_page_candidates")
-      .select(
-        "id,prefecture,municipality,query,title,url,score,matched_keywords,created_at"
-      )
-      .order("score", { ascending: false })
-      .range(from, from + pageSize - 1);
-
-    if (error) throw error;
-
-    const rows = (data || []) as SelectionPageCandidate[];
-    all.push(...rows);
-
-    if (rows.length < pageSize) break;
-
-    from += pageSize;
-  }
-
-  return all;
-}
-
 export default function SelectionListPage() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<SelectionEvent[]>([]);
-  const [candidates, setCandidates] = useState<SelectionPageCandidate[]>([]);
 
   const [keyword, setKeyword] = useState("");
   const [prefecture, setPrefecture] = useState("all");
@@ -207,23 +189,13 @@ export default function SelectionListPage() {
       try {
         const rows = await fetchSelectionEvents();
 
-        let candidateRows: SelectionPageCandidate[] = [];
-
-        try {
-          candidateRows = await fetchAllSelectionCandidates();
-        } catch (error) {
-          console.error("selection candidates load error", error);
-        }
-
         if (!active) return;
 
-        setItems(sortNewestFirst(rows));
-        setCandidates(candidateRows);
+        setItems(sortNewestFirst(rows.filter(isVisibleEvent)));
       } catch (e) {
         console.error("selection page load error", e);
         if (!active) return;
         setItems([]);
-        setCandidates([]);
       } finally {
         if (active) setLoading(false);
       }
@@ -239,35 +211,30 @@ export default function SelectionListPage() {
   const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
   const monthKey = useMemo(() => toMonthKey(monthDate), [monthDate]);
 
+  const newArrivalCount = useMemo(() => {
+    return items.filter(isNewArrival).length;
+  }, [items]);
+
   const prefectures = useMemo(() => {
     return Array.from(
-      new Set([
-        ...items.map((v) => inferredPrefecture(v)).filter(Boolean).map(String),
-        ...candidates.map((v) => v.prefecture).filter(Boolean).map(String),
-      ])
+      new Set(items.map((v) => inferredPrefecture(v)).filter(Boolean).map(String))
     ).sort((a, b) => a.localeCompare(b, "ja"));
-  }, [items, candidates]);
+  }, [items]);
 
   const cities = useMemo(() => {
     return Array.from(
-      new Set([
-        ...items
+      new Set(
+        items
           .filter((v) => {
             const itemPrefecture = inferredPrefecture(v);
             return prefecture === "all" || itemPrefecture === prefecture;
           })
           .map((v) => v.city)
           .filter(Boolean)
-          .map(String),
-
-        ...candidates
-          .filter((v) => prefecture === "all" || v.prefecture === prefecture)
-          .map((v) => v.municipality)
-          .filter(Boolean)
-          .map(String),
-      ])
+          .map(String)
+      )
     ).sort((a, b) => a.localeCompare(b, "ja"));
-  }, [items, candidates, prefecture]);
+  }, [items, prefecture]);
 
   const filteredItems = useMemo(() => {
     const q = keyword.trim().toLowerCase();
@@ -277,7 +244,12 @@ export default function SelectionListPage() {
       const itemRank =
         (item as SelectionEvent & { source_rank?: string }).source_rank || null;
 
-      if (selectedDate && item.event_date !== selectedDate) return false;
+      if (
+        selectedDate &&
+        ymdOnly(item.event_date) !== selectedDate
+      ) {
+        return false;
+      }
       if (prefecture !== "all" && itemPrefecture !== prefecture) return false;
       if (city !== "all" && item.city !== city) return false;
       if (rank !== "all" && itemRank !== rank) return false;
@@ -321,47 +293,33 @@ export default function SelectionListPage() {
     selectedDate,
   ]);
 
-  const filteredCandidates = useMemo(() => {
-    const q = keyword.trim().toLowerCase();
-
-    return candidates.filter((item) => {
-      if (prefecture !== "all" && item.prefecture !== prefecture) return false;
-      if (city !== "all" && item.municipality !== city) return false;
-
-      if (q) {
-        const hay = [
-          item.title,
-          item.prefecture,
-          item.municipality,
-          item.query,
-          item.url,
-          ...(item.matched_keywords ?? []),
-        ]
-          .join(" ")
-          .toLowerCase();
-
-        if (!hay.includes(q)) return false;
-      }
-
-      return true;
-    });
-  }, [candidates, keyword, prefecture, city]);
-
   const selectionItemsByDate = useMemo(() => {
     const map = new Map<string, CalendarItem[]>();
     const countMap = new Map<string, number>();
 
-    for (const item of items) {
-      if (!item.event_date) continue;
-      countMap.set(item.event_date, (countMap.get(item.event_date) ?? 0) + 1);
+    for (const item of filteredItems) {
+      const ymd = ymdOnly(item.event_date);
+
+      if (!ymd) continue;
+
+      countMap.set(
+        ymd,
+        (countMap.get(ymd) ?? 0) + 1
+      );
     }
 
     for (const [ymd, count] of countMap.entries()) {
-      map.set(ymd, [{ label: "選", count, tone: "open" }]);
+      map.set(ymd, [
+        {
+          label: "選",
+          count,
+          tone: "open",
+        },
+      ]);
     }
 
     return map;
-  }, [items]);
+  }, [filteredItems]);
 
   const selectedDateText = useMemo(() => {
     if (!selectedDate) return "すべての日程";
@@ -462,6 +420,7 @@ export default function SelectionListPage() {
             <option value="申込終了">申込終了</option>
             <option value="開催終了">開催終了</option>
             <option value="日程未定">日程未定</option>
+            <option value="日付未取得">日付未取得</option>
           </select>
 
           <select
@@ -480,8 +439,8 @@ export default function SelectionListPage() {
 
         <div style={filterFooter}>
           <div className="ui-meta">
-            {selectedDateText} / 確定情報：{filteredItems.length}件 / 候補：
-            {filteredCandidates.length}件
+            {selectedDateText} / 掲載件数：{filteredItems.length}件 / 過去7日間の新着：
+            {newArrivalCount}件
           </div>
 
           <button type="button" className="sh-btn" onClick={clearFilters}>
@@ -523,7 +482,7 @@ export default function SelectionListPage() {
           {filteredItems.length > 0 ? (
             <section style={listWrap}>
               <div className="ui-title" style={sectionTitle}>
-                確定セレクション情報
+                セレクション情報
               </div>
 
               {filteredItems.map((item) => {
@@ -550,7 +509,7 @@ export default function SelectionListPage() {
                             ...statusStyle(item.display_status),
                           }}
                         >
-                          {item.display_status}
+                          {item.display_status || "日程未定"}
                         </span>
                       </div>
 
@@ -589,64 +548,11 @@ export default function SelectionListPage() {
                 );
               })}
             </section>
-          ) : null}
-
-          {filteredCandidates.length > 0 ? (
-            <section style={listWrap}>
-              <div className="ui-title" style={sectionTitle}>
-                募集・セレクション候補ページ
-              </div>
-
-              {filteredCandidates.map((item) => (
-                <a
-                  key={item.id}
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={linkStyle}
-                >
-                  <article className="ui-card" style={card}>
-                    <div style={cardTop}>
-                      <span style={rankBadge}>候補</span>
-                      <span style={candidateScoreBadge}>
-                        score: {item.score ?? 0}
-                      </span>
-                    </div>
-
-                    <h2 style={cardTitle}>{item.title || item.url}</h2>
-
-                    <div className="ui-meta" style={orgName}>
-                      {[item.prefecture, item.municipality]
-                        .filter(Boolean)
-                        .join(" ") || "地域未設定"}
-                    </div>
-
-                    {item.query ? (
-                      <div className="ui-meta" style={queryText}>
-                        検索語：{item.query}
-                      </div>
-                    ) : null}
-
-                    {item.matched_keywords?.length ? (
-                      <div style={tagWrap}>
-                        {item.matched_keywords.map((kw) => (
-                          <span key={`${item.id}-${kw}`} style={tag}>
-                            {kw}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </article>
-                </a>
-              ))}
-            </section>
-          ) : null}
-
-          {filteredItems.length === 0 && filteredCandidates.length === 0 ? (
+          ) : (
             <div className="ui-card" style={emptyBox}>
               条件に合うセレクション情報がありません
             </div>
-          ) : null}
+          )}
         </>
       )}
     </main>
@@ -834,13 +740,6 @@ const statusBadge: CSSProperties = {
   maxWidth: "100%",
 };
 
-const candidateScoreBadge: CSSProperties = {
-  ...statusBadge,
-  background: "#eef2ff",
-  color: "#3730a3",
-  border: "1px solid #c7d2fe",
-};
-
 const cardTitle: CSSProperties = {
   margin: "10px 0 0",
   fontSize: 18,
@@ -854,12 +753,6 @@ const cardTitle: CSSProperties = {
 
 const orgName: CSSProperties = {
   marginTop: 6,
-  overflowWrap: "anywhere",
-  wordBreak: "break-word",
-};
-
-const queryText: CSSProperties = {
-  marginTop: 4,
   overflowWrap: "anywhere",
   wordBreak: "break-word",
 };

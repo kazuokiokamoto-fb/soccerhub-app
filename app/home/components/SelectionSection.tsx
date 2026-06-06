@@ -8,11 +8,11 @@ import type { SelectionEvent } from "@/app/types/selection";
 
 type SelectionSectionProps = {
   eventCount?: number;
-  candidateCount?: number;
+  newCount?: number;
 };
 
 export function SelectionSection(props: SelectionSectionProps) {
-  const { eventCount, candidateCount } = props;
+  const { eventCount, newCount } = props;
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<SelectionEvent[]>([]);
@@ -61,10 +61,8 @@ export function SelectionSection(props: SelectionSectionProps) {
   const fixedCount =
     typeof eventCount === "number" ? eventCount : items.length;
 
-  const candidateTotal =
-    typeof candidateCount === "number" ? candidateCount : 0;
-
-  const totalCount = fixedCount + candidateTotal;
+  const recentCount =
+    typeof newCount === "number" ? newCount : 0;
 
   return (
     <Link href="/selection" style={sectionLink}>
@@ -81,13 +79,13 @@ export function SelectionSection(props: SelectionSectionProps) {
           <div>
             <div style={summaryCountLineCompact} className="ui-title">
               掲載件数：
-              {loading ? "読み込み中…" : `${totalCount.toLocaleString()}件`}
+              {loading ? "読み込み中…" : `${fixedCount.toLocaleString()}件`}
             </div>
 
             <div style={summarySubTight} className="ui-meta">
               {errorText
                 ? `取得エラー：${errorText}`
-                : `確定情報 ${fixedCount.toLocaleString()}件 / 候補 ${candidateTotal.toLocaleString()}件`}
+                : `過去7日間の新着：${recentCount.toLocaleString()}件`}
             </div>
           </div>
         </div>
