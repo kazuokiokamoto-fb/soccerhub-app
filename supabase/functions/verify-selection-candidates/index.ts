@@ -19,7 +19,15 @@ const BAD_DOMAINS = [
   "x.com",
   "twitter.com",
   "mobile.twitter.com",
+  "ameblo.jp",
+  "prtimes.jp",
+  "kamap.jp",
   "junior-soccer.jp",
+  "juniorsoccer-news.com",
+  "soccerplayer.net",
+  "goal-selection.net",
+  "soccer-selection.com",
+  "j-s-weekly.com",
   "jmty.jp",
   "labola.jp",
   "net-menber.com",
@@ -120,13 +128,49 @@ const HARD_REJECT_WORDS = [
   "アクセス",
 ];
 
+const BAD_TITLE_WORDS = [
+  "スケジュール",
+  "クラブ公式ホームページ",
+  "公式ホームページ",
+  "トップページ",
+  "オフィシャルサイト",
+  "Green Card",
+  "ブログ",
+  "大会結果",
+  "選手権大会",
+  "学校 トップページ",
+  "無料体験申込み",
+  "Trial lesson",
+  "School | academy",
+  "Team | academy",
+  "Education-program",
+  "Personal | academy",
+];
+
+function looksMojibake(text: string) {
+  return /�/.test(String(text || ""));
+}
+
 const BAD_URL_PATTERNS = [
   "/news/list",
+  "/news/?",
+  "/school/news",
   "?ym=",
   "/category/",
   "/tag/",
   "/archive/",
   "/archives/",
+  "/article",
+  "/blog/",
+  "/page3",
+  "/free9/",
+  "/single.html",
+  "/school/",
+  "/taiken/",
+  "/trial/",
+  "/apply-trial",
+  "/education-program",
+  "/personal",
 ];
 
 function json(data: unknown, status = 200) {
@@ -571,6 +615,19 @@ function shouldRejectBeforeFetch(row: any) {
   const title = String(row.title || "");
   const url = String(row.url || "").toLowerCase();
 
+  if (looksMojibake(title)) return true;
+  if (includesAny(title, BAD_TITLE_WORDS)) return true;
+
+  const simpleTitle = title.trim().toLowerCase();
+
+  if (
+    simpleTitle === "news" ||
+    simpleTitle === "ニュース" ||
+    simpleTitle === "スケジュール"
+  ) {
+    return true;
+  }
+
   if (includesAny(`${title} ${url}`, HARD_REJECT_WORDS)) return true;
 
   if (
@@ -596,9 +653,18 @@ function shouldRejectBeforeFetch(row: any) {
 
     const hasEventWord = includesAny(hay, EVENT_PAGE_WORDS);
     const hasSoccerWord = includesAny(hay, SOCCER_WORDS);
+    const hasStrongSelectionWord = includesAny(hay, [
+      "セレクション",
+      "選考会",
+      "トライアウト",
+      "tryout",
+      "selection",
+      "選手募集",
+      "新入団",
+      "ジュニアユース",
+    ]);
 
-    // トップページでも「サッカー系」かつ「募集・体験・セレクション系」なら通す
-    if (!(hasSoccerWord && hasEventWord)) return true;
+    if (!(hasSoccerWord && hasEventWord && hasStrongSelectionWord)) return true;
   }
 
   return false;
