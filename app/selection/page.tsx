@@ -498,17 +498,19 @@ export default function SelectionListPage() {
             日付を押すと、その日に開催されるセレクションだけを表示します。
           </div>
 
-          <MatchCalendarBase
-            monthKey={monthKey}
-            cells={calendarCells}
-            selectedYmd={selectedDate}
-            itemsByDate={selectionItemsByDate}
-            onSelectDate={(ymd) => {
-              setSelectedDate((current) => (current === ymd ? "" : ymd));
-            }}
-            onPrevMonth={() => setMonthDate((prev) => addMonths(prev, -1))}
-            onNextMonth={() => setMonthDate((prev) => addMonths(prev, 1))}
-          />
+          <div style={calendarInner}>
+            <MatchCalendarBase
+              monthKey={monthKey}
+              cells={calendarCells}
+              selectedYmd={selectedDate}
+              itemsByDate={selectionItemsByDate}
+              onSelectDate={(ymd) => {
+                setSelectedDate((current) => (current === ymd ? "" : ymd));
+              }}
+              onPrevMonth={() => setMonthDate((prev) => addMonths(prev, -1))}
+              onNextMonth={() => setMonthDate((prev) => addMonths(prev, 1))}
+            />
+          </div>
         </section>
       ) : null}
 
@@ -653,26 +655,38 @@ export default function SelectionListPage() {
 
 const wrap: CSSProperties = {
   padding: 16,
+  width: "100%",
   maxWidth: 900,
   margin: "0 auto",
   display: "grid",
   gap: 12,
+  boxSizing: "border-box",
+  overflowX: "hidden",
 };
 
 const topBar: CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 12,
+  minWidth: 0,
+  maxWidth: "100%",
+  flexWrap: "wrap",
 };
 
 const pageTitle: CSSProperties = {
   fontSize: 22,
   fontWeight: 900,
   color: "#16391f",
+  minWidth: 0,
+  overflowWrap: "break-word",
 };
 
 const searchBox: CSSProperties = {
   padding: 14,
+  width: "100%",
+  maxWidth: "100%",
+  boxSizing: "border-box",
+  overflow: "hidden",
 };
 
 const searchHeader: CSSProperties = {
@@ -682,6 +696,7 @@ const searchHeader: CSSProperties = {
   gap: 10,
   flexWrap: "wrap",
   marginBottom: 10,
+  minWidth: 0,
 };
 
 const searchTitle: CSSProperties = {
@@ -695,6 +710,7 @@ const sectionTitle: CSSProperties = {
 
 const input: CSSProperties = {
   width: "100%",
+  maxWidth: "100%",
   boxSizing: "border-box",
   padding: "12px 12px",
   borderRadius: 12,
@@ -709,10 +725,12 @@ const filterGrid: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
   gap: 8,
+  minWidth: 0,
 };
 
 const select: CSSProperties = {
   width: "100%",
+  maxWidth: "100%",
   boxSizing: "border-box",
   padding: "11px 10px",
   borderRadius: 12,
@@ -728,10 +746,15 @@ const filterFooter: CSSProperties = {
   alignItems: "center",
   gap: 10,
   flexWrap: "wrap",
+  minWidth: 0,
 };
 
 const calendarBox: CSSProperties = {
   padding: 14,
+  width: "100%",
+  maxWidth: "100%",
+  boxSizing: "border-box",
+  overflow: "hidden",
 };
 
 const calendarTitle: CSSProperties = {
@@ -743,20 +766,38 @@ const calendarTitle: CSSProperties = {
 const calendarHint: CSSProperties = {
   marginTop: 4,
   marginBottom: 10,
+  maxWidth: "100%",
+  overflowWrap: "break-word",
+  wordBreak: "break-word",
+};
+
+const calendarInner: CSSProperties = {
+  width: "100%",
+  maxWidth: "100%",
+  boxSizing: "border-box",
+  overflow: "hidden",
 };
 
 const listWrap: CSSProperties = {
   display: "grid",
   gap: 10,
+  minWidth: 0,
+  maxWidth: "100%",
 };
 
 const linkStyle: CSSProperties = {
   textDecoration: "none",
   color: "inherit",
+  minWidth: 0,
+  maxWidth: "100%",
 };
 
 const card: CSSProperties = {
   padding: 14,
+  width: "100%",
+  maxWidth: "100%",
+  boxSizing: "border-box",
+  overflow: "hidden",
 };
 
 const cardTop: CSSProperties = {
@@ -764,6 +805,8 @@ const cardTop: CSSProperties = {
   justifyContent: "space-between",
   gap: 8,
   alignItems: "center",
+  minWidth: 0,
+  flexWrap: "wrap",
 };
 
 const rankBadge: CSSProperties = {
@@ -777,6 +820,7 @@ const rankBadge: CSSProperties = {
   border: "1px solid #fed7aa",
   fontSize: 12,
   fontWeight: 900,
+  maxWidth: "100%",
 };
 
 const statusBadge: CSSProperties = {
@@ -787,6 +831,7 @@ const statusBadge: CSSProperties = {
   borderRadius: 999,
   fontSize: 12,
   fontWeight: 900,
+  maxWidth: "100%",
 };
 
 const candidateScoreBadge: CSSProperties = {
@@ -801,14 +846,22 @@ const cardTitle: CSSProperties = {
   fontSize: 18,
   lineHeight: 1.45,
   color: "#111827",
+  minWidth: 0,
+  maxWidth: "100%",
+  overflowWrap: "anywhere",
+  wordBreak: "break-word",
 };
 
 const orgName: CSSProperties = {
   marginTop: 6,
+  overflowWrap: "anywhere",
+  wordBreak: "break-word",
 };
 
 const queryText: CSSProperties = {
   marginTop: 4,
+  overflowWrap: "anywhere",
+  wordBreak: "break-word",
 };
 
 const infoGrid: CSSProperties = {
@@ -816,6 +869,7 @@ const infoGrid: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 10,
+  minWidth: 0,
 };
 
 const label: CSSProperties = {
@@ -828,6 +882,8 @@ const value: CSSProperties = {
   fontSize: 14,
   fontWeight: 800,
   color: "#1f2937",
+  overflowWrap: "anywhere",
+  wordBreak: "break-word",
 };
 
 const tagWrap: CSSProperties = {
@@ -835,6 +891,8 @@ const tagWrap: CSSProperties = {
   display: "flex",
   flexWrap: "wrap",
   gap: 6,
+  minWidth: 0,
+  maxWidth: "100%",
 };
 
 const tag: CSSProperties = {
@@ -847,9 +905,16 @@ const tag: CSSProperties = {
   color: "#374151",
   fontSize: 12,
   fontWeight: 700,
+  maxWidth: "100%",
+  overflowWrap: "anywhere",
+  wordBreak: "break-word",
 };
 
 const emptyBox: CSSProperties = {
   padding: 22,
   textAlign: "center",
+  width: "100%",
+  maxWidth: "100%",
+  boxSizing: "border-box",
+  overflow: "hidden",
 };
