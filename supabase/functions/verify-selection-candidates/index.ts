@@ -342,6 +342,103 @@ function extractGender(text: string) {
   return "any";
 }
 
+function inferSourceRank(text: string, organizationName: string | null) {
+  const t = `${text} ${organizationName || ""}`.toLowerCase();
+
+  if (
+    t.includes("jfaアカデミー") ||
+    t.includes("鹿島アントラーズ") ||
+    t.includes("水戸ホーリーホック") ||
+    t.includes("浦和レッズ") ||
+    t.includes("大宮アルディージャ") ||
+    t.includes("柏レイソル") ||
+    t.includes("ジェフユナイテッド") ||
+    t.includes("fc東京") ||
+    t.includes("東京ヴェルディ") ||
+    t.includes("町田ゼルビア") ||
+    t.includes("川崎フロンターレ") ||
+    t.includes("横浜f・マリノス") ||
+    t.includes("横浜fc") ||
+    t.includes("湘南ベルマーレ") ||
+    t.includes("栃木sc") ||
+    t.includes("ザスパ群馬")
+  ) {
+    return "j_academy";
+  }
+
+  if (
+    t.includes("女子") ||
+    t.includes("レディース") ||
+    t.includes("women") ||
+    t.includes("girls") ||
+    t.includes("femminile")
+  ) {
+    return "girls";
+  }
+
+  if (
+    t.includes("高校") ||
+    t.includes("高等学校") ||
+    t.includes("中学校") ||
+    t.includes("大学") ||
+    t.includes("学校法人")
+  ) {
+    return "school";
+  }
+
+  if (
+    t.includes("ラルクヴェール") ||
+    t.includes("wings") ||
+    t.includes("クラブドラゴンズ") ||
+    t.includes("fc古河") ||
+    t.includes("lavida") ||
+    t.includes("横河武蔵野") ||
+    t.includes("forza") ||
+    t.includes("トッカーノ") ||
+    t.includes("tucano") ||
+    t.includes("三菱養和") ||
+    t.includes("大豆戸") ||
+    t.includes("sch") ||
+    t.includes("足柄fc") ||
+    t.includes("fc厚木dreams") ||
+    t.includes("fc多摩") ||
+    t.includes("町田jfc") ||
+    t.includes("ジェファ") ||
+    t.includes("jefa") ||
+    t.includes("クラブテアトロ") ||
+    t.includes("club teatro") ||
+    t.includes("プログレッソ") ||
+    t.includes("エスペランサ") ||
+    t.includes("バディー") ||
+    t.includes("バディ")
+  ) {
+    return "pref_top";
+  }
+
+  if (
+    t.includes("ジュニアユース") ||
+    t.includes("u-15") ||
+    t.includes("u15") ||
+    t.includes("クラブユース") ||
+    t.includes("ユース") ||
+    t.includes("u-18") ||
+    t.includes("u18")
+  ) {
+    return "pref_2";
+  }
+
+  if (
+    t.includes("スクール") ||
+    t.includes("school") ||
+    t.includes("academy") ||
+    t.includes("アカデミー")
+  ) {
+    return "school";
+  }
+
+  return "district";
+}
+
 function displayStatus(eventDate: string | null, deadline: string | null, text: string) {
   const today = toDateString(new Date())!;
 
@@ -583,7 +680,7 @@ async function upsertEvent(candidate: any, html: string) {
     extraction_status: "verified",
     extraction_error: null,
     duplicate_key: hash,
-    source_rank: null,
+    source_rank: inferSourceRank(fullText, candidate.title || title),
   };
 
   const { data: existing, error: existingError } = await supabase

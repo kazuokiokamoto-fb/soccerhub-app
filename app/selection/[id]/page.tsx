@@ -1,19 +1,13 @@
 // /app/selection/[id]/page.tsx
 
 import Link from "next/link";
+import type { CSSProperties, ReactNode } from "react";
 
 import { fetchSelectionEventById } from "@/app/lib/selections";
 
 function formatDate(date?: string | null) {
   if (!date) return "未定";
-
   return new Date(date).toLocaleDateString("ja-JP");
-}
-
-function formatTime(time?: string | null) {
-  if (!time) return "";
-
-  return time.slice(0, 5);
 }
 
 function orgLabel(type?: string | null) {
@@ -42,7 +36,7 @@ function genderLabel(gender?: string | null) {
   }
 }
 
-function statusStyle(status?: string): React.CSSProperties {
+function statusStyle(status?: string): CSSProperties {
   if (status === "募集中") {
     return {
       background: "#ecfdf3",
@@ -80,7 +74,7 @@ function feeText(item: Awaited<ReturnType<typeof fetchSelectionEventById>>) {
 
 function DetailRow(props: {
   label: string;
-  value?: React.ReactNode;
+  value?: ReactNode;
 }) {
   return (
     <div style={detailRow}>
@@ -113,21 +107,11 @@ export default async function SelectionDetailPage(props: {
     );
   }
 
-  const timeText =
-    item.event_start_time || item.event_end_time
-      ? `${formatTime(item.event_start_time)}${
-          item.event_end_time ? `–${formatTime(item.event_end_time)}` : ""
-        }`
-      : "未定";
-
   const locationText =
     [item.prefecture, item.city, item.area].filter(Boolean).join(" ") ||
     "未定";
 
-  const officialUrl = item.official_url || item.source_url;
-
-  const showLinkSection =
-    !!item.official_url && item.official_url !== item.source_url;
+  const officialUrl = item.official_url || item.source_url || "";
 
   return (
     <main style={wrap}>
@@ -151,7 +135,7 @@ export default async function SelectionDetailPage(props: {
               ...statusStyle(item.display_status),
             }}
           >
-            {item.display_status}
+            {item.display_status || "日程未定"}
           </span>
         </div>
 
@@ -161,7 +145,21 @@ export default async function SelectionDetailPage(props: {
           {item.organization_name || "団体名未設定"}
         </div>
 
-        {item.summary ? <p style={summary}>{item.summary}</p> : null}
+        <div style={summaryRow}>
+          {item.summary ? <p style={summary}>{item.summary}</p> : <div />}
+
+          {officialUrl ? (
+            <a
+              href={officialUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="sh-btn sh-btn--primary"
+              style={actionButton}
+            >
+              公式サイトを見る
+            </a>
+          ) : null}
+        </div>
 
         <div style={heroInfoGrid}>
           <div style={heroInfoBox}>
@@ -170,91 +168,34 @@ export default async function SelectionDetailPage(props: {
           </div>
 
           <div style={heroInfoBox}>
-            <div style={heroInfoLabel}>時間</div>
-            <div style={heroInfoValue}>{timeText}</div>
-          </div>
-
-          <div style={heroInfoBox}>
             <div style={heroInfoLabel}>地域</div>
             <div style={heroInfoValue}>{locationText}</div>
           </div>
-
-          <div style={heroInfoBox}>
-            <div style={heroInfoLabel}>申込期限</div>
-            <div style={heroInfoValue}>
-              {formatDate(item.application_deadline)}
-            </div>
-          </div>
-        </div>
-
-        <div style={actionRow}>
-          <a
-            href={officialUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="sh-btn sh-btn--primary"
-            style={actionButton}
-          >
-            公式サイトを見る
-          </a>
         </div>
       </section>
 
       <section className="ui-card" style={detailCard}>
         <h2 style={sectionTitle}>基本情報</h2>
 
-        <DetailRow label="対象カテゴリ" value={item.target_categories?.join(" / ")} />
+        <DetailRow
+          label="対象カテゴリ"
+          value={
+            item.target_categories?.length
+              ? item.target_categories.join(" / ")
+              : undefined
+          }
+        />
         <DetailRow label="対象" value={genderLabel(item.gender)} />
         <DetailRow label="会場" value={item.venue_name} />
         <DetailRow label="住所" value={item.venue_address} />
         <DetailRow label="参加費" value={feeText(item)} />
         <DetailRow label="費用メモ" value={item.fee_note} />
-        <DetailRow label="申込開始日" value={formatDate(item.application_start_date)} />
-        <DetailRow label="申込期限" value={formatDate(item.application_deadline)} />
       </section>
-
-      {item.description || item.memo ? (
-        <section className="ui-card" style={detailCard}>
-          <h2 style={sectionTitle}>詳細・メモ</h2>
-
-          {item.description ? (
-            <div style={textBlock}>
-              {item.description}
-            </div>
-          ) : null}
-
-          {item.memo ? (
-            <div style={memoBox}>
-              {item.memo}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {showLinkSection ? (
-        <section className="ui-card" style={detailCard}>
-          <h2 style={sectionTitle}>リンク</h2>
-
-          <DetailRow
-            label="公式URL"
-            value={
-              <a
-                href={item.official_url || ""}
-                target="_blank"
-                rel="noreferrer"
-                style={plainLink}
-              >
-                {item.official_url}
-              </a>
-            }
-          />
-        </section>
-      ) : null}
     </main>
   );
 }
 
-const wrap: React.CSSProperties = {
+const wrap: CSSProperties = {
   padding: 16,
   maxWidth: 900,
   margin: "0 auto",
@@ -262,17 +203,17 @@ const wrap: React.CSSProperties = {
   gap: 12,
 };
 
-const topBar: React.CSSProperties = {
+const topBar: CSSProperties = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap",
 };
 
-const heroCard: React.CSSProperties = {
+const heroCard: CSSProperties = {
   padding: 16,
 };
 
-const badgeRow: React.CSSProperties = {
+const badgeRow: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
@@ -280,7 +221,7 @@ const badgeRow: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
-const orgBadge: React.CSSProperties = {
+const orgBadge: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   minHeight: 28,
@@ -293,7 +234,7 @@ const orgBadge: React.CSSProperties = {
   fontWeight: 900,
 };
 
-const statusBadge: React.CSSProperties = {
+const statusBadge: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   minHeight: 28,
@@ -303,73 +244,83 @@ const statusBadge: React.CSSProperties = {
   fontWeight: 900,
 };
 
-const title: React.CSSProperties = {
+const title: CSSProperties = {
   margin: "14px 0 0",
   fontSize: 24,
   lineHeight: 1.4,
   color: "#111827",
 };
 
-const organization: React.CSSProperties = {
+const organization: CSSProperties = {
   marginTop: 8,
   fontSize: 14,
 };
 
-const summary: React.CSSProperties = {
-  margin: "14px 0 0",
+const summaryRow: CSSProperties = {
+  marginTop: 14,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const summary: CSSProperties = {
+  margin: 0,
   lineHeight: 1.7,
   color: "#374151",
   fontSize: 14,
+  flex: "1 1 360px",
+  minWidth: 0,
+  display: "-webkit-box",
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: "vertical",
+  overflow: "hidden",
 };
 
-const heroInfoGrid: React.CSSProperties = {
+const actionButton: CSSProperties = {
+  textDecoration: "none",
+  flexShrink: 0,
+};
+
+const heroInfoGrid: CSSProperties = {
   marginTop: 16,
   display: "grid",
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 10,
 };
 
-const heroInfoBox: React.CSSProperties = {
+const heroInfoBox: CSSProperties = {
   padding: 12,
   borderRadius: 14,
   background: "#f8faf8",
   border: "1px solid #e5ece7",
 };
 
-const heroInfoLabel: React.CSSProperties = {
+const heroInfoLabel: CSSProperties = {
   fontSize: 12,
   color: "#6b7280",
   marginBottom: 4,
 };
 
-const heroInfoValue: React.CSSProperties = {
+const heroInfoValue: CSSProperties = {
   fontSize: 15,
   fontWeight: 900,
   color: "#16391f",
   lineHeight: 1.4,
 };
 
-const actionRow: React.CSSProperties = {
-  marginTop: 16,
-  display: "flex",
-  justifyContent: "flex-end",
-};
-
-const actionButton: React.CSSProperties = {
-  textDecoration: "none",
-};
-
-const detailCard: React.CSSProperties = {
+const detailCard: CSSProperties = {
   padding: 16,
 };
 
-const sectionTitle: React.CSSProperties = {
+const sectionTitle: CSSProperties = {
   margin: "0 0 12px",
   fontSize: 18,
   color: "#16391f",
 };
 
-const detailRow: React.CSSProperties = {
+const detailRow: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "120px 1fr",
   gap: 10,
@@ -377,13 +328,13 @@ const detailRow: React.CSSProperties = {
   borderTop: "1px solid #edf2ee",
 };
 
-const detailLabel: React.CSSProperties = {
+const detailLabel: CSSProperties = {
   color: "#6b7280",
   fontSize: 13,
   lineHeight: 1.5,
 };
 
-const detailValue: React.CSSProperties = {
+const detailValue: CSSProperties = {
   color: "#111827",
   fontSize: 14,
   fontWeight: 700,
@@ -392,32 +343,7 @@ const detailValue: React.CSSProperties = {
   wordBreak: "break-word",
 };
 
-const textBlock: React.CSSProperties = {
-  whiteSpace: "pre-wrap",
-  lineHeight: 1.75,
-  fontSize: 14,
-  color: "#374151",
-};
-
-const memoBox: React.CSSProperties = {
-  marginTop: 12,
-  padding: 12,
-  borderRadius: 12,
-  background: "#f8faf8",
-  border: "1px solid #e5ece7",
-  whiteSpace: "pre-wrap",
-  lineHeight: 1.7,
-  fontSize: 14,
-  color: "#374151",
-};
-
-const plainLink: React.CSSProperties = {
-  color: "#166534",
-  fontWeight: 800,
-  wordBreak: "break-all",
-};
-
-const emptyBox: React.CSSProperties = {
+const emptyBox: CSSProperties = {
   padding: 22,
   textAlign: "center",
 };
