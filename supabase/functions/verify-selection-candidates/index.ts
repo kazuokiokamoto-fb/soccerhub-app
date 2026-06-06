@@ -650,8 +650,12 @@ async function upsertEvent(candidate: any, html: string) {
   }
 
   const eventDate = extractEventDate(fullText);
+  const deadline = extractDeadline(fullText);
 
-  if (isPastDate(eventDate)) {
+  if (
+    isPastDate(eventDate) &&
+    (!deadline || isPastDate(deadline))
+  ) {
     return await rejectCandidate(
       candidate,
       `past_event_date:${eventDate}`,
@@ -660,7 +664,6 @@ async function upsertEvent(candidate: any, html: string) {
     );
   }
 
-  const deadline = extractDeadline(fullText);
   const categories = extractCategories(fullText);
   const gender = extractGender(fullText);
   const statusText = displayStatus(eventDate, deadline, fullText);
