@@ -37,15 +37,6 @@ const BAD_DOMAINS = [
   "forms.gle",
 ];
 
-const SUMMARY_DOMAINS = [
-  "juniorsoccer-news.com",
-  "soccerplayer.net",
-  "goal-selection.net",
-  "soccer-selection.com",
-  "j-s-weekly.com",
-  "junior-soccer.jp",
-];
-
 const STRONG_WORDS = [
   "セレクション",
   "選考会",
@@ -64,23 +55,7 @@ const STRONG_WORDS = [
   "募集",
 ];
 
-const EVENT_PAGE_WORDS = [
-  "セレクション",
-  "選考会",
-  "トライアウト",
-  "tryout",
-  "selection",
-  "体験練習会",
-  "体験会",
-  "練習会",
-  "練習参加",
-  "練習体験",
-  "選手募集",
-  "新入団",
-  "入団",
-  "入部",
-  "募集",
-];
+const EVENT_PAGE_WORDS = STRONG_WORDS;
 
 const SOCCER_WORDS = [
   "サッカー",
@@ -127,7 +102,6 @@ const BAD_TITLE_WORDS = [
   "トップページ",
   "オフィシャルサイト",
   "Green Card",
-  "ブログ",
   "大会結果",
   "選手権大会",
   "学校 トップページ",
@@ -138,10 +112,6 @@ const BAD_TITLE_WORDS = [
   "Education-program",
   "Personal | academy",
 ];
-
-function looksMojibake(text: string) {
-  return /�/.test(String(text || ""));
-}
 
 const BAD_URL_PATTERNS = [
   "/news/list",
@@ -165,6 +135,10 @@ function json(data: unknown, status = 200) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function looksMojibake(text: string) {
+  return /�/.test(String(text || ""));
 }
 
 function decodeHtml(s: string) {
@@ -233,11 +207,6 @@ function matchedWords(text: string, words: string[]) {
 function isBadDomain(url: string) {
   const h = hostOf(url);
   return BAD_DOMAINS.some((d) => h.includes(d));
-}
-
-function isSummaryDomain(url: string) {
-  const h = hostOf(url);
-  return SUMMARY_DOMAINS.some((d) => h.includes(d));
 }
 
 function isBadUrlPattern(url: string) {
@@ -409,18 +378,13 @@ async function lookupSourceRankFromAliases(text: string) {
     .from("team_rank_aliases")
     .select("keyword, source_rank");
 
-  if (error) {
-    console.error("team_rank_aliases lookup error", error);
-    return null;
-  }
+  if (error) return null;
 
   const t = String(text || "").toLowerCase();
 
   for (const row of data || []) {
     const keyword = String(row.keyword || "").toLowerCase();
-    if (keyword && t.includes(keyword)) {
-      return row.source_rank;
-    }
+    if (keyword && t.includes(keyword)) return row.source_rank;
   }
 
   return null;
@@ -484,26 +448,11 @@ function inferSourceRank(text: string, organizationName: string | null) {
     return "pref_top";
   }
 
-  if (
-    t.includes("女子") ||
-    t.includes("レディース") ||
-    t.includes("women") ||
-    t.includes("girls") ||
-    t.includes("femminile")
-  ) {
+  if (t.includes("女子") || t.includes("レディース") || t.includes("women") || t.includes("girls")) {
     return "girls";
   }
 
-  if (
-    t.includes("スクール") ||
-    t.includes("school") ||
-    t.includes("クーバー") ||
-    t.includes("malva") ||
-    t.includes("soltilo") ||
-    t.includes("レアル・マドリード")
-  ) {
-    return "school";
-  }
+  if (t.includes("スクール") || t.includes("school")) return "school";
 
   if (
     t.includes("ジュニアユース") ||
@@ -517,19 +466,11 @@ function inferSourceRank(text: string, organizationName: string | null) {
     return "pref_2";
   }
 
-  if (
-    t.includes("高校") ||
-    t.includes("高等学校") ||
-    t.includes("中学校") ||
-    t.includes("大学") ||
-    t.includes("学校法人")
-  ) {
+  if (t.includes("高校") || t.includes("高等学校") || t.includes("中学校") || t.includes("大学")) {
     return "school";
   }
 
-  if (t.includes("academy") || t.includes("アカデミー")) {
-    return "pref_2";
-  }
+  if (t.includes("academy") || t.includes("アカデミー")) return "pref_2";
 
   return "district";
 }
@@ -578,9 +519,7 @@ async function fetchHtml(url: string) {
     if (url.startsWith("http://")) {
       const httpsUrl = url.replace("http://", "https://");
       const retry = await fetch(httpsUrl, { signal: controller.signal, headers });
-
       if (retry.ok) return await retry.text();
-
       throw new Error(`fetch failed ${res.status}, retry https failed ${retry.status}`);
     }
 
@@ -681,7 +620,7 @@ async function claimCandidates(limit: number) {
   }
 
   if (rejectedIds.length > 0) {
-    await supabase
+    const { error: rejectError } = await supabase
       .from("selection_page_candidates")
       .update({
         verified_status: "rejected",
@@ -691,13 +630,33 @@ async function claimCandidates(limit: number) {
         updated_at: nowIso(),
       })
       .in("id", rejectedIds);
+
+    if (rejectError) {
+      throw new Error(`pre reject update failed: ${rejectError.message}`);
+    }
+  }
+
+  if (acceptedRows.length > 0) {
+    const { error: claimError } = await supabase
+      .from("selection_page_candidates")
+      .update({
+        verified_status: "processing",
+        verified_reason: "processing",
+        checked_at: nowIso(),
+        updated_at: nowIso(),
+      })
+      .in("id", acceptedRows.map((r) => r.id));
+
+    if (claimError) {
+      throw new Error(`claim update failed: ${claimError.message}`);
+    }
   }
 
   return acceptedRows;
 }
 
 async function rejectCandidate(candidate: any, reason: string, verifiedScore: number, pageText = "") {
-  await supabase
+  const { error } = await supabase
     .from("selection_page_candidates")
     .update({
       verified_status: "rejected",
@@ -708,6 +667,10 @@ async function rejectCandidate(candidate: any, reason: string, verifiedScore: nu
       updated_at: nowIso(),
     })
     .eq("id", candidate.id);
+
+  if (error) {
+    throw new Error(`reject update failed: ${error.message}`);
+  }
 
   return { status: "rejected", reason, verifiedScore };
 }
@@ -758,10 +721,7 @@ async function upsertEvent(candidate: any, html: string) {
   const eventDate = extractEventDate(fullText);
   const deadline = extractDeadline(fullText);
 
-  if (
-    isPastDate(eventDate) &&
-    (!deadline || isPastDate(deadline))
-  ) {
+  if (isPastDate(eventDate) && (!deadline || isPastDate(deadline))) {
     return await rejectCandidate(
       candidate,
       `past_event_date:${eventDate}`,
@@ -830,9 +790,7 @@ async function upsertEvent(candidate: any, html: string) {
     .eq("duplicate_key", hash)
     .maybeSingle();
 
-  if (existingError && existingError.code !== "PGRST116") {
-    throw existingError;
-  }
+  if (existingError && existingError.code !== "PGRST116") throw existingError;
 
   if (existing?.id) {
     const { error } = await supabase
@@ -852,7 +810,7 @@ async function upsertEvent(candidate: any, html: string) {
     if (error) throw error;
   }
 
-  await supabase
+  const { error: acceptedError } = await supabase
     .from("selection_page_candidates")
     .update({
       verified_status: "accepted",
@@ -863,6 +821,10 @@ async function upsertEvent(candidate: any, html: string) {
       updated_at: nowIso(),
     })
     .eq("id", candidate.id);
+
+  if (acceptedError) {
+    throw new Error(`accepted update failed: ${acceptedError.message}`);
+  }
 
   return {
     status: "accepted",
@@ -888,7 +850,7 @@ async function runOne(candidate: any) {
       ...result,
     };
   } catch (e) {
-    await supabase
+    const { error } = await supabase
       .from("selection_page_candidates")
       .update({
         verified_status: "error",
@@ -898,6 +860,10 @@ async function runOne(candidate: any) {
         updated_at: nowIso(),
       })
       .eq("id", candidate.id);
+
+    if (error) {
+      console.error("error update failed", error);
+    }
 
     return {
       id: candidate.id,
