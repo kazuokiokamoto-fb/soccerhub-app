@@ -579,7 +579,12 @@ function shouldRejectBeforeFetch(row: any) {
 
   if (isLikelyTopPage(row.url)) {
     const hay = `${title} ${row.snippet || ""}`;
-    if (!includesAny(hay, EVENT_PAGE_WORDS)) return true;
+
+    const hasEventWord = includesAny(hay, EVENT_PAGE_WORDS);
+    const hasSoccerWord = includesAny(hay, SOCCER_WORDS);
+
+    // トップページでも「サッカー系」かつ「募集・体験・セレクション系」なら通す
+    if (!(hasSoccerWord && hasEventWord)) return true;
   }
 
   return false;
