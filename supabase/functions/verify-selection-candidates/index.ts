@@ -120,6 +120,15 @@ const HARD_REJECT_WORDS = [
   "アクセス",
 ];
 
+const BAD_URL_PATTERNS = [
+  "/news/list",
+  "?ym=",
+  "/category/",
+  "/tag/",
+  "/archive/",
+  "/archives/",
+];
+
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
@@ -202,6 +211,11 @@ function isBadDomain(url: string) {
 function isSummaryDomain(url: string) {
   const h = hostOf(url);
   return SUMMARY_DOMAINS.some((d) => h.includes(d));
+}
+
+function isBadUrlPattern(url: string) {
+  const u = String(url || "").toLowerCase();
+  return BAD_URL_PATTERNS.some((p) => u.includes(p));
 }
 
 function getTitle(html: string, fallback: string) {
@@ -552,9 +566,9 @@ async function fetchHtml(url: string) {
 function shouldRejectBeforeFetch(row: any) {
   if (!row?.url) return true;
   if (isBadDomain(row.url)) return true;
+  if (isBadUrlPattern(row.url)) return true;
 
   const title = String(row.title || "");
-  const lowerTitle = title.toLowerCase();
   const url = String(row.url || "").toLowerCase();
 
   if (includesAny(`${title} ${url}`, HARD_REJECT_WORDS)) return true;
@@ -646,7 +660,14 @@ async function upsertEvent(candidate: any, html: string) {
   verifiedScore += strong.length * 16;
   verifiedScore += soccer.length * 6;
 
-  if (isSummaryDomain(candidate.url)) verifiedScore -= 15;
+  if (isSummaryDomain(candidate.url)) {
+    return await rejectCandidate(
+      candidate,
+      "summary_site",
+      verifiedScore,
+      pageText,
+    );
+  }
   if (includesAny(fullText, ["募集終了", "受付終了", "締め切りました"])) verifiedScore -= 20;
   if (!includesAny(fullText, SOCCER_WORDS)) verifiedScore -= 35;
 
