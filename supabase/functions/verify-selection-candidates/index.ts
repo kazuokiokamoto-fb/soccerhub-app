@@ -16,6 +16,9 @@ const TARGET_SOURCE_TYPES = [
 const BAD_DOMAINS = [
   "instagram.com",
   "facebook.com",
+  "x.com",
+  "twitter.com",
+  "mobile.twitter.com",
   "junior-soccer.jp",
   "jmty.jp",
   "labola.jp",
@@ -46,6 +49,9 @@ const SUMMARY_DOMAINS = [
 const STRONG_WORDS = [
   "セレクション",
   "選考会",
+  "トライアウト",
+  "tryout",
+  "selection",
   "練習会",
   "体験練習会",
   "体験会",
@@ -61,6 +67,9 @@ const STRONG_WORDS = [
 const EVENT_PAGE_WORDS = [
   "セレクション",
   "選考会",
+  "トライアウト",
+  "tryout",
+  "selection",
   "体験練習会",
   "体験会",
   "練習会",
@@ -70,6 +79,7 @@ const EVENT_PAGE_WORDS = [
   "新入団",
   "入団",
   "入部",
+  "募集",
 ];
 
 const SOCCER_WORDS = [
@@ -95,6 +105,19 @@ const SOCCER_WORDS = [
   "レディース",
   "社会人",
   "シニア",
+];
+
+const HARD_REJECT_WORDS = [
+  "javascriptを使用できません",
+  "お問い合わせ",
+  "問合せ",
+  "問い合わせ",
+  "contact",
+  "privacy policy",
+  "プライバシーポリシー",
+  "利用規約",
+  "会社概要",
+  "アクセス",
 ];
 
 function json(data: unknown, status = 200) {
@@ -256,11 +279,9 @@ function extractDates(text: string) {
     if (d) dates.push(d);
   }
 
-  const unique = Array.from(
+  return Array.from(
     new Map(dates.map((d) => [toDateString(d), d])).values(),
   ).sort((a, b) => a.getTime() - b.getTime());
-
-  return unique;
 }
 
 function extractDeadline(text: string) {
@@ -367,7 +388,6 @@ async function lookupSourceRankFromAliases(text: string) {
 function inferSourceRank(text: string, organizationName: string | null) {
   const t = `${text} ${organizationName || ""}`.toLowerCase();
 
-  // 1. Jクラブ・J下部を最優先
   if (
     t.includes("jfaアカデミー") ||
     t.includes("鹿島アントラーズ") ||
@@ -390,7 +410,6 @@ function inferSourceRank(text: string, organizationName: string | null) {
     return "j_academy";
   }
 
-  // 2. 強豪名一致
   if (
     t.includes("ラルクヴェール") ||
     t.includes("wings") ||
@@ -424,7 +443,6 @@ function inferSourceRank(text: string, organizationName: string | null) {
     return "pref_top";
   }
 
-  // 3. 女子
   if (
     t.includes("女子") ||
     t.includes("レディース") ||
@@ -435,7 +453,6 @@ function inferSourceRank(text: string, organizationName: string | null) {
     return "girls";
   }
 
-  // 4. スクールは school
   if (
     t.includes("スクール") ||
     t.includes("school") ||
@@ -447,7 +464,6 @@ function inferSourceRank(text: string, organizationName: string | null) {
     return "school";
   }
 
-  // 5. ジュニアユース / U-15 / クラブユースは pref_2
   if (
     t.includes("ジュニアユース") ||
     t.includes("u-15") ||
@@ -460,7 +476,6 @@ function inferSourceRank(text: string, organizationName: string | null) {
     return "pref_2";
   }
 
-  // 6. 学校系
   if (
     t.includes("高校") ||
     t.includes("高等学校") ||
@@ -471,11 +486,7 @@ function inferSourceRank(text: string, organizationName: string | null) {
     return "school";
   }
 
-  // 7. academy / アカデミー単体では school にしない
-  if (
-    t.includes("academy") ||
-    t.includes("アカデミー")
-  ) {
+  if (t.includes("academy") || t.includes("アカデミー")) {
     return "pref_2";
   }
 
@@ -495,7 +506,7 @@ function displayStatus(eventDate: string | null, deadline: string | null, text: 
 
   if (eventDate && eventDate < today) return "開催終了";
   if (deadline && deadline < today) return "申込終了";
-  if (!eventDate) return "日程未定";
+  if (!eventDate) return "日付未取得";
 
   return "募集中";
 }
@@ -519,20 +530,13 @@ async function fetchHtml(url: string) {
   };
 
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers,
-    });
+    const res = await fetch(url, { signal: controller.signal, headers });
 
     if (res.ok) return await res.text();
 
     if (url.startsWith("http://")) {
       const httpsUrl = url.replace("http://", "https://");
-
-      const retry = await fetch(httpsUrl, {
-        signal: controller.signal,
-        headers,
-      });
+      const retry = await fetch(httpsUrl, { signal: controller.signal, headers });
 
       if (retry.ok) return await retry.text();
 
@@ -545,58 +549,75 @@ async function fetchHtml(url: string) {
   }
 }
 
+function shouldRejectBeforeFetch(row: any) {
+  if (!row?.url) return true;
+  if (isBadDomain(row.url)) return true;
+
+  const title = String(row.title || "");
+  const lowerTitle = title.toLowerCase();
+  const url = String(row.url || "").toLowerCase();
+
+  if (includesAny(`${title} ${url}`, HARD_REJECT_WORDS)) return true;
+
+  if (
+    title.includes("Instagram") ||
+    title.includes("インスタ") ||
+    title.includes("Facebook")
+  ) {
+    return true;
+  }
+
+  if (
+    url.includes("/contact") ||
+    url.includes("/inquiry") ||
+    url.includes("/toiawase") ||
+    url.includes("/privacy") ||
+    url.includes("/company")
+  ) {
+    return true;
+  }
+
+  if (isLikelyTopPage(row.url)) {
+    const hay = `${title} ${row.snippet || ""}`;
+    if (!includesAny(hay, EVENT_PAGE_WORDS)) return true;
+  }
+
+  return false;
+}
+
 async function claimCandidates(limit: number) {
-  const fetchLimit = Math.max(limit * 20, 50);
+  const fetchLimit = Math.max(limit * 30, 80);
 
   const { data, error } = await supabase
     .from("selection_page_candidates")
     .select("*")
     .in("source_type", TARGET_SOURCE_TYPES)
-    .gte("score", 100)
-    .or("verified_status.is.null,verified_status.eq.pending,verified_status.eq.unchecked")
+    .gte("score", 60)
+    .or("verified_status.is.null,verified_status.eq.pending,verified_status.eq.unchecked,verified_status.eq.error")
     .order("score", { ascending: false })
     .limit(fetchLimit);
 
   if (error) throw error;
 
   return (data || [])
-    .filter((row) => {
-      if (!row?.url) return false;
-      if (isBadDomain(row.url)) return false;
-
-      const title = String(row.title || "");
-      const lowerTitle = title.toLowerCase();
-      const url = String(row.url || "").toLowerCase();
-
-      if (
-        title.includes("お問い合わせ") ||
-        title.includes("問合せ") ||
-        title.includes("問い合わせ") ||
-        lowerTitle.includes("contact") ||
-        title.includes("Instagram") ||
-        title.includes("インスタ") ||
-        title.includes("Facebook") ||
-        title.includes("公式サイト") ||
-        title.includes("オフィシャルサイト") ||
-        title.includes("公式Web") ||
-        title.endsWith("HP")
-      ) {
-        return false;
-      }
-
-      if (
-        url.includes("/contact") ||
-        url.includes("/inquiry") ||
-        url.includes("/toiawase")
-      ) {
-        return false;
-      }
-
-      if (isLikelyTopPage(row.url)) return false;
-
-      return true;
-    })
+    .filter((row) => !shouldRejectBeforeFetch(row))
     .slice(0, limit);
+}
+
+async function rejectCandidate(candidate: any, reason: string, verifiedScore: number, pageText = "") {
+  await supabase
+    .from("selection_page_candidates")
+    .update({
+      verified_status: "rejected",
+      verified_score: verifiedScore,
+      verified_reason: reason,
+      checked_at: nowIso(),
+      page_text: pageText.slice(0, 15000),
+      updated_at: nowIso(),
+    })
+    .eq("id", candidate.id);
+
+  return { status: "rejected", reason, verifiedScore };
 }
 
 async function upsertEvent(candidate: any, html: string) {
@@ -604,88 +625,51 @@ async function upsertEvent(candidate: any, html: string) {
   const title = getTitle(html, candidate.title || "");
   const fullText = compactText(`${title} ${candidate.title || ""} ${candidate.snippet || ""} ${pageText}`, 30000);
 
-  if (!includesAny(fullText, EVENT_PAGE_WORDS)) {
-    await supabase
-      .from("selection_page_candidates")
-      .update({
-        verified_status: "rejected",
-        verified_score: Number(candidate.score || 0),
-        verified_reason: "no_event_page_word",
-        checked_at: nowIso(),
-        page_text: pageText.slice(0, 15000),
-        updated_at: nowIso(),
-      })
-      .eq("id", candidate.id);
-
-    return {
-      status: "rejected",
-      reason: "no_event_page_word",
-      verifiedScore: Number(candidate.score || 0),
-    };
+  if (includesAny(fullText, HARD_REJECT_WORDS) && !includesAny(fullText, EVENT_PAGE_WORDS)) {
+    return await rejectCandidate(candidate, "hard_reject_word", Number(candidate.score || 0), pageText);
   }
 
   const strong = matchedWords(fullText, STRONG_WORDS);
   const soccer = matchedWords(fullText, SOCCER_WORDS);
 
+  if (strong.length === 0) {
+    return await rejectCandidate(candidate, "no_event_page_word", Number(candidate.score || 0), pageText);
+  }
+
   let verifiedScore = Number(candidate.score || 0);
 
-  verifiedScore += strong.length * 10;
-  verifiedScore += soccer.length * 4;
+  verifiedScore += strong.length * 16;
+  verifiedScore += soccer.length * 6;
 
-  if (isSummaryDomain(candidate.url)) verifiedScore -= 40;
-  if (includesAny(fullText, ["募集終了", "受付終了", "締め切りました"])) verifiedScore -= 30;
-  if (!includesAny(fullText, STRONG_WORDS)) verifiedScore -= 100;
-  if (!includesAny(fullText, SOCCER_WORDS)) verifiedScore -= 60;
+  if (isSummaryDomain(candidate.url)) verifiedScore -= 15;
+  if (includesAny(fullText, ["募集終了", "受付終了", "締め切りました"])) verifiedScore -= 20;
+  if (!includesAny(fullText, SOCCER_WORDS)) verifiedScore -= 35;
 
-  if (verifiedScore < 80) {
-    await supabase
-      .from("selection_page_candidates")
-      .update({
-        verified_status: "rejected",
-        verified_score: verifiedScore,
-        verified_reason: "low_verified_score",
-        checked_at: nowIso(),
-        page_text: pageText.slice(0, 15000),
-        updated_at: nowIso(),
-      })
-      .eq("id", candidate.id);
-
-    return { status: "rejected", reason: "low_verified_score", verifiedScore };
+  if (verifiedScore < 55) {
+    return await rejectCandidate(candidate, "low_verified_score", verifiedScore, pageText);
   }
 
   const eventDate = extractEventDate(fullText);
 
   if (isPastDate(eventDate)) {
-    await supabase
-      .from("selection_page_candidates")
-      .update({
-        verified_status: "rejected",
-        verified_score: verifiedScore,
-        verified_reason: `past_event_date:${eventDate}`,
-        checked_at: nowIso(),
-        page_text: pageText.slice(0, 15000),
-        updated_at: nowIso(),
-      })
-      .eq("id", candidate.id);
-
-    return {
-      status: "rejected",
-      reason: `past_event_date:${eventDate}`,
+    return await rejectCandidate(
+      candidate,
+      `past_event_date:${eventDate}`,
       verifiedScore,
-      eventDate,
-    };
+      pageText,
+    );
   }
 
   const deadline = extractDeadline(fullText);
   const categories = extractCategories(fullText);
   const gender = extractGender(fullText);
   const statusText = displayStatus(eventDate, deadline, fullText);
-  
+
   const sourceRank =
     (await lookupSourceRankFromAliases(`${fullText} ${candidate.title || ""} ${title}`)) ||
-    inferSourceRank(fullText, candidate.title || title);  
+    inferSourceRank(fullText, candidate.title || title);
 
-  const hash = await sha256(`${candidate.url}|${title}|${eventDate || ""}|${deadline || ""}`);
+  const hash = await sha256(`${candidate.url}`);
 
   const eventRow = {
     source_id: null,
@@ -709,8 +693,8 @@ async function upsertEvent(candidate: any, html: string) {
     fee_note: null,
     source_url: candidate.url,
     official_url: candidate.url,
-    summary: compactText(pageText, 240),
-    description: compactText(pageText, 1200),
+    summary: compactText(pageText, 180),
+    description: compactText(pageText, 800),
     memo: `candidate_id:${candidate.id}`,
     image_url: null,
     fetched_at: nowIso(),
@@ -764,7 +748,7 @@ async function upsertEvent(candidate: any, html: string) {
     .update({
       verified_status: "accepted",
       verified_score: verifiedScore,
-      verified_reason: `event_date:${eventDate || "none"},deadline:${deadline || "none"}`,
+      verified_reason: `event_date:${eventDate || "none"},deadline:${deadline || "none"},rank:${sourceRank}`,
       checked_at: nowIso(),
       page_text: pageText.slice(0, 15000),
       updated_at: nowIso(),
@@ -778,6 +762,7 @@ async function upsertEvent(candidate: any, html: string) {
     deadline,
     displayStatus: statusText,
     categories,
+    sourceRank,
   };
 }
 
@@ -819,8 +804,8 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
 
-    const batchSize = Math.min(Number(body.batchSize || body.limit || 5), 10);
-    const maxBatches = Math.min(Number(body.maxBatches || 1), 10);
+    const batchSize = Math.min(Number(body.batchSize || body.limit || 10), 30);
+    const maxBatches = Math.min(Number(body.maxBatches || 1), 20);
 
     const results = [];
     let totalClaimed = 0;
@@ -843,7 +828,7 @@ serve(async (req) => {
         else if (r.status === "rejected") totalRejected++;
         else totalErrors++;
 
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 400));
       }
     }
 
