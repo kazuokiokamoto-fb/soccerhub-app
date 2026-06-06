@@ -171,6 +171,10 @@ const BAD_URL_PATTERNS = [
   "/apply-trial",
   "/education-program",
   "/personal",
+  "/news/",
+  "/info/",
+  "/blog",
+  "/single-post/",  
 ];
 
 function json(data: unknown, status = 200) {
@@ -709,6 +713,21 @@ async function upsertEvent(candidate: any, html: string) {
   const pageText = stripTags(html);
   const title = getTitle(html, candidate.title || "");
   const fullText = compactText(`${title} ${candidate.title || ""} ${candidate.snippet || ""} ${pageText}`, 30000);
+
+  if (looksMojibake(title)) {
+    return await rejectCandidate(candidate, "mojibake_title", Number(candidate.score || 0), pageText);
+  }
+
+  const fetchedSimpleTitle = title.trim().toLowerCase();
+
+  if (
+    fetchedSimpleTitle === "news" ||
+    fetchedSimpleTitle === "ニュース" ||
+    fetchedSimpleTitle === "スケジュール" ||
+    includesAny(title, BAD_TITLE_WORDS)
+  ) {
+    return await rejectCandidate(candidate, "bad_fetched_title", Number(candidate.score || 0), pageText);
+  }
 
   if (includesAny(fullText, HARD_REJECT_WORDS) && !includesAny(fullText, EVENT_PAGE_WORDS)) {
     return await rejectCandidate(candidate, "hard_reject_word", Number(candidate.score || 0), pageText);
