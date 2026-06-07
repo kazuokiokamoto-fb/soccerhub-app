@@ -173,6 +173,15 @@ function compactText(text: string, max = 12000) {
   return String(text || "").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
+function cleanForDb(text: string, max = 20000) {
+  return String(text || "")
+    .replace(/\u0000/g, "")
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, " ")
+    .replace(/\u2028/g, " ")
+    .replace(/\u2029/g, " ")
+    .slice(0, max);
+}
+
 function hostOf(url: string) {
   try {
     return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
@@ -663,7 +672,7 @@ async function rejectCandidate(candidate: any, reason: string, verifiedScore: nu
       verified_score: verifiedScore,
       verified_reason: reason,
       checked_at: nowIso(),
-      page_text: pageText.slice(0, 15000),
+      page_text: cleanForDb(pageText, 15000),
       updated_at: nowIso(),
     })
     .eq("id", candidate.id);
@@ -762,12 +771,12 @@ async function upsertEvent(candidate: any, html: string) {
     fee_note: null,
     source_url: candidate.url,
     official_url: candidate.url,
-    summary: compactText(pageText, 180),
-    description: compactText(pageText, 800),
+    summary: cleanForDb(compactText(pageText, 180), 180),
+    description: cleanForDb(compactText(pageText, 800), 800),
+    raw_text: cleanForDb(pageText, 20000),
     memo: `candidate_id:${candidate.id}`,
     image_url: null,
     fetched_at: nowIso(),
-    raw_text: pageText.slice(0, 20000),
     content_hash: hash,
     status: "published",
     display_status: statusText,
@@ -817,7 +826,7 @@ async function upsertEvent(candidate: any, html: string) {
       verified_score: verifiedScore,
       verified_reason: `event_date:${eventDate || "none"},deadline:${deadline || "none"},rank:${sourceRank}`,
       checked_at: nowIso(),
-      page_text: pageText.slice(0, 15000),
+      page_text: cleanForDb(pageText, 15000),
       updated_at: nowIso(),
     })
     .eq("id", candidate.id);
