@@ -108,7 +108,8 @@ export default async function SelectionDetailPage(props: {
   }
 
   const locationText =
-    [item.prefecture, item.city, item.area].filter(Boolean).join(" ") ||
+    item.area ||
+    [item.prefecture, item.city].filter(Boolean).join(" ") ||
     "未定";
 
   const officialUrl = item.official_url || item.source_url || "";
