@@ -512,6 +512,11 @@ async function insertCandidateIfMissing(sourceRow: any, official: any, sourcePag
   );
 
   const insertRow = {
+    query: cleanForDb(
+      `${sourceRow.query || sourceRow.title || official.anchorText || "公式サイト"} ${official.url}`,
+      500,
+    ),
+    
     title: cleanForDb(titleBase, 250),
     url,
     snippet: cleanForDb(snippet, 1000),
