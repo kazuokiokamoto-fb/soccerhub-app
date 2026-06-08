@@ -903,30 +903,34 @@ async function upsertBestPage(candidate: any, bestPage: any, pagesCount: number,
 
   let existing = null;
 
-  const { data: existingBySourceUrl, error: sourceUrlError } = await supabase
+  const { data: existingBySourceUrlRows, error: sourceUrlError } = await supabase
     .from("selection_events")
     .select("id")
     .eq("source_url", candidate.url)
-    .maybeSingle();
+    .limit(1);
 
-  if (sourceUrlError && sourceUrlError.code !== "PGRST116") {
+  if (sourceUrlError) {
     throw sourceUrlError;
   }
 
-  existing = existingBySourceUrl;
+  if (existingBySourceUrlRows && existingBySourceUrlRows.length > 0) {
+    existing = existingBySourceUrlRows[0];
+  }
 
   if (!existing) {
-    const { data: existingByHash, error: hashError } = await supabase
+    const { data: existingByHashRows, error: hashError } = await supabase
       .from("selection_events")
       .select("id")
       .eq("duplicate_key", hash)
-      .maybeSingle();
+      .limit(1);
 
-    if (hashError && hashError.code !== "PGRST116") {
+    if (hashError) {
       throw hashError;
     }
 
-    existing = existingByHash;
+    if (existingByHashRows && existingByHashRows.length > 0) {
+      existing = existingByHashRows[0];
+    }
   }
 
   if (existing?.id) {
