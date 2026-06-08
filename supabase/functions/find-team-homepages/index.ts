@@ -42,6 +42,13 @@ const BAD_DOMAINS = [
   "google.com",
   "forms.gle",
   "docs.google.com",
+  "clubyouth-football.com",
+  "clubyouth-u18.com",
+  "tokyo-cy.jp",
+  "jy-soccer.jp",
+  "juniorsoccer-news.com",
+  "footballnavi.jp",
+  "sportspulse.site",
 ];
 
 const BAD_URL_PARTS = [
@@ -275,11 +282,41 @@ function scoreCandidate(url: string, html: string, team: any) {
   }
 
   if (
-    host.includes("footballnavi") ||
+    nTeam.includes("fc東京") &&
+    (host.includes("fctokyo.co.jp") || host.includes("fc-tokyo.jp"))
+  ) {
+    score += 180;
+    reasons.push("known_official_domain");
+  }
+
+  if (
+    nTeam.includes("町田ゼルビア") &&
+    host.includes("zelvia.co.jp")
+  ) {
+    score += 180;
+    reasons.push("known_official_domain");
+  }
+
+  if (
+    nTeam.includes("東京ヴェルディ") &&
+    host.includes("verdy.co.jp")
+  ) {
+    score += 180;
+    reasons.push("known_official_domain");
+  }
+
+  if (
+    nTeam.includes("トリプレッタ") &&
+    host.includes("triplet-football.com")
+  ) {
+    score += 180;
+    reasons.push("known_official_domain");
+  }
+
+  if (
     host.includes("jimdo") ||
     host.includes("jimdofree") ||
     host.includes("wixsite") ||
-    host.includes("sports") ||
     host.includes("fc-") ||
     host.includes("-fc") ||
     host.includes("sc-") ||
