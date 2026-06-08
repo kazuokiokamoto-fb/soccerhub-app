@@ -15,6 +15,7 @@ const TARGET_SOURCE_TYPES = [
 
 const SUMMARY_DOMAINS = [
   "junior-soccer.jp",
+  "juniorsoccer-news.com",
   "green-card.co.jp",
   "footballnavi.jp",
   "sgrum.com",
@@ -51,26 +52,17 @@ const BAD_DOMAINS = [
   "livedoor.blog",
   "fc2.com",
   "wikipedia.org",
+
+  // 大会・ニュース・リーグ系ノイズ
+  "tokyosoccer-u18.com",
+  "tleague-u18.com",
+  "tandh.net",
 ];
 
 const BAD_EXTENSIONS = [
-  ".pdf",
-  ".doc",
-  ".docx",
-  ".xls",
-  ".xlsx",
-  ".ppt",
-  ".pptx",
-  ".zip",
-  ".jpg",
-  ".jpeg",
-  ".png",
-  ".gif",
-  ".webp",
-  ".svg",
-  ".mp4",
-  ".mov",
-  ".avi",
+  ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".zip",
+  ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
+  ".mp4", ".mov", ".avi",
 ];
 
 const BAD_URL_PARTS = [
@@ -95,6 +87,21 @@ const BAD_URL_PARTS = [
   "/rss",
   "mailto:",
   "tel:",
+];
+
+const BAD_ANCHOR_WORDS = [
+  "大会情報",
+  "大会結果",
+  "リーグ",
+  "日程",
+  "結果",
+  "順位",
+  "お問い合わせ",
+  "問合せ",
+  "アクセス",
+  "地図",
+  "プライバシー",
+  "利用規約",
 ];
 
 const TEAM_HINT_WORDS = [
@@ -122,22 +129,13 @@ const TEAM_HINT_WORDS = [
   "女子",
 ];
 
-const SELECTION_HINT_WORDS = [
-  "セレクション",
-  "選考会",
-  "トライアウト",
-  "tryout",
-  "selection",
-  "練習会",
-  "体験会",
-  "体験練習会",
-  "練習参加",
-  "練習体験",
-  "選手募集",
-  "募集",
-  "入団",
-  "入部",
-  "新入団",
+const OFFICIAL_HINT_WORDS = [
+  "公式",
+  "official",
+  "ホームページ",
+  "hp",
+  "web",
+  "サイト",
 ];
 
 const MAX_SOURCE_ROWS = 30;
@@ -281,10 +279,7 @@ function extractAnchorLinks(html: string, baseUrl: string) {
 
     if (!url) continue;
 
-    links.push({
-      url,
-      anchorText,
-    });
+    links.push({ url, anchorText });
   }
 
   return links;
@@ -320,7 +315,7 @@ async function fetchHtml(url: string) {
   }
 }
 
-function scoreOfficialLink(link: any, sourceUrl: string, pageText: string) {
+function scoreOfficialLink(link: any, sourceUrl: string) {
   const url = link.url || "";
   const host = hostOf(url);
   const sourceHost = hostOf(sourceUrl);
@@ -334,26 +329,16 @@ function scoreOfficialLink(link: any, sourceUrl: string, pageText: string) {
   if (host === sourceHost) return { score: -999, reasons: ["same_domain"] };
   if (isSummaryDomain(url)) return { score: -999, reasons: ["summary_domain"] };
   if (isBadUrl(url)) return { score: -999, reasons: ["bad_url"] };
+  if (includesAny(anchorText, BAD_ANCHOR_WORDS)) return { score: -999, reasons: ["bad_anchor"] };
 
   if (includesAny(hay, TEAM_HINT_WORDS)) {
     score += 50;
     reasons.push("team_hint");
   }
 
-  if (includesAny(hay, SELECTION_HINT_WORDS)) {
+  if (includesAny(hay, OFFICIAL_HINT_WORDS)) {
     score += 50;
-    reasons.push("selection_hint");
-  }
-
-  if (
-    anchorText.includes("公式") ||
-    anchorText.toLowerCase().includes("official") ||
-    anchorText.includes("ホームページ") ||
-    anchorText.includes("HP") ||
-    anchorText.includes("サイト")
-  ) {
-    score += 60;
-    reasons.push("official_anchor");
+    reasons.push("official_hint");
   }
 
   if (
@@ -361,6 +346,8 @@ function scoreOfficialLink(link: any, sourceUrl: string, pageText: string) {
     hay.includes("sc") ||
     hay.includes("u15") ||
     hay.includes("u-15") ||
+    hay.includes("u12") ||
+    hay.includes("u-12") ||
     hay.includes("academy") ||
     hay.includes("club")
   ) {
@@ -373,46 +360,28 @@ function scoreOfficialLink(link: any, sourceUrl: string, pageText: string) {
     url.includes("jimdofree") ||
     url.includes("wixsite") ||
     url.includes("amebaownd") ||
-    url.includes("webu.jp")
+    url.includes("webu.jp") ||
+    url.includes("sk4players")
   ) {
     score += 15;
     reasons.push("common_team_site_builder");
   }
 
-  if (
-    anchorText.includes("お問い合わせ") ||
-    anchorText.includes("問合せ") ||
-    anchorText.includes("アクセス") ||
-    anchorText.includes("地図")
-  ) {
-    score -= 30;
-    reasons.push("bad_anchor");
-  }
-
-  if (
-    url.includes("/contact") ||
-    url.includes("/privacy") ||
-    url.includes("/company") ||
-    url.includes("/access")
-  ) {
-    score -= 50;
-    reasons.push("bad_path");
-  }
-
-  if (score === 0 && includesAny(pageText, SELECTION_HINT_WORDS)) {
-    score += 10;
-    reasons.push("source_page_selection_related");
+  // アンカーテキストが空でも、URL自体がチームっぽければ許可
+  if (!anchorText && score < 50) {
+    score -= 15;
+    reasons.push("empty_anchor_penalty");
   }
 
   return { score, reasons };
 }
 
-function pickBestOfficialLinks(links: any[], sourceUrl: string, pageText: string) {
+function pickBestOfficialLinks(links: any[], sourceUrl: string) {
   const byHost = new Map<string, any>();
 
   for (const link of links) {
-    const scored = scoreOfficialLink(link, sourceUrl, pageText);
-    if (scored.score < 20) continue;
+    const scored = scoreOfficialLink(link, sourceUrl);
+    if (scored.score < 50) continue;
 
     const host = hostOf(link.url);
     if (!host) continue;
@@ -442,10 +411,11 @@ async function claimSummaryRows(limit: number) {
   const { data, error } = await supabase
     .from("selection_page_candidates")
     .select("*")
+    .in("source_type", TARGET_SOURCE_TYPES)
     .gte("score", 20)
     .or("official_links_status.is.null,official_links_status.eq.unchecked,official_links_status.eq.pending")
     .order("score", { ascending: false })
-    .limit(limit * 50);
+    .limit(limit * 80);
 
   if (error) throw error;
 
@@ -481,7 +451,7 @@ async function claimSummaryRows(limit: number) {
   return rows;
 }
 
-async function insertCandidateIfMissing(sourceRow: any, official: any, sourcePageTitle: string, sourcePageText: string) {
+async function insertCandidateIfMissing(sourceRow: any, official: any, sourcePageTitle: string) {
   const url = official.url;
 
   const { data: existing, error: existingError } = await supabase
@@ -507,8 +477,8 @@ async function insertCandidateIfMissing(sourceRow: any, official: any, sourcePag
     "公式サイト候補";
 
   const snippet = compactText(
-    `summary_source:${sourceRow.url} anchor:${official.anchorText} reasons:${official.reasons.join(",")}`,
-    500,
+    `summary_source:${sourceRow.url} original_url:${official.originalUrl} anchor:${official.anchorText} reasons:${official.reasons.join(",")}`,
+    700,
   );
 
   const insertRow = {
@@ -516,7 +486,6 @@ async function insertCandidateIfMissing(sourceRow: any, official: any, sourcePag
       `${sourceRow.query || sourceRow.title || official.anchorText || "公式サイト"} ${official.url}`,
       500,
     ),
-    
     title: cleanForDb(titleBase, 250),
     url,
     snippet: cleanForDb(snippet, 1000),
@@ -552,14 +521,13 @@ async function processOne(row: any) {
   try {
     const html = await fetchHtml(row.url);
     const title = getTitle(html, row.title || "");
-    const pageText = stripTags(html);
     const links = extractAnchorLinks(html, row.url);
-    const officialLinks = pickBestOfficialLinks(links, row.url, pageText);
+    const officialLinks = pickBestOfficialLinks(links, row.url);
 
     const insertedResults = [];
 
     for (const official of officialLinks) {
-      const r = await insertCandidateIfMissing(row, official, title, pageText);
+      const r = await insertCandidateIfMissing(row, official, title);
       insertedResults.push({
         ...r,
         score: official.score,
@@ -598,12 +566,19 @@ async function processOne(row: any) {
       insertedResults: insertedResults.slice(0, 10),
     };
   } catch (e) {
+    const message =
+      e instanceof Error
+        ? e.message
+        : typeof e === "string"
+          ? e
+          : JSON.stringify(e);
+
     const { error } = await supabase
       .from("selection_page_candidates")
       .update({
         official_links_status: "error",
         official_links_checked_at: nowIso(),
-        official_links_reason: String(e?.message || e).slice(0, 500),
+        official_links_reason: message.slice(0, 500),
         updated_at: nowIso(),
       })
       .eq("id", row.id);
@@ -614,7 +589,7 @@ async function processOne(row: any) {
       status: "error",
       id: row.id,
       url: row.url,
-      error: String(e?.message || e),
+      error: message,
     };
   }
 }
@@ -659,10 +634,17 @@ serve(async (req) => {
       results,
     });
   } catch (e) {
+    const message =
+      e instanceof Error
+        ? e.message
+        : typeof e === "string"
+          ? e
+          : JSON.stringify(e);
+
     return json(
       {
         ok: false,
-        error: String(e?.message || e),
+        error: message,
       },
       500,
     );
