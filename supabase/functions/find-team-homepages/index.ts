@@ -75,6 +75,12 @@ const BAD_DOMAINS = [
   "spobook.com",
   "sposuru.com",
   "clubkatsudo.com",
+  "duckduckgo.com",
+  "html.duckduckgo.com",
+  "u-18soccer.com",
+  "koko-soccer.com",
+  "soccerstation.co.jp",
+  "navi.soccerstation.co.jp",
 
   // 行政・学校・汎用
   "city.",
@@ -364,21 +370,19 @@ function getTitle(html: string) {
 }
 
 function getTeamParts(teamName: string) {
-  const nTeam = normalizeText(teamName);
+  const original = normalizeText(teamName);
 
-  const cleaned = nTeam
-    .replace(/u18|u15|u12|u-18|u-15|u-12/g, "")
-    .replace(/u13|u-13/g, "")
+  const cleaned = original
+    .replace(/u18|u15|u12|u13|u-18|u-15|u-12|u-13/g, "")
     .replace(/jr\.?|jy|jryouth/g, "")
-    .replace(/ジュニアユース/g, "")
-    .replace(/ジュニア/g, "")
-    .replace(/ユース/g, "")
-    .replace(/サッカークラブ/g, "")
-    .replace(/フットボールクラブ/g, "")
+    .replace(/ジュニアユース|ジュニアユス/g, "")
+    .replace(/ジュニア|ユース|ユス/g, "")
+    .replace(/サッカークラブ|サッカクラブ/g, "")
+    .replace(/フットボールクラブ|フットボルクラブ/g, "")
+    .replace(/フットボール|フットボル/g, "")
     .replace(/スポーツ少年団/g, "")
     .replace(/少年団/g, "")
-    .replace(/サッカー/g, "")
-    .replace(/フットボール/g, "")
+    .replace(/サッカー|サッカ/g, "")
     .replace(/クラブ/g, "");
 
   const parts = cleaned
@@ -388,26 +392,52 @@ function getTeamParts(teamName: string) {
 
   const extra: string[] = [];
 
-  const original = normalizeText(teamName);
+  const cityWords = [
+    "東京",
+    "町田",
+    "横浜",
+    "川崎",
+    "湘南",
+    "柏",
+    "浦和",
+    "大宮",
+    "千葉",
+    "水戸",
+    "栃木",
+    "群馬",
+    "鹿島",
+    "南葛",
+    "武蔵野",
+  ];
 
-  if (original.includes("東京")) extra.push("東京");
-  if (original.includes("町田")) extra.push("町田");
-  if (original.includes("横浜")) extra.push("横浜");
-  if (original.includes("川崎")) extra.push("川崎");
-  if (original.includes("湘南")) extra.push("湘南");
-  if (original.includes("柏")) extra.push("柏");
-  if (original.includes("浦和")) extra.push("浦和");
-  if (original.includes("大宮")) extra.push("大宮");
-  if (original.includes("千葉")) extra.push("千葉");
-  if (original.includes("水戸")) extra.push("水戸");
-  if (original.includes("栃木")) extra.push("栃木");
-  if (original.includes("群馬")) extra.push("群馬");
-  if (original.includes("鹿島")) extra.push("鹿島");
+  for (const w of cityWords) {
+    if (original.includes(w)) extra.push(w);
+  }
+
+  const knownNameWords = [
+    "ヴェルディ",
+    "ゼルビア",
+    "フロンターレ",
+    "マリノス",
+    "ベルマーレ",
+    "レイソル",
+    "レッズ",
+    "アルディージャ",
+    "アントラーズ",
+    "ホーリーホック",
+    "トリプレッタ",
+    "南葛",
+    "横河武蔵野",
+  ];
+
+  for (const w of knownNameWords) {
+    if (original.includes(normalizeText(w))) extra.push(normalizeText(w));
+  }
 
   return Array.from(new Set([...parts, ...extra]))
     .map((x) => x.trim())
     .filter((x) => x.length >= 2)
-    .slice(0, 6);
+    .slice(0, 8);
 }
 
 function includesAny(text: string, words: string[]) {
