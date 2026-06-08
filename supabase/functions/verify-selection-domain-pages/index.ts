@@ -43,23 +43,8 @@ const BAD_DOMAINS = [
 ];
 
 const BAD_EXTENSIONS = [
-  ".pdf",
-  ".doc",
-  ".docx",
-  ".xls",
-  ".xlsx",
-  ".ppt",
-  ".pptx",
-  ".zip",
-  ".jpg",
-  ".jpeg",
-  ".png",
-  ".gif",
-  ".webp",
-  ".svg",
-  ".mp4",
-  ".mov",
-  ".avi",
+  ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".zip",
+  ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".mp4", ".mov", ".avi",
 ];
 
 const STRONG_WORDS = [
@@ -252,6 +237,14 @@ function canonicalUrl(url: string) {
   }
 }
 
+function pathOf(url: string) {
+  try {
+    return new URL(url).pathname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
 function isBadDomain(url: string) {
   const h = hostOf(url);
   return BAD_DOMAINS.some((d) => h.includes(d));
@@ -352,6 +345,7 @@ async function fetchHtml(url: string) {
 function scorePage(page: any) {
   const title = page.title || "";
   const url = page.url || "";
+  const path = pathOf(url);
   const text = compactText(`${title} ${url} ${page.text}`, 40000);
 
   const strong = countMatches(text, STRONG_WORDS);
@@ -368,12 +362,59 @@ function scorePage(page: any) {
   if (includesAny(title, STRONG_WORDS)) score += 45;
   if (includesAny(title, DETAIL_WORDS)) score += 20;
 
-  if (includesAny(url, ["selection", "tryout"])) score += 20;
+  if (includesAny(url, ["selection", "tryout"])) score += 25;
+
+  // 詳細ページ・募集ページを加点
+  if (includesAny(url, [
+    "recruit",
+    "recruitment",
+    "member",
+    "entry",
+    "form",
+    "trial",
+    "taiken",
+    "nyubu",
+    "join",
+    "boshu",
+    "selection",
+    "tryout",
+  ])) {
+    score += 35;
+  }
+
+  if (includesAny(title, [
+    "募集",
+    "申込",
+    "申し込み",
+    "入部",
+    "体験",
+    "セレクション",
+    "選考会",
+    "練習会",
+  ])) {
+    score += 35;
+  }
 
   score -= negative.count * 25;
 
   if (page.text.length < 250) score -= 35;
   if (page.text.length > 1200) score += 15;
+
+  // トップページは、全ページの要素が混ざって勝ちやすいので強めに減点
+  if (
+    path === "/" ||
+    path === "" ||
+    path === "/index.html" ||
+    path === "/index.htm" ||
+    path === "/index"
+  ) {
+    score -= 120;
+  }
+
+  // お知らせ・最新情報・一覧ページは詳細ページではないことが多いので減点
+  if (includesAny(title, ["最新情報", "news", "お知らせ", "トップ", "home"])) {
+    score -= 80;
+  }
 
   if (includesAny(text, ["ニュース一覧", "記事一覧", "一覧"])) score -= 35;
   if (includesAny(text, ["開催日", "対象", "会場", "申込"])) score += 40;
@@ -416,12 +457,7 @@ async function crawlDomain(startUrl: string) {
       const text = stripTags(html);
 
       if (!looksMojibake(title) && text.length >= 80) {
-        pages.push({
-          url,
-          title,
-          text,
-          html,
-        });
+        pages.push({ url, title, text, html });
       }
 
       const links = extractLinks(html, url);
@@ -452,11 +488,7 @@ async function findBestSelectionPage(candidate: any) {
   const scored = pages
     .map((page) => {
       const s = scorePage(page);
-      return {
-        ...page,
-        verifiedScore: s.score,
-        scoreDetail: s,
-      };
+      return { ...page, verifiedScore: s.score, scoreDetail: s };
     })
     .sort((a, b) => b.verifiedScore - a.verifiedScore);
 
@@ -614,13 +646,9 @@ function extractGender(text: string) {
     t.includes("レディース") ||
     t.includes("women") ||
     t.includes("girls")
-  ) {
-    return "girls";
-  }
+  ) return "girls";
 
-  if (t.includes("男子") || t.includes("boys")) {
-    return "boys";
-  }
+  if (t.includes("男子") || t.includes("boys")) return "boys";
 
   return "any";
 }
@@ -661,14 +689,9 @@ function inferSourceRank(text: string, organizationName: string | null) {
     t.includes("湘南ベルマーレ") ||
     t.includes("栃木sc") ||
     t.includes("ザスパ群馬")
-  ) {
-    return "j_academy";
-  }
+  ) return "j_academy";
 
-  if (t.includes("女子") || t.includes("レディース") || t.includes("women") || t.includes("girls")) {
-    return "girls";
-  }
-
+  if (t.includes("女子") || t.includes("レディース") || t.includes("women") || t.includes("girls")) return "girls";
   if (t.includes("スクール") || t.includes("school")) return "school";
 
   if (
@@ -679,14 +702,9 @@ function inferSourceRank(text: string, organizationName: string | null) {
     t.includes("ユース") ||
     t.includes("u-18") ||
     t.includes("u18")
-  ) {
-    return "pref_2";
-  }
+  ) return "pref_2";
 
-  if (t.includes("高校") || t.includes("高等学校") || t.includes("中学校") || t.includes("大学")) {
-    return "school";
-  }
-
+  if (t.includes("高校") || t.includes("高等学校") || t.includes("中学校") || t.includes("大学")) return "school";
   if (t.includes("academy") || t.includes("アカデミー")) return "pref_2";
 
   return "district";
@@ -699,9 +717,7 @@ function displayStatus(eventDate: string | null, deadline: string | null, text: 
     text.includes("募集終了") ||
     text.includes("受付終了") ||
     text.includes("締め切りました")
-  ) {
-    return "申込終了";
-  }
+  ) return "申込終了";
 
   if (eventDate && eventDate < today) return "開催終了";
   if (deadline && deadline < today) return "申込終了";
@@ -825,12 +841,7 @@ async function upsertBestPage(candidate: any, bestPage: any, pagesCount: number,
   const deadline = extractDeadline(fullText);
 
   if (isPastDate(eventDate) && (!deadline || isPastDate(deadline))) {
-    return await rejectCandidate(
-      candidate,
-      `past_event_date:${eventDate}`,
-      bestPage.verifiedScore || 0,
-      pageText,
-    );
+    return await rejectCandidate(candidate, `past_event_date:${eventDate}`, bestPage.verifiedScore || 0, pageText);
   }
 
   const categories = extractCategories(fullText);
@@ -863,10 +874,8 @@ async function upsertBestPage(candidate: any, bestPage: any, pagesCount: number,
     application_deadline: deadline,
     fee_amount: null,
     fee_note: null,
-
     source_url: candidate.url,
     official_url: bestPage.url,
-
     summary: cleanForDb(compactText(pageText, 180), 180),
     description: cleanForDb(compactText(pageText, 800), 800),
     raw_text: cleanForDb(pageText, 20000),
@@ -910,10 +919,7 @@ async function upsertBestPage(candidate: any, bestPage: any, pagesCount: number,
   } else {
     const { error } = await supabase
       .from("selection_events")
-      .insert({
-        ...eventRow,
-        created_at: nowIso(),
-      });
+      .insert({ ...eventRow, created_at: nowIso() });
 
     if (error) throw error;
   }
@@ -965,12 +971,19 @@ async function runOne(candidate: any) {
       ...result,
     };
   } catch (e) {
+    const message =
+      e instanceof Error
+        ? e.message
+        : typeof e === "string"
+          ? e
+          : JSON.stringify(e);
+
     const { error } = await supabase
       .from("selection_page_candidates")
       .update({
         verified_status: "error",
         verified_score: 0,
-        verified_reason: String(e?.message || e).slice(0, 500),
+        verified_reason: message.slice(0, 500),
         checked_at: nowIso(),
         updated_at: nowIso(),
       })
@@ -983,7 +996,7 @@ async function runOne(candidate: any) {
       title: candidate.title,
       url: candidate.url,
       status: "error",
-      error: String(e?.message || e),
+      error: message,
     };
   }
 }
@@ -1033,12 +1046,13 @@ serve(async (req) => {
       results,
     });
   } catch (e) {
-    return json(
-      {
-        ok: false,
-        error: String(e?.message || e),
-      },
-      500,
-    );
+    const message =
+      e instanceof Error
+        ? e.message
+        : typeof e === "string"
+          ? e
+          : JSON.stringify(e);
+
+    return json({ ok: false, error: message }, 500);
   }
 });
