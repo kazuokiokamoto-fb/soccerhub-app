@@ -552,20 +552,21 @@ function scoreCandidate(url: string, html: string, team: any) {
     reasons.push("thin_page_penalty");
   }
 
-  // 公式HPではなく紹介・大会・検索結果っぽい語
+  // 公式HP本文には「リーグ戦」「大会結果」などが普通に入るため、
+  // 減点対象は URL と title だけに限定する
+  const pageHead = `${url} ${title}`.toLowerCase();
+
   if (
-    includesAny(hay, [
+    includesAny(pageHead, [
       "試合速報",
       "順位表",
       "大会結果",
       "選手権",
-      "リーグ戦",
       "トーナメント",
       "掲示板",
       "まとめ",
       "ニュース一覧",
       "関連記事",
-      "powered by",
     ])
   ) {
     score -= 45;
