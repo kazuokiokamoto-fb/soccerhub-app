@@ -442,11 +442,10 @@ async function claimSummaryRows(limit: number) {
   const { data, error } = await supabase
     .from("selection_page_candidates")
     .select("*")
-    .in("source_type", TARGET_SOURCE_TYPES)
-    .gte("score", 28)
+    .gte("score", 20)
     .or("official_links_status.is.null,official_links_status.eq.unchecked,official_links_status.eq.pending")
     .order("score", { ascending: false })
-    .limit(limit);
+    .limit(limit * 50);
 
   if (error) throw error;
 
@@ -455,10 +454,13 @@ async function claimSummaryRows(limit: number) {
   for (const row of data || []) {
     const url = row.url || "";
 
-    if (!url || isBadUrl(url)) continue;
+    if (!url) continue;
+    if (isBadUrl(url)) continue;
+    if (!isSummaryDomain(url)) continue;
 
-    // まとめサイト優先。ただし通常ページでも外部リンクがある可能性があるので許可
     rows.push(row);
+
+    if (rows.length >= limit) break;
   }
 
   if (rows.length > 0) {
