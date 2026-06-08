@@ -904,7 +904,10 @@ async function upsertBestPage(candidate: any, bestPage: any, pagesCount: number,
   const { data: existing, error: existingError } = await supabase
     .from("selection_events")
     .select("id")
-    .eq("duplicate_key", hash)
+    .or(
+      `source_url.eq.${candidate.url},duplicate_key.eq.${hash}`
+    )
+    .limit(1)
     .maybeSingle();
 
   if (existingError && existingError.code !== "PGRST116") throw existingError;
