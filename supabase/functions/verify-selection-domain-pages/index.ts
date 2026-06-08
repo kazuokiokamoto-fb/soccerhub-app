@@ -11,6 +11,7 @@ const supabase = createClient(
 const TARGET_SOURCE_TYPES = [
   "duckduckgo_html_refined",
   "summary_extracted_link",
+  "official_link_from_summary",
 ];
 
 const MAX_PAGES_PER_DOMAIN = 180;
