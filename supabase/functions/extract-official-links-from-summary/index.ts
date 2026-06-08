@@ -138,7 +138,7 @@ const OFFICIAL_HINT_WORDS = [
   "サイト",
 ];
 
-const MAX_SOURCE_ROWS = 30;
+const MAX_SOURCE_ROWS = 1000;
 const FETCH_TIMEOUT_MS = 12000;
 
 function json(data: unknown, status = 200) {
@@ -257,6 +257,16 @@ function isBadUrl(url: string) {
   return false;
 }
 
+function isBadOfficialCandidate(url: string) {
+  const u = String(url || "").toLowerCase();
+
+  if (!u.startsWith("http://") && !u.startsWith("https://")) return true;
+  if (isBadDomain(u)) return true;
+  if (BAD_EXTENSIONS.some((x) => u.split("?")[0].endsWith(x))) return true;
+
+  return false;
+}
+
 function getTitle(html: string, fallback: string) {
   const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
   if (h1?.[1]) return stripTags(h1[1]).slice(0, 120);
@@ -327,8 +337,10 @@ function scoreOfficialLink(link: any, sourceUrl: string) {
 
   if (!url || !host) return { score: -999, reasons: ["invalid_url"] };
   if (host === sourceHost) return { score: -999, reasons: ["same_domain"] };
+  if (isBadOfficialCandidate(url)) {
+    return { score: -999, reasons: ["bad_url"] };
+  }
   if (isSummaryDomain(url)) return { score: -999, reasons: ["summary_domain"] };
-  if (isBadUrl(url)) return { score: -999, reasons: ["bad_url"] };
   if (includesAny(anchorText, BAD_ANCHOR_WORDS)) return { score: -999, reasons: ["bad_anchor"] };
 
   if (includesAny(hay, TEAM_HINT_WORDS)) {
@@ -415,7 +427,7 @@ async function claimSummaryRows(limit: number) {
     .gte("score", 20)
     .or("official_links_status.is.null,official_links_status.eq.unchecked,official_links_status.eq.pending")
     .order("score", { ascending: false })
-    .limit(5000);
+    .limit(limit);
 
   if (error) throw error;
 
@@ -423,9 +435,8 @@ async function claimSummaryRows(limit: number) {
 
   for (const row of data || []) {
     const url = row.url || "";
-
     if (!url) continue;
-    if (isBadUrl(url)) continue;
+
     if (!isSummaryDomain(url)) continue;
 
     rows.push(row);
