@@ -408,14 +408,29 @@ function pickBestOfficialLinks(links: any[], sourceUrl: string) {
 }
 
 async function claimSummaryRows(limit: number) {
+  const summaryDomainFilters = [
+    "url.ilike.%junior-soccer.jp%",
+    "url.ilike.%juniorsoccer-news.com%",
+    "url.ilike.%green-card.co.jp%",
+    "url.ilike.%footballnavi.jp%",
+    "url.ilike.%sgrum.com%",
+    "url.ilike.%labola.jp%",
+    "url.ilike.%net-menber.com%",
+    "url.ilike.%circle-book.com%",
+    "url.ilike.%jmty.jp%",
+    "url.ilike.%sposuru.com%",
+    "url.ilike.%clubkatsudo.com%",
+  ].join(",");
+
   const { data, error } = await supabase
     .from("selection_page_candidates")
     .select("*")
     .in("source_type", TARGET_SOURCE_TYPES)
     .gte("score", 20)
     .or("official_links_status.is.null,official_links_status.eq.unchecked,official_links_status.eq.pending")
+    .or(summaryDomainFilters)
     .order("score", { ascending: false })
-    .limit(limit * 80);
+    .limit(limit);
 
   if (error) throw error;
 
@@ -429,8 +444,6 @@ async function claimSummaryRows(limit: number) {
     if (!isSummaryDomain(url)) continue;
 
     rows.push(row);
-
-    if (rows.length >= limit) break;
   }
 
   if (rows.length > 0) {
