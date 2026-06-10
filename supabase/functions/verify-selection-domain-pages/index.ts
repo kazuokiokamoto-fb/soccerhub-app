@@ -8,15 +8,11 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-const TARGET_SOURCE_TYPES = [
-  "duckduckgo_html_refined",
-  "summary_extracted_link",
-  "official_link_from_summary",
-];
-
-const MAX_PAGES_PER_DOMAIN = 180;
-const MAX_QUEUE = 600;
+const MAX_ROWS = 5;
+const MAX_PAGES_PER_DOMAIN = 120;
+const MAX_QUEUE = 400;
 const FETCH_TIMEOUT_MS = 12000;
+const MIN_ACCEPT_SCORE = 70;
 
 const BAD_DOMAINS = [
   "instagram.com",
@@ -24,27 +20,39 @@ const BAD_DOMAINS = [
   "x.com",
   "twitter.com",
   "mobile.twitter.com",
-  "junior-soccer.jp",
-  "jmty.jp",
-  "labola.jp",
-  "net-menber.com",
-  "circle-book.com",
-  "求人ボックス.com",
-  "mykoho.jp",
-  "commu-chika.jp",
-  "clubkatsudo.com",
-  "sposuru.com",
   "youtube.com",
   "youtu.be",
   "line.me",
   "maps.google",
   "google.com",
   "forms.gle",
+  "docs.google.com",
 ];
 
 const BAD_EXTENSIONS = [
   ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".zip",
   ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".mp4", ".mov", ".avi",
+];
+
+const BAD_URL_PARTS = [
+  "/category/",
+  "/tag/",
+  "/archive/",
+  "/archives/",
+  "/author/",
+  "/feed",
+  "/rss",
+  "/contact",
+  "/privacy",
+  "/company",
+  "/about",
+  "/access",
+  "/schedule",
+  "/calendar",
+  "/result",
+  "/results",
+  "/news/page/",
+  "?ym=",
 ];
 
 const STRONG_WORDS = [
@@ -58,11 +66,24 @@ const STRONG_WORDS = [
   "体験会",
   "練習参加",
   "練習体験",
+  "体験参加",
+  "体験受付",
   "選手募集",
+  "参加者募集",
   "新入団",
   "入団",
   "入部",
   "募集",
+  "追加募集",
+  "GK募集",
+  "ゴールキーパー募集",
+  "入団希望",
+  "入団希望者",
+  "現小学6年生",
+  "新中学1年生",
+  "新中一",
+  "ジュニアユース説明会",
+  "説明会",
 ];
 
 const DETAIL_WORDS = [
@@ -131,27 +152,6 @@ const NEGATIVE_WORDS = [
   "利用規約",
 ];
 
-const BAD_URL_PARTS = [
-  "/category/",
-  "/tag/",
-  "/archive/",
-  "/archives/",
-  "/author/",
-  "/feed",
-  "/rss",
-  "/contact",
-  "/privacy",
-  "/company",
-  "/about",
-  "/access",
-  "/schedule",
-  "/calendar",
-  "/result",
-  "/results",
-  "/news/page/",
-  "?ym=",
-];
-
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
@@ -161,6 +161,10 @@ function json(data: unknown, status = 200) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function decodeHtml(s: string) {
@@ -216,7 +220,7 @@ function normalizeUrl(url: string, base?: string) {
   try {
     const u = new URL(url, base);
     u.hash = "";
-    if ((u.protocol !== "http:") && (u.protocol !== "https:")) return "";
+    if (u.protocol !== "http:" && u.protocol !== "https:") return "";
     return u.toString();
   } catch {
     return "";
@@ -320,17 +324,18 @@ async function fetchHtml(url: string) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
-  const headers = {
-    "user-agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
-    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "accept-language": "ja,en-US;q=0.9,en;q=0.8",
-  };
-
   try {
-    const res = await fetch(url, { signal: controller.signal, headers });
-    const ct = res.headers.get("content-type") || "";
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "accept-language": "ja,en-US;q=0.9,en;q=0.8",
+      },
+    });
 
+    const ct = res.headers.get("content-type") || "";
     if (!res.ok) throw new Error(`fetch failed ${res.status}`);
     if (!ct.includes("text/html") && !ct.includes("application/xhtml+xml") && !ct.includes("text/plain")) {
       throw new Error(`not html: ${ct}`);
@@ -362,9 +367,8 @@ function scorePage(page: any) {
   if (includesAny(title, STRONG_WORDS)) score += 45;
   if (includesAny(title, DETAIL_WORDS)) score += 20;
 
-  if (includesAny(url, ["selection", "tryout"])) score += 25;
+  if (includesAny(url, ["selection", "tryout", "trial"])) score += 35;
 
-  // 詳細ページ・募集ページを加点
   if (includesAny(url, [
     "recruit",
     "recruitment",
@@ -391,6 +395,7 @@ function scorePage(page: any) {
     "セレクション",
     "選考会",
     "練習会",
+    "説明会",
   ])) {
     score += 35;
   }
@@ -400,7 +405,6 @@ function scorePage(page: any) {
   if (page.text.length < 250) score -= 35;
   if (page.text.length > 1200) score += 15;
 
-  // トップページは、全ページの要素が混ざって勝ちやすいので強めに減点
   if (
     path === "/" ||
     path === "" ||
@@ -411,14 +415,12 @@ function scorePage(page: any) {
     score -= 120;
   }
 
-  // お知らせ・最新情報・一覧ページは詳細ページではないことが多いので減点
   if (includesAny(title, ["最新情報", "news", "お知らせ", "トップ", "home"])) {
-    score -= 80;
+    score -= 60;
   }
 
   if (includesAny(text, ["ニュース一覧", "記事一覧", "一覧"])) score -= 35;
   if (includesAny(text, ["開催日", "対象", "会場", "申込"])) score += 40;
-  if (includesAny(text, ["募集終了", "受付終了", "締め切りました"])) score -= 25;
 
   if (strong.count === 0) score -= 80;
   if (soccer.count === 0) score -= 30;
@@ -435,6 +437,7 @@ function scorePage(page: any) {
 async function crawlDomain(startUrl: string) {
   const start = normalizeUrl(startUrl);
   const startHost = hostOf(start);
+
   if (!start || !startHost) throw new Error("invalid start url");
   if (isBadUrl(start)) throw new Error("bad start url");
 
@@ -472,18 +475,16 @@ async function crawlDomain(startUrl: string) {
         queued.add(link);
         queue.push(link);
       }
-    } catch (_) {
-      // ページ単位のfetch失敗は無視
-    }
+    } catch (_) {}
 
-    await new Promise((resolve) => setTimeout(resolve, 180));
+    await sleep(180);
   }
 
   return pages;
 }
 
-async function findBestSelectionPage(candidate: any) {
-  const pages = await crawlDomain(candidate.url);
+async function findBestSelectionPage(homepage: any) {
+  const pages = await crawlDomain(homepage.official_url);
 
   const scored = pages
     .map((page) => {
@@ -492,10 +493,8 @@ async function findBestSelectionPage(candidate: any) {
     })
     .sort((a, b) => b.verifiedScore - a.verifiedScore);
 
-  const best = scored[0] || null;
-
   return {
-    best,
+    best: scored[0] || null,
     pagesCount: pages.length,
     topPages: scored.slice(0, 10).map((p) => ({
       url: p.url,
@@ -510,16 +509,7 @@ async function findBestSelectionPage(candidate: any) {
 
 function toDateString(d: Date | null) {
   if (!d || Number.isNaN(d.getTime())) return null;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function isPastDate(date: string | null) {
-  if (!date) return false;
-  const today = toDateString(new Date())!;
-  return date < today;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function validDate(y: number, m: number, d: number) {
@@ -535,7 +525,6 @@ function extractDates(text: string) {
   const currentYear = now.getFullYear();
   const dates: Date[] = [];
   const raw = String(text || "");
-
   let m;
 
   const jpFull = /(20\d{2})年\s*(\d{1,2})月\s*(\d{1,2})日/g;
@@ -558,8 +547,7 @@ function extractDates(text: string) {
     const month = Number(m[1]);
     const day = Number(m[2]);
 
-    let y = baseYear;
-    let d = validDate(y, month, day);
+    let d = validDate(baseYear, month, day);
 
     if (
       d &&
@@ -567,20 +555,18 @@ function extractDates(text: string) {
         new Date(currentYear, now.getMonth(), now.getDate()).getTime() -
           1000 * 60 * 60 * 24 * 60
     ) {
-      d = validDate(y + 1, month, day);
+      d = validDate(baseYear + 1, month, day);
     }
 
     if (d) dates.push(d);
   }
 
-  return Array.from(
-    new Map(dates.map((d) => [toDateString(d), d])).values(),
-  ).sort((a, b) => a.getTime() - b.getTime());
+  return Array.from(new Map(dates.map((d) => [toDateString(d), d])).values())
+    .sort((a, b) => a.getTime() - b.getTime());
 }
 
 function extractDeadline(text: string) {
-  const compact = compactText(text, 20000);
-  const lines = compact.split(/。|\.|\n/).map((v) => v.trim()).filter(Boolean);
+  const lines = compactText(text, 20000).split(/。|\.|\n/).map((v) => v.trim()).filter(Boolean);
 
   const deadlineLines = lines.filter((line) =>
     line.includes("締切") ||
@@ -601,8 +587,7 @@ function extractDeadline(text: string) {
 }
 
 function extractEventDate(text: string) {
-  const compact = compactText(text, 20000);
-  const lines = compact.split(/。|\.|\n/).map((v) => v.trim()).filter(Boolean);
+  const lines = compactText(text, 20000).split(/。|\.|\n/).map((v) => v.trim()).filter(Boolean);
 
   const eventLines = lines.filter((line) =>
     line.includes("開催日") ||
@@ -619,7 +604,7 @@ function extractEventDate(text: string) {
     if (dates.length > 0) return toDateString(dates[0]);
   }
 
-  const all = extractDates(compact);
+  const all = extractDates(text);
   return all.length > 0 ? toDateString(all[0]) : null;
 }
 
@@ -640,16 +625,8 @@ function extractCategories(text: string) {
 
 function extractGender(text: string) {
   const t = String(text || "").toLowerCase();
-
-  if (
-    t.includes("女子") ||
-    t.includes("レディース") ||
-    t.includes("women") ||
-    t.includes("girls")
-  ) return "girls";
-
+  if (t.includes("女子") || t.includes("レディース") || t.includes("women") || t.includes("girls")) return "girls";
   if (t.includes("男子") || t.includes("boys")) return "boys";
-
   return "any";
 }
 
@@ -732,139 +709,93 @@ async function sha256(text: string) {
   return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function claimCandidates(limit: number) {
-  const fetchLimit = Math.max(limit * 20, 60);
-
+async function claimHomepages(limit: number) {
   const { data, error } = await supabase
-    .from("selection_page_candidates")
+    .from("team_homepages")
     .select("*")
-    .in("source_type", TARGET_SOURCE_TYPES)
-    .gte("score", 28)
-    .or("verified_status.is.null,verified_status.eq.pending,verified_status.eq.unchecked")
-    .order("score", { ascending: false })
-    .limit(fetchLimit);
+    .eq("homepage_status", "found")
+    .not("official_url", "is", null)
+    .or("selection_search_status.is.null,selection_search_status.eq.unchecked,selection_search_status.eq.retry")
+    .order("created_at", { ascending: true })
+    .limit(limit);
 
   if (error) throw error;
 
-  const acceptedRows = [];
-  const rejectedIds = [];
-  const seenHosts = new Set<string>();
+  const rows = data || [];
 
-  for (const row of data || []) {
-    const url = row?.url || "";
-    const host = hostOf(url);
-
-    if (!url || !host || isBadUrl(url)) {
-      rejectedIds.push(row.id);
-      continue;
-    }
-
-    if (seenHosts.has(host)) {
-      rejectedIds.push(row.id);
-      continue;
-    }
-
-    seenHosts.add(host);
-    acceptedRows.push(row);
-
-    if (acceptedRows.length >= limit) break;
-  }
-
-  if (rejectedIds.length > 0) {
-    const { error: rejectError } = await supabase
-      .from("selection_page_candidates")
+  if (rows.length > 0) {
+    const { error: updateError } = await supabase
+      .from("team_homepages")
       .update({
-        verified_status: "rejected",
-        verified_score: 0,
-        verified_reason: "domain_pre_reject_bad_or_duplicate_host",
-        checked_at: nowIso(),
+        selection_search_status: "processing",
+        selection_search_checked_at: nowIso(),
         updated_at: nowIso(),
       })
-      .in("id", rejectedIds);
+      .in("id", rows.map((r) => r.id));
 
-    if (rejectError) throw new Error(`pre reject update failed: ${rejectError.message}`);
+    if (updateError) throw updateError;
   }
 
-  if (acceptedRows.length > 0) {
-    const { error: claimError } = await supabase
-      .from("selection_page_candidates")
-      .update({
-        verified_status: "processing",
-        verified_reason: "domain_processing",
-        checked_at: nowIso(),
-        updated_at: nowIso(),
-      })
-      .in("id", acceptedRows.map((r) => r.id));
-
-    if (claimError) throw new Error(`claim update failed: ${claimError.message}`);
-  }
-
-  return acceptedRows;
+  return rows;
 }
 
-async function rejectCandidate(candidate: any, reason: string, verifiedScore: number, pageText = "") {
+async function markHomepage(homepage: any, status: string, reason: string) {
   const { error } = await supabase
-    .from("selection_page_candidates")
+    .from("team_homepages")
     .update({
-      verified_status: "rejected",
-      verified_score: verifiedScore,
-      verified_reason: reason,
-      checked_at: nowIso(),
-      page_text: cleanForDb(pageText, 15000),
+      selection_search_status: status,
+      selection_search_reason: reason.slice(0, 1000),
+      selection_search_checked_at: nowIso(),
       updated_at: nowIso(),
     })
-    .eq("id", candidate.id);
+    .eq("id", homepage.id);
 
-  if (error) throw new Error(`reject update failed: ${error.message}`);
-
-  return { status: "rejected", reason, verifiedScore };
+  if (error) throw error;
 }
 
-async function upsertBestPage(candidate: any, bestPage: any, pagesCount: number, topPages: any[]) {
+async function upsertBestPage(homepage: any, bestPage: any, pagesCount: number, topPages: any[]) {
   const pageText = bestPage.text || "";
-  const title = bestPage.title || candidate.title || "セレクション情報";
-  const fullText = compactText(`${title} ${candidate.title || ""} ${candidate.snippet || ""} ${pageText}`, 40000);
+  const title = bestPage.title || `${homepage.team_name} セレクション情報`;
+  const fullText = compactText(`${title} ${homepage.team_name || ""} ${pageText}`, 40000);
 
   if (looksMojibake(title)) {
-    return await rejectCandidate(candidate, "mojibake_best_title", bestPage.verifiedScore || 0, pageText);
+    await markHomepage(homepage, "selection_not_found", "mojibake_best_title");
+    return { status: "rejected", reason: "mojibake_best_title", verifiedScore: bestPage.verifiedScore || 0 };
   }
 
   if (!includesAny(fullText, STRONG_WORDS)) {
-    return await rejectCandidate(candidate, "best_page_no_selection_words", bestPage.verifiedScore || 0, pageText);
+    await markHomepage(homepage, "selection_not_found", "best_page_no_selection_words");
+    return { status: "rejected", reason: "best_page_no_selection_words", verifiedScore: bestPage.verifiedScore || 0 };
   }
 
-  if ((bestPage.verifiedScore || 0) < 70) {
-    return await rejectCandidate(candidate, "best_page_low_score", bestPage.verifiedScore || 0, pageText);
+  if ((bestPage.verifiedScore || 0) < MIN_ACCEPT_SCORE) {
+    await markHomepage(homepage, "selection_not_found", `best_page_low_score:${bestPage.verifiedScore || 0}`);
+    return { status: "rejected", reason: "best_page_low_score", verifiedScore: bestPage.verifiedScore || 0 };
   }
 
   const eventDate = extractEventDate(fullText);
   const deadline = extractDeadline(fullText);
-
-  if (isPastDate(eventDate) && (!deadline || isPastDate(deadline))) {
-    return await rejectCandidate(candidate, `past_event_date:${eventDate}`, bestPage.verifiedScore || 0, pageText);
-  }
-
   const categories = extractCategories(fullText);
   const gender = extractGender(fullText);
   const statusText = displayStatus(eventDate, deadline, fullText);
 
   const sourceRank =
-    (await lookupSourceRankFromAliases(`${fullText} ${candidate.title || ""} ${title}`)) ||
-    inferSourceRank(fullText, candidate.title || title);
+    (await lookupSourceRankFromAliases(`${fullText} ${homepage.team_name || ""}`)) ||
+    inferSourceRank(fullText, homepage.team_name || title);
 
-  const hash = await sha256(`${bestPage.url}`);
+  const hash = await sha256(`${homepage.id}:${bestPage.url}`);
 
   const eventRow = {
     source_id: null,
     crawl_page_id: null,
-    title: title || candidate.title || "セレクション情報",
-    organization_name: candidate.title || title || null,
+    title,
+    organization_name: homepage.team_name || title || null,
     organization_type: "club_team",
     target_categories: categories,
     gender,
-    prefecture: candidate.prefecture || null,
-    city: candidate.municipality || null,
-    area: [candidate.prefecture, candidate.municipality].filter(Boolean).join(" ") || null,
+    prefecture: homepage.prefecture || null,
+    city: null,
+    area: homepage.prefecture || null,
     venue_name: null,
     venue_address: null,
     event_date: eventDate,
@@ -874,13 +805,13 @@ async function upsertBestPage(candidate: any, bestPage: any, pagesCount: number,
     application_deadline: deadline,
     fee_amount: null,
     fee_note: null,
-    source_url: candidate.url,
+    source_url: homepage.official_url,
     official_url: bestPage.url,
     summary: cleanForDb(compactText(pageText, 180), 180),
     description: cleanForDb(compactText(pageText, 800), 800),
     raw_text: cleanForDb(pageText, 20000),
     memo: cleanForDb(
-      `candidate_id:${candidate.id}\nstart_url:${candidate.url}\nbest_url:${bestPage.url}\npages_count:${pagesCount}\ntop_pages:${JSON.stringify(topPages).slice(0, 3000)}`,
+      `homepage_id:${homepage.id}\nteam_directory_id:${homepage.team_directory_id || ""}\nstart_url:${homepage.official_url}\nbest_url:${bestPage.url}\npages_count:${pagesCount}\ntop_pages:${JSON.stringify(topPages).slice(0, 3000)}`,
       4000,
     ),
     image_url: null,
@@ -891,7 +822,7 @@ async function upsertBestPage(candidate: any, bestPage: any, pagesCount: number,
     is_featured: false,
     last_seen_at: nowIso(),
     updated_at: nowIso(),
-    source_type: "verified_domain_best_page",
+    source_type: "team_homepage_selection_page",
     pdf_url: null,
     instagram_url: null,
     external_url: bestPage.url,
@@ -903,35 +834,14 @@ async function upsertBestPage(candidate: any, bestPage: any, pagesCount: number,
 
   let existing = null;
 
-  const { data: existingBySourceUrlRows, error: sourceUrlError } = await supabase
+  const { data: existingRows, error: existingError } = await supabase
     .from("selection_events")
     .select("id")
-    .eq("source_url", candidate.url)
+    .eq("duplicate_key", hash)
     .limit(1);
 
-  if (sourceUrlError) {
-    throw sourceUrlError;
-  }
-
-  if (existingBySourceUrlRows && existingBySourceUrlRows.length > 0) {
-    existing = existingBySourceUrlRows[0];
-  }
-
-  if (!existing) {
-    const { data: existingByHashRows, error: hashError } = await supabase
-      .from("selection_events")
-      .select("id")
-      .eq("duplicate_key", hash)
-      .limit(1);
-
-    if (hashError) {
-      throw hashError;
-    }
-
-    if (existingByHashRows && existingByHashRows.length > 0) {
-      existing = existingByHashRows[0];
-    }
-  }
+  if (existingError) throw existingError;
+  if (existingRows && existingRows.length > 0) existing = existingRows[0];
 
   if (existing?.id) {
     const { error } = await supabase
@@ -948,19 +858,11 @@ async function upsertBestPage(candidate: any, bestPage: any, pagesCount: number,
     if (error) throw error;
   }
 
-  const { error: acceptedError } = await supabase
-    .from("selection_page_candidates")
-    .update({
-      verified_status: "accepted",
-      verified_score: bestPage.verifiedScore || 0,
-      verified_reason: `domain_best_page:${bestPage.url},pages:${pagesCount},event_date:${eventDate || "none"},deadline:${deadline || "none"},rank:${sourceRank}`,
-      checked_at: nowIso(),
-      page_text: cleanForDb(pageText, 15000),
-      updated_at: nowIso(),
-    })
-    .eq("id", candidate.id);
-
-  if (acceptedError) throw new Error(`accepted update failed: ${acceptedError.message}`);
+  await markHomepage(
+    homepage,
+    "selection_found",
+    `best_url:${bestPage.url},score:${bestPage.verifiedScore || 0},pages:${pagesCount},event_date:${eventDate || "none"},deadline:${deadline || "none"},rank:${sourceRank}`,
+  );
 
   return {
     status: "accepted",
@@ -976,22 +878,28 @@ async function upsertBestPage(candidate: any, bestPage: any, pagesCount: number,
   };
 }
 
-async function runOne(candidate: any) {
+async function runOne(homepage: any) {
   try {
-    const found = await findBestSelectionPage(candidate);
+    const found = await findBestSelectionPage(homepage);
 
     if (!found.best) {
-      return await rejectCandidate(candidate, "no_pages_crawled_in_domain", 0, "");
+      await markHomepage(homepage, "selection_not_found", "no_pages_crawled_in_domain");
+      return {
+        id: homepage.id,
+        team_name: homepage.team_name,
+        url: homepage.official_url,
+        status: "rejected",
+        reason: "no_pages_crawled_in_domain",
+      };
     }
 
-    const result = await upsertBestPage(candidate, found.best, found.pagesCount, found.topPages);
+    const result = await upsertBestPage(homepage, found.best, found.pagesCount, found.topPages);
 
     return {
-      id: candidate.id,
-      title: candidate.title,
-      startUrl: candidate.url,
-      host: hostOf(candidate.url),
-      candidateScore: candidate.score,
+      id: homepage.id,
+      team_name: homepage.team_name,
+      startUrl: homepage.official_url,
+      host: hostOf(homepage.official_url),
       ...result,
     };
   } catch (e) {
@@ -1002,23 +910,12 @@ async function runOne(candidate: any) {
           ? e
           : JSON.stringify(e);
 
-    const { error } = await supabase
-      .from("selection_page_candidates")
-      .update({
-        verified_status: "error",
-        verified_score: 0,
-        verified_reason: message.slice(0, 500),
-        checked_at: nowIso(),
-        updated_at: nowIso(),
-      })
-      .eq("id", candidate.id);
-
-    if (error) console.error("error update failed", error);
+    await markHomepage(homepage, "selection_error", message);
 
     return {
-      id: candidate.id,
-      title: candidate.title,
-      url: candidate.url,
+      id: homepage.id,
+      team_name: homepage.team_name,
+      url: homepage.official_url,
       status: "error",
       error: message,
     };
@@ -1029,41 +926,32 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
 
-    const batchSize = Math.min(Number(body.batchSize || body.limit || 2), 5);
-    const maxBatches = Math.min(Number(body.maxBatches || 1), 5);
+    const batchSize = Math.min(Number(body.batchSize || body.limit || 1), MAX_ROWS);
+
+    const homepages = await claimHomepages(batchSize);
 
     const results = [];
-    let totalClaimed = 0;
     let totalAccepted = 0;
     let totalRejected = 0;
     let totalErrors = 0;
 
-    for (let batch = 0; batch < maxBatches; batch++) {
-      const candidates = await claimCandidates(batchSize);
+    for (const homepage of homepages) {
+      const r = await runOne(homepage);
+      results.push(r);
 
-      if (candidates.length === 0) break;
+      if (r.status === "accepted") totalAccepted++;
+      else if (r.status === "rejected") totalRejected++;
+      else totalErrors++;
 
-      totalClaimed += candidates.length;
-
-      for (const candidate of candidates) {
-        const r = await runOne(candidate);
-        results.push(r);
-
-        if (r.status === "accepted") totalAccepted++;
-        else if (r.status === "rejected") totalRejected++;
-        else totalErrors++;
-
-        await new Promise((resolve) => setTimeout(resolve, 600));
-      }
+      await sleep(600);
     }
 
     return json({
       ok: true,
-      mode: "verify-selection-domain-pages",
+      mode: "crawl-team-homepages-for-selection-pages",
       batchSize,
-      maxBatches,
       maxPagesPerDomain: MAX_PAGES_PER_DOMAIN,
-      totalClaimed,
+      claimed: homepages.length,
       totalAccepted,
       totalRejected,
       totalErrors,
