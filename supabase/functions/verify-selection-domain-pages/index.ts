@@ -3,7 +3,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-console.log("VERIFY START NEWS-FIRST");
+console.log("VERIFY START NEWS-FIRST FALLBACK-DIRECT");
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -538,15 +538,15 @@ function dateSortValue(date: string | null) {
   return date ? Number(date.replaceAll("-", "")) : 0;
 }
 
-function dedupeLinks(links: any[]) {
+function dedupeByUrl(items: any[]) {
   const seen = new Set<string>();
   const out: any[] = [];
 
-  for (const link of links) {
-    const url = canonicalUrl(link.url || "");
+  for (const item of items) {
+    const url = canonicalUrl(item.url || "");
     if (!url || seen.has(url)) continue;
     seen.add(url);
-    out.push({ ...link, url });
+    out.push({ ...item, url });
   }
 
   return out;
@@ -561,6 +561,35 @@ async function loadPage(url: string, fallbackTitle = "") {
   return { url, title, text, html, publishedDate };
 }
 
+async function evaluateCandidatePage(link: any, type: string) {
+  const page = await loadPage(link.url, link.label || link.url);
+  const s = scorePage(page);
+  const fullText = compactText(`${page.title} ${page.url} ${page.text}`, 40000);
+  const hasCore = includesAny(fullText, CORE_SELECTION_WORDS);
+
+  return {
+    page: {
+      ...page,
+      publishedDate: page.publishedDate || link.publishedDate || null,
+      verifiedScore: s.score,
+      scoreDetail: s,
+      candidateType: type,
+    },
+    debug: {
+      type,
+      url: page.url,
+      title: page.title,
+      publishedDate: page.publishedDate || link.publishedDate || null,
+      score: s.score,
+      hasCore,
+      coreMatched: s.coreMatched,
+      detailMatched: s.detailMatched,
+      negativeMatched: s.negativeMatched,
+    },
+    accepted: hasCore && s.score >= MIN_ACCEPT_SCORE,
+  };
+}
+
 async function collectCandidatePages(homepage: any) {
   const startUrl = homepage.official_url;
   const startHost = hostOf(startUrl);
@@ -573,23 +602,24 @@ async function collectCandidatePages(homepage: any) {
     .filter((link) => sameHost(link.url, startUrl))
     .filter((link) => !isBadUrl(link.url));
 
-  const directLinks = dedupeLinks(
+  const newsListLinks = dedupeByUrl(
+    topLinks
+      .filter(isNewsListLink)
+      .slice(0, MAX_NEWS_LISTS),
+  );
+
+  const directLinks = dedupeByUrl(
     topLinks
       .filter(isDirectCandidateLink)
       .filter((link) => !isNewsListLink(link))
       .slice(0, MAX_DIRECT_CANDIDATES),
   );
 
-  const newsListLinks = dedupeLinks(
-    topLinks
-      .filter(isNewsListLink)
-      .slice(0, MAX_NEWS_LISTS),
-  );
-
   const articleLinksFromTop = topLinks
     .filter((link) => looksArticleUrl(link.url))
-    .map((link) => ({
+    .map((link, index) => ({
       ...link,
+      order: index,
       publishedDate: extractPublishedDateFromUrlOrText(link.url, link.label),
     }));
 
@@ -602,8 +632,9 @@ async function collectCandidatePages(homepage: any) {
         .filter((link) => sameHost(link.url, startUrl))
         .filter((link) => !isBadUrl(link.url))
         .filter((link) => looksArticleUrl(link.url))
-        .map((link) => ({
+        .map((link, index) => ({
           ...link,
+          order: index,
           publishedDate: extractPublishedDateFromUrlOrText(link.url, `${link.label} ${listPage.text.slice(0, 600)}`),
         }));
 
@@ -613,70 +644,51 @@ async function collectCandidatePages(homepage: any) {
     await sleep(200);
   }
 
-  articleLinks = dedupeLinks(articleLinks)
-    .sort((a, b) => dateSortValue(b.publishedDate) - dateSortValue(a.publishedDate))
+  articleLinks = dedupeByUrl(articleLinks)
+    .sort((a, b) => {
+      const bd = dateSortValue(b.publishedDate);
+      const ad = dateSortValue(a.publishedDate);
+      if (bd !== ad) return bd - ad;
+      return Number(a.order || 0) - Number(b.order || 0);
+    })
     .slice(0, MAX_NEWS_ARTICLES);
 
-  const candidates: any[] = [];
+  const selectedPages: any[] = [];
   const debug: any[] = [];
 
-  for (const link of directLinks) {
-    try {
-      const page = await loadPage(link.url, link.label || link.url);
-      const s = scorePage(page);
-      const fullText = compactText(`${page.title} ${page.url} ${page.text}`, 40000);
-
-      debug.push({
-        type: "direct",
-        url: page.url,
-        title: page.title,
-        score: s.score,
-        hasCore: includesAny(fullText, CORE_SELECTION_WORDS),
-        coreMatched: s.coreMatched,
-      });
-
-      if (includesAny(fullText, CORE_SELECTION_WORDS) && s.score >= MIN_ACCEPT_SCORE) {
-        candidates.push({ ...page, verifiedScore: s.score, scoreDetail: s, candidateType: "direct" });
-      }
-    } catch (_) {}
-
-    await sleep(200);
-  }
-
   for (const link of articleLinks) {
-    if (candidates.length >= MAX_SELECTION_EVENTS_PER_TEAM) break;
+    if (selectedPages.length >= MAX_SELECTION_EVENTS_PER_TEAM) break;
 
     try {
-      const page = await loadPage(link.url, link.label || link.url);
-      const s = scorePage(page);
-      const fullText = compactText(`${page.title} ${page.url} ${page.text}`, 40000);
-      const hasCore = includesAny(fullText, CORE_SELECTION_WORDS);
+      const evaluated = await evaluateCandidatePage(link, "news");
+      debug.push(evaluated.debug);
 
-      debug.push({
-        type: "news",
-        url: page.url,
-        title: page.title,
-        publishedDate: page.publishedDate || link.publishedDate || null,
-        score: s.score,
-        hasCore,
-        coreMatched: s.coreMatched,
-      });
-
-      if (hasCore && s.score >= MIN_ACCEPT_SCORE) {
-        candidates.push({
-          ...page,
-          publishedDate: page.publishedDate || link.publishedDate || null,
-          verifiedScore: s.score,
-          scoreDetail: s,
-          candidateType: "news",
-        });
+      if (evaluated.accepted) {
+        selectedPages.push(evaluated.page);
       }
     } catch (_) {}
 
     await sleep(200);
   }
 
-  const finalCandidates = dedupeLinks(candidates)
+  if (selectedPages.length < MAX_SELECTION_EVENTS_PER_TEAM) {
+    for (const link of directLinks) {
+      if (selectedPages.length >= MAX_SELECTION_EVENTS_PER_TEAM) break;
+
+      try {
+        const evaluated = await evaluateCandidatePage(link, "direct");
+        debug.push(evaluated.debug);
+
+        if (evaluated.accepted) {
+          selectedPages.push(evaluated.page);
+        }
+      } catch (_) {}
+
+      await sleep(200);
+    }
+  }
+
+  const finalCandidates = dedupeByUrl(selectedPages)
     .sort((a, b) => {
       const ad = dateSortValue(a.publishedDate || extractEventDate(`${a.title} ${a.text}`));
       const bd = dateSortValue(b.publishedDate || extractEventDate(`${b.title} ${b.text}`));
@@ -690,9 +702,9 @@ async function collectCandidatePages(homepage: any) {
     directLinksCount: directLinks.length,
     newsListsCount: newsListLinks.length,
     articleLinksCount: articleLinks.length,
-    pagesCount: directLinks.length + newsListLinks.length + articleLinks.length + 1,
+    pagesCount: 1 + newsListLinks.length + articleLinks.length + directLinks.length,
     selectedPages: finalCandidates,
-    topPages: debug.slice(0, 20),
+    topPages: debug.slice(0, 30),
   };
 }
 
@@ -1187,7 +1199,7 @@ async function runOne(homepage: any) {
 }
 
 serve(async (req) => {
-  console.log("REQUEST RECEIVED NEWS-FIRST 2026-06-10-02");
+  console.log("REQUEST RECEIVED NEWS-FIRST FALLBACK-DIRECT 2026-06-10-03");
 
   try {
     const body = await req.json().catch(() => ({}));
@@ -1219,7 +1231,7 @@ serve(async (req) => {
 
     return json({
       ok: true,
-      mode: "crawl-team-homepages-news-first-selection-pages",
+      mode: "crawl-team-homepages-news-first-fallback-direct-selection-pages",
       batchSize,
       maxDirectCandidates: MAX_DIRECT_CANDIDATES,
       maxNewsLists: MAX_NEWS_LISTS,
