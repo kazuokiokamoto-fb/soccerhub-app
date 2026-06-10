@@ -11,8 +11,8 @@ const supabase = createClient(
 );
 
 const MAX_ROWS = 5;
-const MAX_PAGES_PER_DOMAIN = 120;
-const MAX_QUEUE = 400;
+const MAX_PAGES_PER_DOMAIN = 40;
+const MAX_QUEUE = 120;
 const FETCH_TIMEOUT_MS = 12000;
 const MIN_ACCEPT_SCORE = 70;
 
