@@ -88,6 +88,30 @@ const STRONG_WORDS = [
   "説明会",
 ];
 
+const CORE_SELECTION_WORDS = [
+  "セレクション",
+  "選考会",
+  "トライアウト",
+  "tryout",
+  "selection",
+  "練習会",
+  "体験練習会",
+  "体験会",
+  "練習参加",
+  "練習体験",
+  "体験参加",
+  "選手募集",
+  "新入団",
+  "入団希望",
+  "入団希望者",
+  "現小学6年生",
+  "新中学1年生",
+  "新中一",
+  "ジュニアユース説明会",
+  "GK募集",
+  "ゴールキーパー募集",
+];
+
 const DETAIL_WORDS = [
   "開催日",
   "実施日",
@@ -152,6 +176,16 @@ const NEGATIVE_WORDS = [
   "会社概要",
   "プライバシーポリシー",
   "利用規約",
+  "キックオフイベント",
+  "イベント開催",
+  "ファンイベント",
+  "観戦",
+  "チケット",
+  "グッズ",
+  "試合結果",
+  "マッチレポート",
+  "リーグ戦",
+  "大会結果",
 ];
 
 function json(data: unknown, status = 200) {
@@ -355,6 +389,7 @@ function scorePage(page: any) {
   const path = pathOf(url);
   const text = compactText(`${title} ${url} ${page.text}`, 40000);
 
+  const core = countMatches(text, CORE_SELECTION_WORDS);
   const strong = countMatches(text, STRONG_WORDS);
   const detail = countMatches(text, DETAIL_WORDS);
   const soccer = countMatches(text, SOCCER_WORDS);
@@ -362,8 +397,9 @@ function scorePage(page: any) {
 
   let score = 0;
 
-  score += strong.count * 32;
-  score += detail.count * 18;
+  score += core.count * 80;
+  score += strong.count * 20;
+  score += detail.count * 12;
   score += soccer.count * 5;
 
   if (includesAny(title, STRONG_WORDS)) score += 45;
@@ -424,11 +460,13 @@ function scorePage(page: any) {
   if (includesAny(text, ["ニュース一覧", "記事一覧", "一覧"])) score -= 35;
   if (includesAny(text, ["開催日", "対象", "会場", "申込"])) score += 40;
 
+  if (core.count === 0) score -= 250;
   if (strong.count === 0) score -= 80;
   if (soccer.count === 0) score -= 30;
 
   return {
     score,
+    coreMatched: core.matched,
     strongMatched: strong.matched,
     detailMatched: detail.matched,
     soccerMatched: soccer.matched,
@@ -491,17 +529,30 @@ async function findBestSelectionPage(homepage: any) {
   const scored = pages
     .map((page) => {
       const s = scorePage(page);
-      return { ...page, verifiedScore: s.score, scoreDetail: s };
+      const fullText = compactText(`${page.title || ""} ${page.url || ""} ${page.text || ""}`, 40000);
+      const hasCore = includesAny(fullText, CORE_SELECTION_WORDS);
+
+      return {
+        ...page,
+        verifiedScore: s.score,
+        scoreDetail: s,
+        hasCore,
+      };
     })
     .sort((a, b) => b.verifiedScore - a.verifiedScore);
 
+  const eligible = scored.filter((p) => p.hasCore);
+  const best = eligible[0] || null;
+
   return {
-    best: scored[0] || null,
+    best,
     pagesCount: pages.length,
     topPages: scored.slice(0, 10).map((p) => ({
       url: p.url,
       title: p.title,
       verifiedScore: p.verifiedScore,
+      hasCore: p.hasCore,
+      coreMatched: p.scoreDetail.coreMatched || [],
       strongMatched: p.scoreDetail.strongMatched,
       detailMatched: p.scoreDetail.detailMatched,
       negativeMatched: p.scoreDetail.negativeMatched,
@@ -630,6 +681,119 @@ function extractGender(text: string) {
   if (t.includes("女子") || t.includes("レディース") || t.includes("women") || t.includes("girls")) return "girls";
   if (t.includes("男子") || t.includes("boys")) return "boys";
   return "any";
+}
+
+function extractCity(text: string, prefecture: string | null) {
+  const t = String(text || "");
+
+  const areaWords = [
+    "東京都", "神奈川県", "埼玉県", "千葉県", "茨城県", "栃木県", "群馬県", "山梨県",
+  ];
+
+  for (const pref of areaWords) {
+    const re = new RegExp(`${pref}\\s*([^\\s　、。()（）]{1,12}(市|区|町|村))`);
+    const m = t.match(re);
+    if (m?.[1]) return m[1];
+  }
+
+  const m = t.match(/([^\s　、。()（）]{1,12}(市|区|町|村))/);
+  if (m?.[1]) {
+    const bad = ["日時", "開催日", "申込", "受付", "時点", "場合", "対象"];
+    if (bad.some((w) => m[1].includes(w))) return null;
+    return m[1];
+  }
+
+  return null;
+}
+
+function extractVenue(text: string) {
+  const lines = String(text || "")
+    .split(/\n|。/)
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+  const venueLine = lines.find((line) =>
+    line.includes("会場") ||
+    line.includes("場所") ||
+    line.includes("グラウンド") ||
+    line.includes("運動場") ||
+    line.includes("競技場")
+  );
+
+  if (!venueLine) {
+    return { venueName: null, venueAddress: null };
+  }
+
+  const cleaned = venueLine
+    .replace(/^【?会場】?\s*[:：]?\s*/, "")
+    .replace(/^【?場所】?\s*[:：]?\s*/, "")
+    .slice(0, 120);
+
+  const addressMatch = cleaned.match(/(東京都|神奈川県|埼玉県|千葉県|茨城県|栃木県|群馬県|山梨県)[^\s　、。)]{3,80}/);
+
+  return {
+    venueName: cleaned || null,
+    venueAddress: addressMatch?.[0] || null,
+  };
+}
+
+function extractFee(text: string) {
+  const t = String(text || "");
+
+  if (t.includes("無料") || t.includes("参加費無料")) {
+    return { feeAmount: 0, feeNote: "無料" };
+  }
+
+  const m = t.match(/(?:参加費|費用|料金)[^\d０-９]{0,10}([0-9０-９,，]+)\s*円/);
+  if (!m?.[1]) {
+    return { feeAmount: null, feeNote: null };
+  }
+
+  const amount = Number(
+    m[1]
+      .replace(/[０-９]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xfee0))
+      .replace(/[，,]/g, "")
+  );
+
+  return {
+    feeAmount: Number.isFinite(amount) ? amount : null,
+    feeNote: m[0].slice(0, 80),
+  };
+}
+
+function extractTimeRange(text: string) {
+  const t = String(text || "");
+
+  const m = t.match(/(\d{1,2})[:：](\d{2})\s*[〜~\-－～]\s*(\d{1,2})[:：](\d{2})/);
+  if (!m) {
+    return { eventStartTime: null, eventEndTime: null };
+  }
+
+  return {
+    eventStartTime: `${m[1].padStart(2, "0")}:${m[2]}`,
+    eventEndTime: `${m[3].padStart(2, "0")}:${m[4]}`,
+  };
+}
+
+function extractApplicationStartDate(text: string) {
+  const lines = compactText(text, 20000)
+    .split(/。|\.|\n/)
+    .map((v) => v.trim())
+    .filter(Boolean);
+
+  const startLines = lines.filter((line) =>
+    line.includes("受付開始") ||
+    line.includes("申込開始") ||
+    line.includes("申し込み開始") ||
+    line.includes("応募開始")
+  );
+
+  for (const line of startLines) {
+    const dates = extractDates(line);
+    if (dates.length > 0) return toDateString(dates[0]);
+  }
+
+  return null;
 }
 
 async function lookupSourceRankFromAliases(text: string) {
@@ -767,7 +931,20 @@ async function upsertBestPage(homepage: any, bestPage: any, pagesCount: number, 
 
   if (!includesAny(fullText, STRONG_WORDS)) {
     await markHomepage(homepage, "selection_not_found", "best_page_no_selection_words");
-    return { status: "rejected", reason: "best_page_no_selection_words", verifiedScore: bestPage.verifiedScore || 0 };
+    return {
+      status: "rejected",
+      reason: "best_page_no_selection_words",
+      verifiedScore: bestPage.verifiedScore || 0,
+    };
+  }
+
+  if (!includesAny(fullText, CORE_SELECTION_WORDS)) {
+    await markHomepage(homepage, "selection_not_found", "best_page_no_core_selection_words");
+    return {
+      status: "rejected",
+      reason: "best_page_no_core_selection_words",
+      verifiedScore: bestPage.verifiedScore || 0,
+    };
   }
 
   if ((bestPage.verifiedScore || 0) < MIN_ACCEPT_SCORE) {
@@ -777,9 +954,15 @@ async function upsertBestPage(homepage: any, bestPage: any, pagesCount: number, 
 
   const eventDate = extractEventDate(fullText);
   const deadline = extractDeadline(fullText);
+  const applicationStartDate = extractApplicationStartDate(fullText);
   const categories = extractCategories(fullText);
   const gender = extractGender(fullText);
   const statusText = displayStatus(eventDate, deadline, fullText);
+
+  const city = extractCity(fullText, homepage.prefecture || null);
+  const venue = extractVenue(fullText);
+  const fee = extractFee(fullText);
+  const timeRange = extractTimeRange(fullText);
 
   const sourceRank =
     (await lookupSourceRankFromAliases(`${fullText} ${homepage.team_name || ""}`)) ||
@@ -796,17 +979,17 @@ async function upsertBestPage(homepage: any, bestPage: any, pagesCount: number, 
     target_categories: categories,
     gender,
     prefecture: homepage.prefecture || null,
-    city: null,
-    area: homepage.prefecture || null,
-    venue_name: null,
-    venue_address: null,
+    city,
+    area: [homepage.prefecture, city].filter(Boolean).join(" ") || homepage.prefecture || null,
+    venue_name: venue.venueName,
+    venue_address: venue.venueAddress,
     event_date: eventDate,
-    event_start_time: null,
-    event_end_time: null,
-    application_start_date: null,
+    event_start_time: timeRange.eventStartTime,
+    event_end_time: timeRange.eventEndTime,
+    application_start_date: applicationStartDate,
     application_deadline: deadline,
-    fee_amount: null,
-    fee_note: null,
+    fee_amount: fee.feeAmount,
+    fee_note: fee.feeNote,
     source_url: homepage.official_url,
     official_url: bestPage.url,
     summary: cleanForDb(compactText(pageText, 180), 180),
