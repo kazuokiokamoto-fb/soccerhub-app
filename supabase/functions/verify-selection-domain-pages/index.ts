@@ -3,7 +3,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-console.log("VERIFY START");
+console.log("VERIFY START NEWS-FIRST");
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -11,10 +11,13 @@ const supabase = createClient(
 );
 
 const MAX_ROWS = 5;
-const MAX_PAGES_PER_DOMAIN = 40;
-const MAX_QUEUE = 120;
 const FETCH_TIMEOUT_MS = 12000;
 const MIN_ACCEPT_SCORE = 70;
+
+const MAX_DIRECT_CANDIDATES = 8;
+const MAX_NEWS_LISTS = 4;
+const MAX_NEWS_ARTICLES = 24;
+const MAX_SELECTION_EVENTS_PER_TEAM = 2;
 
 const BAD_DOMAINS = [
   "instagram.com",
@@ -36,12 +39,7 @@ const BAD_EXTENSIONS = [
   ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".mp4", ".mov", ".avi",
 ];
 
-const BAD_URL_PARTS = [
-  "/category/",
-  "/tag/",
-  "/archive/",
-  "/archives/",
-  "/author/",
+const HARD_BAD_URL_PARTS = [
   "/feed",
   "/rss",
   "/contact",
@@ -53,10 +51,6 @@ const BAD_URL_PARTS = [
   "/calendar",
   "/result",
   "/results",
-  "/news/page/",
-  "?ym=",
-  "/entry",
-  "page=",
 ];
 
 const STRONG_WORDS = [
@@ -188,6 +182,41 @@ const NEGATIVE_WORDS = [
   "マッチレポート",
   "リーグ戦",
   "大会結果",
+  "ボランティア",
+];
+
+const DIRECT_URL_WORDS = [
+  "selection",
+  "tryout",
+  "trial",
+  "recruit",
+  "recruitment",
+  "member",
+  "join",
+  "entry",
+  "taiken",
+  "nyudan",
+  "nyubu",
+  "boshu",
+  "schooltrial",
+];
+
+const NEWS_LIST_WORDS = [
+  "news",
+  "topics",
+  "topic",
+  "information",
+  "info",
+  "notice",
+  "entry",
+  "blog",
+  "post",
+  "posts",
+  "article",
+  "articles",
+  "お知らせ",
+  "ニュース",
+  "最新情報",
 ];
 
 function json(data: unknown, status = 200) {
@@ -297,8 +326,12 @@ function isBadUrl(url: string) {
   if (!u.startsWith("http://") && !u.startsWith("https://")) return true;
   if (isBadDomain(u)) return true;
   if (BAD_EXTENSIONS.some((x) => u.split("?")[0].endsWith(x))) return true;
-  if (BAD_URL_PARTS.some((x) => u.includes(x))) return true;
+  if (HARD_BAD_URL_PARTS.some((x) => u.includes(x))) return true;
   return false;
+}
+
+function sameHost(url: string, startUrl: string) {
+  return hostOf(url) === hostOf(startUrl);
 }
 
 function includesAny(text: string, words: string[]) {
@@ -338,12 +371,15 @@ function getTitle(html: string, fallback: string) {
 }
 
 function extractLinks(html: string, baseUrl: string) {
-  const links = new Set<string>();
-  const re = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>/gi;
+  const links: any[] = [];
+  const seen = new Set<string>();
+  const re = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let m;
 
   while ((m = re.exec(html)) !== null) {
     const href = decodeHtml(m[1] || "").trim();
+    const label = stripTags(m[2] || "").trim();
+
     if (!href) continue;
     if (href.startsWith("#")) continue;
     if (href.startsWith("mailto:")) continue;
@@ -352,10 +388,15 @@ function extractLinks(html: string, baseUrl: string) {
 
     const normalized = normalizeUrl(href, baseUrl);
     if (!normalized) continue;
-    links.add(canonicalUrl(normalized));
+
+    const url = canonicalUrl(normalized);
+    if (seen.has(url)) continue;
+    seen.add(url);
+
+    links.push({ url, label });
   }
 
-  return Array.from(links);
+  return links;
 }
 
 async function fetchHtml(url: string) {
@@ -404,65 +445,30 @@ function scorePage(page: any) {
   score += detail.count * 12;
   score += soccer.count * 5;
 
+  if (includesAny(title, CORE_SELECTION_WORDS)) score += 100;
   if (includesAny(title, STRONG_WORDS)) score += 45;
   if (includesAny(title, DETAIL_WORDS)) score += 20;
 
-  if (includesAny(url, ["selection", "tryout", "trial"])) score += 35;
+  if (includesAny(url, ["selection", "tryout", "trial"])) score += 50;
+  if (includesAny(url, DIRECT_URL_WORDS)) score += 35;
 
-  if (includesAny(url, [
-    "recruit",
-    "recruitment",
-    "member",
-    "entry",
-    "form",
-    "trial",
-    "taiken",
-    "nyubu",
-    "join",
-    "boshu",
-    "selection",
-    "tryout",
-  ])) {
-    score += 35;
-  }
-
-  if (includesAny(title, [
-    "募集",
-    "申込",
-    "申し込み",
-    "入部",
-    "体験",
-    "セレクション",
-    "選考会",
-    "練習会",
-    "説明会",
-  ])) {
-    score += 35;
-  }
-
-  score -= negative.count * 25;
+  score -= negative.count * 45;
 
   if (page.text.length < 250) score -= 35;
   if (page.text.length > 1200) score += 15;
 
-  if (
-    path === "/" ||
-    path === "" ||
-    path === "/index.html" ||
-    path === "/index.htm" ||
-    path === "/index"
-  ) {
-    score -= 120;
+  if (path === "/" || path === "" || path === "/index.html" || path === "/index.htm" || path === "/index") {
+    score -= 150;
   }
 
-  if (includesAny(title, ["最新情報", "news", "お知らせ", "トップ", "home"])) {
-    score -= 60;
+  if (includesAny(title, ["最新情報", "news", "お知らせ", "トップ", "home", "バックナンバー"])) {
+    score -= 100;
   }
 
-  if (includesAny(text, ["ニュース一覧", "記事一覧", "一覧"])) score -= 35;
+  if (includesAny(text, ["ニュース一覧", "記事一覧", "一覧"])) score -= 70;
   if (includesAny(text, ["開催日", "対象", "会場", "申込"])) score += 40;
 
-  if (core.count === 0) score -= 250;
+  if (core.count === 0) score -= 300;
   if (strong.count === 0) score -= 80;
   if (soccer.count === 0) score -= 30;
 
@@ -476,89 +482,217 @@ function scorePage(page: any) {
   };
 }
 
-async function crawlDomain(startUrl: string) {
-  const start = normalizeUrl(startUrl);
-  const startHost = hostOf(start);
+function isDirectCandidateLink(link: any) {
+  const hay = `${link.url} ${link.label}`;
+  return includesAny(hay, [...DIRECT_URL_WORDS, ...CORE_SELECTION_WORDS]);
+}
 
-  if (!start || !startHost) throw new Error("invalid start url");
-  if (isBadUrl(start)) throw new Error("bad start url");
+function isNewsListLink(link: any) {
+  const hay = `${link.url} ${link.label}`.toLowerCase();
+  const path = pathOf(link.url);
 
-  const queue = [canonicalUrl(start)];
-  const queued = new Set(queue);
-  const visited = new Set<string>();
-  const pages: any[] = [];
+  if (includesAny(hay, NEWS_LIST_WORDS)) return true;
+  if (path === "/news" || path === "/news/") return true;
+  if (path === "/entry" || path === "/entry/") return true;
+  if (path === "/topics" || path === "/topics/") return true;
+  if (path === "/information" || path === "/information/") return true;
+  if (path === "/info" || path === "/info/") return true;
 
-  while (queue.length > 0 && pages.length < MAX_PAGES_PER_DOMAIN && visited.size < MAX_QUEUE) {
-    const url = queue.shift()!;
-    if (!url || visited.has(url)) continue;
-    visited.add(url);
+  return false;
+}
 
-    if (isBadUrl(url)) continue;
-    if (hostOf(url) !== startHost) continue;
+function looksArticleUrl(url: string) {
+  const u = String(url || "").toLowerCase();
+  const path = pathOf(u);
 
+  if (path === "/" || path === "") return false;
+  if (isBadUrl(url)) return false;
+
+  if (/(20\d{2})[\/-](\d{1,2})[\/-](\d{1,2})/.test(u)) return true;
+  if (/\/view\/\d+/.test(u)) return true;
+  if (/\/news\/[^/]+/.test(u)) return true;
+  if (/\/entry\/[^/]+/.test(u)) return true;
+  if (/\/posts?\/[^/]+/.test(u)) return true;
+  if (/\/articles?\/[^/]+/.test(u)) return true;
+  if (/\/topics?\/[^/]+/.test(u)) return true;
+
+  return false;
+}
+
+function extractPublishedDateFromUrlOrText(url: string, text: string) {
+  const raw = `${url} ${text || ""}`;
+
+  let m = raw.match(/(20\d{2})[\/.-](\d{1,2})[\/.-](\d{1,2})/);
+  if (m) return toDateString(validDate(Number(m[1]), Number(m[2]), Number(m[3])));
+
+  m = raw.match(/(20\d{2})年\s*(\d{1,2})月\s*(\d{1,2})日/);
+  if (m) return toDateString(validDate(Number(m[1]), Number(m[2]), Number(m[3])));
+
+  m = raw.match(/(20\d{2})(\d{2})(\d{2})/);
+  if (m) return toDateString(validDate(Number(m[1]), Number(m[2]), Number(m[3])));
+
+  return null;
+}
+
+function dateSortValue(date: string | null) {
+  return date ? Number(date.replaceAll("-", "")) : 0;
+}
+
+function dedupeLinks(links: any[]) {
+  const seen = new Set<string>();
+  const out: any[] = [];
+
+  for (const link of links) {
+    const url = canonicalUrl(link.url || "");
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    out.push({ ...link, url });
+  }
+
+  return out;
+}
+
+async function loadPage(url: string, fallbackTitle = "") {
+  const html = await fetchHtml(url);
+  const title = getTitle(html, fallbackTitle || url);
+  const text = stripTags(html);
+  const publishedDate = extractPublishedDateFromUrlOrText(url, `${title} ${text.slice(0, 1200)}`);
+
+  return { url, title, text, html, publishedDate };
+}
+
+async function collectCandidatePages(homepage: any) {
+  const startUrl = homepage.official_url;
+  const startHost = hostOf(startUrl);
+
+  if (!startUrl || !startHost) throw new Error("invalid homepage url");
+  if (isBadUrl(startUrl)) throw new Error("bad homepage url");
+
+  const top = await loadPage(startUrl, homepage.team_name || startUrl);
+  const topLinks = extractLinks(top.html, startUrl)
+    .filter((link) => sameHost(link.url, startUrl))
+    .filter((link) => !isBadUrl(link.url));
+
+  const directLinks = dedupeLinks(
+    topLinks
+      .filter(isDirectCandidateLink)
+      .filter((link) => !isNewsListLink(link))
+      .slice(0, MAX_DIRECT_CANDIDATES),
+  );
+
+  const newsListLinks = dedupeLinks(
+    topLinks
+      .filter(isNewsListLink)
+      .slice(0, MAX_NEWS_LISTS),
+  );
+
+  const articleLinksFromTop = topLinks
+    .filter((link) => looksArticleUrl(link.url))
+    .map((link) => ({
+      ...link,
+      publishedDate: extractPublishedDateFromUrlOrText(link.url, link.label),
+    }));
+
+  let articleLinks: any[] = [...articleLinksFromTop];
+
+  for (const newsList of newsListLinks) {
     try {
-      const html = await fetchHtml(url);
-      const title = getTitle(html, url);
-      const text = stripTags(html);
+      const listPage = await loadPage(newsList.url, newsList.label || newsList.url);
+      const links = extractLinks(listPage.html, newsList.url)
+        .filter((link) => sameHost(link.url, startUrl))
+        .filter((link) => !isBadUrl(link.url))
+        .filter((link) => looksArticleUrl(link.url))
+        .map((link) => ({
+          ...link,
+          publishedDate: extractPublishedDateFromUrlOrText(link.url, `${link.label} ${listPage.text.slice(0, 600)}`),
+        }));
 
-      if (!looksMojibake(title) && text.length >= 80) {
-        pages.push({ url, title, text, html });
-      }
+      articleLinks.push(...links);
+    } catch (_) {}
 
-      const links = extractLinks(html, url);
+    await sleep(200);
+  }
 
-      for (const link of links) {
-        if (queued.size >= MAX_QUEUE) break;
-        if (queued.has(link)) continue;
-        if (visited.has(link)) continue;
-        if (isBadUrl(link)) continue;
-        if (hostOf(link) !== startHost) continue;
+  articleLinks = dedupeLinks(articleLinks)
+    .sort((a, b) => dateSortValue(b.publishedDate) - dateSortValue(a.publishedDate))
+    .slice(0, MAX_NEWS_ARTICLES);
 
-        queued.add(link);
-        queue.push(link);
+  const candidates: any[] = [];
+  const debug: any[] = [];
+
+  for (const link of directLinks) {
+    try {
+      const page = await loadPage(link.url, link.label || link.url);
+      const s = scorePage(page);
+      const fullText = compactText(`${page.title} ${page.url} ${page.text}`, 40000);
+
+      debug.push({
+        type: "direct",
+        url: page.url,
+        title: page.title,
+        score: s.score,
+        hasCore: includesAny(fullText, CORE_SELECTION_WORDS),
+        coreMatched: s.coreMatched,
+      });
+
+      if (includesAny(fullText, CORE_SELECTION_WORDS) && s.score >= MIN_ACCEPT_SCORE) {
+        candidates.push({ ...page, verifiedScore: s.score, scoreDetail: s, candidateType: "direct" });
       }
     } catch (_) {}
 
-    await sleep(180);
+    await sleep(200);
   }
 
-  return pages;
-}
+  for (const link of articleLinks) {
+    if (candidates.length >= MAX_SELECTION_EVENTS_PER_TEAM) break;
 
-async function findBestSelectionPage(homepage: any) {
-  const pages = await crawlDomain(homepage.official_url);
-
-  const scored = pages
-    .map((page) => {
+    try {
+      const page = await loadPage(link.url, link.label || link.url);
       const s = scorePage(page);
-      const fullText = compactText(`${page.title || ""} ${page.url || ""} ${page.text || ""}`, 40000);
+      const fullText = compactText(`${page.title} ${page.url} ${page.text}`, 40000);
       const hasCore = includesAny(fullText, CORE_SELECTION_WORDS);
 
-      return {
-        ...page,
-        verifiedScore: s.score,
-        scoreDetail: s,
+      debug.push({
+        type: "news",
+        url: page.url,
+        title: page.title,
+        publishedDate: page.publishedDate || link.publishedDate || null,
+        score: s.score,
         hasCore,
-      };
-    })
-    .sort((a, b) => b.verifiedScore - a.verifiedScore);
+        coreMatched: s.coreMatched,
+      });
 
-  const eligible = scored.filter((p) => p.hasCore);
-  const best = eligible[0] || null;
+      if (hasCore && s.score >= MIN_ACCEPT_SCORE) {
+        candidates.push({
+          ...page,
+          publishedDate: page.publishedDate || link.publishedDate || null,
+          verifiedScore: s.score,
+          scoreDetail: s,
+          candidateType: "news",
+        });
+      }
+    } catch (_) {}
+
+    await sleep(200);
+  }
+
+  const finalCandidates = dedupeLinks(candidates)
+    .sort((a, b) => {
+      const ad = dateSortValue(a.publishedDate || extractEventDate(`${a.title} ${a.text}`));
+      const bd = dateSortValue(b.publishedDate || extractEventDate(`${b.title} ${b.text}`));
+      if (bd !== ad) return bd - ad;
+      return (b.verifiedScore || 0) - (a.verifiedScore || 0);
+    })
+    .slice(0, MAX_SELECTION_EVENTS_PER_TEAM);
 
   return {
-    best,
-    pagesCount: pages.length,
-    topPages: scored.slice(0, 10).map((p) => ({
-      url: p.url,
-      title: p.title,
-      verifiedScore: p.verifiedScore,
-      hasCore: p.hasCore,
-      coreMatched: p.scoreDetail.coreMatched || [],
-      strongMatched: p.scoreDetail.strongMatched,
-      detailMatched: p.scoreDetail.detailMatched,
-      negativeMatched: p.scoreDetail.negativeMatched,
-    })),
+    topUrl: top.url,
+    directLinksCount: directLinks.length,
+    newsListsCount: newsListLinks.length,
+    articleLinksCount: articleLinks.length,
+    pagesCount: directLinks.length + newsListLinks.length + articleLinks.length + 1,
+    selectedPages: finalCandidates,
+    topPages: debug.slice(0, 20),
   };
 }
 
@@ -622,7 +756,6 @@ function extractDates(text: string) {
 
 function extractDeadline(text: string) {
   const lines = compactText(text, 20000).split(/。|\.|\n/).map((v) => v.trim()).filter(Boolean);
-
   const deadlineLines = lines.filter((line) =>
     line.includes("締切") ||
     line.includes("〆切") ||
@@ -643,7 +776,6 @@ function extractDeadline(text: string) {
 
 function extractEventDate(text: string) {
   const lines = compactText(text, 20000).split(/。|\.|\n/).map((v) => v.trim()).filter(Boolean);
-
   const eventLines = lines.filter((line) =>
     line.includes("開催日") ||
     line.includes("実施日") ||
@@ -661,6 +793,23 @@ function extractEventDate(text: string) {
 
   const all = extractDates(text);
   return all.length > 0 ? toDateString(all[0]) : null;
+}
+
+function extractApplicationStartDate(text: string) {
+  const lines = compactText(text, 20000).split(/。|\.|\n/).map((v) => v.trim()).filter(Boolean);
+  const startLines = lines.filter((line) =>
+    line.includes("受付開始") ||
+    line.includes("申込開始") ||
+    line.includes("申し込み開始") ||
+    line.includes("応募開始")
+  );
+
+  for (const line of startLines) {
+    const dates = extractDates(line);
+    if (dates.length > 0) return toDateString(dates[0]);
+  }
+
+  return null;
 }
 
 function extractCategories(text: string) {
@@ -685,35 +834,8 @@ function extractGender(text: string) {
   return "any";
 }
 
-function extractCity(text: string, prefecture: string | null) {
-  const t = String(text || "");
-
-  const areaWords = [
-    "東京都", "神奈川県", "埼玉県", "千葉県", "茨城県", "栃木県", "群馬県", "山梨県",
-  ];
-
-  for (const pref of areaWords) {
-    const re = new RegExp(`${pref}\\s*([^\\s　、。()（）]{1,12}(市|区|町|村))`);
-    const m = t.match(re);
-    if (m?.[1]) return m[1];
-  }
-
-  const m = t.match(/([^\s　、。()（）]{1,12}(市|区|町|村))/);
-  if (m?.[1]) {
-    const bad = ["日時", "開催日", "申込", "受付", "時点", "場合", "対象"];
-    if (bad.some((w) => m[1].includes(w))) return null;
-    return m[1];
-  }
-
-  return null;
-}
-
 function extractVenue(text: string) {
-  const lines = String(text || "")
-    .split(/\n|。/)
-    .map((v) => v.trim())
-    .filter(Boolean);
-
+  const lines = String(text || "").split(/\n|。/).map((v) => v.trim()).filter(Boolean);
   const venueLine = lines.find((line) =>
     line.includes("会場") ||
     line.includes("場所") ||
@@ -722,9 +844,7 @@ function extractVenue(text: string) {
     line.includes("競技場")
   );
 
-  if (!venueLine) {
-    return { venueName: null, venueAddress: null };
-  }
+  if (!venueLine) return { venueName: null, venueAddress: null };
 
   const cleaned = venueLine
     .replace(/^【?会場】?\s*[:：]?\s*/, "")
@@ -747,9 +867,7 @@ function extractFee(text: string) {
   }
 
   const m = t.match(/(?:参加費|費用|料金)[^\d０-９]{0,10}([0-9０-９,，]+)\s*円/);
-  if (!m?.[1]) {
-    return { feeAmount: null, feeNote: null };
-  }
+  if (!m?.[1]) return { feeAmount: null, feeNote: null };
 
   const amount = Number(
     m[1]
@@ -765,37 +883,14 @@ function extractFee(text: string) {
 
 function extractTimeRange(text: string) {
   const t = String(text || "");
-
   const m = t.match(/(\d{1,2})[:：](\d{2})\s*[〜~\-－～]\s*(\d{1,2})[:：](\d{2})/);
-  if (!m) {
-    return { eventStartTime: null, eventEndTime: null };
-  }
+
+  if (!m) return { eventStartTime: null, eventEndTime: null };
 
   return {
     eventStartTime: `${m[1].padStart(2, "0")}:${m[2]}`,
     eventEndTime: `${m[3].padStart(2, "0")}:${m[4]}`,
   };
-}
-
-function extractApplicationStartDate(text: string) {
-  const lines = compactText(text, 20000)
-    .split(/。|\.|\n/)
-    .map((v) => v.trim())
-    .filter(Boolean);
-
-  const startLines = lines.filter((line) =>
-    line.includes("受付開始") ||
-    line.includes("申込開始") ||
-    line.includes("申し込み開始") ||
-    line.includes("応募開始")
-  );
-
-  for (const line of startLines) {
-    const dates = extractDates(line);
-    if (dates.length > 0) return toDateString(dates[0]);
-  }
-
-  return null;
 }
 
 async function lookupSourceRankFromAliases(text: string) {
@@ -921,38 +1016,10 @@ async function markHomepage(homepage: any, status: string, reason: string) {
   if (error) throw error;
 }
 
-async function upsertBestPage(homepage: any, bestPage: any, pagesCount: number, topPages: any[]) {
+async function upsertSelectionPage(homepage: any, bestPage: any, pagesCount: number, topPages: any[]) {
   const pageText = bestPage.text || "";
   const title = bestPage.title || `${homepage.team_name} セレクション情報`;
   const fullText = compactText(`${title} ${homepage.team_name || ""} ${pageText}`, 40000);
-
-  if (looksMojibake(title)) {
-    await markHomepage(homepage, "selection_not_found", "mojibake_best_title");
-    return { status: "rejected", reason: "mojibake_best_title", verifiedScore: bestPage.verifiedScore || 0 };
-  }
-
-  if (!includesAny(fullText, STRONG_WORDS)) {
-    await markHomepage(homepage, "selection_not_found", "best_page_no_selection_words");
-    return {
-      status: "rejected",
-      reason: "best_page_no_selection_words",
-      verifiedScore: bestPage.verifiedScore || 0,
-    };
-  }
-
-  if (!includesAny(fullText, CORE_SELECTION_WORDS)) {
-    await markHomepage(homepage, "selection_not_found", "best_page_no_core_selection_words");
-    return {
-      status: "rejected",
-      reason: "best_page_no_core_selection_words",
-      verifiedScore: bestPage.verifiedScore || 0,
-    };
-  }
-
-  if ((bestPage.verifiedScore || 0) < MIN_ACCEPT_SCORE) {
-    await markHomepage(homepage, "selection_not_found", `best_page_low_score:${bestPage.verifiedScore || 0}`);
-    return { status: "rejected", reason: "best_page_low_score", verifiedScore: bestPage.verifiedScore || 0 };
-  }
 
   const eventDate = extractEventDate(fullText);
   const deadline = extractDeadline(fullText);
@@ -960,8 +1027,6 @@ async function upsertBestPage(homepage: any, bestPage: any, pagesCount: number, 
   const categories = extractCategories(fullText);
   const gender = extractGender(fullText);
   const statusText = displayStatus(eventDate, deadline, fullText);
-
-  const city = null;
   const venue = extractVenue(fullText);
   const fee = extractFee(fullText);
   const timeRange = extractTimeRange(fullText);
@@ -981,8 +1046,8 @@ async function upsertBestPage(homepage: any, bestPage: any, pagesCount: number, 
     target_categories: categories,
     gender,
     prefecture: homepage.prefecture || null,
-    city,
-    area: [homepage.prefecture, city].filter(Boolean).join(" ") || homepage.prefecture || null,
+    city: null,
+    area: homepage.prefecture || null,
     venue_name: venue.venueName,
     venue_address: venue.venueAddress,
     event_date: eventDate,
@@ -998,7 +1063,7 @@ async function upsertBestPage(homepage: any, bestPage: any, pagesCount: number, 
     description: cleanForDb(compactText(pageText, 800), 800),
     raw_text: cleanForDb(pageText, 20000),
     memo: cleanForDb(
-      `homepage_id:${homepage.id}\nteam_directory_id:${homepage.team_directory_id || ""}\nstart_url:${homepage.official_url}\nbest_url:${bestPage.url}\npages_count:${pagesCount}\ntop_pages:${JSON.stringify(topPages).slice(0, 3000)}`,
+      `homepage_id:${homepage.id}\nteam_directory_id:${homepage.team_directory_id || ""}\nstart_url:${homepage.official_url}\nbest_url:${bestPage.url}\ncandidate_type:${bestPage.candidateType || ""}\npublished_date:${bestPage.publishedDate || ""}\npages_count:${pagesCount}\ntop_pages:${JSON.stringify(topPages).slice(0, 3000)}`,
       4000,
     ),
     image_url: null,
@@ -1019,8 +1084,6 @@ async function upsertBestPage(homepage: any, bestPage: any, pagesCount: number, 
     source_rank: sourceRank,
   };
 
-  let existing = null;
-
   const { data: existingRows, error: existingError } = await supabase
     .from("selection_events")
     .select("id")
@@ -1028,7 +1091,8 @@ async function upsertBestPage(homepage: any, bestPage: any, pagesCount: number, 
     .limit(1);
 
   if (existingError) throw existingError;
-  if (existingRows && existingRows.length > 0) existing = existingRows[0];
+
+  const existing = existingRows && existingRows.length > 0 ? existingRows[0] : null;
 
   if (existing?.id) {
     const { error } = await supabase
@@ -1045,49 +1109,62 @@ async function upsertBestPage(homepage: any, bestPage: any, pagesCount: number, 
     if (error) throw error;
   }
 
-  await markHomepage(
-    homepage,
-    "selection_found",
-    `best_url:${bestPage.url},score:${bestPage.verifiedScore || 0},pages:${pagesCount},event_date:${eventDate || "none"},deadline:${deadline || "none"},rank:${sourceRank}`,
-  );
-
   return {
     status: "accepted",
     verifiedScore: bestPage.verifiedScore || 0,
     bestUrl: bestPage.url,
+    title,
     eventDate,
     deadline,
     displayStatus: statusText,
     categories,
     sourceRank,
-    pagesCount,
-    topPages,
   };
 }
 
 async function runOne(homepage: any) {
   try {
-    const found = await findBestSelectionPage(homepage);
+    const found = await collectCandidatePages(homepage);
 
-    if (!found.best) {
-      await markHomepage(homepage, "selection_not_found", "no_pages_crawled_in_domain");
+    if (!found.selectedPages || found.selectedPages.length === 0) {
+      await markHomepage(
+        homepage,
+        "selection_not_found",
+        `no_selection_pages; direct:${found.directLinksCount},newsLists:${found.newsListsCount},articles:${found.articleLinksCount}`,
+      );
+
       return {
         id: homepage.id,
         team_name: homepage.team_name,
         url: homepage.official_url,
         status: "rejected",
-        reason: "no_pages_crawled_in_domain",
+        reason: "no_selection_pages",
+        ...found,
       };
     }
 
-    const result = await upsertBestPage(homepage, found.best, found.pagesCount, found.topPages);
+    const saved = [];
+
+    for (const page of found.selectedPages) {
+      const r = await upsertSelectionPage(homepage, page, found.pagesCount, found.topPages);
+      saved.push(r);
+    }
+
+    await markHomepage(
+      homepage,
+      "selection_found",
+      `saved:${saved.length},best_urls:${saved.map((x) => x.bestUrl).join("|")},pages:${found.pagesCount}`,
+    );
 
     return {
       id: homepage.id,
       team_name: homepage.team_name,
       startUrl: homepage.official_url,
       host: hostOf(homepage.official_url),
-      ...result,
+      status: "accepted",
+      savedCount: saved.length,
+      saved,
+      ...found,
     };
   } catch (e) {
     const message =
@@ -1110,11 +1187,10 @@ async function runOne(homepage: any) {
 }
 
 serve(async (req) => {
-  console.log("REQUEST RECEIVED 2026-06-10-01");
+  console.log("REQUEST RECEIVED NEWS-FIRST 2026-06-10-02");
 
   try {
     const body = await req.json().catch(() => ({}));
-
     const batchSize = Math.min(Number(body.batchSize || body.limit || 1), MAX_ROWS);
 
     const homepages = await claimHomepages(batchSize);
@@ -1123,27 +1199,37 @@ serve(async (req) => {
     let totalAccepted = 0;
     let totalRejected = 0;
     let totalErrors = 0;
+    let totalSavedEvents = 0;
 
     for (const homepage of homepages) {
       const r = await runOne(homepage);
       results.push(r);
 
-      if (r.status === "accepted") totalAccepted++;
-      else if (r.status === "rejected") totalRejected++;
-      else totalErrors++;
+      if (r.status === "accepted") {
+        totalAccepted++;
+        totalSavedEvents += Number(r.savedCount || 0);
+      } else if (r.status === "rejected") {
+        totalRejected++;
+      } else {
+        totalErrors++;
+      }
 
       await sleep(600);
     }
 
     return json({
       ok: true,
-      mode: "crawl-team-homepages-for-selection-pages",
+      mode: "crawl-team-homepages-news-first-selection-pages",
       batchSize,
-      maxPagesPerDomain: MAX_PAGES_PER_DOMAIN,
+      maxDirectCandidates: MAX_DIRECT_CANDIDATES,
+      maxNewsLists: MAX_NEWS_LISTS,
+      maxNewsArticles: MAX_NEWS_ARTICLES,
+      maxSelectionEventsPerTeam: MAX_SELECTION_EVENTS_PER_TEAM,
       claimed: homepages.length,
       totalAccepted,
       totalRejected,
       totalErrors,
+      totalSavedEvents,
       results,
     });
   } catch (e) {
