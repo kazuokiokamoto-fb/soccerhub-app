@@ -55,6 +55,8 @@ const BAD_URL_PARTS = [
   "/results",
   "/news/page/",
   "?ym=",
+  "/entry",
+  "page=",
 ];
 
 const STRONG_WORDS = [
@@ -959,7 +961,7 @@ async function upsertBestPage(homepage: any, bestPage: any, pagesCount: number, 
   const gender = extractGender(fullText);
   const statusText = displayStatus(eventDate, deadline, fullText);
 
-  const city = extractCity(fullText, homepage.prefecture || null);
+  const city = null;
   const venue = extractVenue(fullText);
   const fee = extractFee(fullText);
   const timeRange = extractTimeRange(fullText);
