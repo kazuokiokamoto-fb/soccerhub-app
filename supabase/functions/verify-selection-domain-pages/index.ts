@@ -3,7 +3,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-console.log("VERIFY START NEWS-FIRST FALLBACK-DIRECT");
+console.log("VERIFY START NEWS-FIRST FALLBACK-DIRECT v4");
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -16,7 +16,7 @@ const MIN_ACCEPT_SCORE = 70;
 
 const MAX_DIRECT_CANDIDATES = 8;
 const MAX_NEWS_LISTS = 4;
-const MAX_NEWS_ARTICLES = 24;
+const MAX_NEWS_ARTICLES = 100;
 const MAX_SELECTION_EVENTS_PER_TEAM = 2;
 
 const BAD_DOMAINS = [
@@ -183,6 +183,18 @@ const NEGATIVE_WORDS = [
   "リーグ戦",
   "大会結果",
   "ボランティア",
+];
+
+const LIST_PAGE_WORDS = [
+  "バックナンバー",
+  "ニュース一覧",
+  "記事一覧",
+  "お知らせ一覧",
+  "一覧",
+  "カテゴリ",
+  "カテゴリー",
+  "アーカイブ",
+  "検索結果",
 ];
 
 const DIRECT_URL_WORDS = [
@@ -482,6 +494,24 @@ function scorePage(page: any) {
   };
 }
 
+function isListPage(page: any) {
+  const title = String(page.title || "");
+  const url = String(page.url || "");
+  const path = pathOf(url);
+  const textHead = compactText(String(page.text || ""), 2000);
+
+  if (url.includes("page=")) return true;
+  if (path === "/entry" || path === "/entry/") return true;
+  if (path === "/news" || path === "/news/") return true;
+  if (path === "/topics" || path === "/topics/") return true;
+  if (path === "/information" || path === "/information/") return true;
+  if (path === "/info" || path === "/info/") return true;
+  if (includesAny(title, LIST_PAGE_WORDS)) return true;
+  if (includesAny(textHead, ["ニュース一覧", "記事一覧", "バックナンバー"])) return true;
+
+  return false;
+}
+
 function isDirectCandidateLink(link: any) {
   const hay = `${link.url} ${link.label}`;
   return includesAny(hay, [...DIRECT_URL_WORDS, ...CORE_SELECTION_WORDS]);
@@ -506,6 +536,7 @@ function looksArticleUrl(url: string) {
   const path = pathOf(u);
 
   if (path === "/" || path === "") return false;
+  if (u.includes("page=")) return false;
   if (isBadUrl(url)) return false;
 
   if (/(20\d{2})[\/-](\d{1,2})[\/-](\d{1,2})/.test(u)) return true;
@@ -566,6 +597,7 @@ async function evaluateCandidatePage(link: any, type: string) {
   const s = scorePage(page);
   const fullText = compactText(`${page.title} ${page.url} ${page.text}`, 40000);
   const hasCore = includesAny(fullText, CORE_SELECTION_WORDS);
+  const listPage = isListPage(page);
 
   return {
     page: {
@@ -582,11 +614,12 @@ async function evaluateCandidatePage(link: any, type: string) {
       publishedDate: page.publishedDate || link.publishedDate || null,
       score: s.score,
       hasCore,
+      isListPage: listPage,
       coreMatched: s.coreMatched,
       detailMatched: s.detailMatched,
       negativeMatched: s.negativeMatched,
     },
-    accepted: hasCore && s.score >= MIN_ACCEPT_SCORE,
+    accepted: hasCore && !listPage && s.score >= MIN_ACCEPT_SCORE,
   };
 }
 
@@ -1199,7 +1232,7 @@ async function runOne(homepage: any) {
 }
 
 serve(async (req) => {
-  console.log("REQUEST RECEIVED NEWS-FIRST FALLBACK-DIRECT 2026-06-10-03");
+  console.log("REQUEST RECEIVED NEWS-FIRST FALLBACK-DIRECT v4");
 
   try {
     const body = await req.json().catch(() => ({}));
@@ -1231,7 +1264,7 @@ serve(async (req) => {
 
     return json({
       ok: true,
-      mode: "crawl-team-homepages-news-first-fallback-direct-selection-pages",
+      mode: "crawl-team-homepages-news-first-fallback-direct-selection-pages-v4",
       batchSize,
       maxDirectCandidates: MAX_DIRECT_CANDIDATES,
       maxNewsLists: MAX_NEWS_LISTS,
