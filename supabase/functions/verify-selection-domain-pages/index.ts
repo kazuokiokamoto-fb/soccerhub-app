@@ -3,14 +3,15 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-console.log("VERIFY START NEWS-FIRST FALLBACK-DIRECT v4");
+console.log("VERIFY START NEWS-FIRST FALLBACK-DIRECT v5 ONE-BY-ONE");
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-const MAX_ROWS = 5;
+const MAX_ROWS = 9999;
+const MAX_RUN_MS = 45_000;
 const FETCH_TIMEOUT_MS = 12000;
 const MIN_ACCEPT_SCORE = 70;
 
@@ -1232,21 +1233,44 @@ async function runOne(homepage: any) {
 }
 
 serve(async (req) => {
-  console.log("REQUEST RECEIVED NEWS-FIRST FALLBACK-DIRECT v4");
+  console.log("REQUEST RECEIVED NEWS-FIRST FALLBACK-DIRECT v5 ONE-BY-ONE");
 
   try {
     const body = await req.json().catch(() => ({}));
-    const batchSize = Math.min(Number(body.batchSize || body.limit || 1), MAX_ROWS);
-
-    const homepages = await claimHomepages(batchSize);
+    const maxJobs = Math.min(Number(body.maxJobs || body.batchSize || body.limit || MAX_ROWS), MAX_ROWS);
+    const startedAt = Date.now();
 
     const results = [];
+    let claimed = 0;
     let totalAccepted = 0;
     let totalRejected = 0;
     let totalErrors = 0;
     let totalSavedEvents = 0;
+    let stoppedReason = "completed";
 
-    for (const homepage of homepages) {
+    while (claimed < maxJobs) {
+      if (Date.now() - startedAt > MAX_RUN_MS) {
+        stoppedReason = "time_limit";
+        break;
+      }
+
+      const remainingMs = MAX_RUN_MS - (Date.now() - startedAt);
+
+      if (remainingMs < 8000) {
+        stoppedReason = "not_enough_time_for_next";
+        break;
+      }
+
+      const homepages = await claimHomepages(1);
+
+      if (homepages.length === 0) {
+        stoppedReason = "no_more_homepages";
+        break;
+      }
+
+      claimed++;
+
+      const homepage = homepages[0];
       const r = await runOne(homepage);
       results.push(r);
 
@@ -1259,18 +1283,21 @@ serve(async (req) => {
         totalErrors++;
       }
 
-      await sleep(600);
+      await sleep(300);
     }
 
     return json({
       ok: true,
-      mode: "crawl-team-homepages-news-first-fallback-direct-selection-pages-v4",
-      batchSize,
+      mode: "crawl-team-homepages-news-first-fallback-direct-selection-pages-v5-one-by-one",
+      maxJobs,
+      maxRunMs: MAX_RUN_MS,
+      elapsedMs: Date.now() - startedAt,
+      stoppedReason,
       maxDirectCandidates: MAX_DIRECT_CANDIDATES,
       maxNewsLists: MAX_NEWS_LISTS,
       maxNewsArticles: MAX_NEWS_ARTICLES,
       maxSelectionEventsPerTeam: MAX_SELECTION_EVENTS_PER_TEAM,
-      claimed: homepages.length,
+      claimed,
       totalAccepted,
       totalRejected,
       totalErrors,
