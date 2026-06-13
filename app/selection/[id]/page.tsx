@@ -88,15 +88,33 @@ export default async function SelectionDetailPage(props: {
   params: Promise<{
     id: string;
   }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await props.params;
+  const searchParams = props.searchParams ? await props.searchParams : {};
+
+  const query = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (Array.isArray(value)) {
+      for (const v of value) {
+        if (v != null) query.append(key, v);
+      }
+    } else if (value != null) {
+      query.set(key, value);
+    }
+  }
+
+  const backHref = query.toString()
+    ? `/selection?${query.toString()}`
+    : "/selection";
 
   const item = await fetchSelectionEventById(params.id);
 
   if (!item) {
     return (
       <main style={wrap}>
-        <Link href="/selection" className="sh-btn">
+        <Link href={backHref} className="sh-btn">
           ← 一覧へ
         </Link>
 
@@ -117,7 +135,7 @@ export default async function SelectionDetailPage(props: {
   return (
     <main style={wrap}>
       <div style={topBar}>
-        <Link href="/selection" className="sh-btn">
+        <Link href={backHref} className="sh-btn">
           ← 一覧へ
         </Link>
 

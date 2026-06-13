@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { CSSProperties } from "react";
 
 import { fetchSelectionEvents } from "@/app/lib/selections";
@@ -165,20 +166,95 @@ function sortNewestFirst(rows: SelectionEvent[]) {
   });
 }
 
+function validRank(value: string | null): RankFilter {
+  const values: RankFilter[] = [
+    "all",
+    "j_academy",
+    "pref_top",
+    "pref_2",
+    "pref_3",
+    "pref_4",
+    "district",
+    "school",
+    "girls",
+  ];
+  return values.includes(value as RankFilter) ? (value as RankFilter) : "all";
+}
+
+function validStatus(value: string | null): StatusFilter {
+  const values: StatusFilter[] = [
+    "all",
+    "募集中",
+    "申込終了",
+    "開催終了",
+    "日程未定",
+    "日付未取得",
+  ];
+  return values.includes(value as StatusFilter)
+    ? (value as StatusFilter)
+    : "all";
+}
+
 export default function SelectionListPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<SelectionEvent[]>([]);
 
-  const [keyword, setKeyword] = useState("");
-  const [prefecture, setPrefecture] = useState("all");
-  const [city, setCity] = useState("all");
-  const [rank, setRank] = useState<RankFilter>("all");
-  const [status, setStatus] = useState<StatusFilter>("all");
-  const [category, setCategory] = useState("all");
+  const [keyword, setKeyword] = useState(() => searchParams.get("q") || "");
+  const [prefecture, setPrefecture] = useState(
+    () => searchParams.get("pref") || "all"
+  );
+  const [city, setCity] = useState(() => searchParams.get("city") || "all");
+  const [rank, setRank] = useState<RankFilter>(() =>
+    validRank(searchParams.get("rank"))
+  );
+  const [status, setStatus] = useState<StatusFilter>(() =>
+    validStatus(searchParams.get("status"))
+  );
+  const [category, setCategory] = useState(
+    () => searchParams.get("category") || "all"
+  );
 
-  const [showCalendar, setShowCalendar] = useState(true);
+  const [showCalendar, setShowCalendar] = useState(
+    () => searchParams.get("calendar") !== "0"
+  );
   const [monthDate, setMonthDate] = useState(() => startOfMonth(new Date()));
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedDate, setSelectedDate] = useState(
+    () => searchParams.get("date") || ""
+  );
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+
+    if (keyword.trim()) params.set("q", keyword.trim());
+    if (prefecture !== "all") params.set("pref", prefecture);
+    if (city !== "all") params.set("city", city);
+    if (rank !== "all") params.set("rank", rank);
+    if (status !== "all") params.set("status", status);
+    if (category !== "all") params.set("category", category);
+    if (selectedDate) params.set("date", selectedDate);
+    if (!showCalendar) params.set("calendar", "0");
+
+    const nextUrl = params.toString()
+      ? `${pathname}?${params.toString()}`
+      : pathname;
+
+    router.replace(nextUrl, { scroll: false });
+  }, [
+    keyword,
+    prefecture,
+    city,
+    rank,
+    status,
+    category,
+    selectedDate,
+    showCalendar,
+    pathname,
+    router,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -207,6 +283,30 @@ export default function SelectionListPage() {
       active = false;
     };
   }, []);
+
+  const currentQuery = useMemo(() => {
+    const params = new URLSearchParams();
+
+    if (keyword.trim()) params.set("q", keyword.trim());
+    if (prefecture !== "all") params.set("pref", prefecture);
+    if (city !== "all") params.set("city", city);
+    if (rank !== "all") params.set("rank", rank);
+    if (status !== "all") params.set("status", status);
+    if (category !== "all") params.set("category", category);
+    if (selectedDate) params.set("date", selectedDate);
+    if (!showCalendar) params.set("calendar", "0");
+
+    return params.toString();
+  }, [
+    keyword,
+    prefecture,
+    city,
+    rank,
+    status,
+    category,
+    selectedDate,
+    showCalendar,
+  ]);
 
   const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
   const monthKey = useMemo(() => toMonthKey(monthDate), [monthDate]);
@@ -244,12 +344,10 @@ export default function SelectionListPage() {
       const itemRank =
         (item as SelectionEvent & { source_rank?: string }).source_rank || null;
 
-      if (
-        selectedDate &&
-        ymdOnly(item.event_date) !== selectedDate
-      ) {
+      if (selectedDate && ymdOnly(item.event_date) !== selectedDate) {
         return false;
       }
+
       if (prefecture !== "all" && itemPrefecture !== prefecture) return false;
       if (city !== "all" && item.city !== city) return false;
       if (rank !== "all" && itemRank !== rank) return false;
@@ -299,13 +397,8 @@ export default function SelectionListPage() {
 
     for (const item of filteredItems) {
       const ymd = ymdOnly(item.event_date);
-
       if (!ymd) continue;
-
-      countMap.set(
-        ymd,
-        (countMap.get(ymd) ?? 0) + 1
-      );
+      countMap.set(ymd, (countMap.get(ymd) ?? 0) + 1);
     }
 
     for (const [ymd, count] of countMap.entries()) {
@@ -334,6 +427,7 @@ export default function SelectionListPage() {
     setStatus("all");
     setCategory("all");
     setSelectedDate("");
+    setShowCalendar(true);
   };
 
   return (
@@ -439,8 +533,8 @@ export default function SelectionListPage() {
 
         <div style={filterFooter}>
           <div className="ui-meta">
-            {selectedDateText} / 掲載件数：{filteredItems.length}件 / 過去7日間の新着：
-            {newArrivalCount}件
+            {selectedDateText} / 表示件数：{filteredItems.length}件 / 取得件数：
+            {items.length}件 / 過去7日間の新着：{newArrivalCount}件
           </div>
 
           <button type="button" className="sh-btn" onClick={clearFilters}>
@@ -491,12 +585,12 @@ export default function SelectionListPage() {
                   (item as SelectionEvent & { source_rank?: string }).source_rank ||
                   null;
 
+                const detailHref = currentQuery
+                  ? `/selection/${item.id}?${currentQuery}`
+                  : `/selection/${item.id}`;
+
                 return (
-                  <Link
-                    key={item.id}
-                    href={`/selection/${item.id}`}
-                    style={linkStyle}
-                  >
+                  <Link key={item.id} href={detailHref} style={linkStyle}>
                     <article className="ui-card" style={card}>
                       <div style={cardTop}>
                         <span style={rankBadge}>
