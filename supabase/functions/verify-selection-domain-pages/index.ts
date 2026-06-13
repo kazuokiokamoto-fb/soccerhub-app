@@ -401,10 +401,6 @@ function countMatches(text: string, words: string[]) {
   return { count, matched };
 }
 
-function looksMojibake(text: string) {
-  return /�/.test(String(text || ""));
-}
-
 function getTitle(html: string, fallback: string) {
   const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
   if (h1?.[1]) return stripTags(h1[1]).slice(0, 120);
@@ -1050,9 +1046,15 @@ async function sha256(text: string) {
   return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+const PROCESSING_STALE_MINUTES = 5;
+
 async function claimHomepages(limit: number) {
   const cutoffIso = new Date(
     Date.now() - RECRAWL_HOURS * 60 * 60 * 1000
+  ).toISOString();
+
+  const staleProcessingIso = new Date(
+    Date.now() - PROCESSING_STALE_MINUTES * 60 * 1000
   ).toISOString();
 
   const { data, error } = await supabase
@@ -1060,8 +1062,12 @@ async function claimHomepages(limit: number) {
     .select("*")
     .eq("homepage_status", "found")
     .not("official_url", "is", null)
-    .or("selection_search_status.is.null,selection_search_status.neq.processing")
-    .or(`last_selection_crawled_at.is.null,last_selection_crawled_at.lt.${cutoffIso}`)
+    .or(
+      `selection_search_status.is.null,selection_search_status.neq.processing,selection_search_checked_at.lt.${staleProcessingIso}`
+    )
+    .or(
+      `last_selection_crawled_at.is.null,last_selection_crawled_at.lt.${cutoffIso}`
+    )
     .order("last_selection_crawled_at", { ascending: true, nullsFirst: true })
     .order("created_at", { ascending: true })
     .limit(limit);
