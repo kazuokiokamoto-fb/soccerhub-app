@@ -1060,7 +1060,7 @@ async function claimHomepages(limit: number) {
     .select("*")
     .eq("homepage_status", "found")
     .not("official_url", "is", null)
-    .not("selection_search_status", "eq", "processing")
+    .or("selection_search_status.is.null,selection_search_status.neq.processing")
     .or(`last_selection_crawled_at.is.null,last_selection_crawled_at.lt.${cutoffIso}`)
     .order("last_selection_crawled_at", { ascending: true, nullsFirst: true })
     .order("created_at", { ascending: true })
