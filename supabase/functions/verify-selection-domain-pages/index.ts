@@ -19,6 +19,7 @@ const MAX_DIRECT_CANDIDATES = 8;
 const MAX_NEWS_LISTS = 4;
 const MAX_NEWS_ARTICLES = 100;
 const MAX_SELECTION_EVENTS_PER_TEAM = 2;
+const RECRAWL_HOURS = 20;
 
 const BAD_DOMAINS = [
   "instagram.com",
@@ -1050,12 +1051,18 @@ async function sha256(text: string) {
 }
 
 async function claimHomepages(limit: number) {
+  const cutoffIso = new Date(
+    Date.now() - RECRAWL_HOURS * 60 * 60 * 1000
+  ).toISOString();
+
   const { data, error } = await supabase
     .from("team_homepages")
     .select("*")
     .eq("homepage_status", "found")
     .not("official_url", "is", null)
-    .or("selection_search_status.is.null,selection_search_status.eq.unchecked,selection_search_status.eq.retry")
+    .not("selection_search_status", "eq", "processing")
+    .or(`last_selection_crawled_at.is.null,last_selection_crawled_at.lt.${cutoffIso}`)
+    .order("last_selection_crawled_at", { ascending: true, nullsFirst: true })
     .order("created_at", { ascending: true })
     .limit(limit);
 
@@ -1086,6 +1093,7 @@ async function markHomepage(homepage: any, status: string, reason: string) {
       selection_search_status: status,
       selection_search_reason: reason.slice(0, 1000),
       selection_search_checked_at: nowIso(),
+      last_selection_crawled_at: nowIso(),
       updated_at: nowIso(),
     })
     .eq("id", homepage.id);
@@ -1123,6 +1131,25 @@ async function upsertSelectionPage(homepage: any, bestPage: any, pagesCount: num
     inferSourceRank(fullText, homepage.team_name || title);
 
   const hash = await sha256(`${homepage.id}:${bestPage.url}`);
+
+  const { data: lockedRows, error: lockedError } = await supabase
+    .from("selection_events")
+    .select("id")
+    .eq("manual_locked", true)
+    .ilike("memo", `%homepage_id:${homepage.id}%`)
+    .limit(1);
+
+  if (lockedError) throw lockedError;
+
+  if ((lockedRows || []).length > 0) {
+    return {
+      status: "manual_locked",
+      verifiedScore: bestPage.verifiedScore || 0,
+      bestUrl: bestPage.url,
+      title,
+      skipped: true,
+    };
+  }
 
   const eventRow = {
     source_id: null,
@@ -1173,7 +1200,7 @@ async function upsertSelectionPage(homepage: any, bestPage: any, pagesCount: num
 
   const { data: existingRows, error: existingError } = await supabase
     .from("selection_events")
-    .select("id")
+    .select("id, manual_locked")
     .eq("duplicate_key", hash)
     .limit(1);
 
@@ -1182,6 +1209,16 @@ async function upsertSelectionPage(homepage: any, bestPage: any, pagesCount: num
   const existing = existingRows && existingRows.length > 0 ? existingRows[0] : null;
 
   if (existing?.id) {
+    if (existing.manual_locked) {
+      return {
+        status: "manual_locked",
+        verifiedScore: bestPage.verifiedScore || 0,
+        bestUrl: bestPage.url,
+        title,
+        skipped: true,
+      };
+    }
+
     const { error } = await supabase
       .from("selection_events")
       .update(eventRow)
@@ -1235,7 +1272,7 @@ async function runOne(homepage: any) {
     for (const page of found.selectedPages) {
       const r = await upsertSelectionPage(homepage, page, found.pagesCount, found.topPages);
 
-      if (r.status !== "blacklisted") {
+      if (r.status !== "blacklisted" && r.status !== "manual_locked") {
         saved.push(r);
       }
     }
@@ -1244,7 +1281,7 @@ async function runOne(homepage: any) {
       await markHomepage(
         homepage,
         "selection_not_found",
-        `all_candidates_blacklisted; pages:${found.pagesCount}`,
+        `all_candidates_skipped; pages:${found.pagesCount}`,
       );
 
       return {
@@ -1252,7 +1289,7 @@ async function runOne(homepage: any) {
         team_name: homepage.team_name,
         startUrl: homepage.official_url,
         status: "rejected",
-        reason: "all_candidates_blacklisted",
+        reason: "all_candidates_skipped",
         ...found,
       };
     }
