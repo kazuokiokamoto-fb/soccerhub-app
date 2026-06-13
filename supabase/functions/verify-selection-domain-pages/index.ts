@@ -321,6 +321,37 @@ function canonicalUrl(url: string) {
   }
 }
 
+function normalizeSelectionUrl(url: string) {
+  try {
+    const u = new URL(url);
+    u.hash = "";
+    u.searchParams.delete("utm_source");
+    u.searchParams.delete("utm_medium");
+    u.searchParams.delete("utm_campaign");
+    u.searchParams.delete("fbclid");
+    return u.toString().replace(/\/$/, "");
+  } catch {
+    return String(url || "").replace(/\/$/, "");
+  }
+}
+
+async function isBlacklistedSelectionUrl(url: string) {
+  const urlNorm = normalizeSelectionUrl(url);
+
+  const { data, error } = await supabase
+    .from("selection_event_blacklist")
+    .select("id")
+    .eq("url_norm", urlNorm)
+    .limit(1);
+
+  if (error) {
+    console.error("blacklist check error:", error);
+    return false;
+  }
+
+  return (data || []).length > 0;
+}
+
 function pathOf(url: string) {
   try {
     return new URL(url).pathname.toLowerCase();
@@ -1063,6 +1094,16 @@ async function markHomepage(homepage: any, status: string, reason: string) {
 }
 
 async function upsertSelectionPage(homepage: any, bestPage: any, pagesCount: number, topPages: any[]) {
+  if (await isBlacklistedSelectionUrl(bestPage.url)) {
+    return {
+      status: "blacklisted",
+      verifiedScore: bestPage.verifiedScore || 0,
+      bestUrl: bestPage.url,
+      title: bestPage.title || "",
+      skipped: true,
+    };
+  }
+  
   const pageText = bestPage.text || "";
   const title = bestPage.title || `${homepage.team_name} セレクション情報`;
   const fullText = compactText(`${title} ${homepage.team_name || ""} ${pageText}`, 40000);
@@ -1193,7 +1234,27 @@ async function runOne(homepage: any) {
 
     for (const page of found.selectedPages) {
       const r = await upsertSelectionPage(homepage, page, found.pagesCount, found.topPages);
-      saved.push(r);
+
+      if (r.status !== "blacklisted") {
+        saved.push(r);
+      }
+    }
+
+    if (saved.length === 0) {
+      await markHomepage(
+        homepage,
+        "selection_not_found",
+        `all_candidates_blacklisted; pages:${found.pagesCount}`,
+      );
+
+      return {
+        id: homepage.id,
+        team_name: homepage.team_name,
+        startUrl: homepage.official_url,
+        status: "rejected",
+        reason: "all_candidates_blacklisted",
+        ...found,
+      };
     }
 
     await markHomepage(
