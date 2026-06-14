@@ -1060,7 +1060,7 @@ async function claimHomepages(limit: number) {
   const { data, error } = await supabase
     .from("team_homepages")
     .select("*")
-    .eq("homepage_status", "found")
+    .in("homepage_status", ["found", "active"])
     .not("official_url", "is", null)
     .or(
       `selection_search_status.is.null,selection_search_status.neq.processing,selection_search_checked_at.lt.${staleProcessingIso}`
