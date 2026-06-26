@@ -237,7 +237,12 @@ async function upsertLeagueHistory(params: {
 }
 
 async function processLeagueSource(source: any, season: number) {
-  const html = await fetchHtml(source.source_url);
+  let html = "";
+
+  if (!String(source.source_url || "").includes("saitama-cy.com")) {
+    html = await fetchHtml(source.source_url);
+  }
+
   const parsedTeams = await parseTeams(source, html);
 
   const saved = [];
