@@ -1,7 +1,4 @@
-export type TeamRow = {
-  teamName: string;
-  leagueName: string;
-};
+import { parseGenericTable, type TeamRow } from "./generic-table.ts";
 
 const BASE_URL = "https://tokyo-cy.jp/";
 
@@ -21,23 +18,14 @@ function stripTags(html: string) {
       .replace(/<script[\s\S]*?<\/script>/gi, " ")
       .replace(/<style[\s\S]*?<\/style>/gi, " ")
       .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/p>/gi, "\n")
-      .replace(/<\/div>/gi, "\n")
-      .replace(/<\/li>/gi, "\n")
-      .replace(/<\/tr>/gi, "\n")
       .replace(/<[^>]*>/g, " "),
   )
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n\s+/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
 function clean(text: string) {
-  return String(text || "")
-    .normalize("NFKC")
-    .replace(/\s+/g, " ")
-    .trim();
+  return String(text || "").normalize("NFKC").replace(/\s+/g, " ").trim();
 }
 
 function normalizeUrl(url: string, base = BASE_URL) {
@@ -51,9 +39,19 @@ function normalizeUrl(url: string, base = BASE_URL) {
   }
 }
 
+function leagueKey(leagueName: string) {
+  const t = String(leagueName || "").toUpperCase();
+  if (t.includes("T1")) return "T1";
+  if (t.includes("T2")) return "T2";
+  if (t.includes("T3")) return "T3";
+  if (t.includes("T4")) return "T4";
+  return "";
+}
+
 function extractLinks(html: string) {
   const links: { url: string; label: string }[] = [];
   const seen = new Set<string>();
+
   const re = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let m;
 
@@ -72,6 +70,43 @@ function extractLinks(html: string) {
   return links;
 }
 
+function isRankingPageLink(link: { url: string; label: string }, key: string) {
+  const hay = `${link.url} ${link.label}`.toUpperCase();
+
+  if (!key || !hay.includes(key)) return false;
+
+  const positive = [
+    "順位表",
+    "星取表",
+    "戦績表",
+    "リーグ表",
+    "STANDING",
+    "STANDINGS",
+    "TABLE",
+    "RESULT",
+    "LEAGUE",
+  ];
+
+  const negative = [
+    "要項",
+    "大会要項",
+    "規約",
+    "日程",
+    "SCHEDULE",
+    "トーナメント",
+    "高円宮杯",
+    "ニュース",
+    "NEWS",
+    "お知らせ",
+    "PDF",
+    ".PDF",
+  ];
+
+  if (negative.some((w) => hay.includes(w))) return false;
+
+  return positive.some((w) => hay.includes(w));
+}
+
 async function fetchHtml(url: string) {
   const res = await fetch(url, {
     headers: {
@@ -86,92 +121,48 @@ async function fetchHtml(url: string) {
   return await res.text();
 }
 
-function leagueKey(leagueName: string) {
-  const t = String(leagueName || "").toUpperCase();
-
-  if (t.includes("T1")) return "T1";
-  if (t.includes("T2")) return "T2";
-  if (t.includes("T3")) return "T3";
-  if (t.includes("T4")) return "T4";
-
-  return "";
-}
-
-function isCandidateLink(link: { url: string; label: string }, key: string) {
-  const hay = `${link.url} ${link.label}`.toUpperCase();
-
-  if (!hay.includes("U-15") && !hay.includes("U15") && !hay.includes("ジュニアユース")) {
-    return false;
-  }
-
-  if (key && hay.includes(key)) return true;
-
-  return hay.includes("リーグ") || hay.includes("LEAGUE") || hay.includes("星取表");
-}
-
-function looksLikeTeamName(text: string) {
-  const t = clean(text);
-
-  if (!t) return false;
-  if (t.length < 2 || t.length > 80) return false;
+function isBadTeamName(name: string) {
+  const t = clean(name);
 
   const bad = [
-    "順位",
-    "勝点",
-    "得点",
-    "失点",
-    "試合",
-    "結果",
-    "日程",
-    "会場",
-    "詳細",
-    "ニュース",
-    "お知らせ",
-    "大会",
-    "要項",
-    "組み合わせ",
-    "星取表",
-    "前期",
-    "後期",
+    "高円宮杯",
+    "東京都予選",
+    "トーナメント",
+    "参加権",
+    "出場権",
+    "SCHEDULE",
     "リーグ",
-    "東京都クラブユース",
-    "関東クラブユース",
+    "順位表",
+    "星取表",
+    "要項",
+    "ブロック",
+    "以下のチーム",
+    "そのブロック",
+    "チーム",
   ];
 
-  if (bad.some((w) => t.includes(w))) return false;
-
-  return /FC|SC|サッカー|フットボール|クラブ|ユース|ジュニア|U-?15|アカデミー|トレーロス|杉並|府中|町田|東京|調布|多摩|世田谷|三鷹|渋谷|江東|大森|暁星|プラウド|インテリオール|クリアージュ/i.test(t);
+  return bad.some((w) => t.includes(w));
 }
 
-function extractTeamsFromHtml(html: string, leagueName: string) {
-  const rows: TeamRow[] = [];
+function filterTeams(rows: TeamRow[], leagueName: string) {
   const seen = new Set<string>();
+  const out: TeamRow[] = [];
 
-  const text = stripTags(html);
-  const parts = text
-    .split(/\n|。|｜|\||・|●|■|◆|▶|▼|▽/)
-    .map(clean)
-    .filter(Boolean);
+  for (const row of rows) {
+    const teamName = clean(row.teamName);
 
-  for (const part of parts) {
-    if (!looksLikeTeamName(part)) continue;
-
-    let teamName = part
-      .replace(/^[0-9０-９]+[.)．、\s]*/g, "")
-      .replace(/^[A-ZＡ-Ｚ]ブロック\s*/g, "")
-      .replace(/\s*様$/g, "")
-      .trim();
-
-    if (!looksLikeTeamName(teamName)) continue;
+    if (!teamName) continue;
+    if (isBadTeamName(teamName)) continue;
+    if (teamName.length < 2 || teamName.length > 60) continue;
 
     const key = `${leagueName}|${teamName}`;
     if (seen.has(key)) continue;
-
     seen.add(key);
-    rows.push({ teamName, leagueName });
+
+    out.push({ teamName, leagueName });
   }
 
-  return rows;
+  return out;
 }
 
 export async function parseTokyoCY(
@@ -179,34 +170,28 @@ export async function parseTokyoCY(
   leagueName: string,
 ): Promise<TeamRow[]> {
   const key = leagueKey(leagueName);
-  const pages: string[] = [html];
 
-  const links = extractLinks(html)
-    .filter((link) => isCandidateLink(link, key))
-    .slice(0, 30);
+  const links = extractLinks(html).filter((link) =>
+    isRankingPageLink(link, key)
+  );
 
-  for (const link of links) {
+  const pages: string[] = [];
+
+  for (const link of links.slice(0, 10)) {
     const pageHtml = await fetchHtml(link.url);
     if (pageHtml) pages.push(pageHtml);
   }
 
-  const all: TeamRow[] = [];
-  const seen = new Set<string>();
-
-  for (const pageHtml of pages) {
-    const pageText = stripTags(pageHtml).toUpperCase();
-
-    if (key && !pageText.includes(key)) continue;
-
-    const teams = extractTeamsFromHtml(pageHtml, leagueName);
-
-    for (const team of teams) {
-      const dedupeKey = `${leagueName}|${team.teamName}`;
-      if (seen.has(dedupeKey)) continue;
-      seen.add(dedupeKey);
-      all.push(team);
-    }
+  if (pages.length === 0) {
+    return filterTeams(await parseGenericTable(html, leagueName), leagueName);
   }
 
-  return all;
+  const all: TeamRow[] = [];
+
+  for (const pageHtml of pages) {
+    const parsed = await parseGenericTable(pageHtml, leagueName);
+    all.push(...parsed);
+  }
+
+  return filterTeams(all, leagueName);
 }
