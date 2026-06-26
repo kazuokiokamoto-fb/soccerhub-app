@@ -65,6 +65,7 @@ function getSeason(body: any) {
 async function loadLeagueSources(
   limit: number,
   onlySourceId?: string,
+  prefecture?: string,
 ) {
   let q = supabase
     .from("league_sources")
@@ -74,6 +75,10 @@ async function loadLeagueSources(
 
   if (onlySourceId) {
     q = q.eq("id", onlySourceId);
+  }
+
+  if (prefecture) {
+    q = q.eq("prefecture", prefecture);
   }
 
   q = q.limit(limit);
@@ -300,10 +305,12 @@ serve(async (req) => {
 
     const limit = Number(body.limit || body.maxSources || 20);
     const onlySourceId = body.onlySourceId;
+    const prefecture = body.prefecture;
 
     const sources = await loadLeagueSources(
       limit,
       onlySourceId,
+      prefecture,
     );
 
     const results = [];
