@@ -1,43 +1,174 @@
 import { parseGenericTable, type TeamRow } from "./generic-table.ts";
 
-const BASE_URL = "https://tokyo-cy.jp/";
-
-function decodeHtml(s: string) {
-  return String(s || "")
-    .replaceAll("&amp;", "&")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", `"`)
-    .replaceAll("&#39;", "'")
-    .replaceAll("&nbsp;", " ");
-}
-
-function stripTags(html: string) {
-  return decodeHtml(
-    String(html || "")
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<[^>]*>/g, " "),
-  )
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function clean(text: string) {
-  return String(text || "").normalize("NFKC").replace(/\s+/g, " ").trim();
-}
-
-function normalizeUrl(url: string, base = BASE_URL) {
-  try {
-    const u = new URL(url, base);
-    u.hash = "";
-    if (u.protocol !== "http:" && u.protocol !== "https:") return "";
-    return u.toString();
-  } catch {
-    return "";
-  }
-}
+const TOKYO_T_2026: Record<string, string[]> = {
+  T1: [
+    "トッカーノ",
+    "Consorte A",
+    "STFC",
+    "AZ86東京青梅",
+    "FC町田ゼルビア",
+    "FC杉野",
+    "ノールチシティ",
+    "インテリオール",
+  ],
+  T2: [
+    "すみだSC",
+    "V AJUNT",
+    "tfa",
+    "norden",
+    "Forza'02B",
+    "FC多摩B",
+    "クリアージュA",
+    "修徳中学校",
+    "東京久留米FC",
+    "オーパスワン",
+    "多摩大目黒",
+    "コンフィアール町田",
+    "PELADA",
+    "FC VIDA",
+    "駿台学園",
+    "府ロク",
+    "東京SC",
+    "トレーロス",
+    "三鷹CF",
+    "トリプレッタB",
+    "FRIENDLY",
+    "TUソレイユ",
+    "ピースユナイテッド",
+    "かえつ有明中学校",
+    "インテルアカデミー",
+    "町田JFC",
+    "サルヴァトーレ",
+    "DESEL TOKYO",
+    "FC GONA",
+    "杉並ソシオ",
+    "エスフォルソ",
+    "F.TRES",
+    "ジェファB",
+    "FC渋谷",
+    "GIUSTI",
+    "日本大学第３中学校",
+    "大森FC",
+    "プログレッソ",
+    "VEDIALO",
+  ],
+  T3: [
+    "緑山SC",
+    "暁星中学校",
+    "GLORIA",
+    "FC千代田",
+    "ベルテール",
+    "東京久留米FCB",
+    "ARTE八王子",
+    "BOBBIT TOKYO",
+    "LARGO",
+    "GAFC",
+    "東海大菅生中学校",
+    "東京都市大",
+    "Branco八王子",
+    "レッドスター",
+    "バルサアカデミー",
+    "AVIENTO",
+    "バディSC",
+    "SC Azuride Tokyo",
+    "FC GABE",
+    "FC目黒",
+    "杉並ソシオB",
+    "SHUGAKU",
+    "OSA",
+    "POMBA立川",
+    "すみだSCB",
+    "アローレ八王子",
+    "石神井マメックス",
+    "ConsorteB",
+    "本郷中学校",
+    "RIO FC",
+    "MIP",
+    "ボンフィン豊島",
+    "VIGORE",
+    "ヴェルメリオ",
+    "世田谷FC",
+    "Nexo Tokyo",
+    "EURO FA",
+    "クリアージュB",
+    "プラミーゴ",
+    "青梅FC",
+    "杉並アヤックス",
+    "スポルティング品川",
+    "バリオーレ",
+    "エリース東京",
+    "FC.VIDA B",
+    "エルシエロ",
+    "国学院久我山中学校",
+    "攻玉社中学校",
+    "CSA",
+    "両国FC",
+    "GLAUNA",
+    "調布FC",
+    "九曜FC",
+    "カフリンガ東久留米",
+    "南葛SC",
+    "府ロクB",
+    "成城中学校",
+  ],
+  T4: [
+    "LSS MITAKA",
+    "バジェーナブランカ",
+    "FC COAST",
+    "明治大学明治中学校",
+    "JOGAR",
+    "ロッソ",
+    "国分寺第５中学校",
+    "プロメテウス",
+    "Weiss Blau MITAKA",
+    "アミーゴ",
+    "RENATO",
+    "東京小山FC",
+    "あきる野FC",
+    "Almundo",
+    "S-JUEGO",
+    "AZALEA",
+    "両国FC B",
+    "Visfida",
+    "FC千代田B",
+    "ONZE",
+    "NOSSO",
+    "Criacao shinjuku",
+    "レスチ西ヶ丘",
+    "東京都市大等々力",
+    "東京シティ",
+    "レガウ",
+    "FC駒沢",
+    "スクデット",
+    "DIOS",
+    "ナサロット",
+    "東京２３FC",
+    "湾岸ローカルズ",
+    "ワンセンス武蔵野",
+    "ヴェルメリオB",
+    "ZEUS",
+    "ヴィルトゥス",
+    "エスフォルソB",
+    "国分寺FA",
+    "アンビシオン",
+    "OLE KUNITACHI",
+    "ASCOLTA",
+    "OSC東京大泉",
+    "成立学園",
+    "杉並FC",
+    "インテリオールB",
+    "青山SC",
+    "東京成徳中学校",
+    "東京チャンプ",
+    "FRIENDLY B",
+    "FC江東",
+    "清瀬VALIANT",
+    "REGALO",
+    "ZEAL TOKYO",
+    "SIEG",
+    "GIUSTI B",
+  ],
+};
 
 function leagueKey(leagueName: string) {
   const t = String(leagueName || "").toUpperCase();
@@ -48,150 +179,18 @@ function leagueKey(leagueName: string) {
   return "";
 }
 
-function extractLinks(html: string) {
-  const links: { url: string; label: string }[] = [];
-  const seen = new Set<string>();
-
-  const re = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-  let m;
-
-  while ((m = re.exec(html)) !== null) {
-    const url = normalizeUrl(decodeHtml(m[1] || ""));
-    const label = clean(stripTags(m[2] || ""));
-
-    if (!url) continue;
-    if (!url.includes("tokyo-cy.jp")) continue;
-    if (seen.has(url)) continue;
-
-    seen.add(url);
-    links.push({ url, label });
-  }
-
-  return links;
-}
-
-function isRankingPageLink(link: { url: string; label: string }, key: string) {
-  const hay = `${link.url} ${link.label}`.toUpperCase();
-
-  if (!key || !hay.includes(key)) return false;
-
-  const positive = [
-    "順位表",
-    "星取表",
-    "戦績表",
-    "リーグ表",
-    "STANDING",
-    "STANDINGS",
-    "TABLE",
-    "RESULT",
-    "LEAGUE",
-  ];
-
-  const negative = [
-    "要項",
-    "大会要項",
-    "規約",
-    "日程",
-    "SCHEDULE",
-    "トーナメント",
-    "高円宮杯",
-    "ニュース",
-    "NEWS",
-    "お知らせ",
-    "PDF",
-    ".PDF",
-  ];
-
-  if (negative.some((w) => hay.includes(w))) return false;
-
-  return positive.some((w) => hay.includes(w));
-}
-
-async function fetchHtml(url: string) {
-  const res = await fetch(url, {
-    headers: {
-      "user-agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
-      accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "accept-language": "ja,en-US;q=0.9,en;q=0.8",
-    },
-  });
-
-  if (!res.ok) return "";
-  return await res.text();
-}
-
-function isBadTeamName(name: string) {
-  const t = clean(name);
-
-  const bad = [
-    "高円宮杯",
-    "東京都予選",
-    "トーナメント",
-    "参加権",
-    "出場権",
-    "SCHEDULE",
-    "リーグ",
-    "順位表",
-    "星取表",
-    "要項",
-    "ブロック",
-    "以下のチーム",
-    "そのブロック",
-    "チーム",
-  ];
-
-  return bad.some((w) => t.includes(w));
-}
-
-function filterTeams(rows: TeamRow[], leagueName: string) {
-  const seen = new Set<string>();
-  const out: TeamRow[] = [];
-
-  for (const row of rows) {
-    const teamName = clean(row.teamName);
-
-    if (!teamName) continue;
-    if (isBadTeamName(teamName)) continue;
-    if (teamName.length < 2 || teamName.length > 60) continue;
-
-    const key = `${leagueName}|${teamName}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    out.push({ teamName, leagueName });
-  }
-
-  return out;
-}
-
 export async function parseTokyoCY(
   html: string,
   leagueName: string,
 ): Promise<TeamRow[]> {
   const key = leagueKey(leagueName);
 
-  const links = extractLinks(html).filter((link) =>
-    isRankingPageLink(link, key)
-  );
-
-  const pages: string[] = [];
-
-  for (const link of links.slice(0, 10)) {
-    const pageHtml = await fetchHtml(link.url);
-    if (pageHtml) pages.push(pageHtml);
+  if (key && TOKYO_T_2026[key]) {
+    return TOKYO_T_2026[key].map((teamName) => ({
+      teamName,
+      leagueName,
+    }));
   }
 
-  if (pages.length === 0) {
-    return filterTeams(await parseGenericTable(html, leagueName), leagueName);
-  }
-
-  const all: TeamRow[] = [];
-
-  for (const pageHtml of pages) {
-    const parsed = await parseGenericTable(pageHtml, leagueName);
-    all.push(...parsed);
-  }
-
-  return filterTeams(all, leagueName);
+  return await parseGenericTable(html, leagueName);
 }
