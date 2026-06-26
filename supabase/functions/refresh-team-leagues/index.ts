@@ -62,13 +62,23 @@ function getSeason(body: any) {
   return Number(body.season || new Date().getFullYear());
 }
 
-async function loadLeagueSources(limit: number) {
-  const { data, error } = await supabase
+async function loadLeagueSources(
+  limit: number,
+  onlySourceId?: string,
+) {
+  let q = supabase
     .from("league_sources")
     .select("*")
     .eq("enabled", true)
-    .order("league_rank", { ascending: true })
-    .limit(limit);
+    .order("league_rank", { ascending: true });
+
+  if (onlySourceId) {
+    q = q.eq("id", onlySourceId);
+  }
+
+  q = q.limit(limit);
+
+  const { data, error } = await q;
 
   if (error) throw error;
   return data || [];
@@ -287,9 +297,14 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const season = getSeason(body);
-    const limit = Number(body.limit || body.maxSources || 20);
 
-    const sources = await loadLeagueSources(limit);
+    const limit = Number(body.limit || body.maxSources || 20);
+    const onlySourceId = body.onlySourceId;
+
+    const sources = await loadLeagueSources(
+      limit,
+      onlySourceId,
+    );
 
     const results = [];
     let totalParsed = 0;
