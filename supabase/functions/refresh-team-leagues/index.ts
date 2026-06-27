@@ -385,10 +385,19 @@ serve(async (req) => {
       results,
     });
   } catch (e) {
+    console.error(e);
+
     return json(
       {
         ok: false,
-        error: e instanceof Error ? e.message : String(e),
+        error:
+          e instanceof Error
+            ? {
+                name: e.name,
+                message: e.message,
+                stack: e.stack,
+              }
+            : e,
       },
       500,
     );
