@@ -332,9 +332,15 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const season = getSeason(body);
 
-    const limit = Number(body.limit || body.maxSources || 20);
     const onlySourceId = body.onlySourceId;
     const prefecture = body.prefecture;
+
+    // Edge Function のリソース制限対策。
+    // onlySourceId がある場合は必ず1件。
+    // prefecture指定だけの場合も、原則1件ずつ処理する。
+    const limit = onlySourceId
+      ? 1
+      : Number(body.limit || body.maxSources || 1);
 
     const sources = await loadLeagueSources(
       limit,
