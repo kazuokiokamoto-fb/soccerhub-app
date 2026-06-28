@@ -13,7 +13,6 @@ const FETCH_TIMEOUT_MS = 12000;
 const MIN_ACCEPT_SCORE = 120;
 
 const BAD_DOMAINS = [
-  // ニュース・DB・メディア
   "gekisaka.jp",
   "web.gekisaka.jp",
   "playerapp.tokyo",
@@ -33,8 +32,6 @@ const BAD_DOMAINS = [
   "soccer-king.jp",
   "qoly.jp",
   "ultra-soccer.jp",
-
-  // JFA/Jリーグ/連盟・協会・大会サイト
   "jfa.jp",
   "jfa.or.jp",
   "jleague.jp",
@@ -58,8 +55,6 @@ const BAD_DOMAINS = [
   "tochigi-cy.com",
   "gunma-cy.com",
   "jy-soccer.jp",
-
-  // まとめサイト
   "juniorsoccer-news.com",
   "junior-soccer.jp",
   "green-card.co.jp",
@@ -81,16 +76,12 @@ const BAD_DOMAINS = [
   "koko-soccer.com",
   "soccerstation.co.jp",
   "navi.soccerstation.co.jp",
-
-  // 行政・学校・汎用
   "city.",
   ".city.",
   ".lg.jp",
   "pref.",
   ".pref.",
   "metro.tokyo.lg.jp",
-
-  // SNS/動画/フォーム/地図
   "instagram.com",
   "facebook.com",
   "twitter.com",
@@ -299,7 +290,7 @@ async function fetchText(url: string) {
       headers: {
         "user-agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
-        "accept":
+        accept:
           "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "accept-language": "ja,en-US;q=0.9,en;q=0.8",
       },
@@ -332,7 +323,6 @@ function extractSearchLinks(html: string) {
 
   while ((m = re.exec(html)) !== null) {
     let href = m[1];
-
     href = href.replace(/&amp;/g, "&");
 
     if (href.includes("uddg=")) {
@@ -449,7 +439,6 @@ function scoreCandidate(url: string, html: string, team: any) {
   const teamName = team.team_name || "";
   const pref = team.prefecture || "";
   const host = hostOf(url);
-  const origin = originOf(url);
   const title = getTitle(html);
   const text = stripTags(html).slice(0, 8000);
 
@@ -534,12 +523,6 @@ function scoreCandidate(url: string, html: string, team: any) {
     reasons.push("team_site_builder_or_host");
   }
 
-  if (host.includes("ameblo.jp")) {
-    score += 10;
-    reasons.push("ameblo_possible_official_blog");
-  }
-
-  // 検索結果ページ・一覧・ニュース記事っぽいものは減点
   if (
     includesAny(url, [
       "/news/",
@@ -560,7 +543,6 @@ function scoreCandidate(url: string, html: string, team: any) {
     reasons.push("article_or_list_url_penalty");
   }
 
-  // トップページまたは短い階層は公式HPの可能性が高い
   try {
     const path = new URL(url).pathname;
     const depth = path.split("/").filter(Boolean).length;
@@ -576,14 +558,11 @@ function scoreCandidate(url: string, html: string, team: any) {
     }
   } catch {}
 
-  // 公式HPなのに本文が薄いケースもあるが、あまりに薄いものは危険
   if (text.length < 200) {
     score -= 25;
     reasons.push("thin_page_penalty");
   }
 
-  // 公式HP本文には「リーグ戦」「大会結果」などが普通に入るため、
-  // 減点対象は URL と title だけに限定する
   const pageHead = `${url} ${title}`.toLowerCase();
 
   if (
@@ -612,9 +591,10 @@ function scoreCandidate(url: string, html: string, team: any) {
 
 async function claimTeams(limit: number) {
   const { data, error } = await supabase
-    .from("team_directory")
+    .from("team_master")
     .select("*")
     .or("homepage_search_status.is.null,homepage_search_status.eq.unchecked,homepage_search_status.eq.retry")
+    .order("current_league_rank", { ascending: true })
     .order("created_at", { ascending: true })
     .limit(limit);
 
@@ -624,7 +604,7 @@ async function claimTeams(limit: number) {
 
   if (rows.length > 0) {
     await supabase
-      .from("team_directory")
+      .from("team_master")
       .update({
         homepage_search_status: "processing",
         homepage_checked_at: nowIso(),
@@ -637,11 +617,13 @@ async function claimTeams(limit: number) {
 }
 
 async function saveHomepage(team: any, best: any) {
+  const officialUrl = best.homepage_url || best.url;
+
   await supabase
-    .from("team_directory")
+    .from("team_master")
     .update({
-      homepage_url: best.homepage_url || best.url,
-      official_url: best.homepage_url || best.url,
+      official_url: officialUrl,
+      homepage_status: "found",
       homepage_search_status: "found",
       homepage_search_reason: best.reason,
       homepage_checked_at: nowIso(),
@@ -652,14 +634,14 @@ async function saveHomepage(team: any, best: any) {
   const { data: existing } = await supabase
     .from("team_homepages")
     .select("id")
-    .eq("team_directory_id", team.id)
+    .eq("team_master_id", team.id)
     .maybeSingle();
 
   const row = {
-    team_directory_id: team.id,
+    team_master_id: team.id,
     team_name: team.team_name,
     prefecture: team.prefecture,
-    official_url: best.homepage_url || best.url,
+    official_url: officialUrl,
     homepage_status: "found",
     last_checked_at: nowIso(),
     updated_at: nowIso(),
@@ -677,7 +659,7 @@ async function saveHomepage(team: any, best: any) {
 
 async function markNotFound(team: any, reason: string) {
   await supabase
-    .from("team_directory")
+    .from("team_master")
     .update({
       homepage_search_status: "not_found",
       homepage_search_reason: reason.slice(0, 500),
@@ -706,7 +688,6 @@ function buildQueries(team: any) {
 async function processTeam(team: any) {
   const teamName = team.team_name || "";
   const pref = team.prefecture || "";
-
   const queries = buildQueries(team);
 
   const seenUrls = new Set<string>();
@@ -815,7 +796,7 @@ serve(async (req) => {
         errors++;
 
         await supabase
-          .from("team_directory")
+          .from("team_master")
           .update({
             homepage_search_status: "error",
             homepage_search_reason: String(e?.message || e).slice(0, 500),
@@ -837,6 +818,7 @@ serve(async (req) => {
     return json({
       ok: true,
       mode: "find-team-homepages",
+      sourceTable: "team_master",
       minAcceptScore: MIN_ACCEPT_SCORE,
       claimed: teams.length,
       found,
