@@ -196,21 +196,6 @@ const OFFICIAL_HINT_WORDS = [
   "お問い合わせ",
 ];
 
-const EC_WORDS = [
-  "shop",
-  "store",
-  "ec",
-  "cart",
-  "goods",
-  "グッズ",
-  "ショップ",
-  "オンラインショップ",
-  "通販",
-  "商品",
-  "購入",
-  "カート",
-];
-
 function json(data: any, status = 200) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
@@ -473,9 +458,57 @@ function scoreCandidate(url: string, html: string, team: any) {
     reasons.push("shop_domain_penalty");
   }
 
-  if (EC_WORDS.some((w) => hay.includes(w.toLowerCase()))) {
+  if (
+    includesAny(url, [
+      "/shop",
+      "/store",
+      "/goods",
+      "/product",
+      "/products",
+      "/cart",
+      "/ec",
+      "/item",
+      "/items",
+    ])
+  ) {
     score -= 180;
-    reasons.push("ec_or_shop_penalty");
+    reasons.push("ec_or_shop_url_penalty");
+  }
+
+  if (host.endsWith(".or.jp")) {
+    score += 80;
+    reasons.push("official_jp_org_domain");
+  } else if (host.endsWith(".co.jp")) {
+    score += 70;
+    reasons.push("official_company_domain");
+  } else if (host.endsWith(".jp")) {
+    score += 45;
+    reasons.push("jp_domain");
+  } else if (host.endsWith(".com")) {
+    score += 25;
+    reasons.push("com_domain");
+  }
+
+  if (
+    host.includes("fc") ||
+    host.includes("sc") ||
+    host.includes("soccer") ||
+    host.includes("football") ||
+    host.includes("academy")
+  ) {
+    score += 40;
+    reasons.push("team_like_host_bonus");
+  }
+
+  if (
+    host.includes("sakura.ne.jp") ||
+    host.includes("jimdofree.com") ||
+    host.includes("jimdo.com") ||
+    host.includes("wixsite.com") ||
+    host.includes("ameblo.jp")
+  ) {
+    score -= 25;
+    reasons.push("free_host_penalty");
   }
 
   if (!nTeam || isBadUrl(url)) return { score: -999, reasons: ["bad_url"] };
