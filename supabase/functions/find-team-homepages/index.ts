@@ -47,6 +47,7 @@ const BAD_DOMAINS = [
   "gunma-fa.com",
   "clubyouth-football.com",
   "clubyouth-u18.com",
+  "clubyouth-u15.com",
   "tokyo-cy.jp",
   "kanagawa-cy.com",
   "saitama-cy.com",
