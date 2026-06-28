@@ -6,6 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { parseTokyoCY } from "./extractors/tokyo-cy.ts";
 import { parseKantoCY } from "./extractors/kanto-cy.ts";
 import { parseSaitamaCY } from "./extractors/saitama-cy.ts";
+import { parseKanagawaCY } from "./extractors/kanagawa-cy.ts";
 import { parseGenericTable } from "./extractors/generic-table.ts";
 
 import { getLeagueSiteConfig } from "./configs/index.ts";
@@ -126,6 +127,10 @@ async function parseTeams(source: any, html: string) {
 
   if (url.includes("saitama-cy.com")) {
     return await parseSaitamaCY(html, source.league_name);
+  }
+
+  if (url.includes("kanagawa-fa.gr.jp") || url.includes("kanagawa-cy.com")) {
+    return await parseKanagawaCY(html, source.league_name);
   }
 
   return await parseGenericTable(html, source.league_name);
