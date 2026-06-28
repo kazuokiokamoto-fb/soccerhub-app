@@ -698,17 +698,58 @@ async function markNotFound(team: any, reason: string) {
 function buildQueries(team: any) {
   const teamName = team.team_name || "";
   const pref = team.prefecture || "";
+  const category = String(team.category || "").toUpperCase();
 
-  return Array.from(
-    new Set([
-      `${teamName} ${pref} サッカー 公式`,
-      `${teamName} 公式`,
-      `${teamName} ホームページ`,
-      `${teamName} オフィシャル`,
-      `${teamName} soccer club official`,
-      `${teamName} football club official`,
-    ]),
-  );
+  const baseQueries = [
+    `${teamName} ${pref} サッカー 公式`,
+    `${teamName} 公式`,
+    `${teamName} ホームページ`,
+    `${teamName} オフィシャル`,
+    `${teamName} サッカークラブ`,
+    `${teamName} soccer`,
+    `${teamName} football`,
+    `${teamName} soccer club official`,
+    `${teamName} football club official`,
+    `${teamName} FC`,
+    `${teamName} SC`,
+    `${teamName} クラブ`,
+    `${teamName} アカデミー`,
+    `${teamName} academy`,
+  ];
+
+  const categoryQueries: string[] = [];
+
+  if (category === "U12") {
+    categoryQueries.push(
+      `${teamName} ジュニア`,
+      `${teamName} U12`,
+      `${teamName} U-12`,
+      `${teamName} 少年団`,
+      `${teamName} 小学生`,
+    );
+  }
+
+  if (category === "U15") {
+    categoryQueries.push(
+      `${teamName} ジュニアユース`,
+      `${teamName} U15`,
+      `${teamName} U-15`,
+      `${teamName} U13`,
+      `${teamName} U-13`,
+      `${teamName} アカデミー`,
+    );
+  }
+
+  if (category === "U18") {
+    categoryQueries.push(
+      `${teamName} ユース`,
+      `${teamName} U18`,
+      `${teamName} U-18`,
+      `${teamName} アカデミー`,
+    );
+  }
+
+  return Array.from(new Set([...categoryQueries, ...baseQueries]));
 }
 
 async function processTeam(team: any) {
