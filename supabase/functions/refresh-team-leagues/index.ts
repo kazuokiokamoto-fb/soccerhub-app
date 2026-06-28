@@ -13,9 +13,6 @@ import { parseTochigiCY } from "./extractors/tochigi-cy.ts";
 import { parseGunmaCY } from "./extractors/gunma-cy.ts";
 import { parseGenericTable } from "./extractors/generic-table.ts";
 
-import { getLeagueSiteConfig } from "./configs/index.ts";
-import { crawlLeagueRanking } from "./crawler/ranking.ts";
-
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -99,27 +96,6 @@ async function loadLeagueSources(
 
 async function parseTeams(source: any, html: string) {
   const url = source.source_url || "";
-
-  const config = getLeagueSiteConfig(url);
-
-  if (config) {
-    try {
-      const teams = await crawlLeagueRanking(config, source.league_name);
-
-      if (teams.length > 0) {
-        return teams.map((team) => ({
-          teamName: team.teamName,
-          leagueName: source.league_name,
-        }));
-      }
-    } catch (e) {
-      console.log(
-        "common crawler failed, fallback:",
-        source.league_name,
-        e instanceof Error ? e.message : String(e),
-      );
-    }
-  }
 
   if (url.includes("tokyo-cy.jp")) {
     return await parseTokyoCY(html, source.league_name);
@@ -288,7 +264,15 @@ async function upsertLeagueHistory(params: {
 async function processLeagueSource(source: any, season: number) {
   let html = "";
 
-  if (!String(source.source_url || "").includes("saitama-cy.com")) {
+  const sourceUrl = String(source.source_url || "");
+
+  const skipFetch =
+    sourceUrl.includes("saitama-cy.com") ||
+    sourceUrl.includes("tochigi-fa.com") ||
+    sourceUrl.includes("gunma-fa.com") ||
+    sourceUrl.includes("ibaraki-fa.jp");
+
+  if (!skipFetch) {
     html = await fetchHtml(source.source_url);
   }
 
