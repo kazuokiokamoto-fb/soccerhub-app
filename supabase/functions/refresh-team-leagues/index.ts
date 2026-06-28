@@ -21,6 +21,14 @@ import { parseIbarakiU18 } from "./extractors/ibaraki-u18.ts";
 import { parseTochigiU18 } from "./extractors/tochigi-u18.ts";
 import { parseGunmaU18 } from "./extractors/gunma-u18.ts";
 
+import { parseTokyoU12 } from "./extractors/tokyo-u12.ts";
+import { parseKanagawaU12 } from "./extractors/kanagawa-u12.ts";
+import { parseChibaU12 } from "./extractors/chiba-u12.ts";
+import { parseSaitamaU12 } from "./extractors/saitama-u12.ts";
+import { parseIbarakiU12 } from "./extractors/ibaraki-u12.ts";
+import { parseTochigiU12 } from "./extractors/tochigi-u12.ts";
+import { parseGunmaU12 } from "./extractors/gunma-u12.ts";
+
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -109,6 +117,36 @@ async function loadLeagueSources(
 
 async function parseTeams(source: any, html: string) {
   const url = source.source_url || "";
+
+  if (source.category === "U12") {
+    if (source.prefecture === "東京都") {
+      return await parseTokyoU12(html, source.league_name);
+    }
+
+    if (source.prefecture === "神奈川県") {
+      return await parseKanagawaU12(html, source.league_name);
+    }
+
+    if (source.prefecture === "千葉県") {
+      return await parseChibaU12(html, source.league_name);
+    }
+
+    if (source.prefecture === "埼玉県") {
+      return await parseSaitamaU12(html, source.league_name);
+    }
+
+    if (source.prefecture === "茨城県") {
+      return await parseIbarakiU12(html, source.league_name);
+    }
+
+    if (source.prefecture === "栃木県") {
+      return await parseTochigiU12(html, source.league_name);
+    }
+
+    if (source.prefecture === "群馬県") {
+      return await parseGunmaU12(html, source.league_name);
+    }
+  }
 
   if (source.category === "U18") {
     if (source.prefecture === "東京都") {
@@ -310,6 +348,7 @@ async function processLeagueSource(source: any, season: number) {
   const sourceUrl = String(source.source_url || "");
 
   const skipFetch =
+    source.category === "U12" ||
     source.category === "U18" ||
     sourceUrl.startsWith("manual:") ||
     sourceUrl.includes("saitama-cy.com") ||
