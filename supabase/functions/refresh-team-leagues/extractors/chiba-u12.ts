@@ -212,6 +212,9 @@ function leagueKey(leagueName: string) {
   if (t.includes("TOP")) return "TOP";
   if (t.includes("1部") || t.includes("１部")) return "1";
 
+  const nMatch = t.match(/2N(0[1-9]|1[0-3])/);
+  if (nMatch) return `2N${nMatch[1]}`;
+
   return "";
 }
 
