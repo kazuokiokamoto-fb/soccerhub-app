@@ -13,6 +13,14 @@ import { parseTochigiCY } from "./extractors/tochigi-cy.ts";
 import { parseGunmaCY } from "./extractors/gunma-cy.ts";
 import { parseGenericTable } from "./extractors/generic-table.ts";
 
+import { parseTokyoU18 } from "./extractors/tokyo-u18.ts";
+import { parseKanagawaU18 } from "./extractors/kanagawa-u18.ts";
+import { parseChibaU18 } from "./extractors/chiba-u18.ts";
+import { parseSaitamaU18 } from "./extractors/saitama-u18.ts";
+import { parseIbarakiU18 } from "./extractors/ibaraki-u18.ts";
+import { parseTochigiU18 } from "./extractors/tochigi-u18.ts";
+import { parseGunmaU18 } from "./extractors/gunma-u18.ts";
+
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -96,6 +104,36 @@ async function loadLeagueSources(
 
 async function parseTeams(source: any, html: string) {
   const url = source.source_url || "";
+
+  if (source.category === "U18") {
+    if (source.prefecture === "東京都") {
+      return await parseTokyoU18(html, source.league_name);
+    }
+
+    if (source.prefecture === "神奈川県") {
+      return await parseKanagawaU18(html, source.league_name);
+    }
+
+    if (source.prefecture === "千葉県") {
+      return await parseChibaU18(html, source.league_name);
+    }
+
+    if (source.prefecture === "埼玉県") {
+      return await parseSaitamaU18(html, source.league_name);
+    }
+
+    if (source.prefecture === "茨城県") {
+      return await parseIbarakiU18(html, source.league_name);
+    }
+
+    if (source.prefecture === "栃木県") {
+      return await parseTochigiU18(html, source.league_name);
+    }
+
+    if (source.prefecture === "群馬県") {
+      return await parseGunmaU18(html, source.league_name);
+    }
+  }
 
   if (url.includes("tokyo-cy.jp")) {
     return await parseTokyoCY(html, source.league_name);
@@ -267,6 +305,7 @@ async function processLeagueSource(source: any, season: number) {
   const sourceUrl = String(source.source_url || "");
 
   const skipFetch =
+    source.category === "U18" ||
     sourceUrl.includes("saitama-cy.com") ||
     sourceUrl.includes("tochigi-fa.com") ||
     sourceUrl.includes("gunma-fa.com") ||
