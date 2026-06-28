@@ -8,6 +8,7 @@ import { parseKantoCY } from "./extractors/kanto-cy.ts";
 import { parseSaitamaCY } from "./extractors/saitama-cy.ts";
 import { parseKanagawaCY } from "./extractors/kanagawa-cy.ts";
 import { parseChibaCY } from "./extractors/chiba-cy.ts";
+import { parseIbarakiCY } from "./extractors/ibaraki-cy.ts";
 import { parseGenericTable } from "./extractors/generic-table.ts";
 
 import { getLeagueSiteConfig } from "./configs/index.ts";
@@ -136,6 +137,10 @@ async function parseTeams(source: any, html: string) {
 
   if (url.includes("chiba-fa.gr.jp") || url.includes("chiba-cy.com")) {
     return await parseChibaCY(html, source.league_name);
+  }
+
+  if (url.includes("ibaraki-fa.jp") || url.includes("ibaraki-cy.com")) {
+    return await parseIbarakiCY(html, source.league_name);
   }
 
   return await parseGenericTable(html, source.league_name);
