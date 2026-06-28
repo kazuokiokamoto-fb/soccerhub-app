@@ -79,6 +79,7 @@ async function loadLeagueSources(
   limit: number,
   onlySourceId?: string,
   prefecture?: string,
+  category?: string,
 ) {
   let q = supabase
     .from("league_sources")
@@ -92,6 +93,10 @@ async function loadLeagueSources(
 
   if (prefecture) {
     q = q.eq("prefecture", prefecture);
+  }
+
+  if (category) {
+    q = q.eq("category", category);
   }
 
   q = q.limit(limit);
@@ -306,6 +311,7 @@ async function processLeagueSource(source: any, season: number) {
 
   const skipFetch =
     source.category === "U18" ||
+    sourceUrl.startsWith("manual:") ||
     sourceUrl.includes("saitama-cy.com") ||
     sourceUrl.includes("tochigi-fa.com") ||
     sourceUrl.includes("gunma-fa.com") ||
@@ -382,6 +388,7 @@ serve(async (req) => {
 
     const onlySourceId = body.onlySourceId;
     const prefecture = body.prefecture;
+    const category = body.category;
 
     // Edge Function のリソース制限対策。
     // onlySourceId がある場合は必ず1件。
@@ -394,6 +401,7 @@ serve(async (req) => {
       limit,
       onlySourceId,
       prefecture,
+      category,
     );
 
     const results = [];
