@@ -196,6 +196,21 @@ const OFFICIAL_HINT_WORDS = [
   "お問い合わせ",
 ];
 
+const EC_WORDS = [
+  "shop",
+  "store",
+  "ec",
+  "cart",
+  "goods",
+  "グッズ",
+  "ショップ",
+  "オンラインショップ",
+  "通販",
+  "商品",
+  "購入",
+  "カート",
+];
+
 function json(data: any, status = 200) {
   return new Response(JSON.stringify(data, null, 2), {
     status,
@@ -452,6 +467,16 @@ function scoreCandidate(url: string, html: string, team: any) {
 
   let score = 0;
   const reasons: string[] = [];
+
+  if (host.endsWith(".shop")) {
+    score -= 300;
+    reasons.push("shop_domain_penalty");
+  }
+
+  if (EC_WORDS.some((w) => hay.includes(w.toLowerCase()))) {
+    score -= 180;
+    reasons.push("ec_or_shop_penalty");
+  }
 
   if (!nTeam || isBadUrl(url)) return { score: -999, reasons: ["bad_url"] };
 
