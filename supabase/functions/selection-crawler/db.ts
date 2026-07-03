@@ -228,7 +228,7 @@ export async function saveCandidateEvent(params: {
     .select("id")
     .single();
 
-  if (pageError) throw pageError;
+  if (pageError) throw new Error(JSON.stringify(pageError));
 
   const duplicateKey = buildDuplicateKey({
     title,
@@ -334,7 +334,7 @@ export async function saveCandidateEvent(params: {
       updateError = retry.error;
     }
 
-    if (updateError) throw updateError;
+    if (updateError) throw new Error(JSON.stringify(updateError));
 
     return { inserted: false, updated: true, pageSaved: true };
   }
@@ -358,7 +358,7 @@ export async function saveCandidateEvent(params: {
     insertError = retry.error;
   }
 
-  if (insertError) throw insertError;
+  if (insertError) throw new Error(JSON.stringify(insertError));
 
   if (insertedEvent?.id) {
     await notifyNewSelectionEvent(
