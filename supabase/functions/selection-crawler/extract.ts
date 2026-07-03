@@ -417,3 +417,93 @@ export function extractSitemapUrls(xml: string, baseUrl: string) {
 
   return Array.from(urls);
 }
+
+export function extractDatesPerCategory(text: string): Array<{
+  category: string;
+  eventDate: string | null;
+  block: string;
+}> {
+  const normalized = normalizeText(text);
+
+  const categoryPatterns: Array<{ category: string; patterns: RegExp[] }> = [
+    {
+      category: "U-18",
+      patterns: [/U-?18|ユース[^チ]|高校生|高[1-3]年|新高[1-3]/],
+    },
+    {
+      category: "U-15",
+      patterns: [/U-?15|ジュニアユース|中学生|中[1-3]年|新中[1-3]|現中学/],
+    },
+    {
+      category: "U-12",
+      patterns: [/U-?12|小学6年|小6|6年生|新小6|現小6|現小学6/],
+    },
+    {
+      category: "U-11",
+      patterns: [/U-?11|小学5年|小5|5年生|新小5/],
+    },
+    {
+      category: "U-10",
+      patterns: [/U-?10|小学4年|小4|4年生|新小4/],
+    },
+  ];
+
+  const selectionKeywords = [
+    "セレクション", "練習会", "体験会", "体験練習", "選手募集", "募集", "入団",
+  ];
+
+  const allKeywordIdxs: number[] = [];
+  for (const kw of selectionKeywords) {
+    let idx = 0;
+    while ((idx = normalized.indexOf(kw, idx)) !== -1) {
+      allKeywordIdxs.push(idx);
+      idx += kw.length;
+    }
+  }
+
+  allKeywordIdxs.sort((a, b) => a - b);
+
+  const blocks: string[] =
+    allKeywordIdxs.length === 0
+      ? [normalized]
+      : allKeywordIdxs.map((idx) =>
+          normalized.slice(
+            Math.max(0, idx - 300),
+            Math.min(normalized.length, idx + 1000)
+          )
+        );
+
+  const found = new Map<string, { eventDate: string | null; block: string }>();
+
+  for (const block of blocks) {
+    const detectedCategories: string[] = [];
+
+    for (const { category, patterns } of categoryPatterns) {
+      if (patterns.some((p) => p.test(block))) {
+        detectedCategories.push(category);
+      }
+    }
+
+    if (detectedCategories.length === 0) continue;
+
+    const eventDate = extractDate(block);
+
+    for (const category of detectedCategories) {
+      const existing = found.get(category);
+      if (!existing || (!existing.eventDate && eventDate)) {
+        found.set(category, { eventDate, block });
+      }
+    }
+  }
+
+  if (found.size === 0) {
+    const eventDate = extractDateNearKeyword(text);
+    return [{ category: "unknown", eventDate, block: normalized }];
+  }
+
+  return Array.from(found.entries()).map(([category, { eventDate, block }]) => ({
+    category,
+    eventDate,
+    block,
+  }));
+}

@@ -42,7 +42,7 @@ import {
 } from "./classify.ts";
 
 import { fetchHtml } from "./fetch.ts";
-import { saveCandidateEvent } from "./db.ts";
+import { saveCandidateEvent, saveCandidateEvents } from "./db.ts";
 
 function sampleText(text: string, length = 260) {
   return String(text ?? "").replace(/\s+/g, " ").trim().slice(0, length);
@@ -676,27 +676,27 @@ serve(async (req) => {
         });
 
         try {
-          const result = await saveCandidateEvent({
+          const results = await saveCandidateEvents({
             supabase,
             source,
             candidate,
           });
 
-          if (result.pageSaved) {
-            savedPages += 1;
-            debug.saved += 1;
-          }
-
-          if (result.inserted) {
-            insertedEvents += 1;
-            sourceInsertedEvents += 1;
-            debug.inserted += 1;
-          }
-
-          if (result.updated) {
-            updatedEvents += 1;
-            sourceUpdatedEvents += 1;
-            debug.updated += 1;
+          for (const result of results) {
+            if (result.pageSaved) {
+              savedPages += 1;
+              debug.saved += 1;
+            }
+            if (result.inserted) {
+              insertedEvents += 1;
+              sourceInsertedEvents += 1;
+              debug.inserted += 1;
+            }
+            if (result.updated) {
+              updatedEvents += 1;
+              sourceUpdatedEvents += 1;
+              debug.updated += 1;
+            }
           }
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);

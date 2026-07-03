@@ -370,3 +370,48 @@ export async function saveCandidateEvent(params: {
 
   return { inserted: true, updated: false, pageSaved: true };
 }
+
+import { extractDatesPerCategory } from "./extract.ts";
+
+export async function saveCandidateEvents(params: {
+  supabase: any;
+  source: SelectionSource;
+  candidate: CandidatePage;
+}) {
+  const { supabase, source, candidate } = params;
+
+  const perCategory = extractDatesPerCategory(candidate.rawText);
+
+  if (
+    perCategory.length === 0 ||
+    (perCategory.length === 1 && perCategory[0].category === "unknown")
+  ) {
+    const result = await saveCandidateEvent(params);
+    return [result];
+  }
+
+  const results = [];
+
+  for (const { category, block } of perCategory) {
+    const categorizedCandidate: CandidatePage = {
+      ...candidate,
+      rawText: block || candidate.rawText,
+      pageTitle: candidate.pageTitle
+        ? `${candidate.pageTitle} [${category}]`
+        : `[${category}]`,
+    };
+
+    const result = await saveCandidateEvent({
+      supabase,
+      source: {
+        ...source,
+        organization_type: category,
+      },
+      candidate: categorizedCandidate,
+    });
+
+    results.push(result);
+  }
+
+  return results;
+}
