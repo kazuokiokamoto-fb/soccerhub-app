@@ -216,17 +216,16 @@ export async function saveCandidateEvent(params: {
 
   const { data: pageRow, error: pageError } = await supabase
     .from("selection_crawl_pages")
-        .insert({
-          source_id: source.id,
-          page_url: cleanPageUrl,
-          page_title: cleanPageTitle,
-          http_status: status,
-          raw_html: html.slice(0, 500000),
-          raw_text: rawText.slice(0, 500000),
-          checksum,
-          fetched_at: new Date().toISOString(),
-        })
-
+    .upsert({
+      source_id: source.id,
+      page_url: cleanPageUrl,
+      page_title: cleanPageTitle,
+      http_status: status,
+      raw_html: html.slice(0, 500000),
+      raw_text: rawText.slice(0, 500000),
+      checksum,
+      fetched_at: new Date().toISOString(),
+    }, { onConflict: 'page_url' })
     .select("id")
     .single();
 
