@@ -403,16 +403,20 @@ export async function saveCandidateEvents(params: {
         : `[${category}]`,
     };
 
-    const result = await saveCandidateEvent({
-      supabase,
-      source: {
-        ...source,
-        organization_type: category,
-      },
-      candidate: categorizedCandidate,
-    });
-
-    results.push(result);
+    try {
+      const result = await saveCandidateEvent({
+        supabase,
+        source: {
+          ...source,
+          organization_type: category,
+        },
+        candidate: categorizedCandidate,
+      });
+      results.push(result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : JSON.stringify(e);
+      throw new Error(`[${category}] ${msg}`);
+    }
   }
 
   return results;
