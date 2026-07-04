@@ -302,7 +302,7 @@ export async function saveCandidateEvent(params: {
     .eq("source_url", cleanPageUrl)
     .maybeSingle();
 
-  if (existingByUrlError) throw existingByUrlError;
+  if (existingByUrlError) throw new Error(JSON.stringify(existingByUrlError));
 
   existing = existingByUrl;
 
@@ -314,7 +314,7 @@ export async function saveCandidateEvent(params: {
         .eq("duplicate_key", duplicateKey)
         .maybeSingle();
 
-    if (existingByDuplicateKeyError) throw existingByDuplicateKeyError;
+    if (existingByDuplicateKeyError) throw new Error(JSON.stringify(existingByDuplicateKeyError));
 
     existing = existingByDuplicateKey;
   }
