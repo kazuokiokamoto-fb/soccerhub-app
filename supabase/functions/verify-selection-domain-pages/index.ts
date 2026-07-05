@@ -305,11 +305,16 @@ function displayStatus(eventDates: string[], deadline: string | null, text: stri
 }
 
 function inferSourceRank(leagueName: string, teamName: string): string {
-  const t = `${leagueName} ${teamName}`.toLowerCase();
-  if (J_CLUBS.some(j => t.includes(j.toLowerCase()))) return "j_academy";
-  for (const [keyword, rank] of Object.entries(SOURCE_RANK_MAP)) {
-    if (t.includes(keyword.toLowerCase())) return rank;
-  }
+  const t = `${leagueName} ${teamName}`;
+  if (J_CLUBS.some(j => t.includes(j))) return "j_academy";
+  // 「関東」を最優先でチェック
+  if (t.includes("関東")) return "pref_top";
+  if (t.includes("プリンス") || t.includes("プレミア")) return "pref_top";
+  if (t.includes("T1") || t.includes("S1") || t.includes("C1")) return "pref_top";
+  if (t.includes("ウルトラ") || /1部/.test(t)) return "pref_top";
+  if (t.includes("T2") || t.includes("G1") || /2部/.test(t)) return "pref_2";
+  if (t.includes("T3") || t.includes("G2") || /3部/.test(t)) return "pref_3";
+  if (t.includes("T4") || /4部/.test(t)) return "pref_4";
   return "district";
 }
 
@@ -398,9 +403,24 @@ async function claimResearchRows(limit: number) {
     .neq("selection_page_url", "")
     .or(`checked_at.is.null,checked_at.lt.${cutoffIso}`)
     .order("checked_at", { ascending: true, nullsFirst: true })
-    .limit(limit);
+    .limit(limit * 3); // 多めに取得してソート
+
   if (error) throw error;
-  return data || [];
+  
+  const rows = data || [];
+  
+  // U-15を優先、次にリーグランクが高い順
+  rows.sort((a, b) => {
+    const catOrder: Record<string, number> = { "U15": 0, "U18": 1, "U12": 2 };
+    const aCat = catOrder[a.team_master?.category || ""] ?? 9;
+    const bCat = catOrder[b.team_master?.category || ""] ?? 9;
+    if (aCat !== bCat) return aCat - bCat;
+    const aRank = a.team_master?.current_league_rank ?? 999;
+    const bRank = b.team_master?.current_league_rank ?? 999;
+    return aRank - bRank;
+  });
+  
+  return rows.slice(0, limit);
 }
 
 async function upsertSelectionEvents(
