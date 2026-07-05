@@ -1,0 +1,22 @@
+name: Daily Selection Crawler
+
+on:
+  schedule:
+    - cron: '0 1 * * *'  # 毎日日本時間10:00（UTC 1:00）
+  workflow_dispatch:       # 手動実行ボタン
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        batch: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]  # 10回実行で50チーム処理
+    steps:
+      - name: Run selection crawler (batch ${{ matrix.batch }})
+        run: |
+          sleep ${{ matrix.batch }}  # 順番にずらして実行
+          curl -X POST \
+            'https://senspqsexmtrwjfsdadv.supabase.co/functions/v1/verify-selection-domain-pages' \
+            -H 'Authorization: Bearer ${{ secrets.SELECTION_SECRET }}' \
+            -H 'Content-Type: application/json' \
+            -d '{"batchSize": 5}'
