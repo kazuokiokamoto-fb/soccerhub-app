@@ -18,6 +18,7 @@ export type SelectionEvent = {
   venue_address: string | null;
 
   event_date: string | null;
+  event_dates: string[] | null;
   event_start_time: string | null;
   event_end_time: string | null;
 

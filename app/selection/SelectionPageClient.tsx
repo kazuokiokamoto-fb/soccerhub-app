@@ -80,8 +80,13 @@ function ymdOnly(date?: string | null) {
 }
 
 function isVisibleEvent(item: SelectionEvent) {
-  if (!item.event_date) return true;
-  return item.event_date >= todayYmd();
+  const dates = item.event_dates?.length
+    ? item.event_dates
+    : item.event_date
+    ? [item.event_date]
+    : [];
+  if (dates.length === 0) return true;
+  return dates.some((d) => d >= todayYmd());
 }
 
 function isNewArrival(item: SelectionEvent) {
@@ -344,8 +349,16 @@ export default function SelectionListPage() {
       const itemRank =
         (item as SelectionEvent & { source_rank?: string }).source_rank || null;
 
-      if (selectedDate && ymdOnly(item.event_date) !== selectedDate) {
-        return false;
+      if (selectedDate) {
+        const dates = item.event_dates?.length
+          ? item.event_dates
+          : item.event_date
+          ? [item.event_date]
+          : [];
+
+        if (!dates.includes(selectedDate)) {
+          return false;
+        }
       }
 
       if (prefecture !== "all" && itemPrefecture !== prefecture) return false;
@@ -396,9 +409,16 @@ export default function SelectionListPage() {
     const countMap = new Map<string, number>();
 
     for (const item of filteredItems) {
-      const ymd = ymdOnly(item.event_date);
-      if (!ymd) continue;
-      countMap.set(ymd, (countMap.get(ymd) ?? 0) + 1);
+      const dates = item.event_dates?.length
+        ? item.event_dates
+        : item.event_date
+        ? [item.event_date]
+        : [];
+      for (const d of dates) {
+        const ymd = ymdOnly(d);
+        if (!ymd) continue;
+        countMap.set(ymd, (countMap.get(ymd) ?? 0) + 1);
+      }
     }
 
     for (const [ymd, count] of countMap.entries()) {
@@ -626,7 +646,21 @@ export default function SelectionListPage() {
                       <div style={infoGrid}>
                         <div>
                           <div style={label}>開催日</div>
-                          <div style={value}>{formatDate(item.event_date)}</div>
+                          <div style={value}>
+                            {item.event_dates && item.event_dates.length > 0 ? (
+                              <>
+                                {formatDate(item.event_dates[0])}
+                                {item.event_dates.length > 1 && (
+                                  <span style={{ fontSize: "0.8em", color: "#666", marginLeft: 4 }}>
+                                    他{item.event_dates.length - 1}日程
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              formatDate(item.event_date)
+                            )}
+                          </div>
+
                         </div>
 
                         <div>
