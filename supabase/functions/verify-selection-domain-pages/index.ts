@@ -4,6 +4,7 @@
 // 複数日程対応・チームID紐付け・2段階クロール（専用ページ→ニュース記事）
 // 公式サイト優先ロジック：同じチームで公式HP経由の行がある場合はそれを先に試し、
 // 成功したらまとめサイト等の補完行はスキップする
+// まとめサイト由来で見つかった場合も、リンク先は必ず公式サイト側に解決する（まとめサイトへは絶対にリンクしない）
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -356,13 +357,53 @@ function isOfficialSourceRow(row: any): boolean {
   return hostOf(row.selection_page_url) === hostOf(row.official_homepage_url);
 }
 
+// まとめサイト等のページHTML内から、公式サイトへのリンクを探す
+function findOfficialLink(html: string, baseUrl: string, officialHomepageUrl: string): string | null {
+  if (!officialHomepageUrl) return null;
+  const officialHost = hostOf(officialHomepageUrl);
+  if (!officialHost) return null;
+  const links = extractLinks(html, baseUrl);
+  const match = links.find(l => hostOf(l.url) === officialHost);
+  return match ? match.url : null;
+}
+
+// 見つかったページが公式サイト以外（まとめサイト等）だった場合、
+// 公式サイトへのリンクを解決する。見つからなければ公式トップページにフォールバックする。
+// ※まとめサイトのURLをそのままリンク先にすることは絶対にしない。
+async function resolveOfficialUrl(
+  foundPage: { url: string; html: string },
+  officialHomepageUrl: string | null,
+): Promise<string> {
+  if (!officialHomepageUrl) return foundPage.url;
+
+  // 既に公式サイト内で見つかっている場合はそのまま
+  if (hostOf(foundPage.url) === hostOf(officialHomepageUrl)) {
+    return foundPage.url;
+  }
+
+  // まとめサイト等の第三者ページの場合、記事内の公式サイトへのリンクを探す
+  const candidate = findOfficialLink(foundPage.html, foundPage.url, officialHomepageUrl);
+  if (candidate) {
+    try {
+      await fetchHtml(candidate); // アクセス可能か確認のみ
+      return candidate;
+    } catch {
+      // アクセスできなければ下のフォールバックへ
+    }
+  }
+
+  // 候補リンクが見つからない/アクセス不可の場合、まとめサイトには絶対にリンクせず
+  // 公式トップページ自体をリンク先にする
+  return officialHomepageUrl;
+}
+
 async function sha256(text: string) {
   const data = new TextEncoder().encode(text);
   const hash = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,"0")).join("");
 }
 
-async function crawlAndFindSelectionPage(
+async function crawlAndFindSelectionPageRaw(
   selectionPageUrl: string,
   teamName: string,
 ): Promise<{ url: string; html: string; text: string; title: string } | null> {
@@ -431,6 +472,20 @@ async function crawlAndFindSelectionPage(
   } catch {
     return null;
   }
+}
+
+// ラッパー：見つかったページがまとめサイト等の第三者ページだった場合、
+// リンク先を公式サイト側に解決してから返す
+async function crawlAndFindSelectionPage(
+  selectionPageUrl: string,
+  teamName: string,
+  officialHomepageUrl?: string | null,
+): Promise<{ url: string; html: string; text: string; title: string } | null> {
+  const page = await crawlAndFindSelectionPageRaw(selectionPageUrl, teamName);
+  if (!page) return null;
+
+  const resolvedUrl = await resolveOfficialUrl(page, officialHomepageUrl || null);
+  return { ...page, url: resolvedUrl };
 }
 
 async function claimResearchRows(limit: number) {
@@ -641,6 +696,7 @@ serve(async (req) => {
         const page = await crawlAndFindSelectionPage(
           research.selection_page_url,
           teamName,
+          research.official_homepage_url,
         );
 
         if (!page) {
