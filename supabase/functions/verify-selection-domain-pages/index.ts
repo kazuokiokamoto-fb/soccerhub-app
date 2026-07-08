@@ -17,7 +17,6 @@ const RECRAWL_HOURS = 24;
 const BATCH_SIZE = 5;
 
 const BAD_DOMAINS = [
-  "instagram.com", "facebook.com", "x.com", "twitter.com",
   "youtube.com", "line.me", "google.com", "forms.gle",
 ];
 
@@ -26,6 +25,8 @@ const CORE_SELECTION_WORDS = [
   "練習会", "体験練習会", "体験会", "練習参加", "体験参加",
   "選手募集", "新入団", "入団希望", "現小学6年生", "新中学1年生",
   "ジュニアユース説明会", "GK募集", "ゴールキーパー募集",
+  "メンバー募集", "加入テスト", "体験入団", "新規入団", "セレクション実施",
+  "入団説明会", "体験セッション", "練習体験", "新入部員募集", "選手選考",
 ];
 
 const NEWS_LIST_PATTERNS = [
@@ -127,6 +128,20 @@ function getTitle(html: string, fallback = "") {
   const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   if (title?.[1]) return stripTags(title[1]).slice(0, 120);
   return fallback.slice(0, 120);
+}
+
+function extractMetaDescription(html: string): string {
+  const patterns = [
+    /<meta\s+property=["']og:description["']\s+content=["']([\s\S]*?)["']\s*\/?>/i,
+    /<meta\s+content=["']([\s\S]*?)["']\s+property=["']og:description["']\s*\/?>/i,
+    /<meta\s+name=["']description["']\s+content=["']([\s\S]*?)["']\s*\/?>/i,
+    /<meta\s+content=["']([\s\S]*?)["']\s+name=["']description["']\s*\/?>/i,
+  ];
+  for (const pattern of patterns) {
+    const m = html.match(pattern);
+    if (m?.[1]) return decodeHtml(m[1]).trim();
+  }
+  return "";
 }
 
 function extractLinks(html: string, baseUrl: string) {
@@ -332,7 +347,6 @@ function inferSourceRank(leagueName: string, teamName: string): string {
   return "district";
 }
 
-
 async function sha256(text: string) {
   const data = new TextEncoder().encode(text);
   const hash = await crypto.subtle.digest("SHA-256", data);
@@ -347,7 +361,8 @@ async function crawlAndFindSelectionPage(
 
   try {
     const { html, finalUrl } = await fetchHtml(selectionPageUrl);
-    const text = stripTags(html);
+    const metaDescription = extractMetaDescription(html);
+    const text = `${stripTags(html)} ${metaDescription}`.trim();
     const title = getTitle(html, teamName);
 
     if (includesAny(text, CORE_SELECTION_WORDS)) {
@@ -372,7 +387,7 @@ async function crawlAndFindSelectionPage(
       try {
         await sleep(300);
         const { html: lHtml, finalUrl: lUrl } = await fetchHtml(link.url);
-        const lText = stripTags(lHtml);
+        const lText = `${stripTags(lHtml)} ${extractMetaDescription(lHtml)}`.trim();
         if (includesAny(lText, CORE_SELECTION_WORDS)) {
           return { url: lUrl, html: lHtml, text: lText, title: getTitle(lHtml, link.label) };
         }
@@ -394,7 +409,7 @@ async function crawlAndFindSelectionPage(
           try {
             await sleep(200);
             const { html: aHtml, finalUrl: aUrl } = await fetchHtml(article.url);
-            const aText = stripTags(aHtml);
+            const aText = `${stripTags(aHtml)} ${extractMetaDescription(aHtml)}`.trim();
             if (includesAny(aText, CORE_SELECTION_WORDS)) {
               return { url: aUrl, html: aHtml, text: aText, title: getTitle(aHtml, article.label) };
             }
