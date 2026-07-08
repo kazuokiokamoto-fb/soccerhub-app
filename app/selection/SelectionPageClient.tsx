@@ -21,7 +21,50 @@ import {
   type CalendarItem,
 } from "@/app/match/components/MatchCalendarBase";
 
-import { CATEGORY_OPTIONS, categoryLabel, normalizeCategory } from "@/app/lib/categories";
+// セレクションページ専用のカテゴリ選択肢（共有マスタ lib/categories.ts とは独立）
+type SelectionCategoryOption = { value: string; label: string };
+
+const SELECTION_CATEGORY_OPTIONS: SelectionCategoryOption[] = [
+  { value: "U12", label: "U-12" },
+  { value: "U13", label: "U-13" },
+  { value: "U15", label: "U-15" },
+  { value: "U18", label: "U-18" },
+  { value: "U23", label: "U-23" },
+  { value: "OPEN", label: "一般" },
+  { value: "GK", label: "GK" },
+  { value: "女子", label: "女子" },
+];
+
+// 表記ゆれ(ハイフン有無など)を吸収するローカル正規化マップ
+const SELECTION_CATEGORY_ALIAS_MAP: Record<string, string> = {
+  U12: "U12",
+  "U-12": "U12",
+  U13: "U13",
+  "U-13": "U13",
+  U15: "U15",
+  "U-15": "U15",
+  U18: "U18",
+  "U-18": "U18",
+  U23: "U23",
+  "U-23": "U23",
+  OPEN: "OPEN",
+  一般: "OPEN",
+  GK: "GK",
+  女子: "女子",
+};
+
+function normalizeSelectionCategory(v: string | null | undefined): string {
+  if (!v) return "";
+  const key = String(v).trim().toUpperCase();
+  return SELECTION_CATEGORY_ALIAS_MAP[key] ?? key;
+}
+
+function selectionCategoryLabel(v: string | null | undefined): string {
+  if (!v) return "";
+  const resolved = normalizeSelectionCategory(v);
+  const hit = SELECTION_CATEGORY_OPTIONS.find((o) => o.value === resolved);
+  return hit?.label ?? v;
+}
 
 type RankFilter =
   | "all"
@@ -368,7 +411,7 @@ export default function SelectionListPage() {
 
       if (category !== "all") {
         const normalizedItemCats = (item.target_categories ?? []).map(
-          normalizeCategory
+          normalizeSelectionCategory
         );
         if (!normalizedItemCats.includes(category)) {
           return false;
@@ -548,7 +591,7 @@ export default function SelectionListPage() {
             style={select}
           >
             <option value="all">対象カテゴリすべて</option>
-            {CATEGORY_OPTIONS.map((opt) => (
+            {SELECTION_CATEGORY_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
@@ -641,8 +684,8 @@ export default function SelectionListPage() {
                       {item.target_categories?.length > 0 ? (
                         <div style={tagWrap}>
                           {item.target_categories.map((cat) => (
-                            <span key={categoryLabel(cat) || cat} style={tag}>
-                              {categoryLabel(cat) || cat}
+                            <span key={selectionCategoryLabel(cat) || cat} style={tag}>
+                              {selectionCategoryLabel(cat) || cat}
                             </span>
                           ))}
                         </div>
