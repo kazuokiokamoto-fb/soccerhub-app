@@ -21,7 +21,7 @@ import {
   type CalendarItem,
 } from "@/app/match/components/MatchCalendarBase";
 
-import { CATEGORY_OPTIONS, categoryLabel } from "@/app/lib/categories";
+import { CATEGORY_OPTIONS, categoryLabel, normalizeCategory } from "@/app/lib/categories";
 
 type RankFilter =
   | "all"
@@ -366,8 +366,13 @@ export default function SelectionListPage() {
       if (rank !== "all" && itemRank !== rank) return false;
       if (status !== "all" && item.display_status !== status) return false;
 
-      if (category !== "all" && !item.target_categories?.includes(category)) {
-        return false;
+      if (category !== "all") {
+        const normalizedItemCats = (item.target_categories ?? []).map(
+          normalizeCategory
+        );
+        if (!normalizedItemCats.includes(category)) {
+          return false;
+        }
       }
 
       if (q) {
