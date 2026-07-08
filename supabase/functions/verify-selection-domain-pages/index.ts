@@ -307,16 +307,31 @@ function displayStatus(eventDates: string[], deadline: string | null, text: stri
 function inferSourceRank(leagueName: string, teamName: string): string {
   const t = `${leagueName} ${teamName}`;
   if (J_CLUBS.some(j => t.includes(j))) return "j_academy";
-  // 「関東」を最優先でチェック
+
+  // 関東リーグ（全国的にも都道府県トップより上位）
   if (t.includes("関東")) return "pref_top";
+
+  // 都道府県トップリーグ
   if (t.includes("プリンス") || t.includes("プレミア")) return "pref_top";
   if (t.includes("T1") || t.includes("S1") || t.includes("C1")) return "pref_top";
-  if (t.includes("ウルトラ") || /1部/.test(t)) return "pref_top";
-  if (t.includes("T2") || t.includes("G1") || /2部/.test(t)) return "pref_2";
+  if (t.includes("ウルトラ") || /TOP/i.test(t) || /1部/.test(t)) return "pref_top";
+
+  // 「地区トップ」は名前に反してpref_top直下（S2よりさらに下）の第3階層
+  // 例：埼玉県U-12「S1 > S2 > 地区トップ > 地区リーグ」の4段階構造（協会公式要項で確認済み）
+  if (t.includes("地区トップ")) return "pref_3";
+
+  // 2部相当
+  if (t.includes("T2") || t.includes("G1") || t.includes("S2") || t.includes("C2") || /2部/.test(t)) return "pref_2";
+
+  // 3部相当
   if (t.includes("T3") || t.includes("G2") || /3部/.test(t)) return "pref_3";
+
+  // 4部相当
   if (t.includes("T4") || /4部/.test(t)) return "pref_4";
+
   return "district";
 }
+
 
 async function sha256(text: string) {
   const data = new TextEncoder().encode(text);
