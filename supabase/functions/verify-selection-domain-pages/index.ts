@@ -2,6 +2,8 @@
 // verify-selection-domain-pages/index.ts
 // team_selection_research から selection_page_url を取得して直接クロール
 // 複数日程対応・チームID紐付け・2段階クロール（専用ページ→ニュース記事）
+// 公式サイト優先ロジック：同じチームで公式HP経由の行がある場合はそれを先に試し、
+// 成功したらまとめサイト等の補完行はスキップする
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -347,6 +349,13 @@ function inferSourceRank(leagueName: string, teamName: string): string {
   return "district";
 }
 
+// 公式サイト由来の行かどうかを判定
+// selection_page_url のドメインが official_homepage_url のドメインと一致すれば公式サイト由来
+function isOfficialSourceRow(row: any): boolean {
+  if (!row.official_homepage_url || !row.selection_page_url) return false;
+  return hostOf(row.selection_page_url) === hostOf(row.official_homepage_url);
+}
+
 async function sha256(text: string) {
   const data = new TextEncoder().encode(text);
   const hash = await crypto.subtle.digest("SHA-256", data);
@@ -433,24 +442,51 @@ async function claimResearchRows(limit: number) {
     .neq("selection_page_url", "")
     .or(`checked_at.is.null,checked_at.lt.${cutoffIso}`)
     .order("checked_at", { ascending: true, nullsFirst: true })
-    .limit(limit * 3); // 多めに取得してソート
+    .limit(limit * 5); // グループ化のため多めに取得
 
   if (error) throw error;
-  
+
   const rows = data || [];
-  
-  // U-15を優先、次にリーグランクが高い順
-  rows.sort((a, b) => {
+
+  // チーム（team_master_id）ごとにグループ化
+  const groups = new Map<string, any[]>();
+  for (const row of rows) {
+    const key = row.team_master_id || `no_team_${row.id}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(row);
+  }
+
+  // 各グループ内で「公式サイト由来」の行を先頭に並べる
+  const groupList = Array.from(groups.values()).map((groupRows) => {
+    groupRows.sort((a, b) => {
+      const aOfficial = isOfficialSourceRow(a) ? 0 : 1;
+      const bOfficial = isOfficialSourceRow(b) ? 0 : 1;
+      return aOfficial - bOfficial;
+    });
+    return groupRows;
+  });
+
+  // グループ単位の優先順位（U15優先、次にリーグランク）
+  groupList.sort((a, b) => {
+    const aTeam = a[0].team_master;
+    const bTeam = b[0].team_master;
     const catOrder: Record<string, number> = { "U15": 0, "U18": 1, "U12": 2 };
-    const aCat = catOrder[a.team_master?.category || ""] ?? 9;
-    const bCat = catOrder[b.team_master?.category || ""] ?? 9;
+    const aCat = catOrder[aTeam?.category || ""] ?? 9;
+    const bCat = catOrder[bTeam?.category || ""] ?? 9;
     if (aCat !== bCat) return aCat - bCat;
-    const aRank = a.team_master?.current_league_rank ?? 999;
-    const bRank = b.team_master?.current_league_rank ?? 999;
+    const aRank = aTeam?.current_league_rank ?? 999;
+    const bRank = bTeam?.current_league_rank ?? 999;
     return aRank - bRank;
   });
-  
-  return rows.slice(0, limit);
+
+  // フラット化してlimit件数まで切り出す（グループの並び順は保持）
+  const flat: any[] = [];
+  for (const group of groupList) {
+    flat.push(...group);
+    if (flat.length >= limit) break;
+  }
+
+  return flat.slice(0, limit);
 }
 
 async function upsertSelectionEvents(
@@ -578,7 +614,8 @@ serve(async (req) => {
     }
 
     const results = [];
-    let totalInserted = 0, totalUpdated = 0, totalNotFound = 0, totalErrors = 0;
+    let totalInserted = 0, totalUpdated = 0, totalNotFound = 0, totalErrors = 0, totalSkipped = 0;
+    const succeededTeams = new Set<string>(); // 公式サイトで成功済みのチームID
 
     for (const research of rows) {
       if (Date.now() - startedAt > MAX_RUN_MS) {
@@ -587,6 +624,18 @@ serve(async (req) => {
       }
 
       const teamName = research.team_master?.team_name || "不明";
+      const teamKey = research.team_master_id;
+
+      // 同じチームで既に公式サイトから成功している場合、まとめサイト等の行はスキップ
+      if (teamKey && succeededTeams.has(teamKey) && !isOfficialSourceRow(research)) {
+        await supabase
+          .from("team_selection_research")
+          .update({ checked_at: nowIso() })
+          .eq("id", research.id);
+        results.push({ teamName, status: "skipped_official_success" });
+        totalSkipped++;
+        continue;
+      }
 
       try {
         const page = await crawlAndFindSelectionPage(
@@ -609,6 +658,11 @@ serve(async (req) => {
         const updated = upsertResults.filter(r => r.status === "updated").length;
         totalInserted += inserted;
         totalUpdated += updated;
+
+        // 公式サイト由来で成功した場合、以降同じチームのまとめサイト行をスキップする印をつける
+        if (teamKey && isOfficialSourceRow(research)) {
+          succeededTeams.add(teamKey);
+        }
 
         results.push({
           teamName,
@@ -639,6 +693,7 @@ serve(async (req) => {
       totalUpdated,
       totalNotFound,
       totalErrors,
+      totalSkipped,
       results,
     });
   } catch (e) {
