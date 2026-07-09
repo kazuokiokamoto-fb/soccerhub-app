@@ -122,6 +122,8 @@ function ymdOnly(date?: string | null) {
   return String(date).slice(0, 10);
 }
 
+const SELECTION_SCROLL_KEY = "selection-list-scroll-y";
+
 function isNewArrival(item: SelectionEvent) {
   const t = new Date(item.created_at || item.fetched_at || 0).getTime();
   return Number.isFinite(t) && t >= sevenDaysAgoTime();
@@ -413,6 +415,22 @@ export default function SelectionListPage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+
+    try {
+      const saved = sessionStorage.getItem(SELECTION_SCROLL_KEY);
+      if (saved != null) {
+        requestAnimationFrame(() => {
+          window.scrollTo(0, Number(saved));
+          sessionStorage.removeItem(SELECTION_SCROLL_KEY);
+        });
+      }
+    } catch {
+      // sessionStorageが使えない環境では何もしない
+    }
+  }, [loading]);
 
   const currentQuery = useMemo(() => {
     const params = new URLSearchParams();
@@ -806,7 +824,21 @@ export default function SelectionListPage() {
                 const isPastOnly = !hasUpcomingDate(item.allEventDates);
 
                 return (
-                  <Link key={item.id} href={detailHref} style={linkStyle}>
+                  <Link
+                    key={item.id}
+                    href={detailHref}
+                    style={linkStyle}
+                    onClick={() => {
+                      try {
+                        sessionStorage.setItem(
+                          SELECTION_SCROLL_KEY,
+                          String(window.scrollY)
+                        );
+                      } catch {
+                        // 何もしない
+                      }
+                    }}
+                  >
                     <article
                       className="ui-card"
                       style={{ ...card, ...(isPastOnly ? cardPast : {}) }}
