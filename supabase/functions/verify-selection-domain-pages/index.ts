@@ -6,6 +6,7 @@
 // 成功したらまとめサイト等の補完行はスキップする
 // まとめサイト由来で見つかった場合も、リンク先は必ず公式サイト側に解決する（まとめサイトへは絶対にリンクしない）
 // 入口ページが概要ページ（URLに日付なし）だった場合、日付入りの個別記事を優先的に探す
+// 「20XX年度入団」等の入団年度ラベル、「随時募集」等の年度非依存募集を抽出する
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -397,6 +398,28 @@ function inferSourceRank(leagueName: string, teamName: string): string {
   return "district";
 }
 
+// 「2027年度入団」「2027年度新入部員」のような入団年度ラベルを本文から抽出
+function extractAdmissionFiscalYear(text: string): number | null {
+  const t = String(text || "");
+  const patterns = [
+    /(20\d{2})年度\s*(?:新)?入団/,
+    /(20\d{2})年度\s*入部/,
+    /(20\d{2})年度\s*新入部員/,
+    /(20\d{2})年度\s*加入/,
+  ];
+  for (const pattern of patterns) {
+    const m = t.match(pattern);
+    if (m) return Number(m[1]);
+  }
+  return null;
+}
+
+// 「随時募集」「中途加入」など、特定の入団年度に縛られない募集かどうかを判定
+function extractIsRollingRecruitment(text: string): boolean {
+  const t = String(text || "");
+  return /随時募集|随時受付|通年募集|中途加入|中途入団|随時入団/.test(t);
+}
+
 // 公式サイト由来の行かどうかを判定
 // selection_page_url のドメインが official_homepage_url のドメインと一致すれば公式サイト由来
 function isOfficialSourceRow(row: any): boolean {
@@ -617,6 +640,8 @@ async function upsertSelectionEvents(
   const fee = extractFee(fullText);
   const timeRange = extractTimeRange(fullText);
   const sourceRank = inferSourceRank(leagueName, teamName);
+  const admissionFiscalYear = extractAdmissionFiscalYear(fullText);
+  const isRollingRecruitment = extractIsRollingRecruitment(fullText);
   const summary = cleanForDb(compactText(page.text, 200), 200);
   const description = cleanForDb(compactText(page.text, 800), 800);
 
@@ -651,6 +676,8 @@ async function upsertSelectionEvents(
     source_type: "team_selection_research",
     extraction_status: eventDates.length > 0 ? "success" : "date_missing",
     source_rank: sourceRank,
+    admission_fiscal_year: admissionFiscalYear,
+    is_rolling_recruitment: isRollingRecruitment,
   };
 
   const results = [];
