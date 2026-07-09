@@ -5,6 +5,7 @@
 // 公式サイト優先ロジック：同じチームで公式HP経由の行がある場合はそれを先に試し、
 // 成功したらまとめサイト等の補完行はスキップする
 // まとめサイト由来で見つかった場合も、リンク先は必ず公式サイト側に解決する（まとめサイトへは絶対にリンクしない）
+// 入口ページが概要ページ（URLに日付なし）だった場合、日付入りの個別記事を優先的に探す
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -190,6 +191,52 @@ async function fetchHtml(url: string): Promise<{ html: string; finalUrl: string 
   } finally {
     clearTimeout(timer);
   }
+}
+
+// URLに日付らしきパターン（/2026/0615 や 2026-06-15 など）が含まれるか判定
+function hasDatePattern(url: string): boolean {
+  const p = pathOf(url);
+  return /(20\d{2})[\/\-]?(\d{2})[\/\-]?(\d{2})/.test(p);
+}
+
+// URLから比較可能な日付キー（YYYY-MM-DD）を抽出
+function extractDateKeyFromUrl(url: string): string | null {
+  const p = pathOf(url);
+  let m = p.match(/(20\d{2})\/(\d{2})(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = p.match(/(20\d{2})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = p.match(/(20\d{2})(\d{2})(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  return null;
+}
+
+// 概要ページ（アカデミートップ等）のリンクの中から、日付付きの個別記事を新しい順に探す
+async function findLatestDatedArticle(
+  html: string,
+  baseUrl: string,
+): Promise<{ url: string; html: string; text: string; title: string } | null> {
+  const links = extractLinks(html, baseUrl)
+    .filter(l => hostOf(l.url) === hostOf(baseUrl))
+    .filter(l => !isBadDomain(l.url))
+    .filter(l => hasDatePattern(l.url));
+
+  const withDates = links
+    .map(l => ({ ...l, dateKey: extractDateKeyFromUrl(l.url) }))
+    .filter(l => l.dateKey)
+    .sort((a, b) => (b.dateKey! > a.dateKey! ? 1 : (b.dateKey! < a.dateKey! ? -1 : 0)));
+
+  for (const candidate of withDates.slice(0, 8)) {
+    try {
+      await sleep(200);
+      const { html: cHtml, finalUrl: cUrl } = await fetchHtml(candidate.url);
+      const cText = `${stripTags(cHtml)} ${extractMetaDescription(cHtml)}`.trim();
+      if (includesAny(cText, CORE_SELECTION_WORDS)) {
+        return { url: cUrl, html: cHtml, text: cText, title: getTitle(cHtml, candidate.label) };
+      }
+    } catch { continue; }
+  }
+  return null;
 }
 
 function toDateString(d: Date | null) {
@@ -416,6 +463,12 @@ async function crawlAndFindSelectionPageRaw(
     const title = getTitle(html, teamName);
 
     if (includesAny(text, CORE_SELECTION_WORDS)) {
+      // 入口ページ自体がURLに日付を持たない概要ページ（アカデミートップ等）の場合、
+      // ページ内から日付付きの個別記事を優先的に探す
+      if (!hasDatePattern(finalUrl)) {
+        const deeper = await findLatestDatedArticle(html, finalUrl);
+        if (deeper) return deeper;
+      }
       return { url: finalUrl, html, text, title };
     }
 
