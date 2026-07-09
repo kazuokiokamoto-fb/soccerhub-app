@@ -122,16 +122,6 @@ function ymdOnly(date?: string | null) {
   return String(date).slice(0, 10);
 }
 
-function isVisibleEvent(item: SelectionEvent) {
-  const dates = item.event_dates?.length
-    ? item.event_dates
-    : item.event_date
-    ? [item.event_date]
-    : [];
-  if (dates.length === 0) return true;
-  return dates.some((d) => d >= todayYmd());
-}
-
 function isNewArrival(item: SelectionEvent) {
   const t = new Date(item.created_at || item.fetched_at || 0).getTime();
   return Number.isFinite(t) && t >= sevenDaysAgoTime();
@@ -206,7 +196,7 @@ function statusStyle(status?: string): CSSProperties {
   };
 }
 
-function sortNewestFirst(rows: SelectionEvent[]) {
+function sortNewestFirst<T extends SelectionEvent>(rows: T[]): T[] {
   return [...rows].sort((a, b) => {
     const aa = new Date(a.fetched_at || a.created_at || 0).getTime();
     const bb = new Date(b.fetched_at || b.created_at || 0).getTime();
@@ -243,6 +233,91 @@ function validStatus(value: string | null): StatusFilter {
     : "all";
 }
 
+// 「〇〇セレクション 2027-06-30」のようなタイトルから末尾の日付を取り除き、代表タイトルにする
+function baseTitle(title?: string | null): string {
+  if (!title) return "";
+  return title.replace(/\s*\d{4}-\d{2}-\d{2}\s*$/, "").trim();
+}
+
+// 同じ記事から生成された複数日付の行をまとめるためのグループキー
+function groupKeyOf(item: SelectionEvent): string {
+  const teamKey = (item as any).team_master_id || item.organization_name || "";
+  const urlKey = (item as any).source_url || (item as any).official_url || "";
+  return `${teamKey}::${urlKey}`;
+}
+
+type GroupedSelectionEvent = SelectionEvent & {
+  allEventDates: string[];
+  duplicateCount: number;
+  admissionFiscalYear: number | null;
+  isRollingRecruitment: boolean;
+};
+
+// グルーピング：同じ団体・同じ記事由来の行を1件にまとめ、開催日を集約する
+function groupSelectionEvents(items: SelectionEvent[]): GroupedSelectionEvent[] {
+  const groups = new Map<string, SelectionEvent[]>();
+
+  for (const item of items) {
+    const key = groupKeyOf(item);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(item);
+  }
+
+  const result: GroupedSelectionEvent[] = [];
+
+  for (const groupRows of groups.values()) {
+    // 代表行：最新に取得された行を採用
+    const sorted = [...groupRows].sort((a, b) => {
+      const aa = new Date(a.fetched_at || a.created_at || 0).getTime();
+      const bb = new Date(b.fetched_at || b.created_at || 0).getTime();
+      return bb - aa;
+    });
+    const representative = sorted[0] as any;
+
+    // 開催日の集約（各行が持つ event_dates / event_date をすべて統合）
+    const dateSet = new Set<string>();
+    for (const row of groupRows) {
+      const rowDates = row.event_dates?.length
+        ? row.event_dates
+        : row.event_date
+        ? [row.event_date]
+        : [];
+      for (const d of rowDates) {
+        const ymd = ymdOnly(d);
+        if (ymd) dateSet.add(ymd);
+      }
+    }
+    const allEventDates = Array.from(dateSet).sort();
+
+    // 入団年度・随時募集フラグは、グループ内のどれか1行が持っていれば採用
+    const admissionFiscalYear =
+      groupRows
+        .map((r) => (r as any).admission_fiscal_year)
+        .find((v) => v != null) ?? null;
+    const isRollingRecruitment = groupRows.some(
+      (r) => (r as any).is_rolling_recruitment === true
+    );
+
+    result.push({
+      ...representative,
+      title: baseTitle(representative.title) || representative.title,
+      event_dates: allEventDates,
+      allEventDates,
+      duplicateCount: groupRows.length,
+      admissionFiscalYear,
+      isRollingRecruitment,
+    });
+  }
+
+  return result;
+}
+
+function hasUpcomingDate(dates: string[]): boolean {
+  if (dates.length === 0) return true; // 日付未取得は「今後」扱いのまま表示
+  const today = todayYmd();
+  return dates.some((d) => d >= today);
+}
+
 export default function SelectionListPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -265,6 +340,9 @@ export default function SelectionListPage() {
   const [category, setCategory] = useState(
     () => searchParams.get("category") || "all"
   );
+  const [includePast, setIncludePast] = useState(
+    () => searchParams.get("past") === "1"
+  );
 
   const [showCalendar, setShowCalendar] = useState(
     () => searchParams.get("calendar") !== "0"
@@ -285,6 +363,7 @@ export default function SelectionListPage() {
     if (category !== "all") params.set("category", category);
     if (selectedDate) params.set("date", selectedDate);
     if (!showCalendar) params.set("calendar", "0");
+    if (includePast) params.set("past", "1");
 
     const nextUrl = params.toString()
       ? `${pathname}?${params.toString()}`
@@ -300,6 +379,7 @@ export default function SelectionListPage() {
     category,
     selectedDate,
     showCalendar,
+    includePast,
     pathname,
     router,
   ]);
@@ -315,7 +395,9 @@ export default function SelectionListPage() {
 
         if (!active) return;
 
-        setItems(sortNewestFirst(rows.filter(isVisibleEvent)));
+        // ここでは日付フィルタをかけず、全件をそのまま保持する
+        // （未来/過去のフィルタはグルーピング後に行う）
+        setItems(sortNewestFirst(rows));
       } catch (e) {
         console.error("selection page load error", e);
         if (!active) return;
@@ -343,6 +425,7 @@ export default function SelectionListPage() {
     if (category !== "all") params.set("category", category);
     if (selectedDate) params.set("date", selectedDate);
     if (!showCalendar) params.set("calendar", "0");
+    if (includePast) params.set("past", "1");
 
     return params.toString();
   }, [
@@ -354,25 +437,59 @@ export default function SelectionListPage() {
     category,
     selectedDate,
     showCalendar,
+    includePast,
   ]);
 
   const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
   const monthKey = useMemo(() => toMonthKey(monthDate), [monthDate]);
 
+  // グルーピング（同じ団体・同じ記事由来の複数日付行を1件にまとめる）
+  const groupedItems = useMemo(() => groupSelectionEvents(items), [items]);
+
   const newArrivalCount = useMemo(() => {
-    return items.filter(isNewArrival).length;
-  }, [items]);
+    return groupedItems.filter(isNewArrival).length;
+  }, [groupedItems]);
+
+  // 総取扱件数（グルーピング後のユニークな情報数、アピール用）
+  const totalHandledCount = groupedItems.length;
+
+  // 本日以降に開催予定の件数
+  const upcomingCount = useMemo(() => {
+    return groupedItems.filter((g) => hasUpcomingDate(g.allEventDates)).length;
+  }, [groupedItems]);
+
+  // 入団年度ごとの内訳（データが揃うにつれて自動的に育っていく）
+  const admissionYearBreakdown = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const g of groupedItems) {
+      let key: string;
+      if (g.isRollingRecruitment) {
+        key = "随時募集";
+      } else if (g.admissionFiscalYear) {
+        key = `${g.admissionFiscalYear}年度入団`;
+      } else {
+        key = "未分類";
+      }
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return Array.from(map.entries()).sort((a, b) => {
+      // 「未分類」は最後に、それ以外は件数の多い順
+      if (a[0] === "未分類") return 1;
+      if (b[0] === "未分類") return -1;
+      return b[1] - a[1];
+    });
+  }, [groupedItems]);
 
   const prefectures = useMemo(() => {
     return Array.from(
-      new Set(items.map((v) => inferredPrefecture(v)).filter(Boolean).map(String))
+      new Set(groupedItems.map((v) => inferredPrefecture(v)).filter(Boolean).map(String))
     ).sort((a, b) => a.localeCompare(b, "ja"));
-  }, [items]);
+  }, [groupedItems]);
 
   const cities = useMemo(() => {
     return Array.from(
       new Set(
-        items
+        groupedItems
           .filter((v) => {
             const itemPrefecture = inferredPrefecture(v);
             return prefecture === "all" || itemPrefecture === prefecture;
@@ -382,24 +499,23 @@ export default function SelectionListPage() {
           .map(String)
       )
     ).sort((a, b) => a.localeCompare(b, "ja"));
-  }, [items, prefecture]);
+  }, [groupedItems, prefecture]);
 
   const filteredItems = useMemo(() => {
     const q = keyword.trim().toLowerCase();
 
-    const rows = items.filter((item) => {
+    const rows = groupedItems.filter((item) => {
       const itemPrefecture = inferredPrefecture(item);
       const itemRank =
         (item as SelectionEvent & { source_rank?: string }).source_rank || null;
 
-      if (selectedDate) {
-        const dates = item.event_dates?.length
-          ? item.event_dates
-          : item.event_date
-          ? [item.event_date]
-          : [];
+      // 過去も含めて表示、がOFFなら未来日程を含まないグループは除外
+      if (!includePast && !hasUpcomingDate(item.allEventDates)) {
+        return false;
+      }
 
-        if (!dates.includes(selectedDate)) {
+      if (selectedDate) {
+        if (!item.allEventDates.includes(selectedDate)) {
           return false;
         }
       }
@@ -442,7 +558,7 @@ export default function SelectionListPage() {
 
     return sortNewestFirst(rows);
   }, [
-    items,
+    groupedItems,
     keyword,
     prefecture,
     city,
@@ -450,6 +566,7 @@ export default function SelectionListPage() {
     status,
     category,
     selectedDate,
+    includePast,
   ]);
 
   const selectionItemsByDate = useMemo(() => {
@@ -457,12 +574,7 @@ export default function SelectionListPage() {
     const countMap = new Map<string, number>();
 
     for (const item of filteredItems) {
-      const dates = item.event_dates?.length
-        ? item.event_dates
-        : item.event_date
-        ? [item.event_date]
-        : [];
-      for (const d of dates) {
+      for (const d of item.allEventDates) {
         const ymd = ymdOnly(d);
         if (!ymd) continue;
         countMap.set(ymd, (countMap.get(ymd) ?? 0) + 1);
@@ -496,6 +608,7 @@ export default function SelectionListPage() {
     setCategory("all");
     setSelectedDate("");
     setShowCalendar(true);
+    setIncludePast(false);
   };
 
   return (
@@ -507,6 +620,30 @@ export default function SelectionListPage() {
 
         <div style={pageTitle}>セレクション情報</div>
       </div>
+
+      <section className="ui-card" style={statsBox}>
+        <div style={statsRow}>
+          <div style={statItem}>
+            <div style={statNumber}>{totalHandledCount}</div>
+            <div style={statLabel}>総取扱件数</div>
+          </div>
+          <div style={statDivider} />
+          <div style={statItem}>
+            <div style={statNumber}>{upcomingCount}</div>
+            <div style={statLabel}>本日以降 開催予定</div>
+          </div>
+        </div>
+
+        {admissionYearBreakdown.length > 0 ? (
+          <div style={breakdownRow}>
+            {admissionYearBreakdown.map(([label, count]) => (
+              <span key={label} style={breakdownChip}>
+                {label} {count}件
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </section>
 
       <section className="ui-card" style={searchBox}>
         <div style={searchHeader}>
@@ -599,10 +736,19 @@ export default function SelectionListPage() {
           </select>
         </div>
 
+        <label style={pastToggleRow}>
+          <input
+            type="checkbox"
+            checked={includePast}
+            onChange={(e) => setIncludePast(e.target.checked)}
+          />
+          <span>過去の開催も含めて表示</span>
+        </label>
+
         <div style={filterFooter}>
           <div className="ui-meta">
             {selectedDateText} / 表示件数：{filteredItems.length}件 / 取得件数：
-            {items.length}件 / 過去7日間の新着：{newArrivalCount}件
+            {groupedItems.length}件 / 過去7日間の新着：{newArrivalCount}件
           </div>
 
           <button type="button" className="sh-btn" onClick={clearFilters}>
@@ -657,9 +803,14 @@ export default function SelectionListPage() {
                   ? `/selection/${item.id}?${currentQuery}`
                   : `/selection/${item.id}`;
 
+                const isPastOnly = !hasUpcomingDate(item.allEventDates);
+
                 return (
                   <Link key={item.id} href={detailHref} style={linkStyle}>
-                    <article className="ui-card" style={card}>
+                    <article
+                      className="ui-card"
+                      style={{ ...card, ...(isPastOnly ? cardPast : {}) }}
+                    >
                       <div style={cardTop}>
                         <span style={rankBadge}>
                           {rankLabel(itemRank, itemPrefecture || undefined)}
@@ -671,7 +822,7 @@ export default function SelectionListPage() {
                             ...statusStyle(item.display_status),
                           }}
                         >
-                          {item.display_status || "日程未定"}
+                          {isPastOnly ? "終了" : item.display_status || "日程未定"}
                         </span>
                       </div>
 
@@ -695,20 +846,19 @@ export default function SelectionListPage() {
                         <div>
                           <div style={label}>開催日</div>
                           <div style={value}>
-                            {item.event_dates && item.event_dates.length > 0 ? (
+                            {item.allEventDates.length > 0 ? (
                               <>
-                                {formatDate(item.event_dates[0])}
-                                {item.event_dates.length > 1 && (
+                                {formatDate(item.allEventDates[0])}
+                                {item.allEventDates.length > 1 && (
                                   <span style={{ fontSize: "0.8em", color: "#666", marginLeft: 4 }}>
-                                    他{item.event_dates.length - 1}日程
+                                    他{item.allEventDates.length - 1}日程
                                   </span>
                                 )}
                               </>
                             ) : (
-                              formatDate(item.event_date)
+                              "未定"
                             )}
                           </div>
-
                         </div>
 
                         <div>
@@ -761,6 +911,67 @@ const pageTitle: CSSProperties = {
   color: "#16391f",
   minWidth: 0,
   overflowWrap: "break-word",
+};
+
+const statsBox: CSSProperties = {
+  padding: 14,
+  width: "100%",
+  maxWidth: "100%",
+  boxSizing: "border-box",
+  background: "linear-gradient(135deg, #16391f, #2d5a3d)",
+};
+
+const statsRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 24,
+  flexWrap: "wrap",
+};
+
+const statItem: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: 2,
+};
+
+const statNumber: CSSProperties = {
+  fontSize: 32,
+  fontWeight: 900,
+  color: "#fff",
+  lineHeight: 1.1,
+};
+
+const statLabel: CSSProperties = {
+  fontSize: 12,
+  color: "#d1e7d5",
+  fontWeight: 700,
+};
+
+const statDivider: CSSProperties = {
+  width: 1,
+  height: 36,
+  background: "rgba(255,255,255,0.3)",
+};
+
+const breakdownRow: CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  flexWrap: "wrap",
+  justifyContent: "center",
+  gap: 6,
+};
+
+const breakdownChip: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "4px 10px",
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.15)",
+  color: "#fff",
+  fontSize: 11,
+  fontWeight: 700,
 };
 
 const searchBox: CSSProperties = {
@@ -819,6 +1030,15 @@ const select: CSSProperties = {
   border: "1px solid #d1d5db",
   background: "#fff",
   fontSize: 14,
+};
+
+const pastToggleRow: CSSProperties = {
+  marginTop: 10,
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  fontSize: 14,
+  color: "#374151",
 };
 
 const filterFooter: CSSProperties = {
@@ -880,6 +1100,10 @@ const card: CSSProperties = {
   maxWidth: "100%",
   boxSizing: "border-box",
   overflow: "hidden",
+};
+
+const cardPast: CSSProperties = {
+  opacity: 0.6,
 };
 
 const cardTop: CSSProperties = {
