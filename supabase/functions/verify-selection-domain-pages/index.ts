@@ -7,6 +7,15 @@
 // まとめサイト由来で見つかった場合も、リンク先は必ず公式サイト側に解決する（まとめサイトへは絶対にリンクしない）
 // 入口ページが概要ページ（URLに日付なし）だった場合、日付入りの個別記事を優先的に探す
 // 「20XX年度入団」等の入団年度ラベル、「随時募集」等の年度非依存募集を抽出する
+//
+// [2026-07-10 修正] event_date誤登録バグの修正:
+//   従来は改行を全てスペースに潰した compactText 済みテキストを
+//   extractEventDates / extractDeadline / extractVenue に渡していたため、
+//   「開催日」「日程」等のキーワードを含む行だけに絞る仕組みが機能せず、
+//   ページ全体が実質1行になって無関係な日付（更新日表示・フッター等、
+//   クロール実行日と一致しがちな箇所）まで日程として誤抽出していた。
+//   → 改行を保持した生テキスト(rawText)を別途用意し、行分割に依存する
+//     抽出関数にはそちらを渡すよう修正。
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -287,8 +296,14 @@ function extractAllDates(text: string): string[] {
     .sort();
 }
 
+// [修正] 改行を保持したテキストを受け取る前提の関数。
+// 呼び出し側で compactText 済みのテキストを渡さないこと（行分割が機能しなくなるため）。
 function extractEventDates(text: string): string[] {
-  const lines = compactText(text, 30000).split(/\n|。|\./).map(v => v.trim()).filter(Boolean);
+  const lines = String(text || "")
+    .slice(0, 30000)
+    .split(/\n|。|\./)
+    .map(v => v.trim())
+    .filter(Boolean);
   const selectionLines = lines.filter(line =>
     includesAny(line, ["開催日","実施日","日程","セレクション","選考会","練習会","体験会","体験練習"])
   );
@@ -301,8 +316,13 @@ function extractEventDates(text: string): string[] {
   return [...new Set(result)].sort();
 }
 
+// [修正] 同上。改行を保持したテキストを渡すこと。
 function extractDeadline(text: string): string | null {
-  const lines = compactText(text, 20000).split(/。|\.|\n/).map(v => v.trim()).filter(Boolean);
+  const lines = String(text || "")
+    .slice(0, 20000)
+    .split(/。|\.|\n/)
+    .map(v => v.trim())
+    .filter(Boolean);
   const deadlineLines = lines.filter(line =>
     line.includes("締切") || line.includes("〆切") || line.includes("申込期限") ||
     line.includes("受付期限") || line.includes("受付締切")
@@ -332,6 +352,7 @@ function extractGender(text: string): string {
   return "any";
 }
 
+// [修正] 同上。改行を保持したテキストを渡すこと。
 function extractVenue(text: string) {
   const lines = String(text || "").split(/\n|。/).map(v => v.trim()).filter(Boolean);
   const line = lines.find(l =>
@@ -630,13 +651,18 @@ async function upsertSelectionEvents(
   const prefecture = teamMaster.prefecture || null;
   const category = teamMaster.category || research.target_category || "";
 
-  const fullText = compactText(`${page.title} ${teamName} ${page.text}`, 40000);
-  const eventDates = extractEventDates(fullText);
-  const deadline = extractDeadline(fullText);
+  // [修正] 改行を保持した生テキスト(rawText)と、要約・保存用に空白を圧縮したテキスト(fullText)を分ける。
+  // rawText は行分割（\n区切り）に依存する抽出関数専用。
+  const rawText = `${page.title}\n${teamName}\n${page.text}`.slice(0, 40000);
+  const fullText = compactText(rawText, 40000);
+
+  const eventDates = extractEventDates(rawText);
+  const deadline = extractDeadline(rawText);
+  const venue = extractVenue(rawText);
+
   const categories = extractCategories(fullText);
   const gender = extractGender(fullText);
   const statusText = displayStatus(eventDates, deadline, fullText);
-  const venue = extractVenue(fullText);
   const fee = extractFee(fullText);
   const timeRange = extractTimeRange(fullText);
   const sourceRank = inferSourceRank(leagueName, teamName);
