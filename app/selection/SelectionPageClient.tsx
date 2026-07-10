@@ -309,6 +309,24 @@ export default function SelectionListPage() {
   useEffect(() => {
     let active = true;
 
+    function restoreScrollIfNeeded() {
+      try {
+        const saved = sessionStorage.getItem(SELECTION_SCROLL_KEY);
+        if (saved == null) return;
+
+        // 最新データでレイアウトが確定してからスクロールさせるため、
+        // 2フレーム分待ってから復元する
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            window.scrollTo(0, Number(saved));
+            sessionStorage.removeItem(SELECTION_SCROLL_KEY);
+          });
+        });
+      } catch {
+        // sessionStorageが使えない環境では何もしない
+      }
+    }
+
     async function load() {
       setLoading(true);
 
@@ -317,15 +335,16 @@ export default function SelectionListPage() {
 
         if (!active) return;
 
-        // ここでは日付フィルタをかけず、全件をそのまま保持する
-        // （未来/過去のフィルタはグルーピング後に行う）
         setItems(sortNewestFirst(rows));
       } catch (e) {
         console.error("selection page load error", e);
         if (!active) return;
         setItems([]);
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+          restoreScrollIfNeeded();
+        }
       }
     }
 
@@ -335,22 +354,6 @@ export default function SelectionListPage() {
       active = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (loading) return;
-
-    try {
-      const saved = sessionStorage.getItem(SELECTION_SCROLL_KEY);
-      if (saved != null) {
-        requestAnimationFrame(() => {
-          window.scrollTo(0, Number(saved));
-          sessionStorage.removeItem(SELECTION_SCROLL_KEY);
-        });
-      }
-    } catch {
-      // sessionStorageが使えない環境では何もしない
-    }
-  }, [loading]);
 
   const currentQuery = useMemo(() => {
     const params = new URLSearchParams();
