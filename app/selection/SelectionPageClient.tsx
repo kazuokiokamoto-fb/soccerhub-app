@@ -61,6 +61,24 @@ const SELECTION_CATEGORY_ALIAS_MAP: Record<string, string> = {
   女子: "女子",
 };
 
+// 都道府県プルダウンの表示順（標準的な関東順：東京→神奈川→埼玉→千葉→茨城→栃木→群馬→山梨）
+// この配列に無い値は末尾に回す
+const KANTO_PREFECTURE_ORDER: string[] = [
+  "東京都",
+  "神奈川県",
+  "埼玉県",
+  "千葉県",
+  "茨城県",
+  "栃木県",
+  "群馬県",
+  "山梨県",
+];
+
+function prefectureSortIndex(p: string): number {
+  const idx = KANTO_PREFECTURE_ORDER.indexOf(p);
+  return idx === -1 ? KANTO_PREFECTURE_ORDER.length : idx;
+}
+
 function normalizeSelectionCategory(v: string | null | undefined): string {
   if (!v) return "";
   const key = String(v).trim().toUpperCase();
@@ -450,10 +468,11 @@ export default function SelectionListPage() {
     });
   }, [groupedItems]);
 
+  // 都道府県プルダウンの選択肢（標準的な関東順で表示。この並びに無い値は末尾へ）
   const prefectures = useMemo(() => {
     return Array.from(
       new Set(groupedItems.map((v) => inferredPrefecture(v)).filter(Boolean).map(String))
-    ).sort((a, b) => a.localeCompare(b, "ja"));
+    ).sort((a, b) => prefectureSortIndex(a) - prefectureSortIndex(b));
   }, [groupedItems]);
 
   const cities = useMemo(() => {
