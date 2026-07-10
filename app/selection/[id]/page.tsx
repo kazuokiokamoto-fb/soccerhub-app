@@ -114,7 +114,7 @@ export default async function SelectionDetailPage(props: {
   if (!item) {
     return (
       <main style={wrap}>
-        <Link href={backHref} className="sh-btn">
+        <Link href={backHref} className="sh-btn" scroll={false}>
           ← 一覧へ
         </Link>
 
@@ -135,7 +135,7 @@ export default async function SelectionDetailPage(props: {
   return (
     <main style={wrap}>
       <div style={topBar}>
-        <Link href={backHref} className="sh-btn">
+        <Link href={backHref} className="sh-btn" scroll={false}>
           ← 一覧へ
         </Link>
 
