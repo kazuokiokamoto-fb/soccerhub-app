@@ -306,10 +306,17 @@ export default function SelectionListPage() {
     router,
   ]);
 
-  // 画面が描画される「前」に、キャッシュ済みデータを使って即座にスクロール位置を復元する
-  // (詳細ページから戻ってきたときのフラッシュ防止。削除は行わず、後段のuseEffectで
-  //  最新データ反映後にもう一度同じ位置へ合わせてから削除する)
   useLayoutEffect(() => {
+    // ブラウザ標準のスクロール復元(戻る操作時に自動でトップへ戻ろうとする動き)を止め、
+    // このページ側のスクロール制御だけに一本化する
+    try {
+      if ("scrollRestoration" in window.history) {
+        window.history.scrollRestoration = "manual";
+      }
+    } catch {
+      // 何もしない
+    }
+
     try {
       const saved = sessionStorage.getItem(SELECTION_SCROLL_KEY);
       if (saved == null) return;
