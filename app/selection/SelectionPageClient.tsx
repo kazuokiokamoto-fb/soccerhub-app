@@ -6,7 +6,15 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { CSSProperties } from "react";
 
-import { fetchSelectionEvents } from "@/app/lib/selections";
+import {
+  fetchSelectionEvents,
+  getCachedSelectionEvents,
+  groupSelectionEvents,
+  hasUpcomingDate,
+  ymdOnly,
+  type GroupedSelectionEvent,
+} from "@/app/lib/selections";
+
 import type { SelectionEvent } from "@/app/types/selection";
 
 import {
@@ -115,11 +123,6 @@ function sevenDaysAgoTime() {
 function formatDate(date?: string | null) {
   if (!date) return "未定";
   return new Date(date).toLocaleDateString("ja-JP");
-}
-
-function ymdOnly(date?: string | null) {
-  if (!date) return "";
-  return String(date).slice(0, 10);
 }
 
 const SELECTION_SCROLL_KEY = "selection-list-scroll-y";
@@ -235,98 +238,15 @@ function validStatus(value: string | null): StatusFilter {
     : "all";
 }
 
-// 「〇〇セレクション 2027-06-30」のようなタイトルから末尾の日付を取り除き、代表タイトルにする
-function baseTitle(title?: string | null): string {
-  if (!title) return "";
-  return title.replace(/\s*\d{4}-\d{2}-\d{2}\s*$/, "").trim();
-}
-
-// 同じ記事から生成された複数日付の行をまとめるためのグループキー
-function groupKeyOf(item: SelectionEvent): string {
-  const teamKey = (item as any).team_master_id || item.organization_name || "";
-  const urlKey = (item as any).source_url || (item as any).official_url || "";
-  return `${teamKey}::${urlKey}`;
-}
-
-type GroupedSelectionEvent = SelectionEvent & {
-  allEventDates: string[];
-  duplicateCount: number;
-  admissionFiscalYear: number | null;
-  isRollingRecruitment: boolean;
-};
-
-// グルーピング：同じ団体・同じ記事由来の行を1件にまとめ、開催日を集約する
-function groupSelectionEvents(items: SelectionEvent[]): GroupedSelectionEvent[] {
-  const groups = new Map<string, SelectionEvent[]>();
-
-  for (const item of items) {
-    const key = groupKeyOf(item);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(item);
-  }
-
-  const result: GroupedSelectionEvent[] = [];
-
-  for (const groupRows of groups.values()) {
-    // 代表行：最新に取得された行を採用
-    const sorted = [...groupRows].sort((a, b) => {
-      const aa = new Date(a.fetched_at || a.created_at || 0).getTime();
-      const bb = new Date(b.fetched_at || b.created_at || 0).getTime();
-      return bb - aa;
-    });
-    const representative = sorted[0] as any;
-
-    // 開催日の集約（各行が持つ event_dates / event_date をすべて統合）
-    const dateSet = new Set<string>();
-    for (const row of groupRows) {
-      const rowDates = row.event_dates?.length
-        ? row.event_dates
-        : row.event_date
-        ? [row.event_date]
-        : [];
-      for (const d of rowDates) {
-        const ymd = ymdOnly(d);
-        if (ymd) dateSet.add(ymd);
-      }
-    }
-    const allEventDates = Array.from(dateSet).sort();
-
-    // 入団年度・随時募集フラグは、グループ内のどれか1行が持っていれば採用
-    const admissionFiscalYear =
-      groupRows
-        .map((r) => (r as any).admission_fiscal_year)
-        .find((v) => v != null) ?? null;
-    const isRollingRecruitment = groupRows.some(
-      (r) => (r as any).is_rolling_recruitment === true
-    );
-
-    result.push({
-      ...representative,
-      title: baseTitle(representative.title) || representative.title,
-      event_dates: allEventDates,
-      allEventDates,
-      duplicateCount: groupRows.length,
-      admissionFiscalYear,
-      isRollingRecruitment,
-    });
-  }
-
-  return result;
-}
-
-function hasUpcomingDate(dates: string[]): boolean {
-  if (dates.length === 0) return true; // 日付未取得は「今後」扱いのまま表示
-  const today = todayYmd();
-  return dates.some((d) => d >= today);
-}
-
 export default function SelectionListPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState<SelectionEvent[]>([]);
+  const [loading, setLoading] = useState(() => getCachedSelectionEvents() === null);
+  const [items, setItems] = useState<SelectionEvent[]>(
+    () => getCachedSelectionEvents() ?? []
+  );
 
   const [keyword, setKeyword] = useState(() => searchParams.get("q") || "");
   const [prefecture, setPrefecture] = useState(

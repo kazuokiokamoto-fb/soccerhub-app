@@ -17,6 +17,12 @@ import type { StrengthRank } from "@/app/components/StrengthRankPicker";
 import { MatchHelpModals } from "@/app/match/components/MatchHelpModals";
 import { SelectionSection } from "@/app/home/components/SelectionSection";
 
+import {
+  fetchSelectionEvents,
+  groupSelectionEvents,
+  hasUpcomingDate,
+} from "@/app/lib/selections";
+
 type PanelMode = "none" | "team";
 
 type MyScheduleItem = {
@@ -281,41 +287,23 @@ export default function HomeCalendar(props: { initialPanelMode?: PanelMode }) {
 
     async function loadSelectionCounts() {
       try {
-        const today = ymdToday();
-        const sevenDaysAgo = sevenDaysAgoYmd();
-
-        const { count: eventCount, error: eventError } = await supabase
-          .from("selection_events_public")
-          .select("id", { count: "exact", head: true })
-          .or(
-            `event_date.gte.${today},event_date.is.null`
-          );
-
-        if (eventError) {
-          console.error("selection count error:", eventError);
-        }
-
-        const { count: newCount, error: newError } = await supabase
-          .from("selection_events_public")
-          .select("id", { count: "exact", head: true })
-          .gte("created_at", `${sevenDaysAgo}T00:00:00`)
-          .or(
-            `event_date.gte.${today},event_date.is.null`
-          );
-
-        if (newError) {
-          console.error("selection new count error:", newError);
-        }
-
+        const rows = await fetchSelectionEvents();
         if (!active) return;
 
-        setSelectionEventCount(eventCount ?? 0);
-        setSelectionNewCount(newCount ?? 0);
+        const grouped = groupSelectionEvents(rows);
+        const upcoming = grouped.filter((g) => hasUpcomingDate(g.allEventDates));
+
+        const sevenDaysAgoTime = Date.now() - 1000 * 60 * 60 * 24 * 7;
+        const newUpcomingCount = upcoming.filter((g: any) => {
+          const t = new Date(g.created_at || g.fetched_at || 0).getTime();
+          return Number.isFinite(t) && t >= sevenDaysAgoTime;
+        }).length;
+
+        setSelectionEventCount(upcoming.length);
+        setSelectionNewCount(newUpcomingCount);
       } catch (e) {
         console.error("loadSelectionCounts catch:", e);
-
         if (!active) return;
-
         setSelectionEventCount(0);
         setSelectionNewCount(0);
       }
@@ -327,6 +315,7 @@ export default function HomeCalendar(props: { initialPanelMode?: PanelMode }) {
       active = false;
     };
   }, []);
+
 
   const hasAnyActiveFilter = useMemo(() => {
     return (
