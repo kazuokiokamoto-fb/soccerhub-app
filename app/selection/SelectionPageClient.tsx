@@ -307,16 +307,15 @@ export default function SelectionListPage() {
   ]);
 
   // 画面が描画される「前」に、キャッシュ済みデータを使って即座にスクロール位置を復元する
-  // (詳細ページから戻ってきたときのフラッシュ防止)
+  // (詳細ページから戻ってきたときのフラッシュ防止。削除は行わず、後段のuseEffectで
+  //  最新データ反映後にもう一度同じ位置へ合わせてから削除する)
   useLayoutEffect(() => {
     try {
       const saved = sessionStorage.getItem(SELECTION_SCROLL_KEY);
       if (saved == null) return;
 
-      // キャッシュがある = 前回と同じデータで即座にレイアウトが再現できる
       if (getCachedSelectionEvents() !== null) {
         window.scrollTo(0, Number(saved));
-        sessionStorage.removeItem(SELECTION_SCROLL_KEY);
       }
     } catch {
       // sessionStorageが使えない環境では何もしない
@@ -329,7 +328,7 @@ export default function SelectionListPage() {
     function restoreScrollIfNeeded() {
       try {
         const saved = sessionStorage.getItem(SELECTION_SCROLL_KEY);
-        if (saved == null) return; // useLayoutEffectで既に消費済みなら何もしない
+        if (saved == null) return;
 
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
@@ -343,7 +342,13 @@ export default function SelectionListPage() {
     }
 
     async function load() {
-      setLoading(true);
+      const hadCache = getCachedSelectionEvents() !== null;
+
+      // キャッシュが無いときだけ「読み込み中」表示にする
+      // (キャッシュがある場合は裏側で静かに最新データへ更新する)
+      if (!hadCache) {
+        setLoading(true);
+      }
 
       try {
         const rows = await fetchSelectionEvents();
@@ -354,7 +359,9 @@ export default function SelectionListPage() {
       } catch (e) {
         console.error("selection page load error", e);
         if (!active) return;
-        setItems([]);
+        if (!hadCache) {
+          setItems([]);
+        }
       } finally {
         if (active) {
           setLoading(false);
