@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { CSSProperties } from "react";
 
@@ -306,16 +306,31 @@ export default function SelectionListPage() {
     router,
   ]);
 
+  // 画面が描画される「前」に、キャッシュ済みデータを使って即座にスクロール位置を復元する
+  // (詳細ページから戻ってきたときのフラッシュ防止)
+  useLayoutEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(SELECTION_SCROLL_KEY);
+      if (saved == null) return;
+
+      // キャッシュがある = 前回と同じデータで即座にレイアウトが再現できる
+      if (getCachedSelectionEvents() !== null) {
+        window.scrollTo(0, Number(saved));
+        sessionStorage.removeItem(SELECTION_SCROLL_KEY);
+      }
+    } catch {
+      // sessionStorageが使えない環境では何もしない
+    }
+  }, []);
+
   useEffect(() => {
     let active = true;
 
     function restoreScrollIfNeeded() {
       try {
         const saved = sessionStorage.getItem(SELECTION_SCROLL_KEY);
-        if (saved == null) return;
+        if (saved == null) return; // useLayoutEffectで既に消費済みなら何もしない
 
-        // 最新データでレイアウトが確定してからスクロールさせるため、
-        // 2フレーム分待ってから復元する
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             window.scrollTo(0, Number(saved));
