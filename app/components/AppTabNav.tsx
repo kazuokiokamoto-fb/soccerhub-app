@@ -7,13 +7,15 @@ import { useAuth } from "@/app/lib/auth";
 import {
   getUnifiedBadgeCount,
   getUnreadChatCount,
+  getUnreadSelectionCount,
   syncAppBadge,
 } from "@/app/lib/badge";
 
 const TABS = [
   { href: "/", label: "ホーム" },
   { href: "/chat", label: "チャット" },
-  { href: "/mypage", label: "マイページ" },
+  { href: "/selection", label: "セレ" },
+  { href: "/mypage", label: "マイペ" },
 ];
 
 function normalizePath(pathname: string) {
@@ -39,6 +41,8 @@ export default function AppTabNav() {
 
   // 「チャット」タブに表示する数字はチャット未読数のみ(通知全般の合算ではない)
   const [chatBadgeCount, setChatBadgeCount] = useState(0);
+  // 「セレ」タブに表示する数字はセレクション新着通知の未読数のみ
+  const [selectionBadgeCount, setSelectionBadgeCount] = useState(0);
 
   const chatBadgeText = useMemo(() => {
     if (chatBadgeCount <= 0) return "";
@@ -46,11 +50,18 @@ export default function AppTabNav() {
     return String(chatBadgeCount);
   }, [chatBadgeCount]);
 
+  const selectionBadgeText = useMemo(() => {
+    if (selectionBadgeCount <= 0) return "";
+    if (selectionBadgeCount > 99) return "99+";
+    return String(selectionBadgeCount);
+  }, [selectionBadgeCount]);
+
   useEffect(() => {
     if (loading) return;
 
     if (!meId) {
       setChatBadgeCount(0);
+      setSelectionBadgeCount(0);
       void syncAppBadge(0);
       return;
     }
@@ -63,6 +74,11 @@ export default function AppTabNav() {
         const chatCount = await getUnreadChatCount(meId);
         if (!alive) return;
         setChatBadgeCount(chatCount);
+
+        // セレタブの表示用: セレクション新着通知の未読数のみ
+        const selectionCount = await getUnreadSelectionCount(meId);
+        if (!alive) return;
+        setSelectionBadgeCount(selectionCount);
 
         // OSアプリアイコンのバッジ用: チャット+その他通知の合算
         const unifiedTotal = await getUnifiedBadgeCount(meId);
@@ -114,7 +130,17 @@ export default function AppTabNav() {
         {TABS.map((tab) => {
           const active = isActive(pathname, tab.href);
 
-          const showBadge = tab.href === "/chat" && chatBadgeCount > 0;
+          const showChatBadge = tab.href === "/chat" && chatBadgeCount > 0;
+          const showSelectionBadge =
+            tab.href === "/selection" && selectionBadgeCount > 0;
+
+          const badgeText = showChatBadge
+            ? chatBadgeText
+            : showSelectionBadge
+            ? selectionBadgeText
+            : "";
+
+          const showBadge = showChatBadge || showSelectionBadge;
 
           return (
             <Link
@@ -128,9 +154,7 @@ export default function AppTabNav() {
               <span style={tabInner}>
                 <span style={tabLabel}>{tab.label}</span>
 
-                {showBadge ? (
-                  <span style={badge}>{chatBadgeText}</span>
-                ) : null}
+                {showBadge ? <span style={badge}>{badgeText}</span> : null}
               </span>
             </Link>
           );
@@ -146,17 +170,17 @@ const wrap: React.CSSProperties = {
 
 const tabRow: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-  gap: 8,
+  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+  gap: 6,
 };
 
 const tabBase: React.CSSProperties = {
   minHeight: 44,
-  padding: "10px 8px",
+  padding: "10px 4px",
   borderRadius: 999,
   textAlign: "center",
   textDecoration: "none",
-  fontSize: 14,
+  fontSize: 13,
   fontWeight: 900,
   whiteSpace: "nowrap",
   overflow: "hidden",

@@ -112,6 +112,25 @@ export async function getUnreadOtherNotificationCount(userId: string) {
   return count ?? 0;
 }
 
+// セレクション新着通知(type = "selection_event")の未読件数のみ
+export async function getUnreadSelectionCount(userId: string) {
+  if (!userId) return 0;
+
+  const { count, error } = await supabase
+    .from("notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("type", "selection_event")
+    .eq("is_read", false);
+
+  if (error) {
+    console.error("getUnreadSelectionCount error:", error);
+    return 0;
+  }
+
+  return count ?? 0;
+}
+
 // 統一バッジ = チャット未読数 + それ以外の通知(セレクション新着・オファー・試合申込等)の未読数
 export async function getUnifiedBadgeCount(userId: string) {
   if (!userId) return 0;
