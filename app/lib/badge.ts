@@ -92,10 +92,36 @@ export async function getUnreadChatCount(userId: string) {
   return Math.max(0, unread);
 }
 
-// いまは「統一バッジ」= チャット未読数のみ
+// notifications テーブルの未読件数(チャット以外の種類: selection_event, match_request, offer 等)。
+// "chat" タイプは getUnreadChatCount 側で既により正確に計算しているため、二重カウントを避けるために除外する。
+export async function getUnreadOtherNotificationCount(userId: string) {
+  if (!userId) return 0;
+
+  const { count, error } = await supabase
+    .from("notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("is_read", false)
+    .neq("type", "chat");
+
+  if (error) {
+    console.error("getUnreadOtherNotificationCount error:", error);
+    return 0;
+  }
+
+  return count ?? 0;
+}
+
+// 統一バッジ = チャット未読数 + それ以外の通知(セレクション新着・オファー・試合申込等)の未読数
 export async function getUnifiedBadgeCount(userId: string) {
   if (!userId) return 0;
-  return getUnreadChatCount(userId);
+
+  const [chatCount, otherCount] = await Promise.all([
+    getUnreadChatCount(userId),
+    getUnreadOtherNotificationCount(userId),
+  ]);
+
+  return chatCount + otherCount;
 }
 
 export async function syncAppBadge(count: number) {

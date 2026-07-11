@@ -4,6 +4,7 @@ import { Geist, Geist_Mono, Zen_Kaku_Gothic_New } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/app/lib/auth";
 import AppHeader from "@/app/components/AppHeader";
+import BadgeResync from "@/app/components/BadgeResync";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -59,6 +60,7 @@ export default function RootLayout({
       >
         <AuthProvider>
           <AppHeader />
+          <BadgeResync />
           {children}
         </AuthProvider>
 

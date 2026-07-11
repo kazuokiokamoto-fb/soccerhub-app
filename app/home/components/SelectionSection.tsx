@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 
 import { fetchSelectionEvents } from "@/app/lib/selections";
 import type { SelectionEvent } from "@/app/types/selection";
+import { supabase } from "@/app/lib/supabase";
+import { useAuth } from "@/app/lib/auth";
 
 type SelectionSectionProps = {
   eventCount?: number;
@@ -13,10 +15,13 @@ type SelectionSectionProps = {
 
 export function SelectionSection(props: SelectionSectionProps) {
   const { eventCount, newCount } = props;
+  const { user } = useAuth();
+  const meId = user?.id ?? "";
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<SelectionEvent[]>([]);
   const [errorText, setErrorText] = useState("");
+  const [unreadSelectionCount, setUnreadSelectionCount] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -58,6 +63,55 @@ export function SelectionSection(props: SelectionSectionProps) {
     };
   }, [eventCount]);
 
+  // ログイン中ユーザー宛ての「未読セレクション新着通知」件数を取得してバッジ表示する
+  useEffect(() => {
+    let active = true;
+
+    async function loadUnreadSelectionCount() {
+      if (!meId) {
+        if (active) setUnreadSelectionCount(0);
+        return;
+      }
+
+      try {
+        const { count, error } = await supabase
+          .from("notifications")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", meId)
+          .eq("type", "selection_event")
+          .eq("is_read", false);
+
+        if (error) {
+          console.error("SelectionSection unread count error:", error);
+          if (active) setUnreadSelectionCount(0);
+          return;
+        }
+
+        if (active) setUnreadSelectionCount(count ?? 0);
+      } catch (e) {
+        console.error("SelectionSection unread count catch:", e);
+        if (active) setUnreadSelectionCount(0);
+      }
+    }
+
+    void loadUnreadSelectionCount();
+
+    // 通知一覧ページなどで既読化された時にも反映されるよう、
+    // 既存のイベント(badge-updated / notifications-updated)を購読して再取得する
+    function handleBadgeUpdated() {
+      void loadUnreadSelectionCount();
+    }
+
+    window.addEventListener("badge-updated", handleBadgeUpdated);
+    window.addEventListener("notifications-updated", handleBadgeUpdated);
+
+    return () => {
+      active = false;
+      window.removeEventListener("badge-updated", handleBadgeUpdated);
+      window.removeEventListener("notifications-updated", handleBadgeUpdated);
+    };
+  }, [meId]);
+
   const fixedCount =
     typeof eventCount === "number" ? eventCount : items.length;
 
@@ -68,8 +122,14 @@ export function SelectionSection(props: SelectionSectionProps) {
     <Link href="/selection" style={sectionLink}>
       <section style={summaryBoxClickable} className="ui-card">
         <div style={summaryCardTop}>
-          <div style={summaryDateText} className="ui-title">
-            セレクション情報
+          <div style={summaryTitleRow}>
+            <div style={summaryDateText} className="ui-title">
+              セレクション情報
+            </div>
+
+            {unreadSelectionCount > 0 ? (
+              <span style={unreadBadge}>{unreadSelectionCount}</span>
+            ) : null}
           </div>
 
           <span style={sectionCtaSmall}>セレ一覧</span>
@@ -107,9 +167,30 @@ const summaryCardTop: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
+const summaryTitleRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+};
+
 const summaryDateText: React.CSSProperties = {
   fontSize: 20,
   lineHeight: 1.25,
+};
+
+const unreadBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minWidth: 22,
+  height: 22,
+  padding: "0 6px",
+  borderRadius: 999,
+  background: "#dc2626",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 900,
+  lineHeight: 1,
 };
 
 const summaryInnerCompactBox: React.CSSProperties = {
