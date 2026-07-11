@@ -26,6 +26,17 @@ const CATEGORY_OPTIONS: { value: string; label: string }[] = [
   { value: "女子", label: "女子" },
 ];
 
+const RANK_OPTIONS: { value: string; label: string }[] = [
+  { value: "j_academy", label: "J下部" },
+  { value: "pref_top", label: "T1 / 1部" },
+  { value: "pref_2", label: "T2 / 2部" },
+  { value: "pref_3", label: "T3 / 3部" },
+  { value: "pref_4", label: "T4 / 4部" },
+  { value: "district", label: "地区リーグ" },
+  { value: "school", label: "スクール" },
+  { value: "girls", label: "女子" },
+];
+
 type Toast = { type: "success" | "error" | "info"; text: string } | null;
 
 export default function SelectionNotifySettings() {
@@ -36,6 +47,7 @@ export default function SelectionNotifySettings() {
   const [enabled, setEnabled] = useState(true);
   const [prefectures, setPrefectures] = useState<string[]>([]); // 空 = すべて
   const [categories, setCategories] = useState<string[]>([]); // 空 = すべて
+  const [ranks, setRanks] = useState<string[]>([]); // 空 = すべて
 
   const [toast, setToast] = useState<Toast>(null);
 
@@ -65,7 +77,7 @@ export default function SelectionNotifySettings() {
 
       const { data, error } = await supabase
         .from("selection_alert_subscriptions")
-        .select("prefectures, categories, enabled")
+        .select("prefectures, categories, ranks, enabled")
         .eq("user_id", user.id)
         .maybeSingle();
 
@@ -78,6 +90,7 @@ export default function SelectionNotifySettings() {
       if (data) {
         setPrefectures(Array.isArray(data.prefectures) ? data.prefectures : []);
         setCategories(Array.isArray(data.categories) ? data.categories : []);
+        setRanks(Array.isArray((data as any).ranks) ? (data as any).ranks : []);
         setEnabled(data.enabled ?? true);
       }
     } catch (e) {
@@ -96,8 +109,14 @@ export default function SelectionNotifySettings() {
         : categories
             .map((c) => CATEGORY_OPTIONS.find((o) => o.value === c)?.label ?? c)
             .join("・");
-    return `${prefText} / ${catText}`;
-  }, [prefectures, categories]);
+    const rankText =
+      ranks.length === 0
+        ? "全ランク"
+        : ranks
+            .map((r) => RANK_OPTIONS.find((o) => o.value === r)?.label ?? r)
+            .join("・");
+    return `${prefText} / ${catText} / ${rankText}`;
+  }, [prefectures, categories, ranks]);
 
   function togglePrefecture(pref: string) {
     setPrefectures((prev) =>
@@ -108,6 +127,12 @@ export default function SelectionNotifySettings() {
   function toggleCategory(cat: string) {
     setCategories((prev) =>
       prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+    );
+  }
+
+  function toggleRank(r: string) {
+    setRanks((prev) =>
+      prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r]
     );
   }
 
@@ -128,6 +153,7 @@ export default function SelectionNotifySettings() {
             user_id: meId,
             prefectures: prefectures.length > 0 ? prefectures : null,
             categories: categories.length > 0 ? categories : null,
+            ranks: ranks.length > 0 ? ranks : null,
             enabled,
             updated_at: new Date().toISOString(),
           },
@@ -217,6 +243,24 @@ export default function SelectionNotifySettings() {
               key={opt.value}
               type="button"
               onClick={() => toggleCategory(opt.value)}
+              disabled={saving || !enabled}
+              style={{ ...chip, ...(active ? chipActive : null) }}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={groupTitle}>ランク(未選択=すべて)</div>
+      <div style={chipRow}>
+        {RANK_OPTIONS.map((opt) => {
+          const active = ranks.includes(opt.value);
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => toggleRank(opt.value)}
               disabled={saving || !enabled}
               style={{ ...chip, ...(active ? chipActive : null) }}
             >

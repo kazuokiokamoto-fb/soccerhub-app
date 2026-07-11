@@ -30,6 +30,8 @@ import {
   type CalendarItem,
 } from "@/app/match/components/MatchCalendarBase";
 
+import AppTabNav from "@/app/components/AppTabNav";
+
 // セレクションページ専用のカテゴリ選択肢（共有マスタ lib/categories.ts とは独立）
 type SelectionCategoryOption = { value: string; label: string };
 
@@ -629,6 +631,7 @@ export default function SelectionListPage() {
             user_id: user.id,
             prefectures: prefecture === "all" ? null : [prefecture],
             categories: category === "all" ? null : [category],
+            ranks: rank === "all" ? null : [rank],
             enabled: true,
             updated_at: new Date().toISOString(),
           },
@@ -646,8 +649,11 @@ export default function SelectionListPage() {
         category === "all"
           ? "全カテゴリ"
           : selectionCategoryLabel(category) || category;
+      const rankText = rank === "all" ? "全ランク" : rankSelectLabel(rank);
 
-      setNotifyMessage(`✅ 「${prefText} / ${catText}」で通知を保存しました`);
+      setNotifyMessage(
+        `✅ 「${prefText} / ${catText} / ${rankText}」で通知を保存しました`
+      );
     } catch (e) {
       console.error("saveNotifyCondition error:", e);
       setNotifyMessage("保存に失敗しました");
@@ -658,6 +664,8 @@ export default function SelectionListPage() {
 
   return (
     <main style={wrap}>
+      <AppTabNav />
+
       <div style={topBar}>
         <Link href="/" className="sh-btn">
           ← ホーム
@@ -803,6 +811,10 @@ export default function SelectionListPage() {
           {notifyMessage ? (
             <span style={notifyMessageText}>{notifyMessage}</span>
           ) : null}
+        </div>
+
+        <div style={notifyHint}>
+          ※ 通知の対象になるのは「都道府県・カテゴリ・ランク」です(市区町村・状態は対象外です)
         </div>
 
         <div style={filterFooter}>
@@ -1127,6 +1139,12 @@ const notifyMessageText: CSSProperties = {
   fontSize: 13,
   color: "#166534",
   fontWeight: 700,
+};
+
+const notifyHint: CSSProperties = {
+  marginTop: 4,
+  fontSize: 12,
+  color: "#6b7280",
 };
 
 const filterFooter: CSSProperties = {

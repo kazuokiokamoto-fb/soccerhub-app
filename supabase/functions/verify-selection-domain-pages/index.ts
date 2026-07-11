@@ -739,17 +739,18 @@ async function claimResearchRows(limit: number) {
 async function notifyMatchingUsers(params: {
   prefecture: string | null;
   categories: string[];
+  rank: string | null;
   teamName: string;
   dates: string[];
   sampleId: string | null | undefined;
 }) {
-  const { prefecture, categories, teamName, dates, sampleId } = params;
+  const { prefecture, categories, rank, teamName, dates, sampleId } = params;
   if (!sampleId) return;
 
   try {
     const { data: subs, error } = await supabase
       .from("selection_alert_subscriptions")
-      .select("user_id, prefectures, categories")
+      .select("user_id, prefectures, categories, ranks")
       .eq("enabled", true);
 
     if (error) {
@@ -760,6 +761,7 @@ async function notifyMatchingUsers(params: {
     const matched = (subs || []).filter((sub: any) => {
       const subPrefs: string[] | null = sub.prefectures;
       const subCats: string[] | null = sub.categories;
+      const subRanks: string[] | null = sub.ranks;
 
       const prefOk =
         !subPrefs || subPrefs.length === 0 ||
@@ -769,7 +771,11 @@ async function notifyMatchingUsers(params: {
         !subCats || subCats.length === 0 ||
         categories.some((c) => subCats.includes(c));
 
-      return prefOk && catOk;
+      const rankOk =
+        !subRanks || subRanks.length === 0 ||
+        (!!rank && subRanks.includes(rank));
+
+      return prefOk && catOk && rankOk;
     });
 
     if (matched.length === 0) return;
@@ -941,6 +947,7 @@ async function upsertSelectionEvents(
     await notifyMatchingUsers({
       prefecture,
       categories: baseEventRow.target_categories as string[],
+      rank: sourceRank,
       teamName,
       dates: insertedResults.map(r => r.eventDate).filter(Boolean) as string[],
       sampleId: insertedResults[0].id,
