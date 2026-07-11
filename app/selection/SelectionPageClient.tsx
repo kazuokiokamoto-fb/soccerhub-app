@@ -764,10 +764,6 @@ export default function SelectionListPage() {
       <AppTabNav />
 
       <div style={topBar}>
-        <Link href="/" className="sh-btn">
-          ← ホーム
-        </Link>
-
         <div style={pageTitle}>セレクション情報</div>
       </div>
 

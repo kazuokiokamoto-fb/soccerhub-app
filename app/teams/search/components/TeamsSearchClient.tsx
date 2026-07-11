@@ -6,6 +6,7 @@ import Link from "next/link";
 
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
+import AppTabNav from "@/app/components/AppTabNav";
 
 import {
   buildCalendarCells,
@@ -522,11 +523,9 @@ export default function TeamsSearchClient() {
 
   return (
     <main style={wrap}>
-      <div style={topBar}>
-        <Link href="/" className="sh-btn">
-          ← ホーム
-        </Link>
+      <AppTabNav />
 
+      <div style={topBar}>
         <div style={pageTitle}>練習試合を探す</div>
       </div>
 

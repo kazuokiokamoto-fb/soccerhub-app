@@ -2,12 +2,12 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
 import { CATEGORY_OPTIONS, categoryLabel } from "@/app/lib/categories";
+import AppTabNav from "@/app/components/AppTabNav";
 
 import {
   buildCalendarCells,
@@ -583,11 +583,9 @@ export default function MyScheduleInner() {
 
   return (
     <main style={wrap}>
-      <div style={topBar}>
-        <Link href="/" className="sh-btn">
-          ← ホーム
-        </Link>
+      <AppTabNav />
 
+      <div style={topBar}>
         <div style={pageTitle}>マイスケジュール</div>
       </div>
 
