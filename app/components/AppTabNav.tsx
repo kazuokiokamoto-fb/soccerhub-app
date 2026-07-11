@@ -4,7 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/lib/auth";
-import { getUnifiedBadgeCount, syncAppBadge } from "@/app/lib/badge";
+import {
+  getUnifiedBadgeCount,
+  getUnreadChatCount,
+  syncAppBadge,
+} from "@/app/lib/badge";
 
 const TABS = [
   { href: "/", label: "ホーム" },
@@ -33,19 +37,20 @@ export default function AppTabNav() {
   const { user, loading } = useAuth();
   const meId = user?.id ?? "";
 
-  const [badgeCount, setBadgeCount] = useState(0);
+  // 「チャット」タブに表示する数字はチャット未読数のみ(通知全般の合算ではない)
+  const [chatBadgeCount, setChatBadgeCount] = useState(0);
 
   const chatBadgeText = useMemo(() => {
-    if (badgeCount <= 0) return "";
-    if (badgeCount > 99) return "99+";
-    return String(badgeCount);
-  }, [badgeCount]);
+    if (chatBadgeCount <= 0) return "";
+    if (chatBadgeCount > 99) return "99+";
+    return String(chatBadgeCount);
+  }, [chatBadgeCount]);
 
   useEffect(() => {
     if (loading) return;
 
     if (!meId) {
-      setBadgeCount(0);
+      setChatBadgeCount(0);
       void syncAppBadge(0);
       return;
     }
@@ -54,11 +59,15 @@ export default function AppTabNav() {
 
     const syncAll = async () => {
       try {
-        const total = await getUnifiedBadgeCount(meId);
+        // チャットタブの表示用: チャット未読数のみ
+        const chatCount = await getUnreadChatCount(meId);
         if (!alive) return;
+        setChatBadgeCount(chatCount);
 
-        setBadgeCount(total);
-        await syncAppBadge(total);
+        // OSアプリアイコンのバッジ用: チャット+その他通知の合算
+        const unifiedTotal = await getUnifiedBadgeCount(meId);
+        if (!alive) return;
+        await syncAppBadge(unifiedTotal);
       } catch (e) {
         console.error("AppTabNav badge sync error:", e);
       }
@@ -105,7 +114,7 @@ export default function AppTabNav() {
         {TABS.map((tab) => {
           const active = isActive(pathname, tab.href);
 
-          const showBadge = tab.href === "/chat" && badgeCount > 0;
+          const showBadge = tab.href === "/chat" && chatBadgeCount > 0;
 
           return (
             <Link
