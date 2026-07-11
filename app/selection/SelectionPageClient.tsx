@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { CSSProperties } from "react";
+import { supabase } from "@/app/lib/supabase";
 
 import {
   fetchSelectionEvents,
@@ -291,6 +292,10 @@ export default function SelectionListPage() {
   const [selectedDate, setSelectedDate] = useState(
     () => searchParams.get("date") || ""
   );
+
+  // セレクション新着通知(この条件で通知を受け取る)関連の状態
+  const [notifySaving, setNotifySaving] = useState(false);
+  const [notifyMessage, setNotifyMessage] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -600,6 +605,57 @@ export default function SelectionListPage() {
     setIncludePast(false);
   };
 
+  // 今選んでいる都道府県・カテゴリの条件をそのまま通知設定として保存する
+  // (市区町村・ランク・状態は通知条件には含めない: 詳細はmypage側の設定で調整可能)
+  async function saveNotifyCondition() {
+    if (notifySaving) return;
+
+    setNotifySaving(true);
+    setNotifyMessage("");
+
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
+
+      if (!user) {
+        setNotifyMessage("通知設定にはログインが必要です");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("selection_alert_subscriptions")
+        .upsert(
+          {
+            user_id: user.id,
+            prefectures: prefecture === "all" ? null : [prefecture],
+            categories: category === "all" ? null : [category],
+            enabled: true,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" }
+        );
+
+      if (error) {
+        console.error("saveNotifyCondition error:", error);
+        setNotifyMessage(`保存に失敗しました: ${error.message}`);
+        return;
+      }
+
+      const prefText = prefecture === "all" ? "全都道府県" : prefecture;
+      const catText =
+        category === "all"
+          ? "全カテゴリ"
+          : selectionCategoryLabel(category) || category;
+
+      setNotifyMessage(`✅ 「${prefText} / ${catText}」で通知を保存しました`);
+    } catch (e) {
+      console.error("saveNotifyCondition error:", e);
+      setNotifyMessage("保存に失敗しました");
+    } finally {
+      setNotifySaving(false);
+    }
+  }
+
   return (
     <main style={wrap}>
       <div style={topBar}>
@@ -733,6 +789,21 @@ export default function SelectionListPage() {
           />
           <span>過去の開催も含めて表示</span>
         </label>
+
+        <div style={notifyRow}>
+          <button
+            type="button"
+            className="sh-btn sh-btn--primary"
+            onClick={saveNotifyCondition}
+            disabled={notifySaving}
+          >
+            {notifySaving ? "保存中…" : "🔔 この条件で通知を受け取る"}
+          </button>
+
+          {notifyMessage ? (
+            <span style={notifyMessageText}>{notifyMessage}</span>
+          ) : null}
+        </div>
 
         <div style={filterFooter}>
           <div className="ui-meta">
@@ -1042,6 +1113,20 @@ const pastToggleRow: CSSProperties = {
   gap: 8,
   fontSize: 14,
   color: "#374151",
+};
+
+const notifyRow: CSSProperties = {
+  marginTop: 10,
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const notifyMessageText: CSSProperties = {
+  fontSize: 13,
+  color: "#166534",
+  fontWeight: 700,
 };
 
 const filterFooter: CSSProperties = {
