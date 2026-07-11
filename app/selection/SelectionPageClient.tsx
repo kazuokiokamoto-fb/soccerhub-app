@@ -1,4 +1,4 @@
-// /app/selection/page.tsx
+// /app/selection/SelectionPageClient.tsx
 "use client";
 
 import Link from "next/link";
