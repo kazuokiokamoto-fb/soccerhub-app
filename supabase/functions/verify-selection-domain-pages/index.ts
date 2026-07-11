@@ -40,6 +40,7 @@ const MAX_RUN_MS = 50_000;
 const FETCH_TIMEOUT_MS = 12_000;
 const RECRAWL_HOURS = 24;
 const BATCH_SIZE = 5;
+const SITE_BASE_URL = "https://www.sakamatch.com";
 
 const BAD_DOMAINS = [
   "youtube.com", "line.me", "google.com", "forms.gle",
@@ -730,6 +731,94 @@ async function claimResearchRows(limit: number) {
   return flat.slice(0, limit);
 }
 
+// [2026-07-11 追加] 新規セレクション情報が条件に合うユーザーへ通知を送る。
+// selection_alert_subscriptions を全件参照し、prefectures/categories がJSで
+// 未設定(null/空配列)なら「すべて対象」として扱う。
+// 通知は (1) notifications テーブルへの書き込み(アプリ内通知一覧用)と
+// (2) 既存の /api/push/send エンドポイント呼び出し(実際のプッシュ通知)の2本立て。
+async function notifyMatchingUsers(params: {
+  prefecture: string | null;
+  categories: string[];
+  teamName: string;
+  dates: string[];
+  sampleId: string | null | undefined;
+}) {
+  const { prefecture, categories, teamName, dates, sampleId } = params;
+  if (!sampleId) return;
+
+  try {
+    const { data: subs, error } = await supabase
+      .from("selection_alert_subscriptions")
+      .select("user_id, prefectures, categories")
+      .eq("enabled", true);
+
+    if (error) {
+      console.error("selection_alert_subscriptions fetch error:", error);
+      return;
+    }
+
+    const matched = (subs || []).filter((sub: any) => {
+      const subPrefs: string[] | null = sub.prefectures;
+      const subCats: string[] | null = sub.categories;
+
+      const prefOk =
+        !subPrefs || subPrefs.length === 0 ||
+        (!!prefecture && subPrefs.includes(prefecture));
+
+      const catOk =
+        !subCats || subCats.length === 0 ||
+        categories.some((c) => subCats.includes(c));
+
+      return prefOk && catOk;
+    });
+
+    if (matched.length === 0) return;
+
+    const dateText =
+      dates.length === 0
+        ? "日程未定"
+        : dates.length === 1
+        ? dates[0]
+        : `${dates[0]} 他${dates.length - 1}件`;
+
+    const title = "新着セレクション情報";
+    const body = `${teamName}（${dateText}）の情報が登録されました`;
+    const targetUrl = `/selection/${sampleId}`;
+
+    for (const sub of matched) {
+      try {
+        await supabase.from("notifications").insert({
+          user_id: sub.user_id,
+          type: "selection_event",
+          title,
+          body,
+          target_url: targetUrl,
+          is_read: false,
+        });
+      } catch (e) {
+        console.error("notifications insert error:", e);
+      }
+
+      try {
+        await fetch(`${SITE_BASE_URL}/api/push/send`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            userId: sub.user_id,
+            title,
+            body,
+            url: targetUrl,
+          }),
+        });
+      } catch (e) {
+        console.error("push send fetch error:", e);
+      }
+    }
+  } catch (e) {
+    console.error("notifyMatchingUsers error:", e);
+  }
+}
+
 async function upsertSelectionEvents(
   research: any,
   page: { url: string; text: string; title: string },
@@ -834,14 +923,28 @@ async function upsertSelectionEvents(
         .update(eventRow)
         .eq("id", existing.id);
       if (error) throw new Error(`update error: ${JSON.stringify(error)}`);
-      results.push({ status: "updated", eventDate });
+      results.push({ status: "updated", eventDate, id: existing.id });
     } else {
-      const { error } = await supabase
+      const { data: insertedRow, error } = await supabase
         .from("selection_events")
-        .insert({ ...eventRow, created_at: nowIso() });
+        .insert({ ...eventRow, created_at: nowIso() })
+        .select("id")
+        .single();
       if (error) throw new Error(`insert error: ${JSON.stringify(error)}`);
-      results.push({ status: "inserted", eventDate });
+      results.push({ status: "inserted", eventDate, id: insertedRow?.id });
     }
+  }
+
+  // [2026-07-11 追加] 新規登録があった場合、条件に合うユーザーへ通知を送る
+  const insertedResults = results.filter(r => r.status === "inserted");
+  if (insertedResults.length > 0) {
+    await notifyMatchingUsers({
+      prefecture,
+      categories: baseEventRow.target_categories as string[],
+      teamName,
+      dates: insertedResults.map(r => r.eventDate).filter(Boolean) as string[],
+      sampleId: insertedResults[0].id,
+    });
   }
 
   await supabase
