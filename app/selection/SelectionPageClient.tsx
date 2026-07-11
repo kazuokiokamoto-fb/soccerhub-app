@@ -775,13 +775,15 @@ export default function SelectionListPage() {
           </div>
         </div>
 
-        {admissionYearBreakdown.length > 0 ? (
+        {admissionYearBreakdown.some(([label]) => label !== "未分類") ? (
           <div style={breakdownRow}>
-            {admissionYearBreakdown.map(([label, count]) => (
-              <span key={label} style={breakdownChip}>
-                {label} {count}件
-              </span>
-            ))}
+            {admissionYearBreakdown
+              .filter(([label]) => label !== "未分類")
+              .map(([label, count]) => (
+                <span key={label} style={breakdownChip}>
+                  {label} {count}件
+                </span>
+              ))}
           </div>
         ) : null}
       </section>
