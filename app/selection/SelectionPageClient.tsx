@@ -455,11 +455,6 @@ export default function SelectionListPage() {
   // 総取扱件数（グルーピング後のユニークな情報数、アピール用）
   const totalHandledCount = groupedItems.length;
 
-  // 本日以降に開催予定の件数
-  const upcomingCount = useMemo(() => {
-    return groupedItems.filter((g) => hasUpcomingDate(g.allEventDates)).length;
-  }, [groupedItems]);
-
   // 入団年度ごとの内訳（データが揃うにつれて自動的に育っていく）
   const admissionYearBreakdown = useMemo(() => {
     const map = new Map<string, number>();
@@ -771,12 +766,12 @@ export default function SelectionListPage() {
         <div style={statsRow}>
           <div style={statItem}>
             <div style={statNumber}>{totalHandledCount}</div>
-            <div style={statLabel}>総取扱件数</div>
+            <div style={statLabel}>掲載件数</div>
           </div>
           <div style={statDivider} />
           <div style={statItem}>
-            <div style={statNumber}>{upcomingCount}</div>
-            <div style={statLabel}>本日以降 開催予定</div>
+            <div style={statNumber}>{newArrivalCount}</div>
+            <div style={statLabel}>過去7日間の新着</div>
           </div>
         </div>
 
