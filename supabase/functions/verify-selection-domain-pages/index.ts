@@ -16,6 +16,17 @@
 //   クロール実行日と一致しがちな箇所）まで日程として誤抽出していた。
 //   → 改行を保持した生テキスト(rawText)を別途用意し、行分割に依存する
 //     抽出関数にはそちらを渡すよう修正。
+//
+// [2026-07-11 修正] リンク先が概要/一覧ページのままになる問題の修正:
+//   従来は「概要ページ→個別記事」への深堀り探索が、URLに日付パターン
+//   （/2026/0615等）を含むリンクしか候補にしていなかったため、
+//   /pickup/44265/ や /page-11967/ のようなID形式のURLを使うサイトでは
+//   何も見つからず、概要・一覧ページ自体がリンク先として保存されていた。
+//   → findDeeperSelectionPage() として汎用化し、リンクのラベル文言に
+//     セレクション関連語を含むかどうかも候補選定の基準に追加。
+//   また、PDFへの直リンク（例: 募集要項PDF）にも対応。PDFは中身を解析
+//   できないため、到達可能性の確認のみで採否を決め、日程等の抽出用
+//   テキストは親ページ側のものを使い続けるようにした。
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -203,6 +214,49 @@ async function fetchHtml(url: string): Promise<{ html: string; finalUrl: string 
   }
 }
 
+// PDF等バイナリファイルの場合、中身は取得できないため到達可能性だけ確認する
+async function probeUrlOk(url: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "HEAD",
+      signal: controller.signal,
+      headers: {
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+      },
+      redirect: "follow",
+    });
+    if (res.ok) return true;
+  } catch {
+    // 一部サーバーはHEADを許可しないので、下でGETにフォールバックする
+  } finally {
+    clearTimeout(timer);
+  }
+
+  // HEADが使えないサーバー向けのフォールバック
+  const controller2 = new AbortController();
+  const timer2 = setTimeout(() => controller2.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res2 = await fetch(url, {
+      signal: controller2.signal,
+      headers: {
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+      },
+      redirect: "follow",
+    });
+    return res2.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer2);
+  }
+}
+
+function isPdfUrl(url: string): boolean {
+  return pathOf(url).endsWith(".pdf");
+}
+
 // URLに日付らしきパターン（/2026/0615 や 2026-06-15 など）が含まれるか判定
 function hasDatePattern(url: string): boolean {
   const p = pathOf(url);
@@ -221,24 +275,61 @@ function extractDateKeyFromUrl(url: string): string | null {
   return null;
 }
 
-// 概要ページ（アカデミートップ等）のリンクの中から、日付付きの個別記事を新しい順に探す
-async function findLatestDatedArticle(
+// 概要ページ・一覧ページのリンクの中から、より具体的な個別記事/PDFを探す。
+// [2026-07-11 改修] 従来はURLに日付パターン（/2026/0615等）を含むリンクしか
+// 候補にしていなかったため、/pickup/44265/ や /page-11967/ のようなID形式の
+// URLを使うサイトでは何も見つからず、概要ページ自体がリンク先として
+// 採用されてしまっていた。
+// → リンクの「ラベル文言」にセレクション関連語を含むかどうかも候補選定の
+//   基準に加え、URL形式に依存しないようにした。
+// また、PDFへの直リンク（identymirai.jp等）にも対応。PDFは中身を解析できない
+// ため、日程等の抽出用テキストは呼び出し元から渡された親ページのテキスト
+// (parentText) を使い続け、リンク先URLだけをPDFに差し替える。
+async function findDeeperSelectionPage(
   html: string,
   baseUrl: string,
+  parentText: string,
+  parentTitle: string,
 ): Promise<{ url: string; html: string; text: string; title: string } | null> {
-  const links = extractLinks(html, baseUrl)
+  const allLinks = extractLinks(html, baseUrl)
     .filter(l => hostOf(l.url) === hostOf(baseUrl))
-    .filter(l => !isBadDomain(l.url))
-    .filter(l => hasDatePattern(l.url));
+    .filter(l => !isBadDomain(l.url));
 
-  const withDates = links
-    .map(l => ({ ...l, dateKey: extractDateKeyFromUrl(l.url) }))
-    .filter(l => l.dateKey)
-    .sort((a, b) => (b.dateKey! > a.dateKey! ? 1 : (b.dateKey! < a.dateKey! ? -1 : 0)));
+  const withMeta = allLinks.map(l => ({
+    ...l,
+    dateKey: extractDateKeyFromUrl(l.url),
+    labelMatches: includesAny(l.label, CORE_SELECTION_WORDS),
+  }));
 
-  for (const candidate of withDates.slice(0, 8)) {
+  // ラベルにセレクション関連語を含むものを最優先。次にURLの日付が新しい順。
+  const candidates = withMeta
+    .filter(l => l.labelMatches || l.dateKey)
+    .sort((a, b) => {
+      if (a.labelMatches !== b.labelMatches) return a.labelMatches ? -1 : 1;
+      const ak = a.dateKey || "";
+      const bk = b.dateKey || "";
+      return bk > ak ? 1 : (bk < ak ? -1 : 0);
+    })
+    .slice(0, 10);
+
+  for (const candidate of candidates) {
     try {
       await sleep(200);
+
+      if (isPdfUrl(candidate.url)) {
+        // PDFはHTML解析できないため、到達可能性とラベルの一致だけで採否を決める。
+        // 抽出用テキストは親ページのものをそのまま使う。
+        if (candidate.labelMatches && (await probeUrlOk(candidate.url))) {
+          return {
+            url: candidate.url,
+            html: "",
+            text: parentText,
+            title: candidate.label || parentTitle,
+          };
+        }
+        continue;
+      }
+
       const { html: cHtml, finalUrl: cUrl } = await fetchHtml(candidate.url);
       const cText = `${stripTags(cHtml)} ${extractMetaDescription(cHtml)}`.trim();
       if (includesAny(cText, CORE_SELECTION_WORDS)) {
@@ -507,12 +598,10 @@ async function crawlAndFindSelectionPageRaw(
     const title = getTitle(html, teamName);
 
     if (includesAny(text, CORE_SELECTION_WORDS)) {
-      // 入口ページ自体がURLに日付を持たない概要ページ（アカデミートップ等）の場合、
-      // ページ内から日付付きの個別記事を優先的に探す
-      if (!hasDatePattern(finalUrl)) {
-        const deeper = await findLatestDatedArticle(html, finalUrl);
-        if (deeper) return deeper;
-      }
+      // 入口ページが概要・一覧ページの場合、より具体的な個別記事/PDFを優先的に探す。
+      // (URLに日付が無いサイトやPDF直リンクにも対応するため、常に試みる)
+      const deeper = await findDeeperSelectionPage(html, finalUrl, text, title);
+      if (deeper) return deeper;
       return { url: finalUrl, html, text, title };
     }
 
