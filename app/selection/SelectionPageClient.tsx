@@ -298,6 +298,13 @@ export default function SelectionListPage() {
   // セレクション新着通知(この条件で通知を受け取る)関連の状態
   const [notifySaving, setNotifySaving] = useState(false);
   const [notifyMessage, setNotifyMessage] = useState("");
+  const [savedNotifyCondition, setSavedNotifyCondition] = useState<{
+    prefectures: string[] | null;
+    categories: string[] | null;
+    ranks: string[] | null;
+    enabled: boolean;
+  } | null>(null);
+  const [notifyConditionLoading, setNotifyConditionLoading] = useState(true);
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -595,7 +602,89 @@ export default function SelectionListPage() {
     return `${formatDate(selectedDate)} 開催分`;
   }, [selectedDate]);
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadSavedNotifyCondition() {
+      setNotifyConditionLoading(true);
+
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        const user = authData?.user;
+
+        if (!user) {
+          if (active) {
+            setSavedNotifyCondition(null);
+            setNotifyConditionLoading(false);
+          }
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("selection_alert_subscriptions")
+          .select("prefectures, categories, ranks, enabled")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (!active) return;
+
+        if (error) {
+          console.error("loadSavedNotifyCondition error:", error);
+          setSavedNotifyCondition(null);
+          return;
+        }
+
+        if (data) {
+          setSavedNotifyCondition({
+            prefectures: Array.isArray(data.prefectures) ? data.prefectures : null,
+            categories: Array.isArray(data.categories) ? data.categories : null,
+            ranks: Array.isArray((data as any).ranks) ? (data as any).ranks : null,
+            enabled: data.enabled ?? true,
+          });
+        } else {
+          setSavedNotifyCondition(null);
+        }
+      } catch (e) {
+        console.error("loadSavedNotifyCondition catch:", e);
+        if (active) setSavedNotifyCondition(null);
+      } finally {
+        if (active) setNotifyConditionLoading(false);
+      }
+    }
+
+    void loadSavedNotifyCondition();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const savedNotifyConditionText = useMemo(() => {
+    if (!savedNotifyCondition) return null;
+    if (!savedNotifyCondition.enabled) return "通知オフ";
+
+    const prefText =
+      !savedNotifyCondition.prefectures || savedNotifyCondition.prefectures.length === 0
+        ? "全都道府県"
+        : savedNotifyCondition.prefectures.join("・");
+
+    const catText =
+      !savedNotifyCondition.categories || savedNotifyCondition.categories.length === 0
+        ? "全カテゴリ"
+        : savedNotifyCondition.categories
+            .map((c) => selectionCategoryLabel(c) || c)
+            .join("・");
+
+    const rankText =
+      !savedNotifyCondition.ranks || savedNotifyCondition.ranks.length === 0
+        ? "全ランク"
+        : savedNotifyCondition.ranks.map((r) => rankSelectLabel(r as RankFilter)).join("・");
+
+    return `${prefText} / ${catText} / ${rankText}`;
+  }, [savedNotifyCondition]);
+
   const clearFilters = () => {
+
     setKeyword("");
     setPrefecture("all");
     setCity("all");
@@ -654,6 +743,14 @@ export default function SelectionListPage() {
       setNotifyMessage(
         `✅ 「${prefText} / ${catText} / ${rankText}」で通知を保存しました`
       );
+
+      // このページ内の「現在の通知条件」表示もすぐに更新する
+      setSavedNotifyCondition({
+        prefectures: prefecture === "all" ? null : [prefecture],
+        categories: category === "all" ? null : [category],
+        ranks: rank === "all" ? null : [rank],
+        enabled: true,
+      });
     } catch (e) {
       console.error("saveNotifyCondition error:", e);
       setNotifyMessage("保存に失敗しました");
@@ -816,6 +913,13 @@ export default function SelectionListPage() {
         <div style={notifyHint}>
           ※ 通知の対象になるのは「都道府県・カテゴリ・ランク」です(市区町村・状態は対象外です)
         </div>
+
+        {!notifyConditionLoading ? (
+          <div style={currentNotifyConditionBox}>
+            現在の通知条件:{" "}
+            {savedNotifyConditionText ?? "未設定(通知は届きません)"}
+          </div>
+        ) : null}
 
         <div style={filterFooter}>
           <div className="ui-meta">
@@ -1145,6 +1249,17 @@ const notifyHint: CSSProperties = {
   marginTop: 4,
   fontSize: 12,
   color: "#6b7280",
+};
+
+const currentNotifyConditionBox: CSSProperties = {
+  marginTop: 8,
+  padding: "8px 12px",
+  borderRadius: 10,
+  background: "#f0fdf4",
+  border: "1px solid #bbf7d0",
+  fontSize: 13,
+  color: "#166534",
+  fontWeight: 700,
 };
 
 const filterFooter: CSSProperties = {
