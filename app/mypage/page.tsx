@@ -5,6 +5,7 @@ import Link from "next/link";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import PushPermissionButton from "@/app/components/PushPermissionButton";
+import SelectionNotifySettings from "@/app/components/SelectionNotifySettings";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
 
@@ -430,7 +431,9 @@ export default function MyPage() {
 
         <NotificationSection>
           <PushPermissionButton />
+          <SelectionNotifySettings />
         </NotificationSection>
+
       </section>
 
       <section style={box}>
