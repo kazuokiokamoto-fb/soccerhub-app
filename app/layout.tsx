@@ -37,6 +37,10 @@ export const metadata: Metadata = {
       { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
   },
+  // Google Search Console 所有権確認用
+  verification: {
+    google: "gvJkFsQb91zPZOvAMBloH9h810SE1nc9kakUYxbOg60",
+  },
 };
 
 export const viewport: Viewport = {
