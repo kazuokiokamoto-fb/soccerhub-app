@@ -765,6 +765,38 @@ export default function SelectionListPage() {
     setIncludePast(false);
   };
 
+  // カードを開いた時、それが自分宛の未読通知に該当するものであれば既読にする
+  async function markNotificationReadForItem(itemId: string) {
+    if (!myUnreadNotifiedIds.has(itemId)) return;
+
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
+      if (!user) return;
+
+      await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("user_id", user.id)
+        .eq("type", "selection_event")
+        .eq("is_read", false)
+        .ilike("target_url", `%/selection/${itemId}%`);
+
+      // このページ内の状態もすぐ更新する
+      setMyUnreadNotifiedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+
+      // タブのバッジ等、他のコンポーネントにも既読化を伝える
+      window.dispatchEvent(new Event("badge-updated"));
+      window.dispatchEvent(new Event("notifications-updated"));
+    } catch (e) {
+      console.error("markNotificationReadForItem error:", e);
+    }
+  }
+
   // 今選んでいる都道府県・カテゴリの条件をそのまま通知設定として保存する
   // (市区町村・ランク・状態は通知条件には含めない: 詳細はmypage側の設定で調整可能)
   async function saveNotifyCondition() {
@@ -1088,6 +1120,7 @@ export default function SelectionListPage() {
                     href={detailHref}
                     style={linkStyle}
                     onClick={() => {
+                      markNotificationReadForItem(item.id);
                       try {
                         sessionStorage.setItem(
                           SELECTION_SCROLL_KEY,
