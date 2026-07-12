@@ -287,6 +287,9 @@ export default function SelectionListPage() {
     () => searchParams.get("past") === "1"
   );
 
+  // 🔔 あなた宛の新着だけ表示するトグル(検索条件とは独立)
+  const [showOnlyNotified, setShowOnlyNotified] = useState(false);
+
   const [showCalendar, setShowCalendar] = useState(
     () => searchParams.get("calendar") !== "0"
   );
@@ -508,6 +511,11 @@ export default function SelectionListPage() {
     const q = keyword.trim().toLowerCase();
 
     const rows = groupedItems.filter((item) => {
+      // 🔔 あなた宛の新着だけ表示がONなら、他の条件より先にここで絞り込む
+      if (showOnlyNotified && !myUnreadNotifiedIds.has(item.id)) {
+        return false;
+      }
+
       const itemPrefecture = inferredPrefecture(item);
       const itemRank =
         (item as SelectionEvent & { source_rank?: string }).source_rank || null;
@@ -570,6 +578,8 @@ export default function SelectionListPage() {
     category,
     selectedDate,
     includePast,
+    showOnlyNotified,
+    myUnreadNotifiedIds,
   ]);
 
   const selectionItemsByDate = useMemo(() => {
@@ -850,6 +860,22 @@ export default function SelectionListPage() {
           </div>
         ) : null}
       </section>
+
+      {myUnreadNotifiedIds.size > 0 ? (
+        <button
+          type="button"
+          onClick={() => setShowOnlyNotified((v) => !v)}
+          style={{
+            ...notifiedBanner,
+            ...(showOnlyNotified ? notifiedBannerActive : {}),
+          }}
+        >
+          🔔{" "}
+          {showOnlyNotified
+            ? "すべて表示に戻す"
+            : `あなた宛の新着(${myUnreadNotifiedIds.size}件)だけ見る`}
+        </button>
+      ) : null}
 
       <section className="ui-card" style={searchBox}>
         <div style={searchHeader}>
@@ -1442,6 +1468,27 @@ const notifiedBadge: CSSProperties = {
 const cardNotified: CSSProperties = {
   border: "2px solid #7c3aed",
   background: "#faf5ff",
+};
+
+const notifiedBanner: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "100%",
+  padding: "12px 16px",
+  borderRadius: 14,
+  border: "2px solid #7c3aed",
+  background: "#faf5ff",
+  color: "#6d28d9",
+  fontSize: 15,
+  fontWeight: 900,
+  cursor: "pointer",
+  boxSizing: "border-box",
+};
+
+const notifiedBannerActive: CSSProperties = {
+  background: "#7c3aed",
+  color: "#fff",
 };
 
 const rankBadge: CSSProperties = {
