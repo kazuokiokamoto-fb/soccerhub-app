@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { CSSProperties } from "react";
 import { supabase } from "@/app/lib/supabase";
@@ -289,6 +289,7 @@ export default function SelectionListPage() {
 
   // 🔔 あなた宛の新着だけ表示するトグル(検索条件とは独立)
   const [showOnlyNotified, setShowOnlyNotified] = useState(false);
+  const resultsSectionRef = useRef<HTMLDivElement | null>(null);
 
   const [showCalendar, setShowCalendar] = useState(
     () => searchParams.get("calendar") !== "0"
@@ -864,7 +865,23 @@ export default function SelectionListPage() {
       {myUnreadNotifiedIds.size > 0 ? (
         <button
           type="button"
-          onClick={() => setShowOnlyNotified((v) => !v)}
+          onClick={() => {
+            setShowOnlyNotified((v) => {
+              const next = !v;
+              if (next) {
+                // ONにした時だけ、一覧セクションまで自動スクロールする
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(() => {
+                    resultsSectionRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    });
+                  });
+                });
+              }
+              return next;
+            });
+          }}
           style={{
             ...notifiedBanner,
             ...(showOnlyNotified ? notifiedBannerActive : {}),
@@ -1046,7 +1063,7 @@ export default function SelectionListPage() {
       ) : (
         <>
           {filteredItems.length > 0 ? (
-            <section style={listWrap}>
+            <section style={listWrap} ref={resultsSectionRef}>
               <div className="ui-title" style={sectionTitle}>
                 セレクション情報
               </div>
