@@ -370,19 +370,25 @@ function extractAllDates(text: string): string[] {
   }
 
   const fiscal = raw.match(/(20\d{2})年度/);
-  const baseYear = fiscal ? Number(fiscal[1]) : currentYear;
+  const fiscalYear = fiscal ? Number(fiscal[1]) : null;
   const jpShort = /(\d{1,2})月\s*(\d{1,2})日/g;
   let m;
   while ((m = jpShort.exec(raw)) !== null) {
-    // [2026-07-12 修正] 従来は「60日以上前の日付は来年のことだろう」と推測して
-    // 年をずらしていたが、これは単発の過去イベント告知(今回のケースのような、
-    // 数ヶ月前に開催済みの一回限りの体験会の記事)と、毎年恒例の募集ページとを
-    // 区別する手段が無いのに一律で未来日付をでっち上げてしまう危険な仕様だった。
-    // → 年をずらす推測はやめ、素直に baseYear のまま判定する。
-    // 結果が過去日付になった場合は、この後の `d >= today` フィルタで
-    // 自然に除外される(=日付未取得として扱われる)ため、存在しない
-    // 未来の日付を作り出すよりずっと安全。
-    const d = validDate(baseYear, Number(m[1]), Number(m[2]));
+    const month = Number(m[1]);
+    const day = Number(m[2]);
+
+    // [2026-07-12 修正] 「20XX年度」という表記は、日本の学校年度(4月始まり)の
+    // 慣習に基づき「20XX年4月に入団する学年」を指すことが多く、実際のイベント開催日は
+    // 4月〜12月ならその前年、1月〜3月ならその年度と同じ年になる。
+    // 従来はこの区別をせず「20XX年度」の数字をそのままイベントの開催年として使っていたため、
+    // 例えば「2027年度セレクション」の記事内にある「5月31日」を誤って2027年と解釈し、
+    // 実際には2026年開催のイベントを軒並み1年先の日付にしてしまっていた(juniorsoccer-news.com
+    // 由来の記事だけで2,031件が影響を受けていたことが判明)。
+    const year = fiscalYear
+      ? (month >= 4 ? fiscalYear - 1 : fiscalYear)
+      : currentYear;
+
+    const d = validDate(year, month, day);
     if (d) { const s = toDateString(d)!; if (!dates.has(s)) dates.set(s, d); }
   }
 
