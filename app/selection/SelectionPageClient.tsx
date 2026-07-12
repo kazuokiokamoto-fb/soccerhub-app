@@ -973,6 +973,7 @@ export default function SelectionListPage() {
                   : `/selection/${item.id}`;
 
                 const isPastOnly = !hasUpcomingDate(item.allEventDates);
+                const isNew = isNewArrival(item);
 
                 return (
                   <Link
@@ -995,9 +996,12 @@ export default function SelectionListPage() {
                       style={{ ...card, ...(isPastOnly ? cardPast : {}) }}
                     >
                       <div style={cardTop}>
-                        <span style={rankBadge}>
-                          {rankLabel(itemRank, itemPrefecture || undefined)}
-                        </span>
+                        <div style={cardTopLeft}>
+                          {isNew ? <span style={newBadge}>NEW</span> : null}
+                          <span style={rankBadge}>
+                            {rankLabel(itemRank, itemPrefecture || undefined)}
+                          </span>
+                        </div>
 
                         <span
                           style={{
@@ -1327,6 +1331,27 @@ const cardTop: CSSProperties = {
   alignItems: "center",
   minWidth: 0,
   flexWrap: "wrap",
+};
+
+const cardTopLeft: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  flexWrap: "wrap",
+  minWidth: 0,
+};
+
+const newBadge: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 26,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#dc2626",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 900,
+  letterSpacing: 0.5,
 };
 
 const rankBadge: CSSProperties = {
