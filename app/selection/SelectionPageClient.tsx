@@ -306,6 +306,11 @@ export default function SelectionListPage() {
   } | null>(null);
   const [notifyConditionLoading, setNotifyConditionLoading] = useState(true);
 
+  // 自分宛ての未読セレクション新着通知が指しているレコードID一覧
+  const [myUnreadNotifiedIds, setMyUnreadNotifiedIds] = useState<Set<string>>(
+    new Set()
+  );
+
   useEffect(() => {
     const params = new URLSearchParams();
 
@@ -654,6 +659,64 @@ export default function SelectionListPage() {
     };
   }, []);
 
+  // 自分宛ての未読セレクション新着通知(type=selection_event)が指すレコードIDを取得する
+  useEffect(() => {
+    let active = true;
+
+    async function loadMyUnreadNotifiedIds() {
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        const user = authData?.user;
+
+        if (!user) {
+          if (active) setMyUnreadNotifiedIds(new Set());
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("notifications")
+          .select("target_url")
+          .eq("user_id", user.id)
+          .eq("type", "selection_event")
+          .eq("is_read", false);
+
+        if (!active) return;
+
+        if (error) {
+          console.error("loadMyUnreadNotifiedIds error:", error);
+          setMyUnreadNotifiedIds(new Set());
+          return;
+        }
+
+        const ids = new Set<string>();
+        for (const row of data ?? []) {
+          const url = String((row as any).target_url ?? "");
+          const m = url.match(/\/selection\/([^/?]+)/);
+          if (m?.[1]) ids.add(m[1]);
+        }
+
+        setMyUnreadNotifiedIds(ids);
+      } catch (e) {
+        console.error("loadMyUnreadNotifiedIds catch:", e);
+        if (active) setMyUnreadNotifiedIds(new Set());
+      }
+    }
+
+    void loadMyUnreadNotifiedIds();
+
+    function handleUpdated() {
+      void loadMyUnreadNotifiedIds();
+    }
+    window.addEventListener("badge-updated", handleUpdated);
+    window.addEventListener("notifications-updated", handleUpdated);
+
+    return () => {
+      active = false;
+      window.removeEventListener("badge-updated", handleUpdated);
+      window.removeEventListener("notifications-updated", handleUpdated);
+    };
+  }, []);
+
   const savedNotifyConditionText = useMemo(() => {
     if (!savedNotifyCondition) return null;
     if (!savedNotifyCondition.enabled) return "通知オフ";
@@ -974,6 +1037,7 @@ export default function SelectionListPage() {
 
                 const isPastOnly = !hasUpcomingDate(item.allEventDates);
                 const isNew = isNewArrival(item);
+                const isNotifiedToMe = myUnreadNotifiedIds.has(item.id);
 
                 return (
                   <Link
@@ -993,11 +1057,19 @@ export default function SelectionListPage() {
                   >
                     <article
                       className="ui-card"
-                      style={{ ...card, ...(isPastOnly ? cardPast : {}) }}
+                      style={{
+                        ...card,
+                        ...(isPastOnly ? cardPast : {}),
+                        ...(isNotifiedToMe ? cardNotified : {}),
+                      }}
                     >
                       <div style={cardTop}>
                         <div style={cardTopLeft}>
-                          {isNew ? <span style={newBadge}>NEW</span> : null}
+                          {isNotifiedToMe ? (
+                            <span style={notifiedBadge}>🔔 あなた宛の新着</span>
+                          ) : isNew ? (
+                            <span style={newBadge}>NEW</span>
+                          ) : null}
                           <span style={rankBadge}>
                             {rankLabel(itemRank, itemPrefecture || undefined)}
                           </span>
@@ -1352,6 +1424,24 @@ const newBadge: CSSProperties = {
   fontSize: 12,
   fontWeight: 900,
   letterSpacing: 0.5,
+};
+
+const notifiedBadge: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 26,
+  padding: "0 10px",
+  borderRadius: 999,
+  background: "#7c3aed",
+  color: "#fff",
+  fontSize: 12,
+  fontWeight: 900,
+  whiteSpace: "nowrap",
+};
+
+const cardNotified: CSSProperties = {
+  border: "2px solid #7c3aed",
+  background: "#faf5ff",
 };
 
 const rankBadge: CSSProperties = {
