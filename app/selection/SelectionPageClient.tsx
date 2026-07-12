@@ -270,19 +270,26 @@ export default function SelectionListPage() {
   );
 
   const [keyword, setKeyword] = useState(() => searchParams.get("q") || "");
-  const [prefecture, setPrefecture] = useState(
-    () => searchParams.get("pref") || "all"
-  );
+  const [prefectures, setPrefectures] = useState<string[]>(() => {
+    const v = searchParams.get("pref");
+    return v ? v.split(",").filter(Boolean) : [];
+  });
   const [city, setCity] = useState(() => searchParams.get("city") || "all");
-  const [rank, setRank] = useState<RankFilter>(() =>
-    validRank(searchParams.get("rank"))
-  );
+  const [ranks, setRanks] = useState<RankFilter[]>(() => {
+    const v = searchParams.get("rank");
+    return v
+      ? (v.split(",").filter(Boolean) as RankFilter[]).filter((r) =>
+          validRank(r) === r
+        )
+      : [];
+  });
   const [status, setStatus] = useState<StatusFilter>(() =>
     validStatus(searchParams.get("status"))
   );
-  const [category, setCategory] = useState(
-    () => searchParams.get("category") || "all"
-  );
+  const [categories, setCategories] = useState<string[]>(() => {
+    const v = searchParams.get("category");
+    return v ? v.split(",").filter(Boolean) : [];
+  });
   const [includePast, setIncludePast] = useState(
     () => searchParams.get("past") === "1"
   );
@@ -319,11 +326,11 @@ export default function SelectionListPage() {
     const params = new URLSearchParams();
 
     if (keyword.trim()) params.set("q", keyword.trim());
-    if (prefecture !== "all") params.set("pref", prefecture);
+    if (prefectures.length > 0) params.set("pref", prefectures.join(","));
     if (city !== "all") params.set("city", city);
-    if (rank !== "all") params.set("rank", rank);
+    if (ranks.length > 0) params.set("rank", ranks.join(","));
     if (status !== "all") params.set("status", status);
-    if (category !== "all") params.set("category", category);
+    if (categories.length > 0) params.set("category", categories.join(","));
     if (selectedDate) params.set("date", selectedDate);
     if (!showCalendar) params.set("calendar", "0");
     if (includePast) params.set("past", "1");
@@ -335,11 +342,11 @@ export default function SelectionListPage() {
     router.replace(nextUrl, { scroll: false });
   }, [
     keyword,
-    prefecture,
+    prefectures,
     city,
-    rank,
+    ranks,
     status,
-    category,
+    categories,
     selectedDate,
     showCalendar,
     includePast,
@@ -429,11 +436,11 @@ export default function SelectionListPage() {
     const params = new URLSearchParams();
 
     if (keyword.trim()) params.set("q", keyword.trim());
-    if (prefecture !== "all") params.set("pref", prefecture);
+    if (prefectures.length > 0) params.set("pref", prefectures.join(","));
     if (city !== "all") params.set("city", city);
-    if (rank !== "all") params.set("rank", rank);
+    if (ranks.length > 0) params.set("rank", ranks.join(","));
     if (status !== "all") params.set("status", status);
-    if (category !== "all") params.set("category", category);
+    if (categories.length > 0) params.set("category", categories.join(","));
     if (selectedDate) params.set("date", selectedDate);
     if (!showCalendar) params.set("calendar", "0");
     if (includePast) params.set("past", "1");
@@ -441,11 +448,11 @@ export default function SelectionListPage() {
     return params.toString();
   }, [
     keyword,
-    prefecture,
+    prefectures,
     city,
-    rank,
+    ranks,
     status,
-    category,
+    categories,
     selectedDate,
     showCalendar,
     includePast,
@@ -487,7 +494,7 @@ export default function SelectionListPage() {
   }, [groupedItems]);
 
   // 都道府県プルダウンの選択肢（標準的な関東順で表示。この並びに無い値は末尾へ）
-  const prefectures = useMemo(() => {
+  const availablePrefectures = useMemo(() => {
     return Array.from(
       new Set(groupedItems.map((v) => inferredPrefecture(v)).filter(Boolean).map(String))
     ).sort((a, b) => prefectureSortIndex(a) - prefectureSortIndex(b));
@@ -499,14 +506,17 @@ export default function SelectionListPage() {
         groupedItems
           .filter((v) => {
             const itemPrefecture = inferredPrefecture(v);
-            return prefecture === "all" || itemPrefecture === prefecture;
+            return (
+              prefectures.length === 0 ||
+              (itemPrefecture && prefectures.includes(itemPrefecture))
+            );
           })
           .map((v) => v.city)
           .filter(Boolean)
           .map(String)
       )
     ).sort((a, b) => a.localeCompare(b, "ja"));
-  }, [groupedItems, prefecture]);
+  }, [groupedItems, prefectures]);
 
   const filteredItems = useMemo(() => {
     const q = keyword.trim().toLowerCase();
@@ -532,16 +542,27 @@ export default function SelectionListPage() {
         }
       }
 
-      if (prefecture !== "all" && itemPrefecture !== prefecture) return false;
+      if (
+        prefectures.length > 0 &&
+        !(itemPrefecture && prefectures.includes(itemPrefecture))
+      ) {
+        return false;
+      }
       if (city !== "all" && item.city !== city) return false;
-      if (rank !== "all" && itemRank !== rank) return false;
+      if (ranks.length > 0 && !(itemRank && ranks.includes(itemRank as RankFilter))) {
+        return false;
+      }
       if (status !== "all" && item.display_status !== status) return false;
 
-      if (category !== "all") {
+      if (categories.length > 0) {
         const normalizedItemCats = (item.target_categories ?? []).map(
           normalizeSelectionCategory
         );
-        if (!normalizedItemCats.includes(category)) {
+        const normalizedSelectedCats = categories.map(normalizeSelectionCategory);
+        const matches = normalizedItemCats.some((c) =>
+          normalizedSelectedCats.includes(c)
+        );
+        if (!matches) {
           return false;
         }
       }
@@ -572,11 +593,11 @@ export default function SelectionListPage() {
   }, [
     groupedItems,
     keyword,
-    prefecture,
+    prefectures,
     city,
-    rank,
+    ranks,
     status,
-    category,
+    categories,
     selectedDate,
     includePast,
     showOnlyNotified,
@@ -752,14 +773,27 @@ export default function SelectionListPage() {
     return `${prefText} / ${catText} / ${rankText}`;
   }, [savedNotifyCondition]);
 
+  // 「現在の通知条件」を検索フィルターに反映する。
+  // 検索フィルターも複数選択に対応したので、登録されている条件をそのまま全部反映できる。
+  function applySavedNotifyConditionToFilters() {
+    if (!savedNotifyCondition || !savedNotifyCondition.enabled) return;
+
+    setPrefectures(savedNotifyCondition.prefectures ?? []);
+    setCity("all");
+    setCategories(
+      (savedNotifyCondition.categories ?? []).map(normalizeSelectionCategory)
+    );
+    setRanks((savedNotifyCondition.ranks ?? []) as RankFilter[]);
+  }
+
   const clearFilters = () => {
 
     setKeyword("");
-    setPrefecture("all");
+    setPrefectures([]);
     setCity("all");
-    setRank("all");
+    setRanks([]);
     setStatus("all");
-    setCategory("all");
+    setCategories([]);
     setSelectedDate("");
     setShowCalendar(true);
     setIncludePast(false);
@@ -819,9 +853,9 @@ export default function SelectionListPage() {
         .upsert(
           {
             user_id: user.id,
-            prefectures: prefecture === "all" ? null : [prefecture],
-            categories: category === "all" ? null : [category],
-            ranks: rank === "all" ? null : [rank],
+            prefectures: prefectures.length > 0 ? prefectures : null,
+            categories: categories.length > 0 ? categories : null,
+            ranks: ranks.length > 0 ? ranks : null,
             enabled: true,
             updated_at: new Date().toISOString(),
           },
@@ -834,12 +868,13 @@ export default function SelectionListPage() {
         return;
       }
 
-      const prefText = prefecture === "all" ? "全都道府県" : prefecture;
+      const prefText = prefectures.length > 0 ? prefectures.join("・") : "全都道府県";
       const catText =
-        category === "all"
-          ? "全カテゴリ"
-          : selectionCategoryLabel(category) || category;
-      const rankText = rank === "all" ? "全ランク" : rankSelectLabel(rank);
+        categories.length > 0
+          ? categories.map((c) => selectionCategoryLabel(c) || c).join("・")
+          : "全カテゴリ";
+      const rankText =
+        ranks.length > 0 ? ranks.map((r) => rankSelectLabel(r)).join("・") : "全ランク";
 
       setNotifyMessage(
         `✅ 「${prefText} / ${catText} / ${rankText}」で通知を保存しました`
@@ -847,9 +882,9 @@ export default function SelectionListPage() {
 
       // このページ内の「現在の通知条件」表示もすぐに更新する
       setSavedNotifyCondition({
-        prefectures: prefecture === "all" ? null : [prefecture],
-        categories: category === "all" ? null : [category],
-        ranks: rank === "all" ? null : [rank],
+        prefectures: prefectures.length > 0 ? prefectures : null,
+        categories: categories.length > 0 ? categories : null,
+        ranks: ranks.length > 0 ? ranks : null,
         enabled: true,
       });
     } catch (e) {
@@ -948,23 +983,92 @@ export default function SelectionListPage() {
           style={input}
         />
 
-        <div style={filterGrid}>
-          <select
-            value={prefecture}
-            onChange={(e) => {
-              setPrefecture(e.target.value);
-              setCity("all");
-            }}
-            style={select}
-          >
-            <option value="all">都道府県すべて</option>
-            {prefectures.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
+        <div style={chipFilterGroup}>
+          <div style={chipFilterLabel}>都道府県(未選択ですべて)</div>
+          <div style={chipFilterRow}>
+            {availablePrefectures.map((p) => {
+              const active = prefectures.includes(p);
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  style={{ ...filterChip, ...(active ? filterChipActive : {}) }}
+                  onClick={() => {
+                    setPrefectures((prev) =>
+                      prev.includes(p)
+                        ? prev.filter((v) => v !== p)
+                        : [...prev, p]
+                    );
+                    setCity("all");
+                  }}
+                >
+                  {p}
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
+        <div style={chipFilterGroup}>
+          <div style={chipFilterLabel}>対象カテゴリ(未選択ですべて)</div>
+          <div style={chipFilterRow}>
+            {SELECTION_CATEGORY_OPTIONS.map((opt) => {
+              const active = categories.includes(opt.value);
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  style={{ ...filterChip, ...(active ? filterChipActive : {}) }}
+                  onClick={() => {
+                    setCategories((prev) =>
+                      prev.includes(opt.value)
+                        ? prev.filter((v) => v !== opt.value)
+                        : [...prev, opt.value]
+                    );
+                  }}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={chipFilterGroup}>
+          <div style={chipFilterLabel}>ランク(未選択ですべて)</div>
+          <div style={chipFilterRow}>
+            {(
+              [
+                "j_academy",
+                "pref_top",
+                "pref_2",
+                "pref_3",
+                "pref_4",
+                "district",
+                "school",
+                "girls",
+              ] as RankFilter[]
+            ).map((r) => {
+              const active = ranks.includes(r);
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  style={{ ...filterChip, ...(active ? filterChipActive : {}) }}
+                  onClick={() => {
+                    setRanks((prev) =>
+                      prev.includes(r) ? prev.filter((v) => v !== r) : [...prev, r]
+                    );
+                  }}
+                >
+                  {rankSelectLabel(r)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={filterGrid}>
           <select value={city} onChange={(e) => setCity(e.target.value)} style={select}>
             <option value="all">市区町村すべて</option>
             {cities.map((c) => (
@@ -972,22 +1076,6 @@ export default function SelectionListPage() {
                 {c}
               </option>
             ))}
-          </select>
-
-          <select
-            value={rank}
-            onChange={(e) => setRank(e.target.value as RankFilter)}
-            style={select}
-          >
-            <option value="all">{rankSelectLabel("all")}</option>
-            <option value="j_academy">{rankSelectLabel("j_academy")}</option>
-            <option value="pref_top">{rankSelectLabel("pref_top")}</option>
-            <option value="pref_2">{rankSelectLabel("pref_2")}</option>
-            <option value="pref_3">{rankSelectLabel("pref_3")}</option>
-            <option value="pref_4">{rankSelectLabel("pref_4")}</option>
-            <option value="district">{rankSelectLabel("district")}</option>
-            <option value="school">{rankSelectLabel("school")}</option>
-            <option value="girls">{rankSelectLabel("girls")}</option>
           </select>
 
           <select
@@ -1001,19 +1089,6 @@ export default function SelectionListPage() {
             <option value="開催終了">開催終了</option>
             <option value="日程未定">日程未定</option>
             <option value="日付未取得">日付未取得</option>
-          </select>
-
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            style={select}
-          >
-            <option value="all">対象カテゴリすべて</option>
-            {SELECTION_CATEGORY_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
           </select>
         </div>
 
@@ -1046,10 +1121,18 @@ export default function SelectionListPage() {
         </div>
 
         {!notifyConditionLoading ? (
-          <div style={currentNotifyConditionBox}>
+          <button
+            type="button"
+            style={currentNotifyConditionBox}
+            onClick={applySavedNotifyConditionToFilters}
+            disabled={!savedNotifyCondition || !savedNotifyCondition.enabled}
+          >
             現在の通知条件:{" "}
             {savedNotifyConditionText ?? "未設定(通知は届きません)"}
-          </div>
+            {savedNotifyCondition?.enabled ? (
+              <span style={applyHintText}>(タップで検索条件に反映)</span>
+            ) : null}
+          </button>
         ) : null}
 
         <div style={filterFooter}>
@@ -1356,6 +1439,42 @@ const filterGrid: CSSProperties = {
   minWidth: 0,
 };
 
+const chipFilterGroup: CSSProperties = {
+  marginTop: 12,
+};
+
+const chipFilterLabel: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 800,
+  color: "#4b5563",
+  marginBottom: 6,
+};
+
+const chipFilterRow: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 6,
+};
+
+const filterChip: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "6px 12px",
+  borderRadius: 999,
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  color: "#374151",
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const filterChipActive: CSSProperties = {
+  background: "#dcfce7",
+  borderColor: "#bbf7d0",
+  color: "#166534",
+};
+
 const select: CSSProperties = {
   width: "100%",
   maxWidth: "100%",
@@ -1398,6 +1517,8 @@ const notifyHint: CSSProperties = {
 
 const currentNotifyConditionBox: CSSProperties = {
   marginTop: 8,
+  width: "100%",
+  textAlign: "left",
   padding: "8px 12px",
   borderRadius: 10,
   background: "#f0fdf4",
@@ -1405,6 +1526,15 @@ const currentNotifyConditionBox: CSSProperties = {
   fontSize: 13,
   color: "#166534",
   fontWeight: 700,
+  cursor: "pointer",
+  boxSizing: "border-box",
+};
+
+const applyHintText: CSSProperties = {
+  marginLeft: 6,
+  fontSize: 11,
+  fontWeight: 700,
+  color: "#4d7c0f",
 };
 
 const filterFooter: CSSProperties = {
