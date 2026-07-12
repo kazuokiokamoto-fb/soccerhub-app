@@ -102,7 +102,7 @@ export async function getUnreadOtherNotificationCount(userId: string) {
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId)
     .eq("is_read", false)
-    .neq("type", "chat");
+    .neq("type", "chat_message");
 
   if (error) {
     console.error("getUnreadOtherNotificationCount error:", error);
