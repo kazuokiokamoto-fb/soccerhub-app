@@ -374,10 +374,15 @@ function extractAllDates(text: string): string[] {
   const jpShort = /(\d{1,2})月\s*(\d{1,2})日/g;
   let m;
   while ((m = jpShort.exec(raw)) !== null) {
-    let d = validDate(baseYear, Number(m[1]), Number(m[2]));
-    if (d && d.getTime() < now.getTime() - 1000*60*60*24*60) {
-      d = validDate(baseYear+1, Number(m[1]), Number(m[2]));
-    }
+    // [2026-07-12 修正] 従来は「60日以上前の日付は来年のことだろう」と推測して
+    // 年をずらしていたが、これは単発の過去イベント告知(今回のケースのような、
+    // 数ヶ月前に開催済みの一回限りの体験会の記事)と、毎年恒例の募集ページとを
+    // 区別する手段が無いのに一律で未来日付をでっち上げてしまう危険な仕様だった。
+    // → 年をずらす推測はやめ、素直に baseYear のまま判定する。
+    // 結果が過去日付になった場合は、この後の `d >= today` フィルタで
+    // 自然に除外される(=日付未取得として扱われる)ため、存在しない
+    // 未来の日付を作り出すよりずっと安全。
+    const d = validDate(baseYear, Number(m[1]), Number(m[2]));
     if (d) { const s = toDateString(d)!; if (!dates.has(s)) dates.set(s, d); }
   }
 
