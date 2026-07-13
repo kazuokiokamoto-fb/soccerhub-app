@@ -247,8 +247,12 @@ export default function HomeCalendar(props: { initialPanelMode?: PanelMode }) {
   >([]);
   const [myScheduleLoading, setMyScheduleLoading] = useState(false);
 
-  const [selectionEventCount, setSelectionEventCount] = useState(0);
-  const [selectionNewCount, setSelectionNewCount] = useState(0);
+  const [selectionEventCount, setSelectionEventCount] = useState<number | null>(
+    null
+  );
+  const [selectionNewCount, setSelectionNewCount] = useState<number | null>(
+    null
+  );
 
   const { filters } = useMatchFilters();
 
@@ -618,8 +622,8 @@ export default function HomeCalendar(props: { initialPanelMode?: PanelMode }) {
       </Link>
 
       <SelectionSection
-        eventCount={selectionEventCount}
-        newCount={selectionNewCount}
+        eventCount={selectionEventCount ?? undefined}
+        newCount={selectionNewCount ?? undefined}
       />
 
       <MatchHelpModals
