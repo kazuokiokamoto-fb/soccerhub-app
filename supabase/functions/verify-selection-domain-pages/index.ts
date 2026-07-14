@@ -105,6 +105,30 @@ function isBadDomain(url: string) {
   } catch { return true; }
 }
 
+// [2026-07-14 追加] team_master の official_url が壊れている/期限切れ等の理由で、
+// 本来のチームサイトではない「WordPressの初期設定ページ」「404ページ」「ドメイン
+// パーキングページ」等に着地してしまうケースがあった(例: サブドメイン抜けのURLに
+// アクセスした結果、WordPressマルチサイトの「新規サイト作成」ページが表示され、
+// そこに書かれている無関係な情報がそのままセレクション情報として登録されてしまう)。
+// このような「明らかにチーム公式ページではない」内容を検知したら、そのページからは
+// 何も抽出せず早期に諦める。
+const SUSPICIOUS_PAGE_PATTERNS: RegExp[] = [
+  /wp-signup\.php/i,                         // WordPressマルチサイトの新規サイト作成ページ
+  /そのようなサイトはありません/,                    // WordPressマルチサイト系のエラー文言
+  /ページが見つかりません|お探しのページは見つかりません/,  // 404ページ(日本語)
+  /404\s*not\s*found/i,                       // 404ページ(英語)
+  /this\s+domain\s+(is\s+for\s+sale|may\s+be\s+for\s+sale)/i, // ドメインパーキング
+  /domain\s+parking/i,
+  /このドメインは(現在)?(登録され)?ていません/,          // 期限切れドメインの一般的な表示
+  /coming\s+soon.{0,20}wordpress/i,           // WordPress初期状態の「Coming Soon」ページ
+];
+
+function isSuspiciousPage(html: string, url: string): boolean {
+  if (SUSPICIOUS_PAGE_PATTERNS.some((re) => re.test(url))) return true;
+  const text = stripTags(html).slice(0, 3000); // 冒頭だけ見れば十分
+  return SUSPICIOUS_PAGE_PATTERNS.some((re) => re.test(text));
+}
+
 function includesAny(text: string, words: string[]) {
   const t = String(text || "").toLowerCase();
   return words.some((w) => t.includes(w.toLowerCase()));
@@ -620,6 +644,16 @@ async function crawlAndFindSelectionPageRaw(
 
   try {
     const { html, finalUrl } = await fetchHtml(selectionPageUrl);
+
+    if (isSuspiciousPage(html, finalUrl)) {
+      console.warn(
+        `[suspicious page] ${teamName}: official_urlが本来のチームサイトではない` +
+        `可能性があるページ(WordPress初期画面/404/ドメイン期限切れ等)を返しています。` +
+        `url=${finalUrl} 元URL=${selectionPageUrl} 要目視確認。`
+      );
+      return null;
+    }
+
     const metaDescription = extractMetaDescription(html);
     const text = `${stripTags(html)} ${metaDescription}`.trim();
     const title = getTitle(html, teamName);
