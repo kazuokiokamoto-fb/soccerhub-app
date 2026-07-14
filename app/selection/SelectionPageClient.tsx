@@ -153,6 +153,20 @@ function isNewArrival(item: SelectionEvent) {
   return Number.isFinite(t) && t >= sevenDaysAgoTime();
 }
 
+// [2026-07-14 追加] 同じチーム・同じsource_urlの記事から、時期の異なる複数の告知
+// (例: 過去に終わった募集と、新しく追加された今後の募集)がまとめてグルーピングされると、
+// 表示用の日付が単純に「全日程の中で一番古い日付」になってしまい、実際は今後の日程が
+// あるにも関わらずカード上は過去日付に見えてしまう問題があった。
+// → 今日以降の日程があればその中で一番近いものを優先して表示し、
+//   全部過去の場合だけ一番古い日付にフォールバックする。
+function earliestDisplayDate(dates: string[]): string | null {
+  if (dates.length === 0) return null;
+  const today = todayYmd();
+  const upcoming = dates.filter((d) => d >= today).sort();
+  if (upcoming.length > 0) return upcoming[0];
+  return [...dates].sort()[0];
+}
+
 function inferredPrefecture(item: SelectionEvent) {
   if (item.prefecture) return item.prefecture;
 
@@ -1264,18 +1278,28 @@ export default function SelectionListPage() {
                         <div>
                           <div style={label}>開催日</div>
                           <div style={value}>
-                            {item.allEventDates.length > 0 ? (
-                              <>
-                                {formatDate(item.allEventDates[0])}
-                                {item.allEventDates.length > 1 && (
-                                  <span style={{ fontSize: "0.8em", color: "#666", marginLeft: 4 }}>
-                                    他{item.allEventDates.length - 1}日程
-                                  </span>
-                                )}
-                              </>
-                            ) : (
-                              "未定"
-                            )}
+                            {(() => {
+                              const displayDate = earliestDisplayDate(
+                                item.allEventDates
+                              );
+                              if (!displayDate) return "未定";
+                              return (
+                                <>
+                                  {formatDate(displayDate)}
+                                  {item.allEventDates.length > 1 && (
+                                    <span
+                                      style={{
+                                        fontSize: "0.8em",
+                                        color: "#666",
+                                        marginLeft: 4,
+                                      }}
+                                    >
+                                      他{item.allEventDates.length - 1}日程
+                                    </span>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
                         </div>
 
