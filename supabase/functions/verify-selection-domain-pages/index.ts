@@ -357,6 +357,14 @@ function extractAllDates(text: string): string[] {
   const dates = new Map<string, Date>();
   const raw = String(text || "");
 
+  // [2026-07-14 追加] 「20XX年M月D日」のようなフル日付として処理済みの文字範囲を記録し、
+  // 短縮形式(M月D日)の抽出時にその範囲と重なる箇所は無視する。
+  // これが無いと、「2025年11月14日」のような無関係な過去記事の日付(例:
+  // ページ下部の「関連記事」欄など)の中の「11月14日」部分だけが短縮形式として
+  // 二重に抽出され、元の年(2025年)を無視してクロール実行時の年(例:2026年)を
+  // 誤って当てはめてしまい、存在しない日程をでっち上げる原因になっていた。
+  const consumedRanges: Array<[number, number]> = [];
+
   const fullPatterns = [
     /(20\d{2})年\s*(\d{1,2})月\s*(\d{1,2})日/g,
     /(20\d{2})[\/.-](\d{1,2})[\/.-](\d{1,2})/g,
@@ -366,7 +374,12 @@ function extractAllDates(text: string): string[] {
     while ((m = pattern.exec(raw)) !== null) {
       const d = validDate(Number(m[1]), Number(m[2]), Number(m[3]));
       if (d) { const s = toDateString(d)!; if (!dates.has(s)) dates.set(s, d); }
+      consumedRanges.push([m.index, m.index + m[0].length]);
     }
+  }
+
+  function isConsumed(index: number, length: number) {
+    return consumedRanges.some(([s, e]) => index < e && index + length > s);
   }
 
   const fiscal = raw.match(/(20\d{2})年度/);
@@ -374,6 +387,8 @@ function extractAllDates(text: string): string[] {
   const jpShort = /(\d{1,2})月\s*(\d{1,2})日/g;
   let m;
   while ((m = jpShort.exec(raw)) !== null) {
+    if (isConsumed(m.index, m[0].length)) continue;
+
     const month = Number(m[1]);
     const day = Number(m[2]);
 
