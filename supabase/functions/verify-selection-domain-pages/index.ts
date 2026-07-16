@@ -27,6 +27,28 @@
 //   また、PDFへの直リンク（例: 募集要項PDF）にも対応。PDFは中身を解析
 //   できないため、到達可能性の確認のみで採否を決め、日程等の抽出用
 //   テキストは親ページ側のものを使い続けるようにした。
+//
+// [2026-07-16 修正①] 年度コンテキスト消失バグの修正:
+//   extractEventDates は「開催日」「セレクション」等のキーワードを含む行だけを
+//   抜き出し、その1行だけを extractAllDates に渡していた。しかし実際のページ
+//   では「20XX年度　〇〇 体験練習会」という年度表記と、「第1回 6月21日(日)」
+//   のような実際の日付が別々の行に分かれているケースが多く、行単位で処理すると
+//   年度情報が失われて currentYear(クロール実行年)にフォールバックしてしまい、
+//   本来2027年開催のはずのイベントが2026年として登録される事故が発生した
+//   (FC HORTENCIA B 等、確認できただけで1000件超に影響)。
+//   → 年度をドキュメント全体から一度だけ抽出する extractFiscalYear() を新設し、
+//     extractAllDates の第2引数として明示的に渡すことで、行ごとに処理しても
+//     年度コンテキストが失われないようにした。
+//
+// [2026-07-16 修正②] フッター「関連記事」等からの日付混入バグの修正:
+//   ページ下部の「関連記事」「〇〇の記事一覧」「本日の人気の記事」「月を選択」
+//   といったウィジェット/フッター領域には、他の団体の別記事のタイトルや日付が
+//   大量に含まれる。これらの行は「セレクション」「体験練習会」等のキーワードを
+//   含むため extractEventDates の行フィルタをすり抜け、無関係な日付が大量に
+//   誤登録される原因になっていた(同一の日付セットが65〜100件以上の無関係な
+//   組織に重複して現れる形で発覚)。
+//   → truncateAtNoiseSection() を新設し、これらのマーカーが最初に出現する
+//     位置より後ろのテキストを日付・締切・会場抽出の対象から除外するようにした。
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -76,6 +98,15 @@ const J_CLUBS = [
   "栃木SC", "ザスパ群馬", "ヴァンフォーレ甲府",
 ];
 
+// [2026-07-16 追加] フッターの「関連記事」等、他記事の情報が混在するセクションの
+// 開始マーカー。この文言が最初に出現した位置より後ろは、日付・締切・会場の
+// 抽出対象から除外する。
+const NOISE_SECTION_MARKERS = [
+  "関連記事", "の記事一覧", "の最近の投稿", "本日の人気の記事",
+  "今月の人気記事", "月を選択", "コメント欄", "保護者情報", "CANCEL REPLY",
+  "寄稿者プロフィール", "寄稿者の最近の投稿",
+];
+
 function nowIso() { return new Date().toISOString(); }
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -96,6 +127,18 @@ function cleanForDb(text: string, max = 20000) {
 
 function compactText(text: string, max = 12000) {
   return String(text || "").replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+// [2026-07-16 追加] フッターの「関連記事」等、他記事の情報が混在するセクションが
+// 始まる前でテキストを打ち切る。日付・締切・会場の誤抽出を防ぐための前処理。
+function truncateAtNoiseSection(text: string): string {
+  const raw = String(text || "");
+  let cutIndex = raw.length;
+  for (const marker of NOISE_SECTION_MARKERS) {
+    const idx = raw.indexOf(marker);
+    if (idx !== -1 && idx < cutIndex) cutIndex = idx;
+  }
+  return raw.slice(0, cutIndex);
 }
 
 function isBadDomain(url: string) {
@@ -375,7 +418,19 @@ function validDate(y: number, m: number, d: number) {
   return (dt.getFullYear()===y && dt.getMonth()===m-1 && dt.getDate()===d) ? dt : null;
 }
 
-function extractAllDates(text: string): string[] {
+// [2026-07-16 追加] 年度をドキュメント全体から一度だけ抽出する。
+// extractAllDates を行単位で呼び出しても年度コンテキストが失われないよう、
+// 呼び出し側でこの関数の結果を1回だけ計算し、各呼び出しに明示的に渡す。
+function extractFiscalYear(text: string): number | null {
+  const fiscal = String(text || "").match(/(20\d{2})年度/);
+  return fiscal ? Number(fiscal[1]) : null;
+}
+
+// [2026-07-16 修正] 第2引数 fiscalYearOverride を追加。
+//   - undefined の場合: 従来通りこのテキスト内から「20XX年度」を探す(後方互換)
+//   - 値(number | null) が渡された場合: その値をそのまま使う(テキスト内は探さない)
+// これにより、行単位で呼び出す際にドキュメント全体の年度を引き継げるようにした。
+function extractAllDates(text: string, fiscalYearOverride?: number | null): string[] {
   const now = new Date();
   const currentYear = now.getFullYear();
   const dates = new Map<string, Date>();
@@ -416,8 +471,15 @@ function extractAllDates(text: string): string[] {
     return consumedRanges.some(([s, e]) => index < e && index + length > s);
   }
 
-  const fiscal = raw.match(/(20\d{2})年度/);
-  const fiscalYear = fiscal ? Number(fiscal[1]) : null;
+  // [2026-07-16 修正] fiscalYearOverride が明示的に渡されていればそれを使う。
+  // 渡されていなければ(undefined)従来通りこのテキスト内から探す。
+  const fiscalYear = fiscalYearOverride !== undefined
+    ? fiscalYearOverride
+    : (() => {
+        const fiscal = raw.match(/(20\d{2})年度/);
+        return fiscal ? Number(fiscal[1]) : null;
+      })();
+
   const todayMonth = now.getMonth() + 1;
   const todayDate = now.getDate();
   const jpShort = /(\d{1,2})月\s*(\d{1,2})日/g;
@@ -460,7 +522,11 @@ function extractAllDates(text: string): string[] {
 
 // [修正] 改行を保持したテキストを受け取る前提の関数。
 // 呼び出し側で compactText 済みのテキストを渡さないこと（行分割が機能しなくなるため）。
+// [2026-07-16 修正] ドキュメント全体から年度を一度だけ抽出し(documentFiscalYear)、
+// 各行の extractAllDates 呼び出しに明示的に渡すよう変更。これにより、年度表記と
+// 実際の日付が別の行にあるページでも正しく年度を解決できるようになった。
 function extractEventDates(text: string): string[] {
+  const documentFiscalYear = extractFiscalYear(text);
   const lines = String(text || "")
     .slice(0, 30000)
     .split(/\n|。|\./)
@@ -471,15 +537,17 @@ function extractEventDates(text: string): string[] {
   );
   const fromSelectionLines: string[] = [];
   for (const line of selectionLines) {
-    fromSelectionLines.push(...extractAllDates(line));
+    fromSelectionLines.push(...extractAllDates(line, documentFiscalYear));
   }
-  const fromAll = extractAllDates(text);
+  const fromAll = extractAllDates(text, documentFiscalYear);
   const result = fromSelectionLines.length > 0 ? fromSelectionLines : fromAll;
   return [...new Set(result)].sort();
 }
 
 // [修正] 同上。改行を保持したテキストを渡すこと。
+// [2026-07-16 修正] こちらもドキュメント全体の年度を明示的に渡すよう統一。
 function extractDeadline(text: string): string | null {
+  const documentFiscalYear = extractFiscalYear(text);
   const lines = String(text || "")
     .slice(0, 20000)
     .split(/。|\.|\n/)
@@ -490,7 +558,7 @@ function extractDeadline(text: string): string | null {
     line.includes("受付期限") || line.includes("受付締切")
   );
   for (const line of deadlineLines) {
-    const dates = extractAllDates(line);
+    const dates = extractAllDates(line, documentFiscalYear);
     if (dates.length > 0) return dates[0];
   }
   return null;
@@ -920,9 +988,14 @@ async function upsertSelectionEvents(
   const rawText = `${page.title}\n${teamName}\n${page.text}`.slice(0, 40000);
   const fullText = compactText(rawText, 40000);
 
-  const eventDates = extractEventDates(rawText);
-  const deadline = extractDeadline(rawText);
-  const venue = extractVenue(rawText);
+  // [2026-07-16 追加] フッターの「関連記事」等、他記事の情報が混在するセクションを
+  // 打ち切ったテキストを日付・締切・会場の抽出専用に用意する。
+  // fullText(表示用の要約・カテゴリ抽出等)には影響させない。
+  const rawTextForExtraction = truncateAtNoiseSection(rawText);
+
+  const eventDates = extractEventDates(rawTextForExtraction);
+  const deadline = extractDeadline(rawTextForExtraction);
+  const venue = extractVenue(rawTextForExtraction);
 
   const categories = extractCategories(fullText);
   const gender = extractGender(fullText);
