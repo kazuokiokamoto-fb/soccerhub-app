@@ -49,6 +49,14 @@
 //   組織に重複して現れる形で発覚)。
 //   → truncateAtNoiseSection() を新設し、これらのマーカーが最初に出現する
 //     位置より後ろのテキストを日付・締切・会場抽出の対象から除外するようにした。
+//
+// [2026-07-16 修正③] Instagram URLクロールによる日付誤抽出バグの修正:
+//   selection_page_url が Instagram を指しているケースで、fetchHtml() は
+//   ログイン画面/JS読み込み待ちの空シェルしか取得できないにもかかわらず、
+//   ページ内の断片的なテキストが CORE_SELECTION_WORDS の判定を通過してしまい、
+//   無関係な日付(17個の固定ノイズ日付セットと同じパターン)が繰り返し・年を
+//   ずらしながら量産され続けていた(FC HORTENCIA関連で確認)。
+//   → BAD_DOMAINS に instagram.com を追加し、クロール自体を行わないようにした。
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -66,6 +74,10 @@ const SITE_BASE_URL = "https://www.sakamatch.com";
 
 const BAD_DOMAINS = [
   "youtube.com", "line.me", "google.com", "forms.gle",
+  // [2026-07-16 追加] Instagramはfetchで実際の投稿内容を取得できず
+  // (ログイン画面/JSシェルのみ返る)、無関係な断片から日付を誤抽出する
+  // 原因になっていたため、クロール対象から除外する。
+  "instagram.com",
 ];
 
 const CORE_SELECTION_WORDS = [
