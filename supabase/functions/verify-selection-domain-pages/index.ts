@@ -393,11 +393,21 @@ function extractAllDates(text: string): string[] {
     /(20\d{2})年\s*(\d{1,2})月\s*(\d{1,2})日/g,
     /(20\d{2})[\/.-](\d{1,2})[\/.-](\d{1,2})/g,
   ];
+  const todayMonthForFull = now.getMonth() + 1;
+  const todayDateForFull = now.getDate();
   for (const pattern of fullPatterns) {
     let m;
     while ((m = pattern.exec(raw)) !== null) {
-      const d = validDate(Number(m[1]), Number(m[2]), Number(m[3]));
-      if (d) { const s = toDateString(d)!; if (!dates.has(s)) dates.set(s, d); }
+      const mm = Number(m[2]);
+      const dd = Number(m[3]);
+      // [2026-07-15 追加] 「関連記事」の投稿日等が、フル日付(年月日そろった形式)で
+      // 表示されているケースにも同様の対策を適用する。ただし、こちらは年も明記されて
+      // いるため誤りにくいが、掲載日そのものを誤って開催日と解釈するケースを防ぐため、
+      // 月日がクロール実行日と一致する場合は除外する。
+      if (!(mm === todayMonthForFull && dd === todayDateForFull)) {
+        const d = validDate(Number(m[1]), mm, dd);
+        if (d) { const s = toDateString(d)!; if (!dates.has(s)) dates.set(s, d); }
+      }
       consumedRanges.push([m.index, m.index + m[0].length]);
     }
   }
@@ -408,6 +418,8 @@ function extractAllDates(text: string): string[] {
 
   const fiscal = raw.match(/(20\d{2})年度/);
   const fiscalYear = fiscal ? Number(fiscal[1]) : null;
+  const todayMonth = now.getMonth() + 1;
+  const todayDate = now.getDate();
   const jpShort = /(\d{1,2})月\s*(\d{1,2})日/g;
   let m;
   while ((m = jpShort.exec(raw)) !== null) {
@@ -415,6 +427,14 @@ function extractAllDates(text: string): string[] {
 
     const month = Number(m[1]);
     const day = Number(m[2]);
+
+    // [2026-07-15 追加] 「関連記事」欄などに表示される、他記事の投稿日
+    // (クロールを実行している当日/前日の日付になっていることが多い)を、
+    // 短縮形式の月日部分だけ誤って抽出してしまうケースが170件以上見つかった。
+    // 何百もの無関係な団体が偶然「まさにクロール実行日」にセレクションを
+    // 開催する確率は現実的にゼロに近いため、月日がクロール実行日と完全一致する
+    // 場合は抽出対象から除外する。
+    if (month === todayMonth && day === todayDate) continue;
 
     // [2026-07-12 修正] 「20XX年度」という表記は、日本の学校年度(4月始まり)の
     // 慣習に基づき「20XX年4月に入団する学年」を指すことが多く、実際のイベント開催日は
