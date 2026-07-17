@@ -4,6 +4,15 @@
 // Serper API (Google検索結果API) を使ってセレクション情報ページを検索し、
 // team_selection_research に selection_page_url として登録する。
 // 登録された行は、既存の verify-selection-domain-pages が次回実行時に拾ってクロールする。
+//
+// [修正] team_selection_research.team_master_id には UNIQUE制約があり、
+// 既に他の経路(既存クローラー等)で行が作られているチームに対して単純な
+// insert を行うと "duplicate key value violates unique constraint" で
+// 全件エラーになっていた(VIVAIO船橋SC等で確認)。
+// → insert を upsert(onConflict: team_master_id)に変更し、既存行があれば
+//   上書きするようにした。また checked_at を明示的に null に戻すことで、
+//   verify-selection-domain-pages 側の「24時間以内チェック済みはスキップ」
+//   条件を回避し、次回バッチで確実に拾われるようにした。
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -241,9 +250,12 @@ serve(async (req) => {
         );
 
         if (candidate) {
-          const { error: insertError } = await supabase
+          // [修正] insert → upsert に変更。team_master_id の UNIQUE制約により、
+          // 既存行がある場合は上書きする。checked_at は null に戻し、
+          // verify-selection-domain-pages が次回実行時に必ず拾えるようにする。
+          const { error: upsertError } = await supabase
             .from("team_selection_research")
-            .insert({
+            .upsert({
               team_master_id: team.id,
               official_homepage_url: team.official_url,
               selection_page_url: candidate.url,
@@ -251,11 +263,11 @@ serve(async (req) => {
               notes: `discovered via Serper. score:${candidate.score} reasons:${candidate.reasons.join(",")} title:${candidate.title}`,
               research_status: "found_by_discovery",
               checked_by: "discover-selection-pages",
-              created_at: nowIso(),
+              checked_at: null,
               updated_at: nowIso(),
-            });
+            }, { onConflict: "team_master_id" });
 
-          if (insertError) throw new Error(`insert error: ${JSON.stringify(insertError)}`);
+          if (upsertError) throw new Error(`upsert error: ${JSON.stringify(upsertError)}`);
 
           results.push({
             teamName: team.team_name,
@@ -266,20 +278,21 @@ serve(async (req) => {
           });
           totalFound++;
         } else {
-          const { error: insertError } = await supabase
+          // [修正] こちらも insert → upsert に変更。
+          const { error: upsertError } = await supabase
             .from("team_selection_research")
-            .insert({
+            .upsert({
               team_master_id: team.id,
               official_homepage_url: team.official_url,
               target_category: team.category,
               notes: `no candidate found. queries:${queriesUsed.join(" | ")}`,
               research_status: "no_candidate_found",
               checked_by: "discover-selection-pages",
-              created_at: nowIso(),
+              checked_at: nowIso(),
               updated_at: nowIso(),
-            });
+            }, { onConflict: "team_master_id" });
 
-          if (insertError) throw new Error(`insert error: ${JSON.stringify(insertError)}`);
+          if (upsertError) throw new Error(`upsert error: ${JSON.stringify(upsertError)}`);
 
           results.push({ teamName: team.team_name, status: "not_found", queriesUsed });
           totalNotFound++;
