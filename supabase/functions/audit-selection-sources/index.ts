@@ -6,7 +6,18 @@
 //     指しているか(検索上位結果と大きく食い違うページ・無関係なページでないか)
 // の両方をチェックして data_quality_flags に記録する。
 //
-// [追加] URL不一致(url_mismatch)が検出され、かつ検索上位に代替候補URLが
+// [修正] 年度検出・候補URL選定の両方で「セレクション関連語を含まない結果」を
+// 拾ってしまうバグを修正:
+//   - FC Kanaloa B, FC HORTENCIA B 等で、「事業報告（案）」という無関係な文書の
+//     年号(2022年, 2023年等)を「セレクションの年度」と誤認して year_mismatch を
+//     誤検出していた。
+//   - ウイングスSC 2nd で、掲示板/アグリゲーターサイト(srchrank.com)が
+//     代替候補URLとして採用され、team_selection_research に投入されてしまっていた。
+//   → 年度カウント・候補URL選定のどちらも、タイトル/スニペットにセレクション
+//     関連語を含む結果だけを対象にするようフィルタを追加。加えて掲示板/フォーラム系
+//     ドメインを候補から除外するリストを新設した。
+//
+// URL不一致(url_mismatch)が検出され、かつ検索上位に妥当な代替候補URLが
 // 見つかった場合、その候補を team_selection_research に自動投入する(選択肢B)。
 // 古い source_url・selection_events は削除せず残したまま、候補URLを
 // 「次にクロールすべき対象」として追加するだけに留める。実際にその候補が
@@ -28,10 +39,24 @@ const SERPER_ENDPOINT = "https://google.serper.dev/search";
 
 const BATCH_SIZE = 15;
 
-// [追加] 代替候補URLとして採用してはいけないドメイン(SNS・動画等)
+// セレクション関連語(タイトル・スニペットにこれらを含む結果だけを
+// 「年度検出」「候補URL選定」の対象にする)
+const SELECTION_WORDS = [
+  "セレクション", "選考会", "トライアウト", "体験練習会", "体験会",
+  "練習会", "選手募集", "新入団", "入団希望", "体験入団", "募集",
+];
+function includesSelectionWord(text: string): boolean {
+  return SELECTION_WORDS.some((w) => (text || "").includes(w));
+}
+
+// 代替候補URLとして採用してはいけないドメイン(SNS・動画・掲示板/アグリゲーター等)
 const EXCLUDED_CANDIDATE_DOMAINS = [
   "instagram.com", "twitter.com", "x.com", "facebook.com",
   "youtube.com", "tiktok.com", "line.me", "wikipedia.org",
+  // [修正] 掲示板・アグリゲーターサイトを追加。ウイングスSC 2ndで
+  // srchrank.com(掲示板)が誤って代替候補として採用されたため。
+  "srchrank.com", "5ch.net", "2ch.sc", "yahoo.co.jp/questions",
+  "detail.chiebukuro.yahoo.co.jp",
 ];
 
 function nowIso() { return new Date().toISOString(); }
@@ -139,11 +164,18 @@ function extractYearsFromText(text: string): number[] {
 }
 
 // 検索結果全体から、最も頻出する年を「実際の年度」として推定
+// [修正] セレクション関連語を含む結果だけを対象にする。
+// これが無いと「事業報告（案）」等の無関係な文書内の年号を拾ってしまう
+// (FC Kanaloa B, FC HORTENCIA Bで、2022年/2023年を誤って検出した事故)。
 function detectDominantYear(results: SerperResult[]): { year: number | null; evidence: string } {
   const counts = new Map<number, number>();
   const evidences: string[] = [];
 
-  for (const r of results.slice(0, 5)) {
+  const relevantResults = results.filter((r) =>
+    includesSelectionWord(`${r.title} ${r.snippet || ""}`)
+  );
+
+  for (const r of relevantResults.slice(0, 5)) {
     const text = `${r.title} ${r.snippet || ""}`;
     const years = extractYearsFromText(text);
     for (const y of years) {
@@ -152,7 +184,14 @@ function detectDominantYear(results: SerperResult[]): { year: number | null; evi
     if (years.length > 0) evidences.push(`"${r.title}" → ${years.join(",")}`);
   }
 
-  if (counts.size === 0) return { year: null, evidence: "検索結果から年度を抽出できず" };
+  if (counts.size === 0) {
+    return {
+      year: null,
+      evidence: relevantResults.length === 0
+        ? "セレクション関連語を含む検索結果が無く、年度を判定できず"
+        : "検索結果から年度を抽出できず",
+    };
+  }
 
   const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
   return { year: sorted[0][0], evidence: evidences.join(" / ") };
@@ -161,6 +200,8 @@ function detectDominantYear(results: SerperResult[]): { year: number | null; evi
 // DBに保存されているsource_urlが、実際に検索上位に出てくるページと
 // 一致する(=そのドメインが妥当)かどうかを判定する。
 // 一致しない場合、検索結果のトップ候補URLを代替案として記録する。
+// [修正] 代替候補は、除外ドメインでないことに加え、セレクション関連語を
+// 含む結果であることも条件にする(掲示板等の無関係なページの誤採用を防ぐ)。
 function checkUrlPlausibility(
   storedUrl: string,
   searchResults: SerperResult[],
@@ -178,22 +219,25 @@ function checkUrlPlausibility(
     return { plausible: true, topResultUrl: null, reason: "同ドメインが上位検索結果に存在" };
   }
 
-  // 除外ドメイン(SNS等)を飛ばして、最初の妥当な候補を探す
-  const bestCandidate = topResults.find((r) => !isExcludedCandidateDomain(r.link));
+  // [修正] 除外ドメインでなく、かつセレクション関連語を含む結果のみを候補にする
+  const bestCandidate = topResults.find(
+    (r) =>
+      !isExcludedCandidateDomain(r.link) &&
+      includesSelectionWord(`${r.title} ${r.snippet || ""}`)
+  );
 
   return {
     plausible: false,
     topResultUrl: bestCandidate ? bestCandidate.link : null,
     reason: bestCandidate
       ? `保存URL(${storedHost})が上位検索結果に見当たらず。トップ候補: ${bestCandidate.link}`
-      : "検索結果が乏しい、または候補が全て除外ドメイン",
+      : "検索結果が乏しい、候補が全て除外ドメイン、またはセレクション関連語を含む候補が無い",
   };
 }
 
-// [新規追加] 代替候補URLを team_selection_research に投入する。
+// 代替候補URLを team_selection_research に投入する。
 // 既存行があれば upsert で上書きし、checked_at を null に戻して
 // verify-selection-domain-pages が次回実行時に必ず拾えるようにする。
-// (discover-selection-pages と同じ考え方)
 async function submitCandidateForRecrawl(
   teamMasterId: string | null,
   candidateUrl: string,
@@ -211,7 +255,7 @@ async function submitCandidateForRecrawl(
       notes: `audit-selection-sourcesが検出したURL不一致の代替候補。${reason}`,
       research_status: "found_by_audit_candidate",
       checked_by: "audit-selection-sources",
-      checked_at: null, // 次回クロールで必ず拾われるようにする
+      checked_at: null,
       updated_at: nowIso(),
     }, { onConflict: "team_master_id" });
 
@@ -256,7 +300,7 @@ serve(async (req) => {
           if (yearMismatch) flagTypes.push("year_mismatch_confirmed");
           if (!urlCheck.plausible) flagTypes.push("url_mismatch");
 
-          // [追加] URL不一致で候補URLがあれば、再クロール対象として投入
+          // URL不一致で候補URLがあれば、再クロール対象として投入
           if (!urlCheck.plausible && urlCheck.topResultUrl) {
             candidateSubmission = await submitCandidateForRecrawl(
               item.team_master_id,
