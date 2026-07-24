@@ -13,6 +13,13 @@
 //   上書きするようにした。また checked_at を明示的に null に戻すことで、
 //   verify-selection-domain-pages 側の「24時間以内チェック済みはスキップ」
 //   条件を回避し、次回バッチで確実に拾われるようにした。
+//
+// [2026-07-19 修正] リーグ順位表・大会結果まとめページを誤って候補として
+//   採用してしまうバグの修正:
+//   jy-soccer.jp/contents/gunma-u15-league-standings/ のような「リーグ順位表」
+//   ページが、19の無関係なチーム名の候補として誤採用されていた。
+//   → URLパスに順位表・結果系のキーワードを含む場合は候補から除外するように
+//     isStandingsOrResultsPage() を新設した。
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -28,8 +35,6 @@ const SERPER_ENDPOINT = "https://google.serper.dev/search";
 const BATCH_SIZE = 20;
 const MAX_RUN_MS = 50_000;
 
-// 既知の主要メディアサイト(セレクション情報が掲載されやすい)。
-// これらのドメインからの結果は、たとえ検索順位が低くても優先的に採用する。
 const KNOWN_MEDIA_DOMAINS = [
   "juniorsoccer-news.com",
   "sgrum.com",
@@ -39,11 +44,17 @@ const KNOWN_MEDIA_DOMAINS = [
   "jy-soccer.jp",
 ];
 
-// 検索結果として採用してはいけないドメイン(まとめサイト・SNS・動画等)
 const EXCLUDED_DOMAINS = [
   "instagram.com", "twitter.com", "x.com", "facebook.com",
   "youtube.com", "tiktok.com", "line.me",
   "wikipedia.org",
+];
+
+// [2026-07-19 追加] URLパスに含まれていたら「順位表・大会結果」ページと
+// みなし、候補から除外するキーワード。
+const STANDINGS_OR_RESULTS_PATH_KEYWORDS = [
+  "standings", "-league-", "league-standings", "順位表", "結果速報",
+  "match_report", "matchreport", "試合結果",
 ];
 
 function nowIso() { return new Date().toISOString(); }
@@ -61,6 +72,11 @@ function hostOf(url: string): string {
   catch { return ""; }
 }
 
+function pathOf(url: string): string {
+  try { return new URL(url).pathname.toLowerCase(); }
+  catch { return ""; }
+}
+
 function isExcludedDomain(url: string): boolean {
   const host = hostOf(url);
   return EXCLUDED_DOMAINS.some((d) => host.includes(d));
@@ -71,11 +87,17 @@ function isKnownMediaDomain(url: string): boolean {
   return KNOWN_MEDIA_DOMAINS.some((d) => host.includes(d));
 }
 
-// タイトルに「まとめ」を含む索引・ロールアップ記事は、複数団体の日程が
-// 混在しており個別チームの情報源として不適切なため除外する。
-// (verify-selection-domain-pages 側の修正④と同じ考え方)
 function isMatomeTitle(title: string): boolean {
   return /まとめ/.test(title || "");
+}
+
+// [2026-07-19 追加] URLパスから、リーグ順位表・大会結果まとめページかどうかを判定
+function isStandingsOrResultsPage(url: string, title: string): boolean {
+  const p = pathOf(url);
+  const t = (title || "").toLowerCase();
+  return STANDINGS_OR_RESULTS_PATH_KEYWORDS.some(
+    (kw) => p.includes(kw.toLowerCase()) || t.includes(kw.toLowerCase())
+  );
 }
 
 interface SerperResult {
@@ -98,7 +120,6 @@ async function serperSearch(query: string): Promise<SerperResult[]> {
   return (data.organic || []) as SerperResult[];
 }
 
-// セレクション関連語を含むか(タイトル・スニペット)
 const SELECTION_WORDS = [
   "セレクション", "選考会", "トライアウト", "体験練習会", "体験会",
   "練習会", "選手募集", "新入団", "入団希望", "体験入団",
@@ -114,7 +135,6 @@ interface Candidate {
   reasons: string[];
 }
 
-// 検索結果から、チームの候補URLを評価してスコアリングする
 function evaluateCandidates(
   results: SerperResult[],
   teamName: string,
@@ -127,6 +147,8 @@ function evaluateCandidates(
     if (!r.link) continue;
     if (isExcludedDomain(r.link)) continue;
     if (isMatomeTitle(r.title)) continue;
+    // [2026-07-19 追加] 順位表・大会結果ページを除外
+    if (isStandingsOrResultsPage(r.link, r.title)) continue;
 
     const text = `${r.title} ${r.snippet || ""}`;
     let score = 0;
@@ -164,7 +186,6 @@ async function findSelectionPageForTeam(
 ): Promise<{ candidate: Candidate | null; queriesUsed: string[] }> {
   const queriesUsed: string[] = [];
 
-  // クエリ①: チーム名 + 都道府県 + セレクション
   const q1 = `"${teamName}" ${prefecture || ""} セレクション`.trim();
   queriesUsed.push(q1);
   let results = await serperSearch(q1);
@@ -175,7 +196,6 @@ async function findSelectionPageForTeam(
 
   await sleep(300);
 
-  // クエリ②: チーム名 + 体験練習会(セレクションという言葉を使わないチームもあるため)
   const q2 = `"${teamName}" ${prefecture || ""} 体験練習会`.trim();
   queriesUsed.push(q2);
   results = await serperSearch(q2);
@@ -186,9 +206,6 @@ async function findSelectionPageForTeam(
 }
 
 async function claimTeamsWithoutData(limit: number) {
-  // selection_events が1件も無いチームを取得。
-  // 前回 research_status = 'no_candidate_found' で終わっているものは
-  // 再検索の優先度を下げる(まず未着手のものから)。
   const { data: allTeams, error } = await supabase
     .from("team_master")
     .select("id, team_name, prefecture, category, official_url")
@@ -250,9 +267,6 @@ serve(async (req) => {
         );
 
         if (candidate) {
-          // [修正] insert → upsert に変更。team_master_id の UNIQUE制約により、
-          // 既存行がある場合は上書きする。checked_at は null に戻し、
-          // verify-selection-domain-pages が次回実行時に必ず拾えるようにする。
           const { error: upsertError } = await supabase
             .from("team_selection_research")
             .upsert({
@@ -278,7 +292,6 @@ serve(async (req) => {
           });
           totalFound++;
         } else {
-          // [修正] こちらも insert → upsert に変更。
           const { error: upsertError } = await supabase
             .from("team_selection_research")
             .upsert({

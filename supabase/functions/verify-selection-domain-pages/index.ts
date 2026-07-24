@@ -57,6 +57,30 @@
 //   無関係な日付(17個の固定ノイズ日付セットと同じパターン)が繰り返し・年を
 //   ずらしながら量産され続けていた(FC HORTENCIA関連で確認)。
 //   → BAD_DOMAINS に instagram.com を追加し、クロール自体を行わないようにした。
+//
+// [2026-07-19 修正④] 学校サイト全体の行事予定を誤ってセレクション日程として
+//   拾ってしまうバグの修正:
+//   .ac.jp / .ed.jp ドメイン(大学・高校・中学の公式サイト)は、部活動固有の
+//   ページではなく学校全体のトップページや行事予定表であることが多い。
+//   日本大学第３中学校(nihon-u.ac.jp)で37件、明治大学明治中学校(meiji.ac.jp)で
+//   8件もの日程が抽出されており、これはサッカー部の日程ではなく学校行事全般の
+//   誤抽出が疑われる。
+//   → 学校系ドメインかつ抽出日程が8件を超える場合は、実際の日程データは保持
+//     しつつ extraction_status を "school_calendar_suspected" にし、
+//     display_status を強制的に「日付未取得」にすることで、確証が持てるまで
+//     ユーザーには表示しないようにした。
+//
+// [2026-07-19 修正⑤] まとめサイト解決後のURL固定化:
+//   resolveOfficialUrl() でまとめサイトから公式サイトへのリンク解決に成功しても、
+//   その結果を team_selection_research に書き戻していなかったため、毎回同じ
+//   まとめサイトの解決処理をやり直す非効率な状態になっていた。
+//   → 解決後のURLが元の selection_page_url と異なるドメインだった場合、
+//     team_selection_research.selection_page_url をその解決済みURLで更新し、
+//     次回以降は直接そこをクロールするようにした。
+//
+// [2026-07-19 修正⑥] 「接続確認」ページの検知強化:
+//   年齢確認・Cookie同意・ブラウザ非対応通知等の中間ページを、本来のコンテンツと
+//   誤認するケースがあったため、SUSPICIOUS_PAGE_PATTERNS にパターンを追加した。
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -110,14 +134,21 @@ const J_CLUBS = [
   "栃木SC", "ザスパ群馬", "ヴァンフォーレ甲府",
 ];
 
-// [2026-07-16 追加] フッターの「関連記事」等、他記事の情報が混在するセクションの
-// 開始マーカー。この文言が最初に出現した位置より後ろは、日付・締切・会場の
-// 抽出対象から除外する。
 const NOISE_SECTION_MARKERS = [
   "関連記事", "の記事一覧", "の最近の投稿", "本日の人気の記事",
   "今月の人気記事", "月を選択", "コメント欄", "保護者情報", "CANCEL REPLY",
   "寄稿者プロフィール", "寄稿者の最近の投稿",
 ];
+
+// [2026-07-19 追加] 学校の公式ドメインパターン。これらのドメインで抽出日程が
+// 多すぎる場合、学校全体の行事予定を誤って拾っている疑いがある。
+const SCHOOL_GENERAL_DOMAINS_PATTERN = /\.(ac|ed)\.jp$/;
+const SCHOOL_CALENDAR_SUSPECT_DATE_THRESHOLD = 8;
+
+function isSuspiciousSchoolPage(url: string, eventDatesCount: number): boolean {
+  return SCHOOL_GENERAL_DOMAINS_PATTERN.test(hostOf(url)) &&
+    eventDatesCount > SCHOOL_CALENDAR_SUSPECT_DATE_THRESHOLD;
+}
 
 function nowIso() { return new Date().toISOString(); }
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
@@ -141,8 +172,6 @@ function compactText(text: string, max = 12000) {
   return String(text || "").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
-// [2026-07-16 追加] フッターの「関連記事」等、他記事の情報が混在するセクションが
-// 始まる前でテキストを打ち切る。日付・締切・会場の誤抽出を防ぐための前処理。
 function truncateAtNoiseSection(text: string): string {
   const raw = String(text || "");
   let cutIndex = raw.length;
@@ -160,27 +189,31 @@ function isBadDomain(url: string) {
   } catch { return true; }
 }
 
-// [2026-07-14 追加] team_master の official_url が壊れている/期限切れ等の理由で、
-// 本来のチームサイトではない「WordPressの初期設定ページ」「404ページ」「ドメイン
-// パーキングページ」等に着地してしまうケースがあった(例: サブドメイン抜けのURLに
-// アクセスした結果、WordPressマルチサイトの「新規サイト作成」ページが表示され、
-// そこに書かれている無関係な情報がそのままセレクション情報として登録されてしまう)。
-// このような「明らかにチーム公式ページではない」内容を検知したら、そのページからは
-// 何も抽出せず早期に諦める。
+// [2026-07-14 追加、2026-07-19 拡張] team_master の official_url が壊れている/
+// 期限切れ等の理由で、本来のチームサイトではないページに着地してしまうケースを検知。
+// [2026-07-19 追加] 年齢確認・Cookie同意・ブラウザ非対応通知等の「接続確認」系の
+// 中間ページも同様に検知対象に追加。
 const SUSPICIOUS_PAGE_PATTERNS: RegExp[] = [
-  /wp-signup\.php/i,                         // WordPressマルチサイトの新規サイト作成ページ
-  /そのようなサイトはありません/,                    // WordPressマルチサイト系のエラー文言
-  /ページが見つかりません|お探しのページは見つかりません/,  // 404ページ(日本語)
-  /404\s*not\s*found/i,                       // 404ページ(英語)
-  /this\s+domain\s+(is\s+for\s+sale|may\s+be\s+for\s+sale)/i, // ドメインパーキング
+  /wp-signup\.php/i,
+  /そのようなサイトはありません/,
+  /ページが見つかりません|お探しのページは見つかりません/,
+  /404\s*not\s*found/i,
+  /this\s+domain\s+(is\s+for\s+sale|may\s+be\s+for\s+sale)/i,
   /domain\s+parking/i,
-  /このドメインは(現在)?(登録され)?ていません/,          // 期限切れドメインの一般的な表示
-  /coming\s+soon.{0,20}wordpress/i,           // WordPress初期状態の「Coming Soon」ページ
+  /このドメインは(現在)?(登録され)?ていません/,
+  /coming\s+soon.{0,20}wordpress/i,
+  // [2026-07-19 追加] 接続確認・年齢確認・Cookie同意系の中間ページ
+  /年齢確認|age\s*verification/i,
+  /このサイトに接続しますか|このサイトへのアクセスを続行しますか/,
+  /cookieを有効に|enable\s*cookies/i,
+  /このサイトはお使いのブラウザではサポートされていません/i,
+  /javascriptを有効にしてください|please\s+enable\s+javascript/i,
+  /このコンテンツを表示するには(ログイン|会員登録)が必要です/,
 ];
 
 function isSuspiciousPage(html: string, url: string): boolean {
   if (SUSPICIOUS_PAGE_PATTERNS.some((re) => re.test(url))) return true;
-  const text = stripTags(html).slice(0, 3000); // 冒頭だけ見れば十分
+  const text = stripTags(html).slice(0, 3000);
   return SUSPICIOUS_PAGE_PATTERNS.some((re) => re.test(text));
 }
 
@@ -294,7 +327,6 @@ async function fetchHtml(url: string): Promise<{ html: string; finalUrl: string 
   }
 }
 
-// PDF等バイナリファイルの場合、中身は取得できないため到達可能性だけ確認する
 async function probeUrlOk(url: string): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -309,12 +341,10 @@ async function probeUrlOk(url: string): Promise<boolean> {
     });
     if (res.ok) return true;
   } catch {
-    // 一部サーバーはHEADを許可しないので、下でGETにフォールバックする
   } finally {
     clearTimeout(timer);
   }
 
-  // HEADが使えないサーバー向けのフォールバック
   const controller2 = new AbortController();
   const timer2 = setTimeout(() => controller2.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -337,13 +367,11 @@ function isPdfUrl(url: string): boolean {
   return pathOf(url).endsWith(".pdf");
 }
 
-// URLに日付らしきパターン（/2026/0615 や 2026-06-15 など）が含まれるか判定
 function hasDatePattern(url: string): boolean {
   const p = pathOf(url);
   return /(20\d{2})[\/\-]?(\d{2})[\/\-]?(\d{2})/.test(p);
 }
 
-// URLから比較可能な日付キー（YYYY-MM-DD）を抽出
 function extractDateKeyFromUrl(url: string): string | null {
   const p = pathOf(url);
   let m = p.match(/(20\d{2})\/(\d{2})(\d{2})/);
@@ -355,16 +383,6 @@ function extractDateKeyFromUrl(url: string): string | null {
   return null;
 }
 
-// 概要ページ・一覧ページのリンクの中から、より具体的な個別記事/PDFを探す。
-// [2026-07-11 改修] 従来はURLに日付パターン（/2026/0615等）を含むリンクしか
-// 候補にしていなかったため、/pickup/44265/ や /page-11967/ のようなID形式の
-// URLを使うサイトでは何も見つからず、概要ページ自体がリンク先として
-// 採用されてしまっていた。
-// → リンクの「ラベル文言」にセレクション関連語を含むかどうかも候補選定の
-//   基準に加え、URL形式に依存しないようにした。
-// また、PDFへの直リンク（identymirai.jp等）にも対応。PDFは中身を解析できない
-// ため、日程等の抽出用テキストは呼び出し元から渡された親ページのテキスト
-// (parentText) を使い続け、リンク先URLだけをPDFに差し替える。
 async function findDeeperSelectionPage(
   html: string,
   baseUrl: string,
@@ -381,7 +399,6 @@ async function findDeeperSelectionPage(
     labelMatches: includesAny(l.label, CORE_SELECTION_WORDS),
   }));
 
-  // ラベルにセレクション関連語を含むものを最優先。次にURLの日付が新しい順。
   const candidates = withMeta
     .filter(l => l.labelMatches || l.dateKey)
     .sort((a, b) => {
@@ -397,8 +414,6 @@ async function findDeeperSelectionPage(
       await sleep(200);
 
       if (isPdfUrl(candidate.url)) {
-        // PDFはHTML解析できないため、到達可能性とラベルの一致だけで採否を決める。
-        // 抽出用テキストは親ページのものをそのまま使う。
         if (candidate.labelMatches && (await probeUrlOk(candidate.url))) {
           return {
             url: candidate.url,
@@ -430,30 +445,17 @@ function validDate(y: number, m: number, d: number) {
   return (dt.getFullYear()===y && dt.getMonth()===m-1 && dt.getDate()===d) ? dt : null;
 }
 
-// [2026-07-16 追加] 年度をドキュメント全体から一度だけ抽出する。
-// extractAllDates を行単位で呼び出しても年度コンテキストが失われないよう、
-// 呼び出し側でこの関数の結果を1回だけ計算し、各呼び出しに明示的に渡す。
 function extractFiscalYear(text: string): number | null {
   const fiscal = String(text || "").match(/(20\d{2})年度/);
   return fiscal ? Number(fiscal[1]) : null;
 }
 
-// [2026-07-16 修正] 第2引数 fiscalYearOverride を追加。
-//   - undefined の場合: 従来通りこのテキスト内から「20XX年度」を探す(後方互換)
-//   - 値(number | null) が渡された場合: その値をそのまま使う(テキスト内は探さない)
-// これにより、行単位で呼び出す際にドキュメント全体の年度を引き継げるようにした。
 function extractAllDates(text: string, fiscalYearOverride?: number | null): string[] {
   const now = new Date();
   const currentYear = now.getFullYear();
   const dates = new Map<string, Date>();
   const raw = String(text || "");
 
-  // [2026-07-14 追加] 「20XX年M月D日」のようなフル日付として処理済みの文字範囲を記録し、
-  // 短縮形式(M月D日)の抽出時にその範囲と重なる箇所は無視する。
-  // これが無いと、「2025年11月14日」のような無関係な過去記事の日付(例:
-  // ページ下部の「関連記事」欄など)の中の「11月14日」部分だけが短縮形式として
-  // 二重に抽出され、元の年(2025年)を無視してクロール実行時の年(例:2026年)を
-  // 誤って当てはめてしまい、存在しない日程をでっち上げる原因になっていた。
   const consumedRanges: Array<[number, number]> = [];
 
   const fullPatterns = [
@@ -467,10 +469,6 @@ function extractAllDates(text: string, fiscalYearOverride?: number | null): stri
     while ((m = pattern.exec(raw)) !== null) {
       const mm = Number(m[2]);
       const dd = Number(m[3]);
-      // [2026-07-15 追加] 「関連記事」の投稿日等が、フル日付(年月日そろった形式)で
-      // 表示されているケースにも同様の対策を適用する。ただし、こちらは年も明記されて
-      // いるため誤りにくいが、掲載日そのものを誤って開催日と解釈するケースを防ぐため、
-      // 月日がクロール実行日と一致する場合は除外する。
       if (!(mm === todayMonthForFull && dd === todayDateForFull)) {
         const d = validDate(Number(m[1]), mm, dd);
         if (d) { const s = toDateString(d)!; if (!dates.has(s)) dates.set(s, d); }
@@ -483,8 +481,6 @@ function extractAllDates(text: string, fiscalYearOverride?: number | null): stri
     return consumedRanges.some(([s, e]) => index < e && index + length > s);
   }
 
-  // [2026-07-16 修正] fiscalYearOverride が明示的に渡されていればそれを使う。
-  // 渡されていなければ(undefined)従来通りこのテキスト内から探す。
   const fiscalYear = fiscalYearOverride !== undefined
     ? fiscalYearOverride
     : (() => {
@@ -502,21 +498,8 @@ function extractAllDates(text: string, fiscalYearOverride?: number | null): stri
     const month = Number(m[1]);
     const day = Number(m[2]);
 
-    // [2026-07-15 追加] 「関連記事」欄などに表示される、他記事の投稿日
-    // (クロールを実行している当日/前日の日付になっていることが多い)を、
-    // 短縮形式の月日部分だけ誤って抽出してしまうケースが170件以上見つかった。
-    // 何百もの無関係な団体が偶然「まさにクロール実行日」にセレクションを
-    // 開催する確率は現実的にゼロに近いため、月日がクロール実行日と完全一致する
-    // 場合は抽出対象から除外する。
     if (month === todayMonth && day === todayDate) continue;
 
-    // [2026-07-12 修正] 「20XX年度」という表記は、日本の学校年度(4月始まり)の
-    // 慣習に基づき「20XX年4月に入団する学年」を指すことが多く、実際のイベント開催日は
-    // 4月〜12月ならその前年、1月〜3月ならその年度と同じ年になる。
-    // 従来はこの区別をせず「20XX年度」の数字をそのままイベントの開催年として使っていたため、
-    // 例えば「2027年度セレクション」の記事内にある「5月31日」を誤って2027年と解釈し、
-    // 実際には2026年開催のイベントを軒並み1年先の日付にしてしまっていた(juniorsoccer-news.com
-    // 由来の記事だけで2,031件が影響を受けていたことが判明)。
     const year = fiscalYear
       ? (month >= 4 ? fiscalYear - 1 : fiscalYear)
       : currentYear;
@@ -532,11 +515,6 @@ function extractAllDates(text: string, fiscalYearOverride?: number | null): stri
     .sort();
 }
 
-// [修正] 改行を保持したテキストを受け取る前提の関数。
-// 呼び出し側で compactText 済みのテキストを渡さないこと（行分割が機能しなくなるため）。
-// [2026-07-16 修正] ドキュメント全体から年度を一度だけ抽出し(documentFiscalYear)、
-// 各行の extractAllDates 呼び出しに明示的に渡すよう変更。これにより、年度表記と
-// 実際の日付が別の行にあるページでも正しく年度を解決できるようになった。
 function extractEventDates(text: string): string[] {
   const documentFiscalYear = extractFiscalYear(text);
   const lines = String(text || "")
@@ -556,8 +534,6 @@ function extractEventDates(text: string): string[] {
   return [...new Set(result)].sort();
 }
 
-// [修正] 同上。改行を保持したテキストを渡すこと。
-// [2026-07-16 修正] こちらもドキュメント全体の年度を明示的に渡すよう統一。
 function extractDeadline(text: string): string | null {
   const documentFiscalYear = extractFiscalYear(text);
   const lines = String(text || "")
@@ -594,7 +570,6 @@ function extractGender(text: string): string {
   return "any";
 }
 
-// [修正] 同上。改行を保持したテキストを渡すこと。
 function extractVenue(text: string) {
   const lines = String(text || "").split(/\n|。/).map(v => v.trim()).filter(Boolean);
   const line = lines.find(l =>
@@ -636,32 +611,17 @@ function displayStatus(eventDates: string[], deadline: string | null, text: stri
 function inferSourceRank(leagueName: string, teamName: string): string {
   const t = `${leagueName} ${teamName}`;
   if (J_CLUBS.some(j => t.includes(j))) return "j_academy";
-
-  // 関東リーグ（全国的にも都道府県トップより上位）
   if (t.includes("関東")) return "pref_top";
-
-  // 都道府県トップリーグ
   if (t.includes("プリンス") || t.includes("プレミア")) return "pref_top";
   if (t.includes("T1") || t.includes("S1") || t.includes("C1")) return "pref_top";
   if (t.includes("ウルトラ") || /TOP/i.test(t) || /1部/.test(t)) return "pref_top";
-
-  // 「地区トップ」は名前に反してpref_top直下（S2よりさらに下）の第3階層
-  // 例：埼玉県U-12「S1 > S2 > 地区トップ > 地区リーグ」の4段階構造（協会公式要項で確認済み）
   if (t.includes("地区トップ")) return "pref_3";
-
-  // 2部相当
   if (t.includes("T2") || t.includes("G1") || t.includes("S2") || t.includes("C2") || /2部/.test(t)) return "pref_2";
-
-  // 3部相当
   if (t.includes("T3") || t.includes("G2") || /3部/.test(t)) return "pref_3";
-
-  // 4部相当
   if (t.includes("T4") || /4部/.test(t)) return "pref_4";
-
   return "district";
 }
 
-// 「2027年度入団」「2027年度新入部員」のような入団年度ラベルを本文から抽出
 function extractAdmissionFiscalYear(text: string): number | null {
   const t = String(text || "");
   const patterns = [
@@ -677,20 +637,16 @@ function extractAdmissionFiscalYear(text: string): number | null {
   return null;
 }
 
-// 「随時募集」「中途加入」など、特定の入団年度に縛られない募集かどうかを判定
 function extractIsRollingRecruitment(text: string): boolean {
   const t = String(text || "");
   return /随時募集|随時受付|通年募集|中途加入|中途入団|随時入団/.test(t);
 }
 
-// 公式サイト由来の行かどうかを判定
-// selection_page_url のドメインが official_homepage_url のドメインと一致すれば公式サイト由来
 function isOfficialSourceRow(row: any): boolean {
   if (!row.official_homepage_url || !row.selection_page_url) return false;
   return hostOf(row.selection_page_url) === hostOf(row.official_homepage_url);
 }
 
-// まとめサイト等のページHTML内から、公式サイトへのリンクを探す
 function findOfficialLink(html: string, baseUrl: string, officialHomepageUrl: string): string | null {
   if (!officialHomepageUrl) return null;
   const officialHost = hostOf(officialHomepageUrl);
@@ -700,33 +656,25 @@ function findOfficialLink(html: string, baseUrl: string, officialHomepageUrl: st
   return match ? match.url : null;
 }
 
-// 見つかったページが公式サイト以外（まとめサイト等）だった場合、
-// 公式サイトへのリンクを解決する。見つからなければ公式トップページにフォールバックする。
-// ※まとめサイトのURLをそのままリンク先にすることは絶対にしない。
 async function resolveOfficialUrl(
   foundPage: { url: string; html: string },
   officialHomepageUrl: string | null,
 ): Promise<string> {
   if (!officialHomepageUrl) return foundPage.url;
 
-  // 既に公式サイト内で見つかっている場合はそのまま
   if (hostOf(foundPage.url) === hostOf(officialHomepageUrl)) {
     return foundPage.url;
   }
 
-  // まとめサイト等の第三者ページの場合、記事内の公式サイトへのリンクを探す
   const candidate = findOfficialLink(foundPage.html, foundPage.url, officialHomepageUrl);
   if (candidate) {
     try {
-      await fetchHtml(candidate); // アクセス可能か確認のみ
+      await fetchHtml(candidate);
       return candidate;
     } catch {
-      // アクセスできなければ下のフォールバックへ
     }
   }
 
-  // 候補リンクが見つからない/アクセス不可の場合、まとめサイトには絶対にリンクせず
-  // 公式トップページ自体をリンク先にする
   return officialHomepageUrl;
 }
 
@@ -748,7 +696,7 @@ async function crawlAndFindSelectionPageRaw(
     if (isSuspiciousPage(html, finalUrl)) {
       console.warn(
         `[suspicious page] ${teamName}: official_urlが本来のチームサイトではない` +
-        `可能性があるページ(WordPress初期画面/404/ドメイン期限切れ等)を返しています。` +
+        `可能性があるページ(WordPress初期画面/404/ドメイン期限切れ/接続確認等)を返しています。` +
         `url=${finalUrl} 元URL=${selectionPageUrl} 要目視確認。`
       );
       return null;
@@ -759,8 +707,6 @@ async function crawlAndFindSelectionPageRaw(
     const title = getTitle(html, teamName);
 
     if (includesAny(text, CORE_SELECTION_WORDS)) {
-      // 入口ページが概要・一覧ページの場合、より具体的な個別記事/PDFを優先的に探す。
-      // (URLに日付が無いサイトやPDF直リンクにも対応するため、常に試みる)
       const deeper = await findDeeperSelectionPage(html, finalUrl, text, title);
       if (deeper) return deeper;
       return { url: finalUrl, html, text, title };
@@ -821,18 +767,22 @@ async function crawlAndFindSelectionPageRaw(
   }
 }
 
-// ラッパー：見つかったページがまとめサイト等の第三者ページだった場合、
-// リンク先を公式サイト側に解決してから返す
+// [2026-07-19 修正] まとめサイト解決に成功し、解決後URLのドメインが元の
+// selection_page_url のドメインと異なる場合、その解決結果を
+// team_selection_research に書き戻して固定化する。research.id が必要なため
+// 呼び出し元(upsertSelectionEvents内)で行う設計にせず、ここで直接引数として
+// research 行の id を受け取れるようラッパーの型を拡張する。
 async function crawlAndFindSelectionPage(
   selectionPageUrl: string,
   teamName: string,
   officialHomepageUrl?: string | null,
-): Promise<{ url: string; html: string; text: string; title: string } | null> {
+): Promise<{ url: string; html: string; text: string; title: string; resolvedFromMatome: boolean } | null> {
   const page = await crawlAndFindSelectionPageRaw(selectionPageUrl, teamName);
   if (!page) return null;
 
   const resolvedUrl = await resolveOfficialUrl(page, officialHomepageUrl || null);
-  return { ...page, url: resolvedUrl };
+  const resolvedFromMatome = resolvedUrl !== page.url && hostOf(resolvedUrl) !== hostOf(selectionPageUrl);
+  return { ...page, url: resolvedUrl, resolvedFromMatome };
 }
 
 async function claimResearchRows(limit: number) {
@@ -844,13 +794,12 @@ async function claimResearchRows(limit: number) {
     .neq("selection_page_url", "")
     .or(`checked_at.is.null,checked_at.lt.${cutoffIso}`)
     .order("checked_at", { ascending: true, nullsFirst: true })
-    .limit(limit * 5); // グループ化のため多めに取得
+    .limit(limit * 5);
 
   if (error) throw error;
 
   const rows = data || [];
 
-  // チーム（team_master_id）ごとにグループ化
   const groups = new Map<string, any[]>();
   for (const row of rows) {
     const key = row.team_master_id || `no_team_${row.id}`;
@@ -858,7 +807,6 @@ async function claimResearchRows(limit: number) {
     groups.get(key)!.push(row);
   }
 
-  // 各グループ内で「公式サイト由来」の行を先頭に並べる
   const groupList = Array.from(groups.values()).map((groupRows) => {
     groupRows.sort((a, b) => {
       const aOfficial = isOfficialSourceRow(a) ? 0 : 1;
@@ -868,7 +816,6 @@ async function claimResearchRows(limit: number) {
     return groupRows;
   });
 
-  // グループ単位の優先順位（U15優先、次にリーグランク）
   groupList.sort((a, b) => {
     const aTeam = a[0].team_master;
     const bTeam = b[0].team_master;
@@ -881,7 +828,6 @@ async function claimResearchRows(limit: number) {
     return aRank - bRank;
   });
 
-  // フラット化してlimit件数まで切り出す（グループの並び順は保持）
   const flat: any[] = [];
   for (const group of groupList) {
     flat.push(...group);
@@ -891,11 +837,6 @@ async function claimResearchRows(limit: number) {
   return flat.slice(0, limit);
 }
 
-// [2026-07-11 追加] 新規セレクション情報が条件に合うユーザーへ通知を送る。
-// selection_alert_subscriptions を全件参照し、prefectures/categories がJSで
-// 未設定(null/空配列)なら「すべて対象」として扱う。
-// 通知は (1) notifications テーブルへの書き込み(アプリ内通知一覧用)と
-// (2) 既存の /api/push/send エンドポイント呼び出し(実際のプッシュ通知)の2本立て。
 async function notifyMatchingUsers(params: {
   prefecture: string | null;
   categories: string[];
@@ -987,7 +928,7 @@ async function notifyMatchingUsers(params: {
 
 async function upsertSelectionEvents(
   research: any,
-  page: { url: string; text: string; title: string },
+  page: { url: string; text: string; title: string; resolvedFromMatome?: boolean },
 ) {
   const teamMaster = research.team_master || {};
   const teamName = teamMaster.team_name || "不明";
@@ -995,14 +936,9 @@ async function upsertSelectionEvents(
   const prefecture = teamMaster.prefecture || null;
   const category = teamMaster.category || research.target_category || "";
 
-  // [修正] 改行を保持した生テキスト(rawText)と、要約・保存用に空白を圧縮したテキスト(fullText)を分ける。
-  // rawText は行分割（\n区切り）に依存する抽出関数専用。
   const rawText = `${page.title}\n${teamName}\n${page.text}`.slice(0, 40000);
   const fullText = compactText(rawText, 40000);
 
-  // [2026-07-16 追加] フッターの「関連記事」等、他記事の情報が混在するセクションを
-  // 打ち切ったテキストを日付・締切・会場の抽出専用に用意する。
-  // fullText(表示用の要約・カテゴリ抽出等)には影響させない。
   const rawTextForExtraction = truncateAtNoiseSection(rawText);
 
   const eventDates = extractEventDates(rawTextForExtraction);
@@ -1011,7 +947,7 @@ async function upsertSelectionEvents(
 
   const categories = extractCategories(fullText);
   const gender = extractGender(fullText);
-  const statusText = displayStatus(eventDates, deadline, fullText);
+  let statusText = displayStatus(eventDates, deadline, fullText);
   const fee = extractFee(fullText);
   const timeRange = extractTimeRange(fullText);
   const sourceRank = inferSourceRank(leagueName, teamName);
@@ -1019,6 +955,13 @@ async function upsertSelectionEvents(
   const isRollingRecruitment = extractIsRollingRecruitment(fullText);
   const summary = cleanForDb(compactText(page.text, 200), 200);
   const description = cleanForDb(compactText(page.text, 800), 800);
+
+  // [2026-07-19 追加] 学校サイト全体の行事予定を誤って拾っている疑いがある場合、
+  // 表示上は「日付未取得」に強制し、抽出ステータスに要確認マークを付ける。
+  const schoolCalendarSuspected = isSuspiciousSchoolPage(page.url, eventDates.length);
+  if (schoolCalendarSuspected) {
+    statusText = "日付未取得";
+  }
 
   const baseEventRow = {
     team_master_id: research.team_master_id || null,
@@ -1049,7 +992,9 @@ async function upsertSelectionEvents(
     last_seen_at: nowIso(),
     updated_at: nowIso(),
     source_type: "team_selection_research",
-    extraction_status: eventDates.length > 0 ? "success" : "date_missing",
+    extraction_status: schoolCalendarSuspected
+      ? "school_calendar_suspected"
+      : (eventDates.length > 0 ? "success" : "date_missing"),
     source_rank: sourceRank,
     admission_fiscal_year: admissionFiscalYear,
     is_rolling_recruitment: isRollingRecruitment,
@@ -1073,7 +1018,7 @@ async function upsertSelectionEvents(
       event_date: eventDate,
       duplicate_key: duplicateKey,
       content_hash: duplicateKey,
-      memo: cleanForDb(`team_master_id:${research.team_master_id}\nleague:${leagueName}\ncategory:${category}\nevent_date:${eventDate}\nall_dates:${eventDates.join(",")}\ncrawled_url:${page.url}`, 2000),
+      memo: cleanForDb(`team_master_id:${research.team_master_id}\nleague:${leagueName}\ncategory:${category}\nevent_date:${eventDate}\nall_dates:${eventDates.join(",")}\ncrawled_url:${page.url}${schoolCalendarSuspected ? "\nWARNING:school_calendar_suspected" : ""}`, 2000),
     };
 
     const { data: existing } = await supabase
@@ -1106,9 +1051,8 @@ async function upsertSelectionEvents(
     }
   }
 
-  // [2026-07-11 追加] 新規登録があった場合、条件に合うユーザーへ通知を送る
   const insertedResults = results.filter(r => r.status === "inserted");
-  if (insertedResults.length > 0) {
+  if (insertedResults.length > 0 && !schoolCalendarSuspected) {
     await notifyMatchingUsers({
       prefecture,
       categories: baseEventRow.target_categories as string[],
@@ -1119,9 +1063,19 @@ async function upsertSelectionEvents(
     });
   }
 
+  // [2026-07-19 追加] まとめサイトから公式サイトへの解決に成功した場合、
+  // その解決済みURLを team_selection_research に書き戻して固定化する。
+  // これにより次回以降は直接公式サイトをクロールでき、まとめサイトへの
+  // 依存を減らせる。
+  const updatePayload: Record<string, unknown> = { checked_at: nowIso() };
+  if (page.resolvedFromMatome) {
+    updatePayload.selection_page_url = page.url;
+    updatePayload.notes = `まとめサイトから公式サイトへ自動解決・固定化(${nowIso()})`;
+  }
+
   await supabase
     .from("team_selection_research")
-    .update({ checked_at: nowIso() })
+    .update(updatePayload)
     .eq("id", research.id);
 
   return results;
@@ -1140,7 +1094,7 @@ serve(async (req) => {
 
     const results = [];
     let totalInserted = 0, totalUpdated = 0, totalNotFound = 0, totalErrors = 0, totalSkipped = 0;
-    const succeededTeams = new Set<string>(); // 公式サイトで成功済みのチームID
+    const succeededTeams = new Set<string>();
 
     for (const research of rows) {
       if (Date.now() - startedAt > MAX_RUN_MS) {
@@ -1151,7 +1105,6 @@ serve(async (req) => {
       const teamName = research.team_master?.team_name || "不明";
       const teamKey = research.team_master_id;
 
-      // 同じチームで既に公式サイトから成功している場合、まとめサイト等の行はスキップ
       if (teamKey && succeededTeams.has(teamKey) && !isOfficialSourceRow(research)) {
         await supabase
           .from("team_selection_research")
@@ -1185,7 +1138,6 @@ serve(async (req) => {
         totalInserted += inserted;
         totalUpdated += updated;
 
-        // 公式サイト由来で成功した場合、以降同じチームのまとめサイト行をスキップする印をつける
         if (teamKey && isOfficialSourceRow(research)) {
           succeededTeams.add(teamKey);
         }

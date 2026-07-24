@@ -17,6 +17,10 @@
 //     関連語を含む結果だけを対象にするようフィルタを追加。加えて掲示板/フォーラム系
 //     ドメインを候補から除外するリストを新設した。
 //
+// [2026-07-19 修正] リーグ順位表・大会結果ページを候補として誤採用するバグの
+//   修正: discover-selection-pages と同様に、URLパス・タイトルに順位表/結果系
+//   キーワードを含む場合は代替候補から除外するようにした。
+//
 // URL不一致(url_mismatch)が検出され、かつ検索上位に妥当な代替候補URLが
 // 見つかった場合、その候補を team_selection_research に自動投入する(選択肢B)。
 // 古い source_url・selection_events は削除せず残したまま、候補URLを
@@ -39,8 +43,6 @@ const SERPER_ENDPOINT = "https://google.serper.dev/search";
 
 const BATCH_SIZE = 15;
 
-// セレクション関連語(タイトル・スニペットにこれらを含む結果だけを
-// 「年度検出」「候補URL選定」の対象にする)
 const SELECTION_WORDS = [
   "セレクション", "選考会", "トライアウト", "体験練習会", "体験会",
   "練習会", "選手募集", "新入団", "入団希望", "体験入団", "募集",
@@ -49,14 +51,18 @@ function includesSelectionWord(text: string): boolean {
   return SELECTION_WORDS.some((w) => (text || "").includes(w));
 }
 
-// 代替候補URLとして採用してはいけないドメイン(SNS・動画・掲示板/アグリゲーター等)
 const EXCLUDED_CANDIDATE_DOMAINS = [
   "instagram.com", "twitter.com", "x.com", "facebook.com",
   "youtube.com", "tiktok.com", "line.me", "wikipedia.org",
-  // [修正] 掲示板・アグリゲーターサイトを追加。ウイングスSC 2ndで
-  // srchrank.com(掲示板)が誤って代替候補として採用されたため。
   "srchrank.com", "5ch.net", "2ch.sc", "yahoo.co.jp/questions",
   "detail.chiebukuro.yahoo.co.jp",
+];
+
+// [2026-07-19 追加] URLパス・タイトルに含まれていたら「順位表・大会結果」ページと
+// みなし、代替候補から除外するキーワード。
+const STANDINGS_OR_RESULTS_PATH_KEYWORDS = [
+  "standings", "-league-", "league-standings", "順位表", "結果速報",
+  "match_report", "matchreport", "試合結果",
 ];
 
 function nowIso() { return new Date().toISOString(); }
@@ -73,9 +79,23 @@ function hostOf(url: string): string {
   catch { return ""; }
 }
 
+function pathOf(url: string): string {
+  try { return new URL(url).pathname.toLowerCase(); }
+  catch { return ""; }
+}
+
 function isExcludedCandidateDomain(url: string): boolean {
   const host = hostOf(url);
   return EXCLUDED_CANDIDATE_DOMAINS.some((d) => host.includes(d));
+}
+
+// [2026-07-19 追加]
+function isStandingsOrResultsPage(url: string, title: string): boolean {
+  const p = pathOf(url);
+  const t = (title || "").toLowerCase();
+  return STANDINGS_OR_RESULTS_PATH_KEYWORDS.some(
+    (kw) => p.includes(kw.toLowerCase()) || t.includes(kw.toLowerCase())
+  );
 }
 
 interface SerperResult {
@@ -98,7 +118,6 @@ async function serperSearch(query: string): Promise<SerperResult[]> {
   return (data.organic || []) as SerperResult[];
 }
 
-// 疑わしい (organization_name, source_url) の組み合わせを検出
 async function findTargets(limit: number) {
   const { data: rows, error } = await supabase
     .from("selection_events")
@@ -124,7 +143,6 @@ async function findTargets(limit: number) {
     }
   }
 
-  // 既にフラグ済みのものは除外(重複記録を避ける)
   const { data: existingFlags } = await supabase
     .from("data_quality_flags")
     .select("organization_name, source_url");
@@ -144,13 +162,11 @@ async function findTargets(limit: number) {
     });
   }
 
-  // 年またぎしているものを優先的に処理する
   targets.sort((a, b) => (b.hasYearSpread ? 1 : 0) - (a.hasYearSpread ? 1 : 0));
 
   return targets.slice(0, limit);
 }
 
-// タイトル・スニペットから「20XX年度」「20XX年」の年数字を全て抽出
 function extractYearsFromText(text: string): number[] {
   const years: number[] = [];
   const patterns = [/20(\d{2})年度/g, /20(\d{2})年/g];
@@ -163,10 +179,6 @@ function extractYearsFromText(text: string): number[] {
   return years;
 }
 
-// 検索結果全体から、最も頻出する年を「実際の年度」として推定
-// [修正] セレクション関連語を含む結果だけを対象にする。
-// これが無いと「事業報告（案）」等の無関係な文書内の年号を拾ってしまう
-// (FC Kanaloa B, FC HORTENCIA Bで、2022年/2023年を誤って検出した事故)。
 function detectDominantYear(results: SerperResult[]): { year: number | null; evidence: string } {
   const counts = new Map<number, number>();
   const evidences: string[] = [];
@@ -197,11 +209,6 @@ function detectDominantYear(results: SerperResult[]): { year: number | null; evi
   return { year: sorted[0][0], evidence: evidences.join(" / ") };
 }
 
-// DBに保存されているsource_urlが、実際に検索上位に出てくるページと
-// 一致する(=そのドメインが妥当)かどうかを判定する。
-// 一致しない場合、検索結果のトップ候補URLを代替案として記録する。
-// [修正] 代替候補は、除外ドメインでないことに加え、セレクション関連語を
-// 含む結果であることも条件にする(掲示板等の無関係なページの誤採用を防ぐ)。
 function checkUrlPlausibility(
   storedUrl: string,
   searchResults: SerperResult[],
@@ -219,10 +226,12 @@ function checkUrlPlausibility(
     return { plausible: true, topResultUrl: null, reason: "同ドメインが上位検索結果に存在" };
   }
 
-  // [修正] 除外ドメインでなく、かつセレクション関連語を含む結果のみを候補にする
+  // [2026-07-19 修正] 除外ドメイン・順位表/結果ページでなく、かつセレクション
+  // 関連語を含む結果のみを候補にする
   const bestCandidate = topResults.find(
     (r) =>
       !isExcludedCandidateDomain(r.link) &&
+      !isStandingsOrResultsPage(r.link, r.title) &&
       includesSelectionWord(`${r.title} ${r.snippet || ""}`)
   );
 
@@ -231,13 +240,10 @@ function checkUrlPlausibility(
     topResultUrl: bestCandidate ? bestCandidate.link : null,
     reason: bestCandidate
       ? `保存URL(${storedHost})が上位検索結果に見当たらず。トップ候補: ${bestCandidate.link}`
-      : "検索結果が乏しい、候補が全て除外ドメイン、またはセレクション関連語を含む候補が無い",
+      : "検索結果が乏しい、候補が全て除外ドメイン/順位表ページ、またはセレクション関連語を含む候補が無い",
   };
 }
 
-// 代替候補URLを team_selection_research に投入する。
-// 既存行があれば upsert で上書きし、checked_at を null に戻して
-// verify-selection-domain-pages が次回実行時に必ず拾えるようにする。
 async function submitCandidateForRecrawl(
   teamMasterId: string | null,
   candidateUrl: string,
@@ -281,14 +287,12 @@ serve(async (req) => {
         const query = `"${item.organization_name}" セレクション`;
         const searchResults = await serperSearch(query);
 
-        // ① 年のミスマッチチェック
         const { year: detectedYear, evidence: yearEvidence } = detectDominantYear(searchResults);
         const yearMismatch =
           item.years.length > 0 &&
           detectedYear !== null &&
           !item.years.includes(detectedYear);
 
-        // ② URL妥当性チェック
         const urlCheck = checkUrlPlausibility(item.source_url, searchResults);
 
         const hasIssue = yearMismatch || !urlCheck.plausible;
@@ -300,7 +304,6 @@ serve(async (req) => {
           if (yearMismatch) flagTypes.push("year_mismatch_confirmed");
           if (!urlCheck.plausible) flagTypes.push("url_mismatch");
 
-          // URL不一致で候補URLがあれば、再クロール対象として投入
           if (!urlCheck.plausible && urlCheck.topResultUrl) {
             candidateSubmission = await submitCandidateForRecrawl(
               item.team_master_id,
