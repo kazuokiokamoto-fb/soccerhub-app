@@ -308,8 +308,15 @@ export default function SelectionListPage() {
     () => searchParams.get("past") === "1"
   );
 
-  // 🔔 あなた宛の新着だけ表示するトグル(検索条件とは独立)
-  const [showOnlyNotified, setShowOnlyNotified] = useState(false);
+  // 🔔 あなた宛の新着だけ表示するトグル。
+  // [修正①②] URLパラメータ(notified)に同期させることで、詳細ページから
+  // 「戻る」で戻ってきた際にも、このトグルの状態(ON/OFF)が保持されるようにした。
+  // これまでは他の検索条件(keyword, prefectures等)と違いURLに反映されておらず、
+  // 詳細ページ遷移→戻るでコンポーネントが再マウントされると常にOFFにリセットされ、
+  // 「あなた宛の新着」一覧ではなく全体一覧に戻ってしまう問題があった。
+  const [showOnlyNotified, setShowOnlyNotified] = useState(
+    () => searchParams.get("notified") === "1"
+  );
   const resultsSectionRef = useRef<HTMLDivElement | null>(null);
 
   const [showCalendar, setShowCalendar] = useState(
@@ -348,6 +355,8 @@ export default function SelectionListPage() {
     if (selectedDate) params.set("date", selectedDate);
     if (!showCalendar) params.set("calendar", "0");
     if (includePast) params.set("past", "1");
+    // [修正①②] showOnlyNotified もURLに反映する
+    if (showOnlyNotified) params.set("notified", "1");
 
     const nextUrl = params.toString()
       ? `${pathname}?${params.toString()}`
@@ -364,6 +373,7 @@ export default function SelectionListPage() {
     selectedDate,
     showCalendar,
     includePast,
+    showOnlyNotified,
     pathname,
     router,
   ]);
@@ -458,6 +468,8 @@ export default function SelectionListPage() {
     if (selectedDate) params.set("date", selectedDate);
     if (!showCalendar) params.set("calendar", "0");
     if (includePast) params.set("past", "1");
+    // [修正①②] 詳細ページへのリンクにもnotifiedを含める
+    if (showOnlyNotified) params.set("notified", "1");
 
     return params.toString();
   }, [
@@ -470,6 +482,7 @@ export default function SelectionListPage() {
     selectedDate,
     showCalendar,
     includePast,
+    showOnlyNotified,
   ]);
 
   const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
@@ -705,7 +718,13 @@ export default function SelectionListPage() {
     };
   }, []);
 
-  // 自分宛ての未読セレクション新着通知(type=selection_event)が指すレコードIDを取得する
+  // 自分宛ての未読セレクション新着通知(type=selection_event)が指すレコードIDを取得する。
+  // [修正③] 通知が指すイベントの日程が全て過去になっている場合、そのイベントは
+  // 「あなた宛の新着」からは除外する(バッジ・件数・ハイライト表示に出さない)。
+  // これまでは通知が既読になるまでずっと「新着」表示され続け、開催日を過ぎた
+  // セレクション情報がいつまでも新着として目立ってしまう問題があった。
+  // ※通知自体(notificationsテーブルのis_read)は変更しない。あくまで表示上の
+  //   「新着扱いするかどうか」だけを日程で絞り込む。
   useEffect(() => {
     let active = true;
 
@@ -741,7 +760,36 @@ export default function SelectionListPage() {
           if (m?.[1]) ids.add(m[1]);
         }
 
-        setMyUnreadNotifiedIds(ids);
+        // [修正③] items(元データ)を使って、各IDに対応するイベントの日程が
+        // 全て過去かどうかを判定する。まだ items が読み込まれていない場合は
+        // (初回マウント直後など)、フィルタせずそのまま通す。
+        if (items.length === 0) {
+          setMyUnreadNotifiedIds(ids);
+          return;
+        }
+
+        const today = todayYmd();
+        const stillRelevantIds = new Set<string>();
+        for (const id of ids) {
+          const relatedItems = items.filter((it) => it.id === id);
+
+          if (relatedItems.length === 0) {
+            // 該当データがまだ手元に無い場合は、誤って除外しないよう残す
+            stillRelevantIds.add(id);
+            continue;
+          }
+
+          const anyUpcoming = relatedItems.some(
+            (it) => it.event_date && it.event_date >= today
+          );
+          const anyUndated = relatedItems.some((it) => !it.event_date);
+
+          if (anyUpcoming || anyUndated) {
+            stillRelevantIds.add(id);
+          }
+        }
+
+        setMyUnreadNotifiedIds(stillRelevantIds);
       } catch (e) {
         console.error("loadMyUnreadNotifiedIds catch:", e);
         if (active) setMyUnreadNotifiedIds(new Set());
@@ -761,7 +809,7 @@ export default function SelectionListPage() {
       window.removeEventListener("badge-updated", handleUpdated);
       window.removeEventListener("notifications-updated", handleUpdated);
     };
-  }, []);
+  }, [items]);
 
   const savedNotifyConditionText = useMemo(() => {
     if (!savedNotifyCondition) return null;
@@ -842,6 +890,38 @@ export default function SelectionListPage() {
       window.dispatchEvent(new Event("notifications-updated"));
     } catch (e) {
       console.error("markNotificationReadForItem error:", e);
+    }
+  }
+
+  // [修正①] 「あなた宛の新着」を一括で既読にする。
+  // 通知一覧ページ(NotificationsPage)の「すべて既読」は全種類の通知をまとめて
+  // 既読にするものだが、こちらはこのページの文脈(セレクション新着だけ)に絞って
+  // 一括既読できるようにするための専用関数。
+  async function markAllNotifiedRead() {
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("user_id", user.id)
+        .eq("type", "selection_event")
+        .eq("is_read", false);
+
+      if (error) {
+        console.error("markAllNotifiedRead error:", error);
+        return;
+      }
+
+      setMyUnreadNotifiedIds(new Set());
+      setShowOnlyNotified(false);
+
+      window.dispatchEvent(new Event("badge-updated"));
+      window.dispatchEvent(new Event("notifications-updated"));
+    } catch (e) {
+      console.error("markAllNotifiedRead catch:", e);
     }
   }
 
@@ -944,35 +1024,47 @@ export default function SelectionListPage() {
       </section>
 
       {myUnreadNotifiedIds.size > 0 ? (
-        <button
-          type="button"
-          onClick={() => {
-            setShowOnlyNotified((v) => {
-              const next = !v;
-              if (next) {
-                // ONにした時だけ、一覧セクションまで自動スクロールする
-                requestAnimationFrame(() => {
+        // [修正①] 一括既読ボタンをバナーの隣に配置
+        <div style={notifiedBannerRow}>
+          <button
+            type="button"
+            onClick={() => {
+              setShowOnlyNotified((v) => {
+                const next = !v;
+                if (next) {
+                  // ONにした時だけ、一覧セクションまで自動スクロールする
                   requestAnimationFrame(() => {
-                    resultsSectionRef.current?.scrollIntoView({
-                      behavior: "smooth",
-                      block: "start",
+                    requestAnimationFrame(() => {
+                      resultsSectionRef.current?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start",
+                      });
                     });
                   });
-                });
-              }
-              return next;
-            });
-          }}
-          style={{
-            ...notifiedBanner,
-            ...(showOnlyNotified ? notifiedBannerActive : {}),
-          }}
-        >
-          🔔{" "}
-          {showOnlyNotified
-            ? "すべて表示に戻す"
-            : `あなた宛の新着(${myUnreadNotifiedIds.size}件)だけ見る`}
-        </button>
+                }
+                return next;
+              });
+            }}
+            style={{
+              ...notifiedBanner,
+              ...(showOnlyNotified ? notifiedBannerActive : {}),
+            }}
+          >
+            🔔{" "}
+            {showOnlyNotified
+              ? "すべて表示に戻す"
+              : `あなた宛の新着(${myUnreadNotifiedIds.size}件)だけ見る`}
+          </button>
+
+          <button
+            type="button"
+            className="sh-btn"
+            onClick={markAllNotifiedRead}
+            style={markAllNotifiedButton}
+          >
+            すべて既読
+          </button>
+        </div>
       ) : null}
 
       <section className="ui-card" style={searchBox}>
@@ -1674,11 +1766,18 @@ const cardNotified: CSSProperties = {
   background: "#faf5ff",
 };
 
+// [修正①] バナーと一括既読ボタンを横並びにするための行コンテナ
+const notifiedBannerRow: CSSProperties = {
+  display: "flex",
+  gap: 8,
+  alignItems: "stretch",
+};
+
 const notifiedBanner: CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  width: "100%",
+  flex: 1,
   padding: "12px 16px",
   borderRadius: 14,
   border: "2px solid #7c3aed",
@@ -1693,6 +1792,12 @@ const notifiedBanner: CSSProperties = {
 const notifiedBannerActive: CSSProperties = {
   background: "#7c3aed",
   color: "#fff",
+};
+
+// [修正①] 一括既読ボタン専用スタイル
+const markAllNotifiedButton: CSSProperties = {
+  flexShrink: 0,
+  whiteSpace: "nowrap",
 };
 
 const rankBadge: CSSProperties = {
