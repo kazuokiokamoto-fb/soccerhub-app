@@ -99,6 +99,37 @@ export function hasUpcomingDate(dates: string[]): boolean {
   return dates.some((d) => d >= today);
 }
 
+// [修正] 一覧表示に本当に必要なカラムだけを明示的に指定する。
+// 従来は select("*") で raw_text(最大20,000文字)や description(最大800文字)
+// といった重量級カラムまで毎回全件(数千件)取得しており、これが
+// 「セレクション情報 読み込み中...」が常に長い主因になっていた。
+// (数千件 × 数万文字 = 実質数十MBのダウンロードが発生していた)
+// 詳細ページ用の全カラムは fetchSelectionEventById 側でのみ取得する。
+const LIST_COLUMNS = [
+  "id",
+  "team_master_id",
+  "organization_name",
+  "organization_type",
+  "target_categories",
+  "gender",
+  "prefecture",
+  "area",
+  "city",
+  "venue_name",
+  "venue_address",
+  "event_date",
+  "event_dates",
+  "source_url",
+  "official_url",
+  "title",
+  "display_status",
+  "source_rank",
+  "admission_fiscal_year",
+  "is_rolling_recruitment",
+  "fetched_at",
+  "created_at",
+].join(",");
+
 export async function fetchSelectionEvents(): Promise<SelectionEvent[]> {
   const today = todayYmd();
   const allRows: SelectionEvent[] = [];
@@ -110,7 +141,7 @@ export async function fetchSelectionEvents(): Promise<SelectionEvent[]> {
 
     const { data, error } = await supabase
       .from("selection_events_public")
-      .select("*")
+      .select(LIST_COLUMNS)
       .or(`event_date.gte.${today},event_date.is.null`)
       .order("event_date", { ascending: true, nullsFirst: false })
       .order("fetched_at", { ascending: false, nullsFirst: false })
@@ -122,7 +153,8 @@ export async function fetchSelectionEvents(): Promise<SelectionEvent[]> {
       return allRows;
     }
 
-    const rows = (data ?? []) as SelectionEvent[];
+    const rows = (data ?? []) as unknown as SelectionEvent[];
+
     allRows.push(...rows);
 
     if (rows.length < PAGE_SIZE) break;
@@ -137,6 +169,8 @@ export async function fetchSelectionEvents(): Promise<SelectionEvent[]> {
 export async function fetchSelectionEventById(
   id: string
 ): Promise<SelectionEvent | null> {
+  // 詳細ページでは summary / description 等も含めて全カラム取得してよい
+  // (1件だけなので負荷は軽微)
   const { data, error } = await supabase
     .from("selection_events_public")
     .select("*")
