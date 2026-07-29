@@ -114,6 +114,14 @@ type StatusFilter =
   | "日程未定"
   | "日付未取得";
 
+// [2026-07-29 追加] セレクション一覧の並び替え順
+type SortOrder = "newest" | "date_asc" | "date_desc";
+
+function validSortOrder(value: string | null): SortOrder {
+  const values: SortOrder[] = ["newest", "date_asc", "date_desc"];
+  return values.includes(value as SortOrder) ? (value as SortOrder) : "newest";
+}
+
 const SOURCE_PREFECTURE_MAP: Record<string, string> = {
   鹿島アントラーズ: "茨城県",
   水戸ホーリーホック: "茨城県",
@@ -165,6 +173,15 @@ function earliestDisplayDate(dates: string[]): string | null {
   const upcoming = dates.filter((d) => d >= today).sort();
   if (upcoming.length > 0) return upcoming[0];
   return [...dates].sort()[0];
+}
+
+// [2026-07-29 追加] ソート用: 未来日程があればその中で一番近い日付、
+// 無ければ一番古い日付、日程が全く無ければ最後尾に回るよう非常に大きい値を返す。
+function earliestUpcomingOrFirst(dates: string[]): string {
+  if (dates.length === 0) return "9999-99-99";
+  const today = todayYmd();
+  const upcoming = dates.filter((d) => d >= today).sort();
+  return upcoming.length > 0 ? upcoming[0] : [...dates].sort()[0];
 }
 
 // [2026-07-29 追加] 「入団年度」が既に終わっているサイクルかどうかを判定する。
@@ -261,6 +278,28 @@ function sortNewestFirst<T extends SelectionEvent>(rows: T[]): T[] {
   });
 }
 
+// [2026-07-29 追加] 選択中の並び替え順に応じてソートする。
+function sortByOrder<T extends GroupedSelectionEvent>(
+  rows: T[],
+  order: SortOrder
+): T[] {
+  if (order === "date_asc") {
+    return [...rows].sort((a, b) =>
+      earliestUpcomingOrFirst(a.allEventDates).localeCompare(
+        earliestUpcomingOrFirst(b.allEventDates)
+      )
+    );
+  }
+  if (order === "date_desc") {
+    return [...rows].sort((a, b) =>
+      earliestUpcomingOrFirst(b.allEventDates).localeCompare(
+        earliestUpcomingOrFirst(a.allEventDates)
+      )
+    );
+  }
+  return sortNewestFirst(rows);
+}
+
 function validRank(value: string | null): RankFilter {
   const values: RankFilter[] = [
     "all",
@@ -326,11 +365,17 @@ export default function SelectionListPage() {
   );
 
   // 🔔 あなた宛の新着だけ表示するトグル。
-  // URLパラメータ(notified)に同期させることで、詳細ページから
-  // 「戻る」で戻ってきた際にも、このトグルの状態(ON/OFF)が保持されるようにした。
+  // URLパラメータに同期させることで、詳細ページから「戻る」で戻ってきた際にも、
+  // このトグルの状態(ON/OFF)が保持されるようにした。
   const [showOnlyNotified, setShowOnlyNotified] = useState(
     () => searchParams.get("notified") === "1"
   );
+
+  // [2026-07-29 追加] 並び替え順。URLパラメータ(sort)に同期させる。
+  const [sortOrder, setSortOrder] = useState<SortOrder>(() =>
+    validSortOrder(searchParams.get("sort"))
+  );
+
   const resultsSectionRef = useRef<HTMLDivElement | null>(null);
 
   const [showCalendar, setShowCalendar] = useState(
@@ -370,6 +415,7 @@ export default function SelectionListPage() {
     if (!showCalendar) params.set("calendar", "0");
     if (includePast) params.set("past", "1");
     if (showOnlyNotified) params.set("notified", "1");
+    if (sortOrder !== "newest") params.set("sort", sortOrder);
 
     const nextUrl = params.toString()
       ? `${pathname}?${params.toString()}`
@@ -387,6 +433,7 @@ export default function SelectionListPage() {
     showCalendar,
     includePast,
     showOnlyNotified,
+    sortOrder,
     pathname,
     router,
   ]);
@@ -488,6 +535,7 @@ export default function SelectionListPage() {
     if (!showCalendar) params.set("calendar", "0");
     if (includePast) params.set("past", "1");
     if (showOnlyNotified) params.set("notified", "1");
+    if (sortOrder !== "newest") params.set("sort", sortOrder);
 
     return params.toString();
   }, [
@@ -501,6 +549,7 @@ export default function SelectionListPage() {
     showCalendar,
     includePast,
     showOnlyNotified,
+    sortOrder,
   ]);
 
   const calendarCells = useMemo(() => buildCalendarCells(monthDate), [monthDate]);
@@ -513,17 +562,13 @@ export default function SelectionListPage() {
     return groupedItems.filter(isNewArrival).length;
   }, [groupedItems]);
 
-  // [2026-07-29 修正] ホーム画面(HomeCalendar.tsx)の集計基準(未来日程を持つ
-  // グループのみをカウント)と揃える。従来は groupedItems.length(全件、過去のみの
-  // グループも含む)を使っており、ホーム画面の「掲載件数」と食い違っていた。
+  // ホーム画面(HomeCalendar.tsx)の集計基準(未来日程を持つグループのみをカウント)と揃える。
   const totalHandledCount = useMemo(() => {
     return groupedItems.filter((g) => hasUpcomingDate(g.allEventDates)).length;
   }, [groupedItems]);
 
   // 入団年度ごとの内訳（データが揃うにつれて自動的に育っていく）
-  // [2026-07-29 修正] 既に募集サイクルが終わっているはずの過去の入団年度
-  // (例: 現在2026年度なのに2024年度入団・2026年度入団が出てしまう)は
-  // 内訳の集計から除外する。
+  // 既に募集サイクルが終わっているはずの過去の入団年度は内訳の集計から除外する。
   const admissionYearBreakdown = useMemo(() => {
     const map = new Map<string, number>();
     for (const g of groupedItems) {
@@ -583,7 +628,7 @@ export default function SelectionListPage() {
         return false;
       }
 
-      // [2026-07-29 追加] 過去の入団年度サイクル(既に選考が終わっているはず)は、
+      // 過去の入団年度サイクル(既に選考が終わっているはず)は、
       // 「過去の開催も含めて表示」がONの時だけ一覧にも表示する。
       if (
         !includePast &&
@@ -655,7 +700,7 @@ export default function SelectionListPage() {
       return true;
     });
 
-    return sortNewestFirst(rows);
+    return sortByOrder(rows, sortOrder);
   }, [
     groupedItems,
     keyword,
@@ -668,6 +713,7 @@ export default function SelectionListPage() {
     includePast,
     showOnlyNotified,
     myUnreadNotifiedIds,
+    sortOrder,
   ]);
 
   const selectionItemsByDate = useMemo(() => {
@@ -890,6 +936,7 @@ export default function SelectionListPage() {
     setSelectedDate("");
     setShowCalendar(true);
     setIncludePast(false);
+    setSortOrder("newest");
   };
 
   // カードを開いた時、それが自分宛の未読通知に該当するものであれば既読にする
@@ -1108,10 +1155,7 @@ export default function SelectionListPage() {
           </button>
         </div>
 
-        {/* [2026-07-29 修正] 「現在の通知条件」を上、通知登録ボタンをその下に配置。
-            以前はキーワード入力欄や各種フィルターの下(ページ末尾寄り)にあり、
-            通知状態がひと目で分かりづらかったため、条件検索の入口である
-            このカードの最上部に移動した。 */}
+        {/* 「現在の通知条件」を上、通知登録ボタンをその下に配置 */}
         {!notifyConditionLoading ? (
           <button
             type="button"
@@ -1259,6 +1303,17 @@ export default function SelectionListPage() {
             <option value="開催終了">開催終了</option>
             <option value="日程未定">日程未定</option>
             <option value="日付未取得">日付未取得</option>
+          </select>
+
+          {/* [2026-07-29 追加] 並び替え */}
+          <select
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+            style={select}
+          >
+            <option value="newest">新着順</option>
+            <option value="date_asc">開催日が近い順</option>
+            <option value="date_desc">開催日が遠い順</option>
           </select>
         </div>
 
