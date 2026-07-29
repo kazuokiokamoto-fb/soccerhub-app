@@ -114,7 +114,7 @@ type StatusFilter =
   | "日程未定"
   | "日付未取得";
 
-// [2026-07-29 追加] セレクション一覧の並び替え順
+// セレクション一覧の並び替え順
 type SortOrder = "newest" | "date_asc" | "date_desc";
 
 function validSortOrder(value: string | null): SortOrder {
@@ -161,10 +161,10 @@ function isNewArrival(item: SelectionEvent) {
   return Number.isFinite(t) && t >= sevenDaysAgoTime();
 }
 
-// [2026-07-14 追加] 同じチーム・同じsource_urlの記事から、時期の異なる複数の告知
-// (例: 過去に終わった募集と、新しく追加された今後の募集)がまとめてグルーピングされると、
-// 表示用の日付が単純に「全日程の中で一番古い日付」になってしまい、実際は今後の日程が
-// あるにも関わらずカード上は過去日付に見えてしまう問題があった。
+// 同じチーム・同じsource_urlの記事から、時期の異なる複数の告知がまとめて
+// グルーピングされると、表示用の日付が単純に「全日程の中で一番古い日付」に
+// なってしまい、実際は今後の日程があるにも関わらずカード上は過去日付に
+// 見えてしまう問題があった。
 // → 今日以降の日程があればその中で一番近いものを優先して表示し、
 //   全部過去の場合だけ一番古い日付にフォールバックする。
 function earliestDisplayDate(dates: string[]): string | null {
@@ -175,8 +175,8 @@ function earliestDisplayDate(dates: string[]): string | null {
   return [...dates].sort()[0];
 }
 
-// [2026-07-29 追加] ソート用: 未来日程があればその中で一番近い日付、
-// 無ければ一番古い日付、日程が全く無ければ最後尾に回るよう非常に大きい値を返す。
+// ソート用: 未来日程があればその中で一番近い日付、無ければ一番古い日付、
+// 日程が全く無ければ最後尾に回るよう非常に大きい値を返す。
 function earliestUpcomingOrFirst(dates: string[]): string {
   if (dates.length === 0) return "9999-99-99";
   const today = todayYmd();
@@ -184,11 +184,10 @@ function earliestUpcomingOrFirst(dates: string[]): string {
   return upcoming.length > 0 ? upcoming[0] : [...dates].sort()[0];
 }
 
-// [2026-07-29 追加] 「入団年度」が既に終わっているサイクルかどうかを判定する。
+// 「入団年度」が既に終わっているサイクルかどうかを判定する。
 // 4月入団の選考は、実施年の前年(例: 2027年度入団なら2026年)に行われるのが通例。
 // 現在の月が4月以降なら「今年+1年度」以降を、3月以前なら「今年度」以降を
-// 有効な(まだ終わっていない)入団年度とみなす。過去の入団年度(2026年度・2024年度等)
-// が「セレクション情報」の内訳や一覧に出てきてしまう問題を防ぐための判定。
+// 有効な(まだ終わっていない)入団年度とみなす。
 function currentValidAdmissionYearCutoff(): number {
   const now = new Date();
   const year = now.getFullYear();
@@ -278,7 +277,7 @@ function sortNewestFirst<T extends SelectionEvent>(rows: T[]): T[] {
   });
 }
 
-// [2026-07-29 追加] 選択中の並び替え順に応じてソートする。
+// 選択中の並び替え順に応じてソートする。
 function sortByOrder<T extends GroupedSelectionEvent>(
   rows: T[],
   order: SortOrder
@@ -371,7 +370,7 @@ export default function SelectionListPage() {
     () => searchParams.get("notified") === "1"
   );
 
-  // [2026-07-29 追加] 並び替え順。URLパラメータ(sort)に同期させる。
+  // 並び替え順。URLパラメータ(sort)に同期させる。
   const [sortOrder, setSortOrder] = useState<SortOrder>(() =>
     validSortOrder(searchParams.get("sort"))
   );
@@ -1304,17 +1303,6 @@ export default function SelectionListPage() {
             <option value="日程未定">日程未定</option>
             <option value="日付未取得">日付未取得</option>
           </select>
-
-          {/* [2026-07-29 追加] 並び替え */}
-          <select
-            value={sortOrder}
-            onChange={(e) => setSortOrder(e.target.value as SortOrder)}
-            style={select}
-          >
-            <option value="newest">新着順</option>
-            <option value="date_asc">開催日が近い順</option>
-            <option value="date_desc">開催日が遠い順</option>
-          </select>
         </div>
 
         <label style={pastToggleRow}>
@@ -1370,8 +1358,22 @@ export default function SelectionListPage() {
         <>
           {filteredItems.length > 0 ? (
             <section style={listWrap} ref={resultsSectionRef}>
-              <div className="ui-title" style={sectionTitle}>
-                セレクション情報
+              {/* [2026-07-29 修正] ソートのプルダウンを、市区町村・状態のセレクトボックスの
+                  並びから、この「セレクション情報」見出しと同じ行の右側に移動した。 */}
+              <div style={sectionTitleRow}>
+                <div className="ui-title" style={sectionTitle}>
+                  セレクション情報
+                </div>
+
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+                  style={sortSelect}
+                >
+                  <option value="newest">新着順</option>
+                  <option value="date_asc">開催日が近い順</option>
+                  <option value="date_desc">開催日が遠い順</option>
+                </select>
               </div>
 
               {filteredItems.map((item) => {
@@ -1617,7 +1619,29 @@ const searchTitle: CSSProperties = {
 
 const sectionTitle: CSSProperties = {
   fontSize: 18,
+  margin: 0,
+};
+
+// [2026-07-29 追加] 「セレクション情報」見出しと並び替えプルダウンを横並びにする行
+const sectionTitleRow: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap",
   marginTop: 8,
+};
+
+// [2026-07-29 追加] 並び替えプルダウン専用スタイル
+const sortSelect: CSSProperties = {
+  padding: "8px 10px",
+  borderRadius: 10,
+  border: "1px solid #d1d5db",
+  background: "#fff",
+  fontSize: 13,
+  fontWeight: 700,
+  color: "#374151",
+  flexShrink: 0,
 };
 
 const input: CSSProperties = {
