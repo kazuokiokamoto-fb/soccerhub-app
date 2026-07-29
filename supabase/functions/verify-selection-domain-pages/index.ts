@@ -92,6 +92,21 @@
 //     持っていて、かつ全く重ならない場合はそのチームへの登録をスキップする
 //     categoriesOverlap() を追加。どちらかにカテゴリ情報が無い場合は判定材料が
 //     無いとみなし、誤って正しい情報まで弾かないよう従来通り許可する。
+//
+// [2026-07-29 修正⑧] team_selection_research.selection_page_url が過去に
+//   変更された(まとめ記事URL→公式サイト直リンクへの切り替え等)際、旧URL由来の
+//   selection_events 行が自動的には削除されず、クロールのたびに履歴が
+//   積み重なり続けるバグを修正。
+//   実例: ジェフユナイテッド市原・千葉U-15で、過去に試された3種類のURL
+//   (juniorsoccer-news.com記事、jefunited.co.jp旧ニュース、academy概要ページ)
+//   由来の行が44件も蓄積していた。
+//   → upsertSelectionEvents内で、新しいイベントを登録する前に「同じ
+//     team_master_idだが、今回のsource_url(=research.selection_page_url)とは
+//     異なるURL由来の行」を削除するようにした。
+//   注: 1つのteam_masterが正当に複数の深掘り先ページ(official_url)を持つ
+//     ケース(例: 湘南ベルマーレが1つのacademyページから3つの募集ページを持つ)
+//     には影響しない。source_urlは常にresearch行自身のURL(=academy)を指す
+//     ため一致し続け、削除条件に該当しないため。
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -540,6 +555,8 @@ function extractAllDates(text: string, fiscalYearOverride?: number | null): stri
     .sort();
 }
 
+// 「開催日」「セレクション」等のキーワードを含む行だけから日付を抽出し、
+// 見つかった全ての日付をそのまま返す(複数日程がある場合は全てそのまま保持する)。
 function extractEventDates(text: string): string[] {
   const documentFiscalYear = extractFiscalYear(text);
   const lines = String(text || "")
@@ -961,6 +978,10 @@ async function upsertSelectionEvents(
 
   const rawTextForExtraction = truncateAtNoiseSection(rawText);
 
+  // このページ内に含まれる、セレクションの全ての開催日をここで抽出する。
+  // 複数日程(1次/2次/3次選考等)が見つかった場合、後段の datesToProcess ループで
+  // それぞれ個別の行として selection_events に保存される(情報を1つに
+  // まとめて潰したり、代表の1件だけ残したりはしない)。
   const eventDates = extractEventDates(rawTextForExtraction);
   const deadline = extractDeadline(rawTextForExtraction);
   const venue = extractVenue(rawTextForExtraction);
@@ -976,7 +997,7 @@ async function upsertSelectionEvents(
   const summary = cleanForDb(compactText(page.text, 200), 200);
   const description = cleanForDb(compactText(page.text, 800), 800);
 
-  // [2026-07-29 追加] 1つの公式サイトを複数カテゴリのteam_masterが共有している
+  // [2026-07-29 修正⑦] 1つの公式サイトを複数カテゴリのteam_masterが共有している
   // ケースで、特定カテゴリ向けの記事が無関係な他カテゴリのチームにまで無差別に
   // 複製されてしまう問題を防ぐ。記事側・チーム側どちらかにカテゴリ情報が無い
   // 場合は判定材料が無いとみなし、従来通り許可する。
@@ -994,6 +1015,34 @@ async function upsertSelectionEvents(
   const schoolCalendarSuspected = isSuspiciousSchoolPage(page.url, eventDates.length);
   if (schoolCalendarSuspected) {
     statusText = "日付未取得";
+  }
+
+  // [2026-07-29 修正⑧] このteam_master_idについて、今回の source_url
+  // (= research.selection_page_url、このteam_selection_research行が指す
+  // 現在有効な入口URL)とは異なるURL由来の古い行を削除する。
+  // team_selection_research.selection_page_url が過去に変更された
+  // (まとめ記事URL→公式サイト直リンクへの切り替え等)際、旧URL由来の行が
+  // 自動的には削除されず、クロールのたびに履歴が積み重なり続けていた
+  // (実例: ジェフユナイテッド市原・千葉U-15で44件蓄積を確認)。
+  //
+  // 安全性について: この削除条件は「source_urlが違う」行だけを対象にする。
+  // 1つのteam_masterが正当に複数の深掘り先ページ(official_url)を持つケース
+  // (例: 湘南ベルマーレが1つのacademyページから3つの異なる募集記事(396855/
+  // 396966/398447)を持つ)には影響しない。なぜなら、それらは全て同じ
+  // research行(同じselection_page_url=academyページ)から見つかったもので
+  // あり、source_url(常にresearch.selection_page_urlそのものが入る)は
+  // 変わらず一致し続けるため、削除条件(source_url不一致)に該当しないから。
+  if (research.team_master_id) {
+    const { error: cleanupError } = await supabase
+      .from("selection_events")
+      .delete()
+      .eq("team_master_id", research.team_master_id)
+      .neq("source_url", research.selection_page_url);
+
+    if (cleanupError) {
+      console.error("old source_url cleanup error:", cleanupError);
+      // クリーンアップの失敗は致命的ではないので、処理は続行する
+    }
   }
 
   const baseEventRow = {
@@ -1034,6 +1083,8 @@ async function upsertSelectionEvents(
   };
 
   const results = [];
+  // eventDatesが複数見つかった場合、それぞれの日付ごとに1行ずつ保存する。
+  // (例: 1次選考6/21、2次選考7/5、3次選考7/19 のように3日程あれば3行)
   const datesToProcess = eventDates.length > 0 ? eventDates : [null];
 
   for (const eventDate of datesToProcess) {
