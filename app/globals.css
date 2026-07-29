@@ -466,3 +466,8 @@ body {
     min-height: 44px;
   }
 }
+
+@keyframes sh-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
