@@ -167,6 +167,23 @@ function earliestDisplayDate(dates: string[]): string | null {
   return [...dates].sort()[0];
 }
 
+// [2026-07-29 追加] 「入団年度」が既に終わっているサイクルかどうかを判定する。
+// 4月入団の選考は、実施年の前年(例: 2027年度入団なら2026年)に行われるのが通例。
+// 現在の月が4月以降なら「今年+1年度」以降を、3月以前なら「今年度」以降を
+// 有効な(まだ終わっていない)入団年度とみなす。過去の入団年度(2026年度・2024年度等)
+// が「セレクション情報」の内訳や一覧に出てきてしまう問題を防ぐための判定。
+function currentValidAdmissionYearCutoff(): number {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  return month >= 4 ? year + 1 : year;
+}
+
+function isStaleAdmissionYear(admissionFiscalYear: number | null): boolean {
+  if (admissionFiscalYear == null) return false;
+  return admissionFiscalYear < currentValidAdmissionYearCutoff();
+}
+
 function inferredPrefecture(item: SelectionEvent) {
   if (item.prefecture) return item.prefecture;
 
@@ -309,11 +326,8 @@ export default function SelectionListPage() {
   );
 
   // 🔔 あなた宛の新着だけ表示するトグル。
-  // [修正①②] URLパラメータ(notified)に同期させることで、詳細ページから
+  // URLパラメータ(notified)に同期させることで、詳細ページから
   // 「戻る」で戻ってきた際にも、このトグルの状態(ON/OFF)が保持されるようにした。
-  // これまでは他の検索条件(keyword, prefectures等)と違いURLに反映されておらず、
-  // 詳細ページ遷移→戻るでコンポーネントが再マウントされると常にOFFにリセットされ、
-  // 「あなた宛の新着」一覧ではなく全体一覧に戻ってしまう問題があった。
   const [showOnlyNotified, setShowOnlyNotified] = useState(
     () => searchParams.get("notified") === "1"
   );
@@ -355,7 +369,6 @@ export default function SelectionListPage() {
     if (selectedDate) params.set("date", selectedDate);
     if (!showCalendar) params.set("calendar", "0");
     if (includePast) params.set("past", "1");
-    // [修正①②] showOnlyNotified もURLに反映する
     if (showOnlyNotified) params.set("notified", "1");
 
     const nextUrl = params.toString()
@@ -420,16 +433,11 @@ export default function SelectionListPage() {
       }
     }
 
-        async function load() {
+    async function load() {
       const hadCache = getCachedSelectionEvents() !== null;
 
-      // [修正②] キャッシュがある場合は、ネットワーク再取得(fetchSelectionEvents)の
+      // キャッシュがある場合は、ネットワーク再取得(fetchSelectionEvents)の
       // 完了を待たずに、その場で即座にスクロール位置を復元する。
-      // 従来は restoreScrollIfNeeded() を finally 内(=ネットワーク完了後)でしか
-      // 呼んでいなかったため、キャッシュがあって画面自体は即座に表示できて
-      // いるにも関わらず、スクロール復元だけ裏側の再取得の完了を待って
-      // 遅延し、「一覧に戻ると一瞬トップが見えてから目的の位置へジャンプする」
-      // ちらつきの原因になっていた。
       if (hadCache) {
         restoreScrollIfNeeded();
       } else {
@@ -479,7 +487,6 @@ export default function SelectionListPage() {
     if (selectedDate) params.set("date", selectedDate);
     if (!showCalendar) params.set("calendar", "0");
     if (includePast) params.set("past", "1");
-    // [修正①②] 詳細ページへのリンクにもnotifiedを含める
     if (showOnlyNotified) params.set("notified", "1");
 
     return params.toString();
@@ -506,13 +513,24 @@ export default function SelectionListPage() {
     return groupedItems.filter(isNewArrival).length;
   }, [groupedItems]);
 
-  // 総取扱件数（グルーピング後のユニークな情報数、アピール用）
-  const totalHandledCount = groupedItems.length;
+  // [2026-07-29 修正] ホーム画面(HomeCalendar.tsx)の集計基準(未来日程を持つ
+  // グループのみをカウント)と揃える。従来は groupedItems.length(全件、過去のみの
+  // グループも含む)を使っており、ホーム画面の「掲載件数」と食い違っていた。
+  const totalHandledCount = useMemo(() => {
+    return groupedItems.filter((g) => hasUpcomingDate(g.allEventDates)).length;
+  }, [groupedItems]);
 
   // 入団年度ごとの内訳（データが揃うにつれて自動的に育っていく）
+  // [2026-07-29 修正] 既に募集サイクルが終わっているはずの過去の入団年度
+  // (例: 現在2026年度なのに2024年度入団・2026年度入団が出てしまう)は
+  // 内訳の集計から除外する。
   const admissionYearBreakdown = useMemo(() => {
     const map = new Map<string, number>();
     for (const g of groupedItems) {
+      if (!g.isRollingRecruitment && isStaleAdmissionYear(g.admissionFiscalYear)) {
+        continue;
+      }
+
       let key: string;
       if (g.isRollingRecruitment) {
         key = "随時募集";
@@ -562,6 +580,16 @@ export default function SelectionListPage() {
     const rows = groupedItems.filter((item) => {
       // 🔔 あなた宛の新着だけ表示がONなら、他の条件より先にここで絞り込む
       if (showOnlyNotified && !myUnreadNotifiedIds.has(item.id)) {
+        return false;
+      }
+
+      // [2026-07-29 追加] 過去の入団年度サイクル(既に選考が終わっているはず)は、
+      // 「過去の開催も含めて表示」がONの時だけ一覧にも表示する。
+      if (
+        !includePast &&
+        !item.isRollingRecruitment &&
+        isStaleAdmissionYear(item.admissionFiscalYear)
+      ) {
         return false;
       }
 
@@ -730,12 +758,8 @@ export default function SelectionListPage() {
   }, []);
 
   // 自分宛ての未読セレクション新着通知(type=selection_event)が指すレコードIDを取得する。
-  // [修正③] 通知が指すイベントの日程が全て過去になっている場合、そのイベントは
+  // 通知が指すイベントの日程が全て過去になっている場合、そのイベントは
   // 「あなた宛の新着」からは除外する(バッジ・件数・ハイライト表示に出さない)。
-  // これまでは通知が既読になるまでずっと「新着」表示され続け、開催日を過ぎた
-  // セレクション情報がいつまでも新着として目立ってしまう問題があった。
-  // ※通知自体(notificationsテーブルのis_read)は変更しない。あくまで表示上の
-  //   「新着扱いするかどうか」だけを日程で絞り込む。
   useEffect(() => {
     let active = true;
 
@@ -771,9 +795,6 @@ export default function SelectionListPage() {
           if (m?.[1]) ids.add(m[1]);
         }
 
-        // [修正③] items(元データ)を使って、各IDに対応するイベントの日程が
-        // 全て過去かどうかを判定する。まだ items が読み込まれていない場合は
-        // (初回マウント直後など)、フィルタせずそのまま通す。
         if (items.length === 0) {
           setMyUnreadNotifiedIds(ids);
           return;
@@ -785,7 +806,6 @@ export default function SelectionListPage() {
           const relatedItems = items.filter((it) => it.id === id);
 
           if (relatedItems.length === 0) {
-            // 該当データがまだ手元に無い場合は、誤って除外しないよう残す
             stillRelevantIds.add(id);
             continue;
           }
@@ -904,10 +924,7 @@ export default function SelectionListPage() {
     }
   }
 
-  // [修正①] 「あなた宛の新着」を一括で既読にする。
-  // 通知一覧ページ(NotificationsPage)の「すべて既読」は全種類の通知をまとめて
-  // 既読にするものだが、こちらはこのページの文脈(セレクション新着だけ)に絞って
-  // 一括既読できるようにするための専用関数。
+  // 「あなた宛の新着」を一括で既読にする。
   async function markAllNotifiedRead() {
     try {
       const { data: authData } = await supabase.auth.getUser();
@@ -1035,7 +1052,6 @@ export default function SelectionListPage() {
       </section>
 
       {myUnreadNotifiedIds.size > 0 ? (
-        // [修正①] 一括既読ボタンをバナーの隣に配置
         <div style={notifiedBannerRow}>
           <button
             type="button"
@@ -1043,7 +1059,6 @@ export default function SelectionListPage() {
               setShowOnlyNotified((v) => {
                 const next = !v;
                 if (next) {
-                  // ONにした時だけ、一覧セクションまで自動スクロールする
                   requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
                       resultsSectionRef.current?.scrollIntoView({
@@ -1091,6 +1106,44 @@ export default function SelectionListPage() {
           >
             {showCalendar ? "カレンダーを閉じる" : "カレンダー表示"}
           </button>
+        </div>
+
+        {/* [2026-07-29 修正] 「現在の通知条件」を上、通知登録ボタンをその下に配置。
+            以前はキーワード入力欄や各種フィルターの下(ページ末尾寄り)にあり、
+            通知状態がひと目で分かりづらかったため、条件検索の入口である
+            このカードの最上部に移動した。 */}
+        {!notifyConditionLoading ? (
+          <button
+            type="button"
+            style={currentNotifyConditionBox}
+            onClick={applySavedNotifyConditionToFilters}
+            disabled={!savedNotifyCondition || !savedNotifyCondition.enabled}
+          >
+            現在の通知条件:{" "}
+            {savedNotifyConditionText ?? "未設定(通知は届きません)"}
+            {savedNotifyCondition?.enabled ? (
+              <span style={applyHintText}>(タップで検索条件に反映)</span>
+            ) : null}
+          </button>
+        ) : null}
+
+        <div style={notifyRow}>
+          <button
+            type="button"
+            className="sh-btn sh-btn--primary"
+            onClick={saveNotifyCondition}
+            disabled={notifySaving}
+          >
+            {notifySaving ? "保存中…" : "🔔 この条件で通知を受け取る"}
+          </button>
+
+          {notifyMessage ? (
+            <span style={notifyMessageText}>{notifyMessage}</span>
+          ) : null}
+        </div>
+
+        <div style={notifyHint}>
+          ※ 通知の対象になるのは「都道府県・カテゴリ・ランク」です(市区町村・状態は対象外です)
         </div>
 
         <input
@@ -1217,40 +1270,6 @@ export default function SelectionListPage() {
           />
           <span>過去の開催も含めて表示</span>
         </label>
-
-        <div style={notifyRow}>
-          <button
-            type="button"
-            className="sh-btn sh-btn--primary"
-            onClick={saveNotifyCondition}
-            disabled={notifySaving}
-          >
-            {notifySaving ? "保存中…" : "🔔 この条件で通知を受け取る"}
-          </button>
-
-          {notifyMessage ? (
-            <span style={notifyMessageText}>{notifyMessage}</span>
-          ) : null}
-        </div>
-
-        <div style={notifyHint}>
-          ※ 通知の対象になるのは「都道府県・カテゴリ・ランク」です(市区町村・状態は対象外です)
-        </div>
-
-        {!notifyConditionLoading ? (
-          <button
-            type="button"
-            style={currentNotifyConditionBox}
-            onClick={applySavedNotifyConditionToFilters}
-            disabled={!savedNotifyCondition || !savedNotifyCondition.enabled}
-          >
-            現在の通知条件:{" "}
-            {savedNotifyConditionText ?? "未設定(通知は届きません)"}
-            {savedNotifyCondition?.enabled ? (
-              <span style={applyHintText}>(タップで検索条件に反映)</span>
-            ) : null}
-          </button>
-        ) : null}
 
         <div style={filterFooter}>
           <div className="ui-meta">
@@ -1556,6 +1575,7 @@ const input: CSSProperties = {
   fontSize: 16,
   outline: "none",
   background: "#fff",
+  marginTop: 12,
 };
 
 const filterGrid: CSSProperties = {
@@ -1643,7 +1663,6 @@ const notifyHint: CSSProperties = {
 };
 
 const currentNotifyConditionBox: CSSProperties = {
-  marginTop: 8,
   width: "100%",
   textAlign: "left",
   padding: "8px 12px",
@@ -1777,7 +1796,6 @@ const cardNotified: CSSProperties = {
   background: "#faf5ff",
 };
 
-// [修正①] バナーと一括既読ボタンを横並びにするための行コンテナ
 const notifiedBannerRow: CSSProperties = {
   display: "flex",
   gap: 8,
@@ -1805,7 +1823,6 @@ const notifiedBannerActive: CSSProperties = {
   color: "#fff",
 };
 
-// [修正①] 一括既読ボタン専用スタイル
 const markAllNotifiedButton: CSSProperties = {
   flexShrink: 0,
   whiteSpace: "nowrap",
