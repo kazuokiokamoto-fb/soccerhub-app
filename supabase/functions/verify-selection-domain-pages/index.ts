@@ -81,6 +81,17 @@
 // [2026-07-19 修正⑥] 「接続確認」ページの検知強化:
 //   年齢確認・Cookie同意・ブラウザ非対応通知等の中間ページを、本来のコンテンツと
 //   誤認するケースがあったため、SUSPICIOUS_PAGE_PATTERNS にパターンを追加した。
+//
+// [2026-07-29 修正⑦] 1つの公式サイトを複数カテゴリのteam_masterが共有している
+//   ケース(例: 湘南ベルマーレ本体・EAST・WEST・U-15EAST・U-15WEST・U-18の6団体)で、
+//   特定カテゴリ向けの記事(例: 「U-18」限定セレクション)が、記事の対象と無関係な
+//   他カテゴリのチームにまで無差別に複製されてしまう問題を修正。
+//   実例: bellmare.co.jp/396855(U-18限定の記事)が、U-12/U-15専用の
+//   チームレコードにまで同じ日程として登録されていた。
+//   → 記事から抽出したカテゴリと、team_master.category が両方とも明確な値を
+//     持っていて、かつ全く重ならない場合はそのチームへの登録をスキップする
+//     categoriesOverlap() を追加。どちらかにカテゴリ情報が無い場合は判定材料が
+//     無いとみなし、誤って正しい情報まで弾かないよう従来通り許可する。
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -148,6 +159,20 @@ const SCHOOL_CALENDAR_SUSPECT_DATE_THRESHOLD = 8;
 function isSuspiciousSchoolPage(url: string, eventDatesCount: number): boolean {
   return SCHOOL_GENERAL_DOMAINS_PATTERN.test(hostOf(url)) &&
     eventDatesCount > SCHOOL_CALENDAR_SUSPECT_DATE_THRESHOLD;
+}
+
+// [2026-07-29 追加] カテゴリの正規化(ハイフン有無・大文字小文字の表記ゆれを吸収)
+function normalizeCategoryForMatch(v: string | null | undefined): string {
+  return String(v || "").toUpperCase().replace(/-/g, "");
+}
+
+// [2026-07-29 追加] 抽出されたカテゴリと、チーム自身のカテゴリが重なるか判定する。
+// どちらかが空(判定材料が無い)場合は、誤ってスキップしないよう「一致とみなす」。
+function categoriesOverlap(articleCategories: string[], teamCategories: string[]): boolean {
+  if (articleCategories.length === 0 || teamCategories.length === 0) return true;
+  const a = articleCategories.map(normalizeCategoryForMatch);
+  const b = teamCategories.map(normalizeCategoryForMatch);
+  return a.some((x) => b.includes(x));
 }
 
 function nowIso() { return new Date().toISOString(); }
@@ -767,11 +792,6 @@ async function crawlAndFindSelectionPageRaw(
   }
 }
 
-// [2026-07-19 修正] まとめサイト解決に成功し、解決後URLのドメインが元の
-// selection_page_url のドメインと異なる場合、その解決結果を
-// team_selection_research に書き戻して固定化する。research.id が必要なため
-// 呼び出し元(upsertSelectionEvents内)で行う設計にせず、ここで直接引数として
-// research 行の id を受け取れるようラッパーの型を拡張する。
 async function crawlAndFindSelectionPage(
   selectionPageUrl: string,
   teamName: string,
@@ -956,6 +976,19 @@ async function upsertSelectionEvents(
   const summary = cleanForDb(compactText(page.text, 200), 200);
   const description = cleanForDb(compactText(page.text, 800), 800);
 
+  // [2026-07-29 追加] 1つの公式サイトを複数カテゴリのteam_masterが共有している
+  // ケースで、特定カテゴリ向けの記事が無関係な他カテゴリのチームにまで無差別に
+  // 複製されてしまう問題を防ぐ。記事側・チーム側どちらかにカテゴリ情報が無い
+  // 場合は判定材料が無いとみなし、従来通り許可する。
+  const teamOwnCategories = [category].filter(Boolean) as string[];
+  if (!categoriesOverlap(categories, teamOwnCategories)) {
+    await supabase
+      .from("team_selection_research")
+      .update({ checked_at: nowIso() })
+      .eq("id", research.id);
+    return [{ status: "category_mismatch", eventDate: null }];
+  }
+
   // [2026-07-19 追加] 学校サイト全体の行事予定を誤って拾っている疑いがある場合、
   // 表示上は「日付未取得」に強制し、抽出ステータスに要確認マークを付ける。
   const schoolCalendarSuspected = isSuspiciousSchoolPage(page.url, eventDates.length);
@@ -1093,7 +1126,7 @@ serve(async (req) => {
     }
 
     const results = [];
-    let totalInserted = 0, totalUpdated = 0, totalNotFound = 0, totalErrors = 0, totalSkipped = 0;
+    let totalInserted = 0, totalUpdated = 0, totalNotFound = 0, totalErrors = 0, totalSkipped = 0, totalCategoryMismatch = 0;
     const succeededTeams = new Set<string>();
 
     for (const research of rows) {
@@ -1135,8 +1168,15 @@ serve(async (req) => {
         const upsertResults = await upsertSelectionEvents(research, page);
         const inserted = upsertResults.filter(r => r.status === "inserted").length;
         const updated = upsertResults.filter(r => r.status === "updated").length;
+        const categoryMismatch = upsertResults.filter(r => r.status === "category_mismatch").length;
         totalInserted += inserted;
         totalUpdated += updated;
+        totalCategoryMismatch += categoryMismatch;
+
+        if (categoryMismatch > 0) {
+          results.push({ teamName, status: "category_mismatch", url: page.url });
+          continue;
+        }
 
         if (teamKey && isOfficialSourceRow(research)) {
           succeededTeams.add(teamKey);
@@ -1172,6 +1212,7 @@ serve(async (req) => {
       totalNotFound,
       totalErrors,
       totalSkipped,
+      totalCategoryMismatch,
       results,
     });
   } catch (e) {
