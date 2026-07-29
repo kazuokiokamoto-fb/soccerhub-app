@@ -420,12 +420,19 @@ export default function SelectionListPage() {
       }
     }
 
-    async function load() {
+        async function load() {
       const hadCache = getCachedSelectionEvents() !== null;
 
-      // キャッシュが無いときだけ「読み込み中」表示にする
-      // (キャッシュがある場合は裏側で静かに最新データへ更新する)
-      if (!hadCache) {
+      // [修正②] キャッシュがある場合は、ネットワーク再取得(fetchSelectionEvents)の
+      // 完了を待たずに、その場で即座にスクロール位置を復元する。
+      // 従来は restoreScrollIfNeeded() を finally 内(=ネットワーク完了後)でしか
+      // 呼んでいなかったため、キャッシュがあって画面自体は即座に表示できて
+      // いるにも関わらず、スクロール復元だけ裏側の再取得の完了を待って
+      // 遅延し、「一覧に戻ると一瞬トップが見えてから目的の位置へジャンプする」
+      // ちらつきの原因になっていた。
+      if (hadCache) {
+        restoreScrollIfNeeded();
+      } else {
         setLoading(true);
       }
 
@@ -444,7 +451,11 @@ export default function SelectionListPage() {
       } finally {
         if (active) {
           setLoading(false);
-          restoreScrollIfNeeded();
+          // キャッシュが無かった場合(初回アクセス時)は、データが揃って
+          // 画面が描画されてからここで復元する
+          if (!hadCache) {
+            restoreScrollIfNeeded();
+          }
         }
       }
     }
