@@ -156,8 +156,14 @@ function formatDate(date?: string | null) {
 
 const SELECTION_SCROLL_KEY = "selection-list-scroll-y";
 
+// [2026-07-31 修正] NEWバッジの基準を fetched_at(最終更新日時) に統一。
+// 従来は created_at(レコードが初めて作られた日時) を優先していたため、
+// 「新着順」ソート(fetched_at基準)の上位にNEWバッジの付かないカードが
+// 混ざる不整合があった(例: tonan前橋U-12が日程更新されて上位に来るのに
+// NEWが付かない)。日程の追加・内容更新も「新着」として扱う方が実用的
+// なため、fetched_at を優先する基準に変更した。
 function isNewArrival(item: SelectionEvent) {
-  const t = new Date(item.created_at || item.fetched_at || 0).getTime();
+  const t = new Date(item.fetched_at || item.created_at || 0).getTime();
   return Number.isFinite(t) && t >= sevenDaysAgoTime();
 }
 
