@@ -1118,21 +1118,48 @@ async function upsertSelectionEvents(
     }
 
     if (existing?.id) {
-      const { error } = await supabase
-        .from("selection_events")
-        .update(eventRow)
-        .eq("id", existing.id);
-      if (error) throw new Error(`update error: ${JSON.stringify(error)}`);
-      results.push({ status: "updated", eventDate, id: existing.id });
-    } else {
-      const { data: insertedRow, error } = await supabase
-        .from("selection_events")
-        .insert({ ...eventRow, created_at: nowIso() })
-        .select("id")
-        .single();
-      if (error) throw new Error(`insert error: ${JSON.stringify(error)}`);
-      results.push({ status: "inserted", eventDate, id: insertedRow?.id });
-    }
+          // [2026-07-31 追加] 実際に内容(日程・締切・会場・状態・タイトル)が
+          // 変わった場合だけ content_updated_at を更新する。
+          // fetched_at はクロールが実行されるたびに(内容が変わらなくても)
+          // 常に更新されるため、これをNEW判定に使うと「10分おきの巡回だけで
+          // 常にNEW扱いされ続ける」問題が発生した(2026-07-31に確認)。
+          // content_updated_at は本当に情報が更新された時だけ動くタイムスタンプ
+          // として別途持たせ、NEWバッジ・新着順ソートの基準に使う。
+          const { data: beforeUpdate } = await supabase
+            .from("selection_events")
+            .select("event_date, event_dates, application_deadline, venue_name, display_status, title")
+            .eq("id", existing.id)
+            .maybeSingle();
+
+          const contentChanged = !beforeUpdate || (
+            beforeUpdate.event_date !== eventRow.event_date ||
+            JSON.stringify(beforeUpdate.event_dates) !== JSON.stringify(eventRow.event_dates) ||
+            beforeUpdate.application_deadline !== eventRow.application_deadline ||
+            beforeUpdate.venue_name !== eventRow.venue_name ||
+            beforeUpdate.display_status !== eventRow.display_status ||
+            beforeUpdate.title !== eventRow.title
+          );
+
+          const updatePayloadForEvent = contentChanged
+            ? { ...eventRow, content_updated_at: nowIso() }
+            : eventRow;
+
+          const { error } = await supabase
+            .from("selection_events")
+            .update(updatePayloadForEvent)
+            .eq("id", existing.id);
+          if (error) throw new Error(`update error: ${JSON.stringify(error)}`);
+          results.push({ status: "updated", eventDate, id: existing.id, contentChanged });
+        } else {
+          const { data: insertedRow, error } = await supabase
+            .from("selection_events")
+            .insert({ ...eventRow, created_at: nowIso(), content_updated_at: nowIso() })
+            .select("id")
+            .single();
+          if (error) throw new Error(`insert error: ${JSON.stringify(error)}`);
+          results.push({ status: "inserted", eventDate, id: insertedRow?.id });
+        }
+
   }
 
   const insertedResults = results.filter(r => r.status === "inserted");

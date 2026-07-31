@@ -36,6 +36,16 @@ export type GroupedSelectionEvent = SelectionEvent & {
   isRollingRecruitment: boolean;
 };
 
+// [2026-07-31 追加] グループの代表行を決めるための並び替え基準。
+// content_updated_at(本当に内容が変わった時だけ動くタイムスタンプ)を
+// 最優先にし、無ければ fetched_at → created_at の順にフォールバックする。
+function representativeSortKey(item: SelectionEvent): number {
+  const t = new Date(
+    (item as any).content_updated_at || item.fetched_at || item.created_at || 0
+  ).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
 export function groupSelectionEvents(
   items: SelectionEvent[]
 ): GroupedSelectionEvent[] {
@@ -50,11 +60,9 @@ export function groupSelectionEvents(
   const result: GroupedSelectionEvent[] = [];
 
   for (const groupRows of groups.values()) {
-    const sorted = [...groupRows].sort((a, b) => {
-      const aa = new Date(a.fetched_at || a.created_at || 0).getTime();
-      const bb = new Date(b.fetched_at || b.created_at || 0).getTime();
-      return bb - aa;
-    });
+    const sorted = [...groupRows].sort(
+      (a, b) => representativeSortKey(b) - representativeSortKey(a)
+    );
     const representative = sorted[0] as any;
 
     const dateSet = new Set<string>();
@@ -99,11 +107,9 @@ export function hasUpcomingDate(dates: string[]): boolean {
   return dates.some((d) => d >= today);
 }
 
-// [修正] 一覧表示に本当に必要なカラムだけを明示的に指定する。
-// 従来は select("*") で raw_text(最大20,000文字)や description(最大800文字)
-// といった重量級カラムまで毎回全件(数千件)取得しており、これが
-// 「セレクション情報 読み込み中...」が常に長い主因になっていた。
-// (数千件 × 数万文字 = 実質数十MBのダウンロードが発生していた)
+// 一覧表示に本当に必要なカラムだけを明示的に指定する。
+// select("*") で raw_text(最大20,000文字)や description(最大800文字)
+// といった重量級カラムまで毎回全件取得すると、読み込みが大きく遅くなるため、
 // 詳細ページ用の全カラムは fetchSelectionEventById 側でのみ取得する。
 const LIST_COLUMNS = [
   "id",
@@ -128,6 +134,7 @@ const LIST_COLUMNS = [
   "is_rolling_recruitment",
   "fetched_at",
   "created_at",
+  "content_updated_at", // [2026-07-31 追加] NEW判定・新着順ソートの正式な基準列
 ].join(",");
 
 export async function fetchSelectionEvents(): Promise<SelectionEvent[]> {

@@ -156,14 +156,17 @@ function formatDate(date?: string | null) {
 
 const SELECTION_SCROLL_KEY = "selection-list-scroll-y";
 
-// [2026-07-31 修正] NEWバッジの基準を fetched_at(最終更新日時) に統一。
-// 従来は created_at(レコードが初めて作られた日時) を優先していたため、
-// 「新着順」ソート(fetched_at基準)の上位にNEWバッジの付かないカードが
-// 混ざる不整合があった(例: tonan前橋U-12が日程更新されて上位に来るのに
-// NEWが付かない)。日程の追加・内容更新も「新着」として扱う方が実用的
-// なため、fetched_at を優先する基準に変更した。
+// [2026-07-31 修正] NEWバッジの基準を content_updated_at(本当に内容が
+// 変わった時だけ動くタイムスタンプ) に統一。
+// 一度 fetched_at(クロール実行時刻)を基準にしたところ、10分おきの巡回
+// だけで(内容が変わらなくても)ほぼ全件がNEW扱いされてしまう不具合が
+// 発生した。content_updated_at はクローラー側で「実際に日程・締切・
+// 会場・状態・タイトルのいずれかが変化した場合だけ」更新されるため、
+// 「情報が更新されたらNEWにしたい」という意図を正しく満たせる。
 function isNewArrival(item: SelectionEvent) {
-  const t = new Date(item.fetched_at || item.created_at || 0).getTime();
+  const t = new Date(
+    (item as any).content_updated_at || item.created_at || item.fetched_at || 0
+  ).getTime();
   return Number.isFinite(t) && t >= sevenDaysAgoTime();
 }
 
@@ -275,10 +278,17 @@ function statusStyle(status?: string): CSSProperties {
   };
 }
 
+// [2026-07-31 修正] 「新着順」の基準を content_updated_at 優先に統一。
+// NEWバッジ(isNewArrival)と同じ基準列を使うことで、「新着順」で上位に
+// 並ぶカードには必ずNEWバッジが付く(逆もまた然り)という一貫性を保つ。
 function sortNewestFirst<T extends SelectionEvent>(rows: T[]): T[] {
   return [...rows].sort((a, b) => {
-    const aa = new Date(a.fetched_at || a.created_at || 0).getTime();
-    const bb = new Date(b.fetched_at || b.created_at || 0).getTime();
+    const aa = new Date(
+      (a as any).content_updated_at || a.created_at || a.fetched_at || 0
+    ).getTime();
+    const bb = new Date(
+      (b as any).content_updated_at || b.created_at || b.fetched_at || 0
+    ).getTime();
     return bb - aa;
   });
 }
@@ -1364,8 +1374,6 @@ export default function SelectionListPage() {
         <>
           {filteredItems.length > 0 ? (
             <section style={listWrap} ref={resultsSectionRef}>
-              {/* [2026-07-29 修正] ソートのプルダウンを、市区町村・状態のセレクトボックスの
-                  並びから、この「セレクション情報」見出しと同じ行の右側に移動した。 */}
               <div style={sectionTitleRow}>
                 <div className="ui-title" style={sectionTitle}>
                   セレクション情報
@@ -1628,7 +1636,6 @@ const sectionTitle: CSSProperties = {
   margin: 0,
 };
 
-// [2026-07-29 追加] 「セレクション情報」見出しと並び替えプルダウンを横並びにする行
 const sectionTitleRow: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
@@ -1638,7 +1645,6 @@ const sectionTitleRow: CSSProperties = {
   marginTop: 8,
 };
 
-// [2026-07-29 追加] 並び替えプルダウン専用スタイル
 const sortSelect: CSSProperties = {
   padding: "8px 10px",
   borderRadius: 10,
