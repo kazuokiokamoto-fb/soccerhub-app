@@ -299,7 +299,7 @@ export default function HomeCalendar(props: { initialPanelMode?: PanelMode }) {
 
         const sevenDaysAgoTime = Date.now() - 1000 * 60 * 60 * 24 * 7;
         const newUpcomingCount = upcoming.filter((g: any) => {
-          const t = new Date(g.created_at || g.fetched_at || 0).getTime();
+          const t = new Date(g.content_updated_at || g.created_at || g.fetched_at || 0).getTime();
           return Number.isFinite(t) && t >= sevenDaysAgoTime;
         }).length;
 
