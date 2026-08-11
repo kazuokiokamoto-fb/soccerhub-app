@@ -107,6 +107,30 @@
 //     ケース(例: 湘南ベルマーレが1つのacademyページから3つの募集ページを持つ)
 //     には影響しない。source_urlは常にresearch行自身のURL(=academy)を指す
 //     ため一致し続け、削除条件に該当しないため。
+//
+// [2026-07-31 修正⑨] NEWバッジ・新着順ソートの基準を content_updated_at に
+//   統一するため、実際に内容(日程・締切・会場・状態・タイトル)が変わった
+//   場合だけ content_updated_at を更新するようにした。fetched_at は
+//   クロールが実行されるたびに(内容が変わらなくても)常に更新されるため、
+//   これをNEW判定の基準にすると「10分おきの巡回だけで常にNEW扱いされ続ける」
+//   問題が発生していた。
+//
+// [2026-08-07 修正⑩] summary/description にサイト共通のナビゲーション
+//   メニュー文言(「コンテンツへスキップ メニュー 検索 ニュース チーム...」等)
+//   がそのまま入ってしまい、実際の記事内容が読めない問題を修正。
+//   鹿島アントラーズの公式サイトのように、記事本文の前に巨大なヘッダー
+//   メニューがあるサイトで、summary/descriptionの抽出元(page.textの先頭)が
+//   ナビゲーション文言で占められてしまい、ユーザーから見て「セレクション情報
+//   ではない」ページのように見えてしまっていた。
+//   → extractArticleBodyText() を新設。meta description があればそれを
+//     最優先で使い、無い場合はナビゲーション語句(NAV_BOILERPLATE_MARKERS)が
+//     出現する範囲の直後から本文とみなして抽出するようにした。
+//
+// [2026-08-07 修正⑪] team_master.category が空でカテゴリ判定ができない
+//   チーム(例: 鹿島アントラーズの「つくば」「ノルテ」等の地域別サブアカデミー)
+//   で、修正⑦のcategoriesOverlapだけでは無関係な記事の複製を防げない問題への
+//   保険的対応。チーム名に含まれる地域識別子(つくば/ノルテ)と、記事タイトルの
+//   地域識別子が矛盾する場合はスキップする teamIdentifierMismatch() を追加。
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -166,6 +190,18 @@ const NOISE_SECTION_MARKERS = [
   "寄稿者プロフィール", "寄稿者の最近の投稿",
 ];
 
+// [2026-08-07 追加] サイト共通のヘッダーナビゲーションでよく使われる語句。
+// これらが summary/description の冒頭を占めてしまうのを防ぐため、
+// 本文らしき部分を探す際にこれらの語句が連続する塊はスキップする。
+const NAV_BOILERPLATE_MARKERS = [
+  "コンテンツへスキップ", "メニュー 検索", "Skip to content",
+  "チケット/観戦/グッズ", "ファンクラブ", "アカデミー", "パートナー",
+];
+
+// [2026-08-07 追加] チーム名に含まれる地域識別子(つくば/ノルテ等)が
+// 記事タイトルと矛盾していないか判定するための識別子リスト。
+const SUB_ACADEMY_IDENTIFIERS = ["つくば", "ノルテ", "本体", "ジュニアユース", "ユース", "ジュニア"];
+
 // [2026-07-19 追加] 学校の公式ドメインパターン。これらのドメインで抽出日程が
 // 多すぎる場合、学校全体の行事予定を誤って拾っている疑いがある。
 const SCHOOL_GENERAL_DOMAINS_PATTERN = /\.(ac|ed)\.jp$/;
@@ -188,6 +224,62 @@ function categoriesOverlap(articleCategories: string[], teamCategories: string[]
   const a = articleCategories.map(normalizeCategoryForMatch);
   const b = teamCategories.map(normalizeCategoryForMatch);
   return a.some((x) => b.includes(x));
+}
+
+// [2026-08-07 追加] ページ本文の「実質的な開始位置」を推定する。
+// meta description があればそれを最優先(記事固有の説明文である可能性が高い)。
+// 無い場合、stripTags後のテキストから、ナビゲーション語句の塊が終わったと
+// 思われる位置(最後のナビ語句の後)を本文開始位置とみなして、そこから
+// summary/description 用のテキストを切り出す。
+function extractArticleBodyText(pageText: string, metaDescription: string): string {
+  if (metaDescription && metaDescription.length > 20) {
+    return metaDescription;
+  }
+
+  const raw = String(pageText || "");
+  let lastNavEnd = 0;
+  for (const marker of NAV_BOILERPLATE_MARKERS) {
+    const idx = raw.indexOf(marker);
+    if (idx !== -1) {
+      const end = idx + marker.length;
+      if (end > lastNavEnd) lastNavEnd = end;
+    }
+  }
+
+  // ナビ語句が見つかった場合、その直後から始まるテキストを本文とみなす。
+  // 見つからない場合は元のテキストをそのまま使う(従来通り)。
+  return lastNavEnd > 0 ? raw.slice(lastNavEnd) : raw;
+}
+
+// [2026-08-07 追加] チーム名に含まれる固有の識別子(つくば、ノルテ等)が、
+// 記事タイトルに含まれているかで、カテゴリ情報が無いチームでも
+// ある程度の対応チェックができるようにする。
+// team_master.category が空でカテゴリ判定ができないケース
+// (例: 鹿島アントラーズの「つくば」「ノルテ」等のサブアカデミー)で、
+// 同じURLが無関係な複数チームに登録され続ける問題を緩和する。
+function teamIdentifierMismatch(teamName: string, articleTitle: string): boolean {
+  const teamSpecificWords = SUB_ACADEMY_IDENTIFIERS.filter((w) =>
+    teamName.includes(w)
+  );
+  if (teamSpecificWords.length === 0) return false; // 判定材料が無ければ許可
+
+  // チーム名に含まれる地域識別子(つくば/ノルテ)が記事タイトルにも
+  // 含まれているか確認する。両方に無関係な地域識別子が含まれていて、
+  // かつ一致しない場合だけミスマッチとみなす。
+  const regionWords = ["つくば", "ノルテ"];
+  const teamRegion = regionWords.find((w) => teamName.includes(w));
+  const articleRegion = regionWords.find((w) => articleTitle.includes(w));
+
+  if (teamRegion && articleRegion && teamRegion !== articleRegion) {
+    return true;
+  }
+  // チームが特定地域(つくば/ノルテ)を含むのに、記事タイトルにはどの
+  // 地域識別子も無い(=本体向けの記事の可能性が高い)場合もミスマッチとみなす
+  if (teamRegion && !articleRegion) {
+    return true;
+  }
+
+  return false;
 }
 
 function nowIso() { return new Date().toISOString(); }
@@ -965,7 +1057,7 @@ async function notifyMatchingUsers(params: {
 
 async function upsertSelectionEvents(
   research: any,
-  page: { url: string; text: string; title: string; resolvedFromMatome?: boolean },
+  page: { url: string; text: string; title: string; html?: string; resolvedFromMatome?: boolean },
 ) {
   const teamMaster = research.team_master || {};
   const teamName = teamMaster.team_name || "不明";
@@ -994,8 +1086,14 @@ async function upsertSelectionEvents(
   const sourceRank = inferSourceRank(leagueName, teamName);
   const admissionFiscalYear = extractAdmissionFiscalYear(fullText);
   const isRollingRecruitment = extractIsRollingRecruitment(fullText);
-  const summary = cleanForDb(compactText(page.text, 200), 200);
-  const description = cleanForDb(compactText(page.text, 800), 800);
+
+  // [2026-08-07 追加] ナビゲーションメニューの文言が summary/description の
+  // 先頭を占めてしまい、実際の記事内容が読めない問題を修正。
+  // (鹿島アントラーズのセレクション記事で「コンテンツへスキップ メニュー
+  // 検索 ニュース チーム...」が summary に表示される事故を確認)
+  const articleBodyText = extractArticleBodyText(page.text, extractMetaDescription(page.html || ""));
+  const summary = cleanForDb(compactText(articleBodyText, 200), 200);
+  const description = cleanForDb(compactText(articleBodyText, 800), 800);
 
   // [2026-07-29 修正⑦] 1つの公式サイトを複数カテゴリのteam_masterが共有している
   // ケースで、特定カテゴリ向けの記事が無関係な他カテゴリのチームにまで無差別に
@@ -1003,6 +1101,18 @@ async function upsertSelectionEvents(
   // 場合は判定材料が無いとみなし、従来通り許可する。
   const teamOwnCategories = [category].filter(Boolean) as string[];
   if (!categoriesOverlap(categories, teamOwnCategories)) {
+    await supabase
+      .from("team_selection_research")
+      .update({ checked_at: nowIso() })
+      .eq("id", research.id);
+    return [{ status: "category_mismatch", eventDate: null }];
+  }
+
+  // [2026-08-07 追加] category が空でカテゴリ判定ができないチーム
+  // (例: 鹿島アントラーズの「つくば」「ノルテ」等のサブアカデミー)向けの
+  // 保険的なチェック。チーム名に含まれる地域識別子(つくば/ノルテ)と、
+  // 記事タイトルの地域識別子が矛盾する場合はスキップする。
+  if (teamIdentifierMismatch(teamName, page.title)) {
     await supabase
       .from("team_selection_research")
       .update({ checked_at: nowIso() })
@@ -1118,48 +1228,47 @@ async function upsertSelectionEvents(
     }
 
     if (existing?.id) {
-          // [2026-07-31 追加] 実際に内容(日程・締切・会場・状態・タイトル)が
-          // 変わった場合だけ content_updated_at を更新する。
-          // fetched_at はクロールが実行されるたびに(内容が変わらなくても)
-          // 常に更新されるため、これをNEW判定に使うと「10分おきの巡回だけで
-          // 常にNEW扱いされ続ける」問題が発生した(2026-07-31に確認)。
-          // content_updated_at は本当に情報が更新された時だけ動くタイムスタンプ
-          // として別途持たせ、NEWバッジ・新着順ソートの基準に使う。
-          const { data: beforeUpdate } = await supabase
-            .from("selection_events")
-            .select("event_date, event_dates, application_deadline, venue_name, display_status, title")
-            .eq("id", existing.id)
-            .maybeSingle();
+      // [2026-07-31 追加] 実際に内容(日程・締切・会場・状態・タイトル)が
+      // 変わった場合だけ content_updated_at を更新する。
+      // fetched_at はクロールが実行されるたびに(内容が変わらなくても)
+      // 常に更新されるため、これをNEW判定に使うと「10分おきの巡回だけで
+      // 常にNEW扱いされ続ける」問題が発生した(2026-07-31に確認)。
+      // content_updated_at は本当に情報が更新された時だけ動くタイムスタンプ
+      // として別途持たせ、NEWバッジ・新着順ソートの基準に使う。
+      const { data: beforeUpdate } = await supabase
+        .from("selection_events")
+        .select("event_date, event_dates, application_deadline, venue_name, display_status, title")
+        .eq("id", existing.id)
+        .maybeSingle();
 
-          const contentChanged = !beforeUpdate || (
-            beforeUpdate.event_date !== eventRow.event_date ||
-            JSON.stringify(beforeUpdate.event_dates) !== JSON.stringify(eventRow.event_dates) ||
-            beforeUpdate.application_deadline !== eventRow.application_deadline ||
-            beforeUpdate.venue_name !== eventRow.venue_name ||
-            beforeUpdate.display_status !== eventRow.display_status ||
-            beforeUpdate.title !== eventRow.title
-          );
+      const contentChanged = !beforeUpdate || (
+        beforeUpdate.event_date !== eventRow.event_date ||
+        JSON.stringify(beforeUpdate.event_dates) !== JSON.stringify(eventRow.event_dates) ||
+        beforeUpdate.application_deadline !== eventRow.application_deadline ||
+        beforeUpdate.venue_name !== eventRow.venue_name ||
+        beforeUpdate.display_status !== eventRow.display_status ||
+        beforeUpdate.title !== eventRow.title
+      );
 
-          const updatePayloadForEvent = contentChanged
-            ? { ...eventRow, content_updated_at: nowIso() }
-            : eventRow;
+      const updatePayloadForEvent = contentChanged
+        ? { ...eventRow, content_updated_at: nowIso() }
+        : eventRow;
 
-          const { error } = await supabase
-            .from("selection_events")
-            .update(updatePayloadForEvent)
-            .eq("id", existing.id);
-          if (error) throw new Error(`update error: ${JSON.stringify(error)}`);
-          results.push({ status: "updated", eventDate, id: existing.id, contentChanged });
-        } else {
-          const { data: insertedRow, error } = await supabase
-            .from("selection_events")
-            .insert({ ...eventRow, created_at: nowIso(), content_updated_at: nowIso() })
-            .select("id")
-            .single();
-          if (error) throw new Error(`insert error: ${JSON.stringify(error)}`);
-          results.push({ status: "inserted", eventDate, id: insertedRow?.id });
-        }
-
+      const { error } = await supabase
+        .from("selection_events")
+        .update(updatePayloadForEvent)
+        .eq("id", existing.id);
+      if (error) throw new Error(`update error: ${JSON.stringify(error)}`);
+      results.push({ status: "updated", eventDate, id: existing.id, contentChanged });
+    } else {
+      const { data: insertedRow, error } = await supabase
+        .from("selection_events")
+        .insert({ ...eventRow, created_at: nowIso(), content_updated_at: nowIso() })
+        .select("id")
+        .single();
+      if (error) throw new Error(`insert error: ${JSON.stringify(error)}`);
+      results.push({ status: "inserted", eventDate, id: insertedRow?.id });
+    }
   }
 
   const insertedResults = results.filter(r => r.status === "inserted");
