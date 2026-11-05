@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/lib/auth";
+import ZoneLink from "@/app/components/ZoneLink";
 import {
   getUnifiedBadgeCount,
   getUnreadChatCount,
@@ -143,7 +143,7 @@ export default function AppTabNav() {
           const showBadge = showChatBadge || showSelectionBadge;
 
           return (
-            <Link
+            <ZoneLink
               key={tab.href}
               href={tab.href}
               style={{
@@ -156,7 +156,7 @@ export default function AppTabNav() {
 
                 {showBadge ? <span style={badge}>{badgeText}</span> : null}
               </span>
-            </Link>
+            </ZoneLink>
           );
         })}
       </div>

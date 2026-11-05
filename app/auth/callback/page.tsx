@@ -3,6 +3,7 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
+import { assignCrossZone } from "@/app/components/ZoneLink";
 
 function normalizeRedirect(input: string | null | undefined) {
   if (!input) return "/";
@@ -49,8 +50,10 @@ function AuthCallbackInner() {
           return;
         }
 
-        router.replace(redirect);
-        router.refresh();
+        if (!assignCrossZone(redirect)) {
+          router.replace(redirect);
+          router.refresh();
+        }
       } catch (e) {
         console.error("auth callback error:", e);
         if (!mounted) return;

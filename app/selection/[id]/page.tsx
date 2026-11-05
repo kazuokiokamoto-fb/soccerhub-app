@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
+import ZoneLink from "@/app/components/ZoneLink";
 
 import { fetchSelectionEventById } from "@/app/lib/selections";
 
@@ -139,9 +140,9 @@ export default async function SelectionDetailPage(props: {
           ← 一覧へ
         </Link>
 
-        <Link href="/" className="sh-btn">
+        <ZoneLink href="/" className="sh-btn">
           ホーム
-        </Link>
+        </ZoneLink>
       </div>
 
       <section className="ui-card" style={heroCard}>

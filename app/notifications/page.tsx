@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import AppTabNav from "@/app/components/AppTabNav";
+import { assignCrossZone } from "@/app/components/ZoneLink";
 import AppHero from "@/app/components/AppHero";
 import { getUnifiedBadgeCount, syncAppBadge } from "@/app/lib/badge";
 
@@ -161,7 +162,10 @@ export default function NotificationsPage() {
         await notifyBadgeUpdate();
       }
 
-      router.push(item.target_url || "/");
+      const target = item.target_url || "/";
+      if (!assignCrossZone(target)) {
+        router.push(target);
+      }
     } catch (e) {
       console.error(e);
       alert(e instanceof Error ? e.message : "通知の処理に失敗しました");

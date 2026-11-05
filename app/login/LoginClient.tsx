@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
+import { assignCrossZone } from "@/app/components/ZoneLink";
 
 function timeout<T>(ms: number, label = "timeout") {
   return new Promise<T>((_, reject) =>
@@ -56,6 +57,7 @@ export default function LoginClient() {
       if (!mounted) return;
 
       if (data.session) {
+        if (assignCrossZone(redirect)) return;
         router.replace(redirect);
         router.refresh();
       }
@@ -76,6 +78,7 @@ export default function LoginClient() {
         setMsg(`✅ 認証OK。移動します → ${to}`);
 
         setTimeout(() => {
+          if (assignCrossZone(to)) return;
           router.replace(to);
           router.refresh();
         }, 100);
@@ -95,16 +98,20 @@ export default function LoginClient() {
       const { data } = await supabase.auth.getSession();
       if (data.session) {
         setMsg(`✅ 認証OK。移動します → ${to}`);
-        router.replace(to);
-        router.refresh();
+        if (!assignCrossZone(to)) {
+          router.replace(to);
+          router.refresh();
+        }
         return;
       }
       await sleep(150);
     }
 
     setMsg(`✅ 認証OK。移動します → ${to}`);
-    router.replace(to);
-    router.refresh();
+    if (!assignCrossZone(to)) {
+      router.replace(to);
+      router.refresh();
+    }
   };
 
   const signUp = async () => {
