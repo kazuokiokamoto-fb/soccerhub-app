@@ -1,9 +1,9 @@
 name: Daily Selection Crawler
 
+# 定期実行は Supabase pg_cron の crawl-selection-pages（10分ごと）が担当。
+# このワークフローは手動実行だけ。
 on:
-  #schedule:
-  #  - cron: '0 1 * * *'  # 毎日日本時間10:00（UTC 1:00）
-  workflow_dispatch:       # 手動実行ボタン
+  workflow_dispatch:
 
 jobs:
   crawl:

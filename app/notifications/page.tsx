@@ -143,17 +143,15 @@ export default function NotificationsPage() {
 
     try {
       if (!item.is_read) {
-        const res = await fetch("/api/notifications/read", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ id: item.id }),
-        });
+        const { data, error } = await supabase
+          .from("notifications")
+          .update({ is_read: true })
+          .eq("id", item.id)
+          .eq("user_id", meId)
+          .select("id");
 
-        if (!res.ok) {
-          const json = await res.json().catch(() => null);
-          throw new Error(json?.error ?? "既読更新に失敗しました");
+        if (error || !data?.length) {
+          throw new Error(error?.message ?? "既読更新に失敗しました");
         }
 
         setItems((prev) =>
@@ -174,17 +172,14 @@ export default function NotificationsPage() {
   async function markAllRead() {
     if (!meId) return;
 
-    const res = await fetch("/api/notifications/read-all", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ userId: meId }),
-    });
+    const { error } = await supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("user_id", meId)
+      .eq("is_read", false);
 
-    if (!res.ok) {
-      const json = await res.json().catch(() => null);
-      alert(json?.error ?? "一括既読に失敗しました");
+    if (error) {
+      alert(error.message || "一括既読に失敗しました");
       return;
     }
 

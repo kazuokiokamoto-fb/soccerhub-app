@@ -278,7 +278,31 @@ function compareCandidates(a: CandidatePage, b: CandidatePage) {
   return kb.urlLength - ka.urlLength;
 }
 
+function selectionSecretMatches(provided: string, expected: string) {
+  const encoder = new TextEncoder();
+  const actual = encoder.encode(provided);
+  const wanted = encoder.encode(expected);
+  const length = Math.max(actual.length, wanted.length);
+  let diff = actual.length === wanted.length ? 0 : 1;
+  for (let i = 0; i < length; i++) {
+    diff |= (actual[i] ?? 0) ^ (wanted[i] ?? 0);
+  }
+  return diff === 0;
+}
+
 serve(async (req) => {
+  const selectionSecret = Deno.env.get("SELECTION_SECRET") ?? "";
+  const providedSecret = req.headers.get("x-selection-secret") ?? "";
+  if (
+    !selectionSecret ||
+    !selectionSecretMatches(providedSecret, selectionSecret)
+  ) {
+    return new Response(JSON.stringify({ ok: false, error: "unauthorized" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
   const url = new URL(req.url);
   const body = await readJsonBody(req);
 

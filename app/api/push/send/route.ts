@@ -1,13 +1,18 @@
+import "@/app/lib/server/patchNodeUrlParse";
 import webpush from "web-push";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { hasCronAuthorization, getSessionUserId } from "@/app/lib/server/internalAuth";
+import { callerMayNotify, isUuid } from "@/app/lib/server/pushAuthorization";
+import { safePushPath } from "@/app/lib/server/pushPath";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type PushSendBody = {
-  userId: string;
-  title: string;
-  body: string;
-  url?: string;
+  userId?: unknown;
+  title?: unknown;
+  body?: unknown;
+  url?: unknown;
 };
 
 type ChatMemberRow = {
@@ -24,16 +29,21 @@ type ChatMessageRow = {
   deleted_for_everyone?: boolean | null;
 };
 
-function getEnvOrThrow() {
+type PushSubscriptionRow = {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+};
+
+function requiredEnv() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
 
-  if (!supabaseUrl) throw new Error("Missing env: NEXT_PUBLIC_SUPABASE_URL");
-  if (!serviceRoleKey) throw new Error("Missing env: SUPABASE_SERVICE_ROLE_KEY");
-  if (!vapidPublicKey) throw new Error("Missing env: NEXT_PUBLIC_VAPID_PUBLIC_KEY");
-  if (!vapidPrivateKey) throw new Error("Missing env: VAPID_PRIVATE_KEY");
+  if (!supabaseUrl || !serviceRoleKey || !vapidPublicKey || !vapidPrivateKey) {
+    throw new Error("push is not configured");
+  }
 
   return {
     supabaseUrl,
@@ -44,7 +54,7 @@ function getEnvOrThrow() {
 }
 
 function createSupabaseAdmin() {
-  const { supabaseUrl, serviceRoleKey } = getEnvOrThrow();
+  const { supabaseUrl, serviceRoleKey } = requiredEnv();
 
   return createClient(supabaseUrl, serviceRoleKey, {
     auth: {
@@ -54,30 +64,38 @@ function createSupabaseAdmin() {
   });
 }
 
-function ensureWebPushConfigured() {
-  const { vapidPublicKey, vapidPrivateKey } = getEnvOrThrow();
-
-  webpush.setVapidDetails(
-    "mailto:your@email.com",
-    vapidPublicKey,
-    vapidPrivateKey
-  );
+function vapidSubject() {
+  const configured = process.env.VAPID_SUBJECT?.trim();
+  if (!configured) return "https://www.sakamatch.com";
+  if (configured.startsWith("mailto:") || configured.startsWith("https://")) {
+    return configured;
+  }
+  throw new Error("push is not configured");
 }
 
-// =========================
-// 未読数計算
-// =========================
-async function getUnreadChatCount(userId: string) {
-  const supabase = createSupabaseAdmin();
+function ensureWebPushConfigured() {
+  const { vapidPublicKey, vapidPrivateKey } = requiredEnv();
+  webpush.setVapidDetails(vapidSubject(), vapidPublicKey, vapidPrivateKey);
+}
 
+function clipText(value: string, max: number) {
+  const trimmed = value.trim();
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, max - 1)}…`;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getUnreadChatCount(supabase: SupabaseClient, userId: string) {
   const { data: memberRows } = await supabase
     .from("chat_members")
     .select("thread_id,last_read_at")
     .eq("user_id", userId);
 
   const members = (memberRows ?? []) as ChatMemberRow[];
-  const threadIds = members.map((x) => x.thread_id).filter(Boolean);
-
+  const threadIds = members.map((row) => row.thread_id).filter(Boolean);
   if (threadIds.length === 0) return 0;
 
   const { data: msgRows } = await supabase
@@ -87,34 +105,29 @@ async function getUnreadChatCount(userId: string) {
     .order("created_at", { ascending: false })
     .limit(3000);
 
-  const messages = ((msgRows ?? []) as ChatMessageRow[]).filter((m) => {
-    if (!m) return false;
-    if (m.deleted_at) return false;
-    if (m.deleted_for_everyone) return false;
+  const messages = ((msgRows ?? []) as ChatMessageRow[]).filter((message) => {
+    if (!message) return false;
+    if (message.deleted_at) return false;
+    if (message.deleted_for_everyone) return false;
     return true;
   });
 
   const latestByThread = new Map<string, ChatMessageRow>();
-
-  for (const m of messages) {
-    if (!latestByThread.has(m.thread_id)) {
-      latestByThread.set(m.thread_id, m);
+  for (const message of messages) {
+    if (!latestByThread.has(message.thread_id)) {
+      latestByThread.set(message.thread_id, message);
     }
   }
 
   let unread = 0;
-
   for (const member of members) {
     const latest = latestByThread.get(member.thread_id);
     if (!latest?.created_at) continue;
-
     if (latest.sender_id === userId) continue;
-
     if (!member.last_read_at) {
       unread++;
       continue;
     }
-
     if (
       new Date(latest.created_at).getTime() >
       new Date(member.last_read_at).getTime()
@@ -126,11 +139,10 @@ async function getUnreadChatCount(userId: string) {
   return unread;
 }
 
-// notifications テーブルの未読件数(チャット以外: selection_event, match_request, offer 等)。
-// "chat" タイプは getUnreadChatCount 側で既に計算しているため、二重カウント防止のため除外する。
-async function getUnreadOtherNotificationCount(userId: string) {
-  const supabase = createSupabaseAdmin();
-
+async function getUnreadOtherNotificationCount(
+  supabase: SupabaseClient,
+  userId: string,
+) {
   const { count, error } = await supabase
     .from("notifications")
     .select("id", { count: "exact", head: true })
@@ -139,64 +151,70 @@ async function getUnreadOtherNotificationCount(userId: string) {
     .neq("type", "chat_message");
 
   if (error) {
-    console.error("getUnreadOtherNotificationCount error:", error);
+    console.error("getUnreadOtherNotificationCount error");
     return 0;
   }
 
   return count ?? 0;
 }
 
-// 統一バッジ = チャット未読数 + それ以外の通知(セレクション新着・オファー・試合申込等)の未読数
-async function getUnifiedBadgeCount(userId: string) {
-  const [chatCount, otherCount] = await Promise.all([
-    getUnreadChatCount(userId),
-    getUnreadOtherNotificationCount(userId),
-  ]);
-
-  return chatCount + otherCount;
-}
-
-// =========================
-// ★ここが重要：遅延追加
-// =========================
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function statusCodeOf(error: unknown) {
+  if (!error || typeof error !== "object" || !("statusCode" in error)) return undefined;
+  const statusCode = error.statusCode;
+  return typeof statusCode === "number" ? statusCode : undefined;
 }
 
 export async function POST(req: Request) {
   try {
-    ensureWebPushConfigured();
-    const supabase = createSupabaseAdmin();
+    const internal = hasCronAuthorization(req);
+    const callerId = internal ? null : await getSessionUserId();
+    if (!internal && !callerId) {
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    }
 
     const json = (await req.json()) as PushSendBody;
+    const userId = typeof json.userId === "string" ? json.userId : "";
+    const title = typeof json.title === "string" ? json.title : "";
+    const body = typeof json.body === "string" ? json.body : "";
+    const url = safePushPath(json.url);
 
-    const userId = json?.userId;
-    const title = json?.title;
-    const body = json?.body;
-    const url = json?.url || "/";
-
-    if (!userId || !title || !body) {
+    if (!isUuid(userId) || !title.trim() || !body.trim()) {
       return Response.json(
         { error: "userId, title, body are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // ★ここ追加（重要）
+    ensureWebPushConfigured();
+    const supabase = createSupabaseAdmin();
+
+    if (!internal && callerId) {
+      const allowed = await callerMayNotify(supabase, callerId, userId);
+      if (!allowed) {
+        return Response.json({ error: "forbidden" }, { status: 403 });
+      }
+    }
+
     await wait(300);
 
-    const badgeCount = await getUnifiedBadgeCount(userId);
+    const [chatCount, otherCount] = await Promise.all([
+      getUnreadChatCount(supabase, userId),
+      getUnreadOtherNotificationCount(supabase, userId),
+    ]);
+    const badgeCount = chatCount + otherCount;
 
     const { data: subscriptions, error } = await supabase
       .from("push_subscriptions")
-      .select("id, endpoint, p256dh, auth")
+      .select("endpoint, p256dh, auth")
       .eq("user_id", userId);
 
     if (error) {
-      return Response.json({ error: error.message }, { status: 500 });
+      console.error("push subscription lookup failed");
+      return Response.json({ error: "push failed" }, { status: 500 });
     }
 
-    if (!subscriptions || subscriptions.length === 0) {
+    const rows = (subscriptions ?? []) as PushSubscriptionRow[];
+    if (rows.length === 0) {
       return Response.json({
         success: true,
         sent: 0,
@@ -206,15 +224,14 @@ export async function POST(req: Request) {
     }
 
     const payload = JSON.stringify({
-      title,
-      body,
+      title: clipText(title, 80),
+      body: clipText(body, 180),
       url,
       badgeCount,
     });
 
     let sent = 0;
-
-    for (const sub of subscriptions) {
+    for (const sub of rows) {
       try {
         await webpush.sendNotification(
           {
@@ -224,17 +241,15 @@ export async function POST(req: Request) {
               auth: sub.auth,
             },
           },
-          payload
+          payload,
         );
         sent++;
-      } catch (e: any) {
-        console.error("push send error:", e?.message ?? e);
+      } catch (sendError: unknown) {
+        const statusCode = statusCodeOf(sendError);
+        console.error("push send error:", statusCode ?? "unknown");
 
-        if (e?.statusCode === 404 || e?.statusCode === 410) {
-          await supabase
-            .from("push_subscriptions")
-            .delete()
-            .eq("endpoint", sub.endpoint);
+        if (statusCode === 404 || statusCode === 410) {
+          await supabase.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
         }
       }
     }
@@ -242,14 +257,11 @@ export async function POST(req: Request) {
     return Response.json({
       success: true,
       sent,
-      total: subscriptions.length,
+      total: rows.length,
       badgeCount,
     });
-  } catch (e: any) {
-    console.error("push route error:", e);
-    return Response.json(
-      { error: e?.message ?? "invalid request" },
-      { status: 500 }
-    );
+  } catch (error) {
+    console.error("push route error:", error instanceof Error ? error.message : "unknown");
+    return Response.json({ error: "push failed" }, { status: 500 });
   }
 }

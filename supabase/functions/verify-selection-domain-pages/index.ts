@@ -1036,9 +1036,15 @@ async function notifyMatchingUsers(params: {
       }
 
       try {
+        const cronSecret = Deno.env.get("CRON_SECRET") ?? "";
         await fetch(`${SITE_BASE_URL}/api/push/send`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            ...(cronSecret
+              ? { authorization: `Bearer ${cronSecret}` }
+              : {}),
+          },
           body: JSON.stringify({
             userId: sub.user_id,
             title,
