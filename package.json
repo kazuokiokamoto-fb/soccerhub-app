@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test lib/official-results/*.test.ts",
     "selection:deploy": "npx supabase functions deploy selection-crawler",
     "selection:run": "curl -X POST 'https://senspqsexmtrwjfsdadv.supabase.co/functions/v1/selection-crawler' -H \"Authorization: Bearer $SELECTION_SECRET\" -H \"apikey: $SELECTION_SECRET\" -H \"x-selection-secret: $SELECTION_SECRET\""
   },
