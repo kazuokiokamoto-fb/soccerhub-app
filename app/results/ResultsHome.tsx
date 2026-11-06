@@ -2,35 +2,40 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { errorText, OBLIGATION_TEXT } from "./labels";
+import { errorText, fiscalYearLabel, OBLIGATION_TEXT, PHASE_TEXT } from "./labels";
+
+type YearStatus = {
+  fiscalYear: number;
+  periodStart: string;
+  periodEnd: string;
+  deadlineDate: string;
+  phase: string;
+  code: string;
+  blocksProduct: false;
+  lateSubmission: "allowed";
+  report: { state: string; outcome: string } | null;
+};
 
 type TeamStatus = {
   id: string;
   name: string;
   role: string;
-  report: { state: string; outcome: string; reportingYear: number } | null;
+  years: YearStatus[];
 };
 
 type HomePayload = {
   ok: true;
   discovery: { label: string };
   policy: {
-    yearStatus: "unset" | "configured";
-    reportingYear: number | null;
-    deadlineMonth: number | null;
-    deadlineDay: number | null;
+    periodKind: string;
+    deadlineMonth: number;
+    deadlineDay: number;
+    deadlineTimeZone: string;
+    enforcement: string;
+    lateSubmission: string;
   };
   teams: TeamStatus[];
 };
-
-function obligationCode(policy: HomePayload["policy"], report: TeamStatus["report"]) {
-  if (policy.yearStatus !== "configured" || policy.reportingYear === null) return "year_unset";
-  if (!report) return "not_started";
-  if (report.state === "draft") return "draft";
-  if (report.state === "in_review") return "in_review";
-  if (report.outcome === "no_official_results") return "submitted_none";
-  return "submitted_results";
-}
 
 export default function ResultsHome() {
   const [payload, setPayload] = useState<HomePayload | null>(null);
@@ -57,35 +62,37 @@ export default function ResultsHome() {
     <main style={{ padding: 24, maxWidth: 880, margin: "0 auto" }}>
       <h1>公式戦の年次報告</h1>
       <p>
-        管理者とコーチが、チーム単位の公式戦結果を年ごとに確認して提出します。試合、チャット、サイトの利用は止めません。
+        所有者とコーチが、チーム単位の公式戦結果を年度ごとに確認して提出します。期限を過ぎてもログイン、試合、チャット、予定は止まりません。
       </p>
       {error ? <p>{error}</p> : null}
       {payload ? (
         <>
           <p>{payload.discovery.label}</p>
           <p>
-            {payload.policy.yearStatus === "configured" && payload.policy.reportingYear
-              ? `設定されている対象年は ${payload.policy.reportingYear} 年です。`
-              : "対象年は未設定です。方針が決まるまで、特定の年を必須にはしていません。"}
-            {payload.policy.deadlineMonth && payload.policy.deadlineDay
-              ? ` 期限の設定値は ${payload.policy.deadlineMonth}/${payload.policy.deadlineDay} です。表示だけで、機能停止には使いません。`
-              : " 期限は未設定です。"}
+            対象期間は日本の年度です。4月1日から翌年3月31日までを、その年の年度とします。例: 2025年度は 2025-04-01 から 2026-03-31 です。提出期限はその翌年度の5月31日の終わり（日本時間）で、2025年度なら 2026-05-31 です。2026-06-01 0:00 から期限超過の表示になります。期限後も提出できます。表示だけで、機能は止めません。
           </p>
           {payload.teams.length === 0 ? (
             <p>報告できるチームはありません。</p>
           ) : (
             <ul>
-              {payload.teams.map((team) => {
-                const code = obligationCode(payload.policy, team.report);
-                const year = payload.policy.reportingYear;
-                const href = year ? `/results/${team.id}?year=${year}` : `/results/${team.id}`;
-                return (
-                  <li key={team.id} style={{ marginBottom: 12 }}>
-                    <Link href={href}>{team.name || "名称未設定"}</Link>
-                    <div>{OBLIGATION_TEXT[code]}</div>
-                  </li>
-                );
-              })}
+              {payload.teams.map((team) => (
+                <li key={team.id} style={{ marginBottom: 16 }}>
+                  <strong>{team.name || "名称未設定"}</strong>
+                  <ul>
+                    {team.years.map((year) => (
+                      <li key={year.fiscalYear}>
+                        <Link href={`/results/${team.id}?year=${year.fiscalYear}`}>
+                          {fiscalYearLabel(year.fiscalYear)}
+                        </Link>
+                        <div>
+                          {PHASE_TEXT[year.phase] ?? year.phase} 期限 {year.deadlineDate} の終わり（日本時間）。{" "}
+                          {OBLIGATION_TEXT[year.code] ?? year.code}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
             </ul>
           )}
         </>

@@ -2,9 +2,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { extractOfficialCandidates } from "@/lib/official-results/extract";
 import { isTeamManagerRole } from "@/lib/official-results/permissions";
 import {
+  dateInFiscalYear,
+  describeDuty,
+  isCanonicalPolicy,
+  isReportingYear,
+  listedDuties,
+} from "@/lib/official-results/fiscal";
+import {
   decideReview,
   decideSubmit,
-  isReportingYear,
+  obligation,
   type ReportOutcome,
   type ReportState,
   resultLabel,
@@ -80,21 +87,21 @@ async function requireManager(
 export async function readPolicy(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from("official_result_policy")
-    .select("year_status,reporting_year,deadline_month,deadline_day,enforcement")
+    .select("period_kind,deadline_month,deadline_day,deadline_time_zone,enforcement,late_submission")
     .eq("id", 1)
     .maybeSingle();
   if (schemaMissing(error)) return fail(503, "schema_unavailable");
   if (error || !data) return fail(500, "read_failed");
-  return {
-    ok: true as const,
-    policy: {
-      yearStatus: data.year_status === "configured" ? "configured" as const : "unset" as const,
-      reportingYear: typeof data.reporting_year === "number" ? data.reporting_year : null,
-      deadlineMonth: typeof data.deadline_month === "number" ? data.deadline_month : null,
-      deadlineDay: typeof data.deadline_day === "number" ? data.deadline_day : null,
-      enforcement: "status_only" as const,
-    },
+  const policy = {
+    periodKind: String(data.period_kind ?? ""),
+    deadlineMonth: Number(data.deadline_month),
+    deadlineDay: Number(data.deadline_day),
+    deadlineTimeZone: String(data.deadline_time_zone ?? ""),
+    enforcement: String(data.enforcement ?? ""),
+    lateSubmission: String(data.late_submission ?? ""),
   };
+  if (!isCanonicalPolicy(policy)) return fail(500, "policy_invalid");
+  return { ok: true as const, policy };
 }
 
 export async function listManagedTeams(supabase: SupabaseClient, userId: string) {
@@ -135,22 +142,25 @@ export async function listManagedTeams(supabase: SupabaseClient, userId: string)
   }
 
   const ids = [...teams.keys()];
-  const reportsByTeam = new Map<string, { state: ReportState; outcome: ReportOutcome; reportingYear: number }>();
-  if (ids.length > 0 && policy.policy.reportingYear !== null) {
+  const duties = listedDuties(new Date());
+  const reportsByTeam = new Map<string, Map<number, { state: ReportState; outcome: ReportOutcome }>>();
+  if (ids.length > 0) {
     const reports = await supabase
       .from("official_result_reports")
       .select("team_id,state,outcome,reporting_year")
       .in("team_id", ids)
-      .eq("reporting_year", policy.policy.reportingYear);
+      .in("reporting_year", duties.map((duty) => duty.fiscalYear));
     if (schemaMissing(reports.error)) return fail(503, "schema_unavailable");
     if (reports.error) return fail(500, "read_failed");
     for (const row of reports.data ?? []) {
       if (typeof row.team_id !== "string") continue;
-      reportsByTeam.set(row.team_id, {
+      const year = Number(row.reporting_year);
+      const byYear = reportsByTeam.get(row.team_id) ?? new Map();
+      byYear.set(year, {
         state: row.state as ReportState,
         outcome: row.outcome as ReportOutcome,
-        reportingYear: Number(row.reporting_year),
       });
+      reportsByTeam.set(row.team_id, byYear);
     }
   }
 
@@ -158,9 +168,18 @@ export async function listManagedTeams(supabase: SupabaseClient, userId: string)
     ok: true as const,
     discovery: DISCOVERY,
     policy: policy.policy,
+    duties,
     teams: [...teams.values()].map((team) => ({
       ...team,
-      report: reportsByTeam.get(team.id) ?? null,
+      years: duties.map((duty) => {
+        const report = reportsByTeam.get(team.id)?.get(duty.fiscalYear) ?? null;
+        const status = obligation({ report });
+        return {
+          ...duty,
+          code: status.code,
+          report,
+        };
+      }),
     })),
   };
 }
@@ -200,6 +219,7 @@ export async function readReportBundle(
       ok: true as const,
       discovery: DISCOVERY,
       policy: policy.policy,
+      duty: describeDuty(year, new Date()),
       team: access.team,
       report: null,
       sources: [],
@@ -241,6 +261,7 @@ export async function readReportBundle(
     ok: true as const,
     discovery: DISCOVERY,
     policy: policy.policy,
+    duty: describeDuty(year, new Date()),
     team: access.team,
     report: loaded.report,
     sources: sources.data ?? [],
@@ -347,13 +368,7 @@ function parseGoals(team: unknown, opponent: unknown) {
 
 function parsePlayedOn(value: unknown, year: number): string | null | undefined {
   if (value == null || value === "") return null;
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
-  const [y, m, d] = value.split("-").map(Number);
-  if (y !== year || m < 1 || m > 12 || d < 1 || d > 31) return undefined;
-  const date = new Date(Date.UTC(y, m - 1, d));
-  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== m - 1 || date.getUTCDate() !== d) {
-    return undefined;
-  }
+  if (typeof value !== "string" || !dateInFiscalYear(value, year)) return undefined;
   return value;
 }
 

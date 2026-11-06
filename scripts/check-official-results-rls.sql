@@ -174,9 +174,9 @@ values (
 );
 
 insert into public.official_result_lines (
-  report_id, team_id, competition_name, opponent_name, team_goals, opponent_goals, result_label
+  report_id, team_id, competition_name, opponent_name, played_on, team_goals, opponent_goals, result_label
 )
-select id, team_id, '市長杯', '緑ヶ丘SC', 2, 1, 'win'
+select id, team_id, '市長杯', '緑ヶ丘SC', '2026-03-31', 2, 1, 'win'
 from public.official_result_reports
 where reporting_year = 2025;
 
@@ -192,6 +192,18 @@ begin
   if report_state <> 'draft' or report_version <> 2 then
     raise exception 'line insert changed report to % version %', report_state, report_version;
   end if;
+
+  begin
+    update public.official_result_lines
+       set played_on = '2026-04-01'
+     where competition_name = '市長杯';
+    raise exception 'outside fiscal year accepted';
+  exception
+    when others then
+      if SQLERRM = 'outside fiscal year accepted' then
+        raise;
+      end if;
+  end;
 
   begin
     update public.official_result_reports
@@ -241,8 +253,22 @@ begin
     raise exception 'security definer helper count %', definers;
   end if;
 
-  select year_status into policy_year from public.official_result_policy where id = 1;
-  if policy_year <> 'unset' then
-    raise exception 'policy year was %', policy_year;
+  select period_kind || ':' || deadline_month::text || '-' || deadline_day::text
+         || ':' || deadline_time_zone || ':' || enforcement || ':' || late_submission
+    into policy_year
+  from public.official_result_policy
+  where id = 1;
+  if policy_year <> 'jp_fiscal:5-31:Asia/Tokyo:status_only:allowed' then
+    raise exception 'policy was %', policy_year;
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'official_result_policy'
+      and column_name = 'year_status'
+  ) then
+    raise exception 'unset year_status column is still present';
   end if;
 end $$;

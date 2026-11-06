@@ -39,6 +39,32 @@ test("a page that does not name the team produces no scores", () => {
   assert.deepEqual(result.candidates, []);
 });
 
+test("2025年度 keeps a March date and drops the next fiscal year's April date", () => {
+  const result = extractOfficialCandidates({
+    html: `
+      <title>2025年度 市長杯 大会</title>
+      <p>青葉FC</p>
+      <p>2026年3月12日 青葉FC 対 緑ヶ丘SC 1-0</p>
+      <p>2026年4月2日 青葉FC 対 緑ヶ丘SC 0-1</p>
+    `,
+    teamName: "青葉FC",
+    reportingYear: 2025,
+  });
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].playedOn, "2026-03-12");
+  assert.match(result.note, /提出ではありません/);
+});
+
+test("a page that names only the next calendar year is not the fiscal year", () => {
+  const result = extractOfficialCandidates({
+    html: "<p>青葉FC 2026年4月2日 対 緑ヶ丘SC 1-0</p>",
+    teamName: "青葉FC",
+    reportingYear: 2025,
+  });
+  assert.equal(result.matchConfidence, "team_or_year_missing");
+  assert.deepEqual(result.candidates, []);
+});
+
 test("a matching page without an explicit score stays empty", () => {
   const result = extractOfficialCandidates({
     html: "<p>青葉FC は 2026 年の公式戦に出場した。</p>",

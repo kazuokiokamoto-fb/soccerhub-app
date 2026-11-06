@@ -1,47 +1,52 @@
 -- Annual official-match reports. Not applied to production by this change.
--- Review and apply separately. Do not run this against production from the app.
+-- Apply this file once, at the reviewed SHA. Do not apply an older copy of the same filename.
+-- Do not run supabase db push of the whole migrations folder against production:
+-- production schema_migrations has 20261105102204 security_hardening, which does not match
+-- the repo filenames 20261105080000 / 20261105080100. The later file drops backup tables.
 --
 -- Network retrieval stores sourced candidates only. It cannot mark a report submitted.
--- Authorization uses teams.owner_id and team_members.role (owner, coach, manager).
+-- Authorization uses teams.owner_id and team_members.role (owner, coach).
+-- Production team_members_role_check allows owner, coach, member. It does not allow manager.
 -- No security definer helper is added. No user_metadata is read.
+--
+-- Decided 2026-11-06 JST:
+--   period is the Japanese fiscal year, April 1 through the next March 31.
+--   2025年度 is 2025-04-01 through 2026-03-31.
+--   deadline is May 31 of the following fiscal year, end of that Asia/Tokyo day.
+--   2025年度 is due through 2026-05-31 23:59:59.999 Asia/Tokyo and overdue from 2026-06-01 00:00.
+--   enforcement is status_only. Late submission stays allowed.
+--   This schema has no path that blocks login, matches, chat, or scheduling.
+--   Reopening a submitted report is still undecided, so submitted rows stay immutable.
 
 -- ---------------------------------------------------------------------------
--- Policy: the required year and deadline stay unset until a person confirms them.
--- enforcement is status_only. This schema has no path that blocks the product.
+-- Policy: standing fiscal-year rule. There is no unset year.
 -- ---------------------------------------------------------------------------
 
 create table public.official_result_policy (
   id integer primary key,
-  year_status text not null,
-  reporting_year integer,
-  deadline_month integer,
-  deadline_day integer,
+  period_kind text not null,
+  deadline_month integer not null,
+  deadline_day integer not null,
+  deadline_time_zone text not null,
   enforcement text not null default 'status_only',
+  late_submission text not null default 'allowed',
   updated_at timestamptz not null default now(),
   constraint official_result_policy_singleton check (id = 1),
-  constraint official_result_policy_year_status check (year_status in ('unset', 'configured')),
+  constraint official_result_policy_period check (period_kind = 'jp_fiscal'),
+  constraint official_result_policy_deadline check (deadline_month = 5 and deadline_day = 31),
+  constraint official_result_policy_zone check (deadline_time_zone = 'Asia/Tokyo'),
   constraint official_result_policy_enforcement check (enforcement = 'status_only'),
-  constraint official_result_policy_year_pair check (
-    (year_status = 'unset' and reporting_year is null)
-    or (
-      year_status = 'configured'
-      and reporting_year between 1990 and 2100
-    )
-  ),
-  constraint official_result_policy_deadline_pair check (
-    (deadline_month is null and deadline_day is null)
-    or (
-      deadline_month between 1 and 12
-      and deadline_day between 1 and 31
-    )
-  )
+  constraint official_result_policy_late check (late_submission = 'allowed')
 );
 
-insert into public.official_result_policy (id, year_status, enforcement)
-values (1, 'unset', 'status_only');
+insert into public.official_result_policy (
+  id, period_kind, deadline_month, deadline_day, deadline_time_zone, enforcement, late_submission
+) values (
+  1, 'jp_fiscal', 5, 31, 'Asia/Tokyo', 'status_only', 'allowed'
+);
 
 comment on table public.official_result_policy is
-  'Configurable obligation year. Default is unset. status_only never blocks matches, chat, or accounts.';
+  'Japanese fiscal year April 1 through March 31. Deadline is May 31 of the following fiscal year, end of that Asia/Tokyo day. status_only never blocks login, matches, chat, or scheduling. Late submission stays allowed.';
 
 -- ---------------------------------------------------------------------------
 -- Reports, sources, frozen candidates, team lines, correction history
@@ -83,6 +88,9 @@ create table public.official_result_reports (
 
 comment on table public.official_result_reports is
   'One team-authored annual report. submitted means a manager confirmed it. A fetched page never sets this.';
+
+comment on column public.official_result_reports.reporting_year is
+  'Fiscal-year label. 2025 means 2025-04-01 through 2026-03-31 Asia/Tokyo. The database does not reject a submit after the May 31 deadline.';
 
 create table public.official_result_sources (
   id uuid primary key default gen_random_uuid(),
@@ -295,7 +303,19 @@ as $$
 declare
   line_before jsonb;
   line_after jsonb;
+  report_year integer;
 begin
+  if tg_op <> 'DELETE' and new.played_on is not null then
+    select r.reporting_year into report_year
+      from public.official_result_reports r
+     where r.id = new.report_id;
+    if report_year is null
+       or new.played_on < make_date(report_year, 4, 1)
+       or new.played_on > make_date(report_year + 1, 3, 31) then
+      raise exception 'played_on is outside the fiscal year';
+    end if;
+  end if;
+
   if tg_op = 'UPDATE' then
     if new.report_id is distinct from old.report_id
        or new.team_id is distinct from old.team_id
@@ -416,7 +436,12 @@ using (
   )
 )
 with check (
-  enforcement = 'status_only'
+  period_kind = 'jp_fiscal'
+  and deadline_month = 5
+  and deadline_day = 31
+  and deadline_time_zone = 'Asia/Tokyo'
+  and enforcement = 'status_only'
+  and late_submission = 'allowed'
   and exists (
     select 1 from public.admins a
     where a.user_id = (select auth.uid())
@@ -437,7 +462,7 @@ using (
     select 1 from public.team_members tm
     where tm.team_id = official_result_reports.team_id
       and tm.user_id = (select auth.uid())
-      and tm.role in ('owner', 'coach', 'manager')
+      and tm.role in ('owner', 'coach')
   )
 );
 
@@ -462,7 +487,7 @@ with check (
       select 1 from public.team_members tm
       where tm.team_id = team_id
         and tm.user_id = (select auth.uid())
-        and tm.role in ('owner', 'coach', 'manager')
+        and tm.role in ('owner', 'coach')
     )
   )
 );
@@ -483,7 +508,7 @@ using (
       select 1 from public.team_members tm
       where tm.team_id = official_result_reports.team_id
         and tm.user_id = (select auth.uid())
-        and tm.role in ('owner', 'coach', 'manager')
+        and tm.role in ('owner', 'coach')
     )
   )
 )
@@ -497,7 +522,7 @@ with check (
     select 1 from public.team_members tm
     where tm.team_id = team_id
       and tm.user_id = (select auth.uid())
-      and tm.role in ('owner', 'coach', 'manager')
+      and tm.role in ('owner', 'coach')
   )
 );
 
@@ -515,7 +540,7 @@ using (
     select 1 from public.team_members tm
     where tm.team_id = official_result_sources.team_id
       and tm.user_id = (select auth.uid())
-      and tm.role in ('owner', 'coach', 'manager')
+      and tm.role in ('owner', 'coach')
   )
 );
 
@@ -541,7 +566,7 @@ with check (
       select 1 from public.team_members tm
       where tm.team_id = team_id
         and tm.user_id = (select auth.uid())
-        and tm.role in ('owner', 'coach', 'manager')
+        and tm.role in ('owner', 'coach')
     )
   )
 );
@@ -560,7 +585,7 @@ using (
     select 1 from public.team_members tm
     where tm.team_id = official_result_candidates.team_id
       and tm.user_id = (select auth.uid())
-      and tm.role in ('owner', 'coach', 'manager')
+      and tm.role in ('owner', 'coach')
   )
 );
 
@@ -588,7 +613,7 @@ with check (
       select 1 from public.team_members tm
       where tm.team_id = team_id
         and tm.user_id = (select auth.uid())
-        and tm.role in ('owner', 'coach', 'manager')
+        and tm.role in ('owner', 'coach')
     )
   )
 );
@@ -607,7 +632,7 @@ using (
     select 1 from public.team_members tm
     where tm.team_id = official_result_lines.team_id
       and tm.user_id = (select auth.uid())
-      and tm.role in ('owner', 'coach', 'manager')
+      and tm.role in ('owner', 'coach')
   )
 );
 
@@ -633,7 +658,7 @@ with check (
       select 1 from public.team_members tm
       where tm.team_id = team_id
         and tm.user_id = (select auth.uid())
-        and tm.role in ('owner', 'coach', 'manager')
+        and tm.role in ('owner', 'coach')
     )
   )
 );
@@ -658,7 +683,7 @@ using (
       select 1 from public.team_members tm
       where tm.team_id = official_result_lines.team_id
         and tm.user_id = (select auth.uid())
-        and tm.role in ('owner', 'coach', 'manager')
+        and tm.role in ('owner', 'coach')
     )
   )
 )
@@ -679,7 +704,7 @@ with check (
       select 1 from public.team_members tm
       where tm.team_id = team_id
         and tm.user_id = (select auth.uid())
-        and tm.role in ('owner', 'coach', 'manager')
+        and tm.role in ('owner', 'coach')
     )
   )
 );
@@ -704,7 +729,7 @@ using (
       select 1 from public.team_members tm
       where tm.team_id = official_result_lines.team_id
         and tm.user_id = (select auth.uid())
-        and tm.role in ('owner', 'coach', 'manager')
+        and tm.role in ('owner', 'coach')
     )
   )
 );
@@ -723,7 +748,7 @@ using (
     select 1 from public.team_members tm
     where tm.team_id = official_result_line_revisions.team_id
       and tm.user_id = (select auth.uid())
-      and tm.role in ('owner', 'coach', 'manager')
+      and tm.role in ('owner', 'coach')
   )
 );
 
@@ -743,7 +768,7 @@ with check (
       select 1 from public.team_members tm
       where tm.team_id = team_id
         and tm.user_id = (select auth.uid())
-        and tm.role in ('owner', 'coach', 'manager')
+        and tm.role in ('owner', 'coach')
     )
   )
 );
@@ -762,7 +787,7 @@ using (
     select 1 from public.team_members tm
     where tm.team_id = official_result_fetch_attempts.team_id
       and tm.user_id = (select auth.uid())
-      and tm.role in ('owner', 'coach', 'manager')
+      and tm.role in ('owner', 'coach')
   )
 );
 
@@ -782,7 +807,7 @@ with check (
       select 1 from public.team_members tm
       where tm.team_id = team_id
         and tm.user_id = (select auth.uid())
-        and tm.role in ('owner', 'coach', 'manager')
+        and tm.role in ('owner', 'coach')
     )
   )
 );

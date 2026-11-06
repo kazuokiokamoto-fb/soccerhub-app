@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { CONFIDENCE_TEXT, errorText, EXTENT_TEXT, STATE_TEXT } from "./labels";
+import { CONFIDENCE_TEXT, errorText, EXTENT_TEXT, fiscalYearLabel, PHASE_TEXT, STATE_TEXT } from "./labels";
 
 type Report = {
   id: string;
@@ -63,10 +63,20 @@ type Bundle = {
   ok: true;
   discovery: { label: string };
   policy: {
-    yearStatus: string;
-    reportingYear: number | null;
-    deadlineMonth: number | null;
-    deadlineDay: number | null;
+    periodKind: string;
+    deadlineMonth: number;
+    deadlineDay: number;
+    deadlineTimeZone: string;
+    lateSubmission: string;
+  };
+  duty: {
+    fiscalYear: number;
+    periodStart: string;
+    periodEnd: string;
+    deadlineDate: string;
+    phase: string;
+    blocksProduct: false;
+    lateSubmission: "allowed";
   };
   team: { id: string; name: string };
   report: Report | null;
@@ -160,7 +170,7 @@ export default function ResultsEditor() {
       <h1>{bundle?.team.name || "公式戦の年次報告"}</h1>
       <p>選手個人の名前は入れないでください。取得した情報だけでは提出になりません。</p>
       <label>
-        対象年{" "}
+        対象年度{" "}
         <input
           value={year}
           inputMode="numeric"
@@ -172,23 +182,20 @@ export default function ResultsEditor() {
         この年を開く
       </button>
       {bundle ? <p>{bundle.discovery.label}</p> : null}
-      {bundle?.policy.yearStatus !== "configured" ? (
-        <p>義務の対象年と期限は未設定です。この画面で年を選んで下書きできます。試合やチャットは止まりません。</p>
-      ) : (
+      {bundle ? (
         <p>
-          設定上の対象年は {bundle.policy.reportingYear} 年です。
-          {bundle.policy.deadlineMonth && bundle.policy.deadlineDay
-            ? `期限の設定値は ${bundle.policy.deadlineMonth}/${bundle.policy.deadlineDay} で、表示だけに使います。`
-            : "期限は未設定です。"}
+          {fiscalYearLabel(bundle.duty.fiscalYear)}。提出期限は {bundle.duty.deadlineDate} の終わり（日本時間）です。
+          {PHASE_TEXT[bundle.duty.phase] ?? bundle.duty.phase}
+          期限を過ぎてもこの画面から提出できます。ログイン、試合、チャット、予定は止まりません。
         </p>
-      )}
+      ) : null}
       {message ? <p>{message}</p> : null}
       {/^\d{4}$/.test(year) && !bundle?.report ? (
         <button
           type="button"
           onClick={() => void send(`/api/official-results/${teamId}`, "POST", { year: numericYear })}
         >
-          この年の下書きを作る
+          この年度の下書きを作る
         </button>
       ) : null}
       {bundle?.report ? (
@@ -306,7 +313,7 @@ export default function ResultsEditor() {
                 onChange={(event) => setLine({ ...line, opponentName: event.target.value })}
               />
               <input
-                placeholder="日付 YYYY-MM-DD"
+                placeholder="日付 YYYY-MM-DD（年度の期間内）"
                 value={line.playedOn}
                 disabled={locked}
                 onChange={(event) => setLine({ ...line, playedOn: event.target.value })}
@@ -374,7 +381,12 @@ export default function ResultsEditor() {
           </section>
           <section>
             <h2>提出</h2>
-            <p>提出した時点の確認者と時刻が記録されます。ページの取得だけでは提出になりません。</p>
+            <p>
+              提出した時点の確認者と時刻が記録されます。ページの取得だけでは提出になりません。
+              {bundle.duty.phase === "overdue"
+                ? " 期限は過ぎていますが、提出ボタンはそのまま使えます。"
+                : ""}
+            </p>
             <button
               type="button"
               disabled={locked}

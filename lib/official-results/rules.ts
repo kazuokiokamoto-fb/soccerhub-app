@@ -1,58 +1,22 @@
 export type ReportState = "draft" | "in_review" | "submitted";
 export type ReportOutcome = "unspecified" | "has_results" | "no_official_results";
 
-export type PolicyRow = {
-  yearStatus: "unset" | "configured";
-  reportingYear: number | null;
-  deadlineMonth: number | null;
-  deadlineDay: number | null;
-  enforcement: "status_only";
-};
-
 export type ObligationCode =
-  | "year_unset"
   | "not_started"
   | "draft"
   | "in_review"
   | "submitted_results"
   | "submitted_none";
 
-const MIN_YEAR = 1990;
-
-export function maxReportingYear(now: Date): number {
-  return now.getUTCFullYear() + 1;
-}
-
-export function isReportingYear(year: number, now: Date): boolean {
-  return Number.isInteger(year) && year >= MIN_YEAR && year <= maxReportingYear(now);
-}
-
 export function obligation(input: {
-  policy: PolicyRow;
   report: { state: ReportState; outcome: ReportOutcome } | null;
-}): { code: ObligationCode; blocksProduct: false; deadline: null | string } {
-  const deadline =
-    input.policy.deadlineMonth && input.policy.deadlineDay
-      ? `${input.policy.deadlineMonth}/${input.policy.deadlineDay}`
-      : null;
-
-  if (input.policy.yearStatus !== "configured" || input.policy.reportingYear === null) {
-    return { code: "year_unset", blocksProduct: false, deadline };
-  }
-
-  if (!input.report) {
-    return { code: "not_started", blocksProduct: false, deadline };
-  }
-  if (input.report.state === "draft") {
-    return { code: "draft", blocksProduct: false, deadline };
-  }
-  if (input.report.state === "in_review") {
-    return { code: "in_review", blocksProduct: false, deadline };
-  }
-  if (input.report.outcome === "no_official_results") {
-    return { code: "submitted_none", blocksProduct: false, deadline };
-  }
-  return { code: "submitted_results", blocksProduct: false, deadline };
+}): { code: ObligationCode; blocksProduct: false; lateSubmission: "allowed" } {
+  const base = { blocksProduct: false as const, lateSubmission: "allowed" as const };
+  if (!input.report) return { ...base, code: "not_started" };
+  if (input.report.state === "draft") return { ...base, code: "draft" };
+  if (input.report.state === "in_review") return { ...base, code: "in_review" };
+  if (input.report.outcome === "no_official_results") return { ...base, code: "submitted_none" };
+  return { ...base, code: "submitted_results" };
 }
 
 export type SubmitDecision =

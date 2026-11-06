@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { dateInFiscalYear, isRealIsoDate } from "./fiscal.ts";
 import { containsPersonalMarker, normalizeTeamName } from "./text.ts";
 
 export type SourceCandidate = {
@@ -85,7 +86,7 @@ export function extractOfficialCandidates(input: {
   const normalizedTeam = normalizeTeamName(input.teamName);
   const yearText = String(input.reportingYear);
   const teamSeen = normalizedTeam.length >= 2 && normalizeTeamName(text).includes(normalizedTeam);
-  const yearSeen = text.includes(yearText);
+  const yearSeen = new RegExp(`(?<!\\d)${yearText}年度(?!\\d)|(?<!\\d)${yearText}(?!\\d)`).test(text);
 
   if (!teamSeen || !yearSeen) {
     return {
@@ -99,7 +100,9 @@ export function extractOfficialCandidates(input: {
   }
 
   const titleCompetition =
-    title && COMPETITION.test(title) && title.includes(yearText) ? title.slice(0, 80) : null;
+    title && COMPETITION.test(title) && (title.includes(`${yearText}年度`) || title.includes(yearText))
+      ? title.slice(0, 80)
+      : null;
   const candidates: SourceCandidate[] = [];
   const seen = new Set<string>();
 
@@ -118,12 +121,12 @@ export function extractOfficialCandidates(input: {
 
     const date = line.match(DATE);
     let playedOn: string | null = null;
-    if (date && Number(date[1]) === input.reportingYear) {
+    if (date) {
       const month = Number(date[2]);
       const day = Number(date[3]);
-      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-        playedOn = `${date[1]}-${pad(month)}-${pad(day)}`;
-      }
+      const iso = `${date[1]}-${pad(month)}-${pad(day)}`;
+      if (!isRealIsoDate(iso) || !dateInFiscalYear(iso, input.reportingYear)) continue;
+      playedOn = iso;
     }
 
     const opponentMatch = line.match(OPPONENT);

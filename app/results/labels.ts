@@ -16,6 +16,7 @@ export const ERROR_TEXT: Record<string, string> = {
   lines_required: "結果ありで提出するには、報告に含める行が1つ必要です。",
   lines_forbidden: "公式戦なしで提出するには、含める行を外してください。",
   submitted: "提出済みの報告は変更できません。",
+  policy_invalid: "年次報告の方針行が、決めた年度ルールと一致しません。",
   read_failed: "読み込みに失敗しました。",
   write_failed: "保存に失敗しました。",
 };
@@ -45,10 +46,19 @@ export const STATE_TEXT: Record<string, string> = {
 };
 
 export const OBLIGATION_TEXT: Record<string, string> = {
-  year_unset: "対象年は未設定です。期限も未設定です。",
-  not_started: "この年の報告はまだありません。",
+  not_started: "この年度の報告はまだありません。",
   draft: "下書きのままです。提出されていません。",
   in_review: "確認中です。まだ提出されていません。",
   submitted_results: "チームが結果ありで提出済みです。",
   submitted_none: "チームが公式戦なしで提出済みです。",
 };
+
+export const PHASE_TEXT: Record<string, string> = {
+  in_progress: "年度の途中です。",
+  due: "対象期間は終わっています。期限までは期限内です。",
+  overdue: "期限を過ぎています。提出はまだできます。",
+};
+
+export function fiscalYearLabel(year: number): string {
+  return `${year}年度（${year}-04-01〜${year + 1}-03-31）`;
+}
