@@ -35,6 +35,8 @@
 
 新しい関数に `security definer` はありません。RLS はチームの所有者と、`owner` / `coach` だけに開きます。`user_metadata` は見ていません。ブラウザに service role は置いていません。ビューは増やしていません。
 
+方針の中で外側の行を指す列は、すべて表名で修飾しています。`team_members tm` の内側で修飾しない `team_id` は `tm.team_id` と解釈され、`tm.team_id = tm.team_id` になって、見えている自分の所属行があれば他チームへの書き込みも通っていました。`team_members` の本人参照ポリシーは、その所属行を本人に見せるので、この穴は塞ぎません。コミット `91d44c3` のマイグレーションはこの形を含むので、適用しないでください。
+
 マイグレーションは `supabase/migrations/20261105214326_annual_official_results.sql` です。本番にはまだありません。同じファイル名の古いコピー（対象年が未設定の版）は適用しないでください。本番の `schema_migrations` は `20261105102204 security_hardening` だけで、リポジトリの `20261105080000` や `20261105080100` とはバージョンが違います。フォルダ全体の `supabase db push` は、セキュリティ変更の再実行と、バックアップ表を消す `20261105080100_risky_drop_unused_tables.sql` につながるので使いません。
 
 ## 環境変数

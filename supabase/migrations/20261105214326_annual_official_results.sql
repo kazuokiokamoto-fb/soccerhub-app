@@ -385,6 +385,13 @@ grant execute on function public.official_result_lines_audit() to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- RLS. Team managers only. Policy row is readable, not writable, except admins.
+--
+-- Outer columns are schema-qualified. PostgreSQL resolves an unqualified name
+-- from the innermost query. Inside "from team_members tm", "tm.team_id = team_id"
+-- means tm.team_id = tm.team_id, which is true for any membership row the caller
+-- can see. team_members_select_self makes a coach's own row visible, so that
+-- predicate would allow a coach or member-owner of team A to write team B.
+-- The same capture happens for "r.team_id = team_id" inside a reports subquery.
 -- ---------------------------------------------------------------------------
 
 alter table public.official_result_policy enable row level security;
@@ -455,7 +462,7 @@ to authenticated
 using (
   exists (
     select 1 from public.teams t
-    where t.id = team_id
+    where t.id = official_result_reports.team_id
       and t.owner_id = (select auth.uid())
   )
   or exists (
@@ -471,21 +478,21 @@ on public.official_result_reports
 for insert
 to authenticated
 with check (
-  created_by = (select auth.uid())
-  and state = 'draft'
-  and outcome = 'unspecified'
-  and submitted_at is null
-  and submitted_by is null
-  and version = 1
+  official_result_reports.created_by = (select auth.uid())
+  and official_result_reports.state = 'draft'
+  and official_result_reports.outcome = 'unspecified'
+  and official_result_reports.submitted_at is null
+  and official_result_reports.submitted_by is null
+  and official_result_reports.version = 1
   and (
     exists (
       select 1 from public.teams t
-      where t.id = team_id
+      where t.id = official_result_reports.team_id
         and t.owner_id = (select auth.uid())
     )
     or exists (
       select 1 from public.team_members tm
-      where tm.team_id = team_id
+      where tm.team_id = official_result_reports.team_id
         and tm.user_id = (select auth.uid())
         and tm.role in ('owner', 'coach')
     )
@@ -497,11 +504,11 @@ on public.official_result_reports
 for update
 to authenticated
 using (
-  state <> 'submitted'
+  official_result_reports.state <> 'submitted'
   and (
     exists (
       select 1 from public.teams t
-      where t.id = team_id
+      where t.id = official_result_reports.team_id
         and t.owner_id = (select auth.uid())
     )
     or exists (
@@ -515,12 +522,12 @@ using (
 with check (
   exists (
     select 1 from public.teams t
-    where t.id = team_id
+    where t.id = official_result_reports.team_id
       and t.owner_id = (select auth.uid())
   )
   or exists (
     select 1 from public.team_members tm
-    where tm.team_id = team_id
+    where tm.team_id = official_result_reports.team_id
       and tm.user_id = (select auth.uid())
       and tm.role in ('owner', 'coach')
   )
@@ -533,7 +540,7 @@ to authenticated
 using (
   exists (
     select 1 from public.teams t
-    where t.id = team_id
+    where t.id = official_result_sources.team_id
       and t.owner_id = (select auth.uid())
   )
   or exists (
@@ -549,22 +556,22 @@ on public.official_result_sources
 for insert
 to authenticated
 with check (
-  created_by = (select auth.uid())
+  official_result_sources.created_by = (select auth.uid())
   and exists (
     select 1 from public.official_result_reports r
-    where r.id = report_id
+    where r.id = official_result_sources.report_id
       and r.team_id = official_result_sources.team_id
       and r.state <> 'submitted'
   )
   and (
     exists (
       select 1 from public.teams t
-      where t.id = team_id
+      where t.id = official_result_sources.team_id
         and t.owner_id = (select auth.uid())
     )
     or exists (
       select 1 from public.team_members tm
-      where tm.team_id = team_id
+      where tm.team_id = official_result_sources.team_id
         and tm.user_id = (select auth.uid())
         and tm.role in ('owner', 'coach')
     )
@@ -578,7 +585,7 @@ to authenticated
 using (
   exists (
     select 1 from public.teams t
-    where t.id = team_id
+    where t.id = official_result_candidates.team_id
       and t.owner_id = (select auth.uid())
   )
   or exists (
@@ -598,7 +605,7 @@ with check (
     select 1
     from public.official_result_sources s
     join public.official_result_reports r on r.id = s.report_id
-    where s.id = source_id
+    where s.id = official_result_candidates.source_id
       and s.report_id = official_result_candidates.report_id
       and s.team_id = official_result_candidates.team_id
       and r.state <> 'submitted'
@@ -606,12 +613,12 @@ with check (
   and (
     exists (
       select 1 from public.teams t
-      where t.id = team_id
+      where t.id = official_result_candidates.team_id
         and t.owner_id = (select auth.uid())
     )
     or exists (
       select 1 from public.team_members tm
-      where tm.team_id = team_id
+      where tm.team_id = official_result_candidates.team_id
         and tm.user_id = (select auth.uid())
         and tm.role in ('owner', 'coach')
     )
@@ -625,7 +632,7 @@ to authenticated
 using (
   exists (
     select 1 from public.teams t
-    where t.id = team_id
+    where t.id = official_result_lines.team_id
       and t.owner_id = (select auth.uid())
   )
   or exists (
@@ -641,22 +648,22 @@ on public.official_result_lines
 for insert
 to authenticated
 with check (
-  version = 1
+  official_result_lines.version = 1
   and exists (
     select 1 from public.official_result_reports r
-    where r.id = report_id
+    where r.id = official_result_lines.report_id
       and r.team_id = official_result_lines.team_id
       and r.state <> 'submitted'
   )
   and (
     exists (
       select 1 from public.teams t
-      where t.id = team_id
+      where t.id = official_result_lines.team_id
         and t.owner_id = (select auth.uid())
     )
     or exists (
       select 1 from public.team_members tm
-      where tm.team_id = team_id
+      where tm.team_id = official_result_lines.team_id
         and tm.user_id = (select auth.uid())
         and tm.role in ('owner', 'coach')
     )
@@ -670,13 +677,13 @@ to authenticated
 using (
   exists (
     select 1 from public.official_result_reports r
-    where r.id = report_id
+    where r.id = official_result_lines.report_id
       and r.state <> 'submitted'
   )
   and (
     exists (
       select 1 from public.teams t
-      where t.id = team_id
+      where t.id = official_result_lines.team_id
         and t.owner_id = (select auth.uid())
     )
     or exists (
@@ -690,19 +697,19 @@ using (
 with check (
   exists (
     select 1 from public.official_result_reports r
-    where r.id = report_id
-      and r.team_id = team_id
+    where r.id = official_result_lines.report_id
+      and r.team_id = official_result_lines.team_id
       and r.state <> 'submitted'
   )
   and (
     exists (
       select 1 from public.teams t
-      where t.id = team_id
+      where t.id = official_result_lines.team_id
         and t.owner_id = (select auth.uid())
     )
     or exists (
       select 1 from public.team_members tm
-      where tm.team_id = team_id
+      where tm.team_id = official_result_lines.team_id
         and tm.user_id = (select auth.uid())
         and tm.role in ('owner', 'coach')
     )
@@ -716,13 +723,13 @@ to authenticated
 using (
   exists (
     select 1 from public.official_result_reports r
-    where r.id = report_id
+    where r.id = official_result_lines.report_id
       and r.state <> 'submitted'
   )
   and (
     exists (
       select 1 from public.teams t
-      where t.id = team_id
+      where t.id = official_result_lines.team_id
         and t.owner_id = (select auth.uid())
     )
     or exists (
@@ -741,7 +748,7 @@ to authenticated
 using (
   exists (
     select 1 from public.teams t
-    where t.id = team_id
+    where t.id = official_result_line_revisions.team_id
       and t.owner_id = (select auth.uid())
   )
   or exists (
@@ -757,16 +764,16 @@ on public.official_result_line_revisions
 for insert
 to authenticated
 with check (
-  editor_id = (select auth.uid())
+  official_result_line_revisions.editor_id = (select auth.uid())
   and (
     exists (
       select 1 from public.teams t
-      where t.id = team_id
+      where t.id = official_result_line_revisions.team_id
         and t.owner_id = (select auth.uid())
     )
     or exists (
       select 1 from public.team_members tm
-      where tm.team_id = team_id
+      where tm.team_id = official_result_line_revisions.team_id
         and tm.user_id = (select auth.uid())
         and tm.role in ('owner', 'coach')
     )
@@ -780,7 +787,7 @@ to authenticated
 using (
   exists (
     select 1 from public.teams t
-    where t.id = team_id
+    where t.id = official_result_fetch_attempts.team_id
       and t.owner_id = (select auth.uid())
   )
   or exists (
@@ -796,16 +803,16 @@ on public.official_result_fetch_attempts
 for insert
 to authenticated
 with check (
-  user_id = (select auth.uid())
+  official_result_fetch_attempts.user_id = (select auth.uid())
   and (
     exists (
       select 1 from public.teams t
-      where t.id = team_id
+      where t.id = official_result_fetch_attempts.team_id
         and t.owner_id = (select auth.uid())
     )
     or exists (
       select 1 from public.team_members tm
-      where tm.team_id = team_id
+      where tm.team_id = official_result_fetch_attempts.team_id
         and tm.user_id = (select auth.uid())
         and tm.role in ('owner', 'coach')
     )
