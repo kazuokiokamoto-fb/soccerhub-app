@@ -477,6 +477,11 @@ export default function MyPage() {
                       <Link href={`/teams/${team.id}?from=mypage`} className="sh-btn">
                         詳細
                       </Link>
+                      {role === "owner" || role === "coach" ? (
+                        <Link href={`/results/${team.id}`} className="sh-btn">
+                          公式戦の年次報告
+                        </Link>
+                      ) : null}
 
                       {isOwner ? (
                         <button
