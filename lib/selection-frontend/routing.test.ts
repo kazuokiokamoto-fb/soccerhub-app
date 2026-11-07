@@ -85,6 +85,8 @@ test("enabled routing rewrites only selection pages and assets", () => {
     assert.equal(rule.source.startsWith("/match"), false);
     assert.equal(rule.source.startsWith("/chat"), false);
     assert.equal(rule.source.startsWith("/teams"), false);
+    assert.equal(rule.source.startsWith("/results"), false);
+    assert.equal(rule.source.includes("official-results"), false);
   }
 });
 

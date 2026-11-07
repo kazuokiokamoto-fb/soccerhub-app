@@ -34,7 +34,7 @@
 - `/selection/:path*`
 - `/selection-static/:path*`
 
-それ以外（`/`, `/match`, `/chat`, `/teams`, `/api/cron/selection-crawler` を含む）はハブのままです。フラグが無い、`true` などの別の値、オリジンが空、http、パス付き、`www.sakamatch.com`、`sakamatch.com`、`selection.sakamatch.com`、ハブ自身のホスト、プレースホルダのときは書き換えを出しません。そのビルドは今までどおり `app/selection` を出します。
+それ以外（`/`, `/match`, `/chat`, `/teams`, `/results`, `/api/official-results`, `/api/cron/selection-crawler` を含む）はハブのままです。フラグが無い、`true` などの別の値、オリジンが空、http、パス付き、`www.sakamatch.com`、`sakamatch.com`、`selection.sakamatch.com`、ハブ自身のホスト、プレースホルダのときは書き換えを出しません。そのビルドは今までどおり `app/selection` を出します。公式戦の年次報告は本番に入っているので、この分割では触りません。
 
 `basePath` は使いません。マニフェスト、アイコン、`/sw.js` はオリジン直下のままにするためです。
 
@@ -68,7 +68,9 @@ Root Directory は `apps/selection`。Framework は Next.js。このアプリは
 
 `NEXT_PUBLIC_APP_ZONE` はアプリ設定が `selection` に固定します。上書きしないでください。
 
-Hobby のプロジェクト数にカウントされます。このリポジトリ変更はプロジェクトを作成しません。
+Hobby のプロジェクト数にカウントされます。このリポジトリ変更はプロジェクトを作成しません。有料プランの追加も不要です。
+
+セレクション側の本番デプロイ URL（`*.vercel.app`）は、ハブのサーバが認証なしで取得できる必要があります。Next.js の rewrite は `x-vercel-protection-bypass` を付けられません。現在のハブ `soccerhub-app` は Vercel Authentication が `all_except_custom_domains` です。カスタムドメインは開いていますが、`*.vercel.app` は保護されています。新しいプロジェクトにこの設定をコピーすると、ハブからの rewrite はアプリではなく認証ページになります。セレクションプロジェクトは Production のデプロイ URL を保護しない設定（プレビューだけ保護）にしてください。ハブの保護設定は変えないでください。有効化の前に、そのオリジンへ認証なしで `GET /selection` し、Vercel のログインページではなくハブのログインへの 307 が返ることを確認します。
 
 ## 有効化
 
@@ -85,7 +87,7 @@ Hobby のプロジェクト数にカウントされます。このリポジト�
 - ハブで一度ログインしたあと、セレ一覧・詳細・通知の `/selection/[id]` でログイン画面がもう一度出ない
 - セレクション表示中にトークンが更新されても、ホームやチャットはログイン済みのまま
 - どちらかでログアウトすると、もう片方も次の表示では未ログイン。開いたままのセレクションタブは `/login` へ移る
-- `/match`、`/chat`、`/teams`、`/api/cron/selection-crawler` のホストは変わらない
+- `/match`、`/chat`、`/teams`、`/results`、`/api/official-results`、`/api/cron/selection-crawler` のホストは変わらない
 - `https://www.sakamatch.com/robots.txt` の disallow は変えない
 - サービスワーカーは `/sw.js` のまま。`/selection` を別オリジンに開かない
 - 応答がハブとセレクションの間で往復し続けない
@@ -132,16 +134,19 @@ npm run dev
 
 `app/lib/server/patchNodeUrlParse.ts` は web-push が呼ぶ `url.parse` を WHATWG URL に差し替えている。相対パスまで `new URL` に渡すと、そのモジュールを読み込んだ Node プロセスは `/` を含む全リクエストで 500 になる。絶対 URL だけを差し替え、それ以外は Node のパーサに戻す。
 
-## 範囲外
+## 公式戦の年次報告
 
-公式戦の年次報告は入れていません。DB も本番も変えていません。
+年次報告は PR #3 として `main` に入り、マイグレーション `20261105214326` だけが本番データベースに適用済みです。この分割ブランチは `main` を取り込み、そのコードと RLS を残します。追加のマイグレーションはありません。
 
-リポジトリ上で分かっている接続点だけ:
+`/results` と `/api/official-results` はハブのままです。rewrite の対象にしません。年次報告の API は、ハブとセレクションと同じ host-only の Cookie クライアントを使います。`Domain` は付けません。
 
-- `/results` は「実績登録（あとで）」のプレースホルダ。ログイン必須で、robots も disallow
-- チームは `category`、`level`、`strength_rank` を持ち、強さの説明は公式戦の試合強度の目安。結果の台帳ではない
-- `TeamSchedule` は練習試合の予定（下書き / 確定）で、シーズン報告ではない
-- マイグレーションにあるのはセキュリティ強化だけで、シーズンや公式戦結果のテーブル定義は無い
-- 既存クローラはチームサイトとセレクション情報向けで、試合結果の収集ではない
+## 有効化の順
 
-収集した外部情報と、チームが確認した報告は別データにしてください。収集結果を自動で「確認済み」にしない。未提出を理由にアカウントや機能を止めない。その方針は別の決定が要ります。本番スキーマの調査はこの作業では行っていません。
+1. このブランチをマージする。ハブの `SELECTION_FRONTEND_ROUTING` はまだ置かない。公開の `/selection` は今までどおりハブ自身が出す。
+2. セレクション用の Vercel プロジェクトを作る。Root Directory、Install、Build は上のとおり。カスタムドメインは付けない。
+3. 環境変数は名前だけ上の表のとおり。秘密はハブから service role や cron 用をコピーしない。
+4. セレクションの Production をデプロイし、認証なしの `GET /selection` がハブのログインへ 307 すること、および Vercel Authentication のページではないことを確認する。違う場合は、そのプロジェクトの保護をプレビューだけにしてからやり直す。ハブの保護は変えない。
+5. ハブの Production にだけ `SELECTION_FRONTEND_ROUTING=1` と `SELECTION_APP_ORIGIN`（手順 4 のオリジン）を入れて再デプロイする。
+6. `www.sakamatch.com/selection` と詳細、`/selection-static` の JS、`/results` と `/match` がハブのままであることを見る。
+
+戻すときはハブのフラグを外して再デプロイする。セレクションプロジェクトを消す必要はありません。データベースの戻しはありません。

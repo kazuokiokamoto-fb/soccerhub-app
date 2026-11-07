@@ -44,6 +44,9 @@ test("logged-out selection and other protected routes still go to the hub login"
   assert.equal(isProtectedPath("/match"), true);
   assert.equal(isProtectedPath("/teams"), true);
   assert.equal(isProtectedPath("/chat"), true);
+  assert.equal(isProtectedPath("/results"), true);
+  assert.equal(isProtectedPath("/results/team-1"), true);
+  assert.equal(isProtectedPath("/api/official-results"), false);
 
   const selection = decideLegacyAuth({
     hasUser: false,
@@ -175,6 +178,24 @@ test("enabled routing proxies an existing session and does not ask for a second 
     }).action,
     "legacy"
   );
+  for (const pathname of [
+    "/results",
+    "/results/team-1",
+    "/api/official-results",
+    "/api/official-results/team-1/submit",
+    "/api/cron/selection-crawler",
+  ]) {
+    assert.equal(
+      hubSelectionPlan({
+        routingEnabled: true,
+        pathname,
+        cookieNames: [PREFIX],
+        supabaseUrl: SUPABASE_URL,
+      }).action,
+      "legacy",
+      pathname
+    );
+  }
 });
 
 test("selection login returns to the hub host, not the selection deployment host", () => {
