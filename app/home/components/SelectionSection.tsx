@@ -1,12 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { fetchSelectionEvents } from "@/app/lib/selections";
 import type { SelectionEvent } from "@/app/types/selection";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
+import ZoneLink from "@/app/components/ZoneLink";
 
 type SelectionSectionProps = {
   eventCount?: number;
@@ -119,7 +119,7 @@ export function SelectionSection(props: SelectionSectionProps) {
     typeof newCount === "number" ? newCount : 0;
 
   return (
-    <Link href="/selection" style={sectionLink}>
+    <ZoneLink href="/selection" style={sectionLink}>
       <section style={summaryBoxClickable} className="ui-card">
         <div style={summaryCardTop}>
           <div style={summaryTitleRow}>
@@ -150,7 +150,7 @@ export function SelectionSection(props: SelectionSectionProps) {
           </div>
         </div>
       </section>
-    </Link>
+    </ZoneLink>
   );
 }
 

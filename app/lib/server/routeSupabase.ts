@@ -1,6 +1,6 @@
-import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { createSharedServerClient } from "@/lib/auth-session/supabaseClients";
 
 export async function createUserClient(): Promise<{
   supabase: SupabaseClient;
@@ -11,20 +11,22 @@ export async function createUserClient(): Promise<{
   if (!supabaseUrl || !anonKey) return null;
 
   const cookieStore = await cookies();
-  const supabase = createServerClient(supabaseUrl, anonKey, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll();
-      },
-      setAll(cookiesToSet) {
-        try {
-          for (const { name, value, options } of cookiesToSet) {
-            cookieStore.set(name, value, options);
-          }
-        } catch {
-          // Route handlers can expose a read-only cookie store.
+  // Same host-only cookie contract as both zone middlewares. Official-results
+  // requests stay on the hub and must not mint a second cookie scope.
+  const supabase = createSharedServerClient({
+    supabaseUrl,
+    supabaseAnonKey: anonKey,
+    getAll() {
+      return cookieStore.getAll();
+    },
+    setAll(cookiesToSet) {
+      try {
+        for (const { name, value, options } of cookiesToSet) {
+          cookieStore.set(name, value, options);
         }
-      },
+      } catch {
+        // Route handlers can expose a read-only cookie store.
+      }
     },
   });
 

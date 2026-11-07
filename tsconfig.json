@@ -40,6 +40,7 @@
     "node_modules",
     "scripts",
     "supabase/functions/**",
+    "apps",
     "**/*.test.ts"
   ]
 }
