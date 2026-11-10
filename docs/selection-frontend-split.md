@@ -100,11 +100,30 @@ Hobby のプロジェクト数にカウントされます。このリポジト�
 4. セレクションプロジェクトは残してよい。ハブが書き換えない限り公開トラフィックは来ません。
 5. DNS、Cookie の Domain、Supabase Auth、RLS は触っていないので戻すものはありません。
 
-## プレビュー
+## プレビューで既存アカウントを確認する
 
-プレビューのハブは、Production の環境変数を見ません。フラグを Preview に置かない限り、プレビューは既存画面のままです。
+未ログインのリダイレクトは、ログイン・更新・ログアウトの確認にはなりません。本番の `SELECTION_FRONTEND_ROUTING` は空のままにしてください。確認はハブの Preview だけで行います。
 
-試すときは、ハブの Preview にそのブランチのセレクションオリジンを入れ、セレクション側の `NEXT_PUBLIC_HUB_ORIGIN` をそのハブプレビューのオリジンにします。オリジンをハブ自身の URL にするとループ防止で書き換えは出ません。
+今のセレクション Production（`https://soccerhub-selection.vercel.app`）は `NEXT_PUBLIC_HUB_ORIGIN=https://www.sakamatch.com` でビルドされています。未ログインは `www` のログインへ戻ります。ハブの Preview ホストはログイン先の許可リストに入らないので、そのビルドのままでは失敗時に Preview ではなく本番の `www` へ出ます。同じホストで既存アカウントを見るには、セレクションを Preview のオリジンでビルドし直します。
+
+ハブ `soccerhub-app` の Production は変えない。Preview かつブランチ `cursor/selection-frontend-split-7294` だけに置く名前:
+
+| 名前 | 値 |
+| --- | --- |
+| `SELECTION_FRONTEND_ROUTING` | `1` |
+| `SELECTION_APP_ORIGIN` | `https://soccerhub-selection.vercel.app` |
+
+`NEXT_PUBLIC_SUPABASE_URL` と `NEXT_PUBLIC_SUPABASE_ANON_KEY` はハブに既にあるものを使う。値は変えない。`NEXT_PUBLIC_SELECTION_ZONE_ACTIVE` と `NEXT_PUBLIC_APP_ZONE` は置かない。`SELECTION_SECRET`、`CRON_SECRET`、service role、Web Push の秘密はセレクションへコピーしない。
+
+セレクション `soccerhub-selection` は、この確認のあいだだけ Production の `NEXT_PUBLIC_HUB_ORIGIN` をハブ Preview のオリジンにする。候補は `https://soccerhub-app-git-cursor-sel-326c7c-kazuokiokamoto-fbs-projects.vercel.app` です。再デプロイ後の実際の Preview オリジンと違う場合は、実際の方を使ってセレクションを再ビルドする。この値はビルドに埋め込まれる。パスは付けない。
+
+確認が終わったら、セレクションの `NEXT_PUBLIC_HUB_ORIGIN` を `https://www.sakamatch.com` に戻して再デプロイする。ハブ Preview の2つの変数も外して再デプロイする。
+
+保護: セレクションの Vercel Authentication はプレビューだけ。Production の `https://soccerhub-selection.vercel.app` は認証なしで取得できる必要がある。ハブの `all_except_custom_domains` はコピーしない。ハブ Preview 自体が Vercel Authentication のままでも、ブラウザでチームにログインしていれば開ける。rewrite は `x-vercel-protection-bypass` を付けられない。
+
+Cookie: 新しい Domain 設定は置かない。両方のビルドが同じ `NEXT_PUBLIC_SUPABASE_URL` なら Cookie 名は `sb-senspqsexmtrwjfsdadv-auth-token` で揃う。既存アカウントはメールとパスワードで入る。Google は Supabase のリダイレクト許可を変える必要があり、この確認では Auth 設定を変えない。
+
+見るもの: Preview の `/login?redirect=/selection` で入ったあと、アドレスが Preview ホストの `/selection` のままであること。詳細へ進めること。別タブでログアウトすると、もう一方の保護ページが同じ Preview ホストの `/login` へ戻ること。`www.sakamatch.com` と `soccerhub-selection.vercel.app` のログイン画面へ飛んでいないこと。
 
 ## ローカル
 

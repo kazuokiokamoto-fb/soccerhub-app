@@ -9,6 +9,7 @@ import {
 import { hubSelectionPlan } from "./hubPlan.ts";
 import { selectionLoginLocation } from "./loginRedirect.ts";
 import {
+  crossTabSignOutDestination,
   decideLegacyAuth,
   isProtectedPath,
   isSelectionAssetPath,
@@ -196,6 +197,22 @@ test("enabled routing proxies an existing session and does not ask for a second 
       pathname
     );
   }
+});
+
+test("cross-tab sign-out leaves protected pages and stays on public pages", () => {
+  assert.equal(
+    crossTabSignOutDestination("/selection", ""),
+    "/login?redirect=%2Fselection"
+  );
+  assert.equal(
+    crossTabSignOutDestination("/selection/event-1", "?x=1"),
+    "/login?redirect=%2Fselection%2Fevent-1%3Fx%3D1"
+  );
+  assert.equal(crossTabSignOutDestination("/match", ""), "/login?redirect=%2Fmatch");
+  assert.equal(crossTabSignOutDestination("/results", ""), "/login?redirect=%2Fresults");
+  assert.equal(crossTabSignOutDestination("/", ""), null);
+  assert.equal(crossTabSignOutDestination("/login", ""), null);
+  assert.equal(crossTabSignOutDestination("//evil.example", ""), null);
 });
 
 test("selection login returns to the hub host, not the selection deployment host", () => {

@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { supabase } from "@/app/lib/supabase";
+import { crossTabSignOutDestination } from "@/lib/auth-session/paths";
 
 function SelectionSignOutRedirect() {
   useEffect(() => {
@@ -9,10 +10,11 @@ function SelectionSignOutRedirect() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
       if (event !== "SIGNED_OUT") return;
-      const next = `${window.location.pathname}${window.location.search}`;
-      const redirect =
-        next.startsWith("/") && !next.startsWith("//") ? next : "/selection";
-      window.location.assign(`/login?redirect=${encodeURIComponent(redirect)}`);
+      const destination = crossTabSignOutDestination(
+        window.location.pathname,
+        window.location.search
+      );
+      if (destination) window.location.assign(destination);
     });
 
     return () => subscription.unsubscribe();

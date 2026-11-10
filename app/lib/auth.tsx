@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/app/lib/supabase";
+import { crossTabSignOutDestination } from "@/lib/auth-session/paths";
 
 type AuthCtx = {
   session: Session | null;
@@ -103,13 +104,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (!mounted) return;
 
       setSession(newSession ?? null);
       setLoading(false);
 
       void refreshAdmin(newSession?.user ?? null);
+
+      if (event !== "SIGNED_OUT") return;
+      const destination = crossTabSignOutDestination(
+        window.location.pathname,
+        window.location.search
+      );
+      if (destination) window.location.assign(destination);
     });
 
     return () => {

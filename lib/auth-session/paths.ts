@@ -29,6 +29,18 @@ export function isProtectedPath(pathname: string): boolean {
   );
 }
 
+/**
+ * Where another tab should go after SIGNED_OUT. Protected pages return to the
+ * hub login. Public pages stay put so a logout on one tab does not pull the
+ * home tab off the public page.
+ */
+export function crossTabSignOutDestination(pathname: string, search: string): string | null {
+  if (!isProtectedPath(pathname) || isPublicPath(pathname)) return null;
+  const next = buildSafeRedirectPath(pathname, search);
+  if (!next.startsWith("/") || next.startsWith("//") || next.startsWith("/login")) return null;
+  return `/login?redirect=${encodeURIComponent(next)}`;
+}
+
 export function buildSafeRedirectPath(pathname: string, search: string): string {
   const fullPath = `${pathname}${search ?? ""}`;
   if (!fullPath.startsWith("/")) return "/";
