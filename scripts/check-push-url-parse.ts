@@ -22,6 +22,9 @@ process.on("warning", (warning) => {
 const parsed = nodeUrl.parse(
   "https://fcm.googleapis.com/fcm/send/abc?x=1",
 );
+const relative = nodeUrl.parse("/selection");
+assert.equal(relative.pathname, "/selection");
+assert.equal(relative.path, "/selection");
 assert.equal(parsed.protocol, "https:");
 assert.equal(parsed.hostname, "fcm.googleapis.com");
 assert.equal(parsed.host, "fcm.googleapis.com");

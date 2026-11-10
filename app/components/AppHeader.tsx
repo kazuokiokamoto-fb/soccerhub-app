@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/app/lib/auth";
+import ZoneLink, { assignCrossZone } from "@/app/components/ZoneLink";
 import { getUnreadChatCount, syncAppBadge } from "@/app/lib/badge";
 
 export default function AppHeader() {
@@ -108,6 +108,7 @@ export default function AppHeader() {
     try {
       await signOut();
       await syncAppBadge(0);
+      if (assignCrossZone("/login")) return;
       router.replace("/login");
       router.refresh();
     } finally {
@@ -118,7 +119,7 @@ export default function AppHeader() {
   return (
     <header ref={headerRef} className="smh-header">
       <div className="smh-inner">
-        <Link href="/" className="smh-brand">
+        <ZoneLink href="/" className="smh-brand">
           <div className="smh-brandMark">
             <Image
               src="/header-logo.png"
@@ -134,7 +135,7 @@ export default function AppHeader() {
             <div className="logoText">サカまっち</div>
             <div className="smh-brandSub">Soccer Match</div>
           </div>
-        </Link>
+        </ZoneLink>
 
         <nav className="smh-nav">
           {loading ? (
@@ -148,13 +149,13 @@ export default function AppHeader() {
               {busy ? "..." : "ログアウト"}
             </button>
           ) : pathname === "/login" ? (
-            <Link href="/" className="sh-btn smh-logout">
+            <ZoneLink href="/" className="sh-btn smh-logout">
               トップへ
-            </Link>
+            </ZoneLink>
           ) : (
-            <Link href="/login" className="sh-btn smh-logout">
+            <ZoneLink href="/login" className="sh-btn smh-logout">
               ログイン
-            </Link>
+            </ZoneLink>
           )}
         </nav>
       </div>

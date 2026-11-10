@@ -2,12 +2,17 @@
   "name": "soccerhub-app",
   "version": "0.1.0",
   "private": true,
+  "workspaces": ["apps/selection"],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test lib/official-results/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test lib/selection-frontend/*.test.ts lib/auth-session/*.test.ts lib/official-results/*.test.ts",
+    "selection:typecheck": "npm run typecheck -w soccerhub-selection",
+    "selection:lint": "npm run lint -w soccerhub-selection",
+    "selection:build": "npm run build -w soccerhub-selection",
     "selection:deploy": "npx supabase functions deploy selection-crawler",
     "selection:run": "curl -X POST 'https://senspqsexmtrwjfsdadv.supabase.co/functions/v1/selection-crawler' -H \"Authorization: Bearer $SELECTION_SECRET\" -H \"apikey: $SELECTION_SECRET\" -H \"x-selection-secret: $SELECTION_SECRET\""
   },
