@@ -115,6 +115,28 @@ export function isReportingYear(year: number, now: Date): boolean {
   return Number.isInteger(year) && year >= MIN_YEAR && year <= fiscalYearContaining(now);
 }
 
+/**
+ * Years the team screen can open, newest first.
+ * The home list stays the fiscal year in progress and the one before it.
+ * This list is every year the API already accepts, from 1990 through the
+ * year in progress, so an older year can still be chosen and submitted.
+ */
+export function reportingYearChoices(now: Date): number[] {
+  const current = fiscalYearContaining(now);
+  const years: number[] = [];
+  for (let year = current; year >= MIN_YEAR; year -= 1) years.push(year);
+  return years;
+}
+
+export function isExactReportingYear(value: string, now: Date): boolean {
+  return /^\d{4}$/.test(value) && isReportingYear(Number(value), now);
+}
+
+export function resolveReportingYear(value: string | null | undefined, now: Date): number {
+  if (value != null && isExactReportingYear(value, now)) return Number(value);
+  return fiscalYearContaining(now);
+}
+
 export function isRealIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split("-").map(Number);
