@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/lib/auth";
 import ZoneLink from "@/app/components/ZoneLink";
 import {
@@ -14,8 +14,8 @@ import {
 const TABS = [
   { href: "/", label: "ホーム" },
   { href: "/chat", label: "チャット" },
-  { href: "/selection", label: "セレ" },
-  { href: "/mypage", label: "マイペ" },
+  { href: "/selection", label: "セレクション" },
+  { href: "/mypage", label: "マイページ" },
 ];
 
 function normalizePath(pathname: string) {
@@ -41,8 +41,15 @@ export default function AppTabNav() {
 
   // 「チャット」タブに表示する数字はチャット未読数のみ(通知全般の合算ではない)
   const [chatBadgeCount, setChatBadgeCount] = useState(0);
-  // 「セレ」タブに表示する数字はセレクション新着通知の未読数のみ
+  // 「セレクション」タブに表示する数字はセレクション新着通知の未読数のみ
   const [selectionBadgeCount, setSelectionBadgeCount] = useState(0);
+  const [trackedUserId, setTrackedUserId] = useState(meId);
+
+  if (trackedUserId !== meId) {
+    setTrackedUserId(meId);
+    setChatBadgeCount(0);
+    setSelectionBadgeCount(0);
+  }
 
   const chatBadgeText = useMemo(() => {
     if (chatBadgeCount <= 0) return "";
@@ -60,8 +67,6 @@ export default function AppTabNav() {
     if (loading) return;
 
     if (!meId) {
-      setChatBadgeCount(0);
-      setSelectionBadgeCount(0);
       void syncAppBadge(0);
       return;
     }
@@ -75,7 +80,7 @@ export default function AppTabNav() {
         if (!alive) return;
         setChatBadgeCount(chatCount);
 
-        // セレタブの表示用: セレクション新着通知の未読数のみ
+        // セレクションタブの表示用: セレクション新着通知の未読数のみ
         const selectionCount = await getUnreadSelectionCount(meId);
         if (!alive) return;
         setSelectionBadgeCount(selectionCount);
@@ -125,8 +130,8 @@ export default function AppTabNav() {
   }, [meId, loading]);
 
   return (
-    <nav style={wrap} aria-label="メインナビゲーション">
-      <div style={tabRow}>
+    <nav className="app-tab-nav" aria-label="メインナビゲーション">
+      <div className="app-tab-row">
         {TABS.map((tab) => {
           const active = isActive(pathname, tab.href);
 
@@ -146,16 +151,11 @@ export default function AppTabNav() {
             <ZoneLink
               key={tab.href}
               href={tab.href}
-              style={{
-                ...tabBase,
-                ...(active ? tabActive : tabInactive),
-              }}
+              className={active ? "app-tab app-tab--active" : "app-tab"}
+              aria-current={active ? "page" : undefined}
             >
-              <span style={tabInner}>
-                <span style={tabLabel}>{tab.label}</span>
-
-                {showBadge ? <span style={badge}>{badgeText}</span> : null}
-              </span>
+              <span className="app-tab-label">{tab.label}</span>
+              {showBadge ? <span className="app-tab-badge">{badgeText}</span> : null}
             </ZoneLink>
           );
         })}
@@ -163,71 +163,3 @@ export default function AppTabNav() {
     </nav>
   );
 }
-
-const wrap: React.CSSProperties = {
-  marginBottom: 12,
-};
-
-const tabRow: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-  gap: 6,
-};
-
-const tabBase: React.CSSProperties = {
-  minHeight: 44,
-  padding: "10px 4px",
-  borderRadius: 999,
-  textAlign: "center",
-  textDecoration: "none",
-  fontSize: 13,
-  fontWeight: 900,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  border: "1px solid #d6eadb",
-  transition: "all 0.15s ease",
-};
-
-const tabActive: React.CSSProperties = {
-  background: "#145c2a",
-  borderColor: "#145c2a",
-  color: "#fff",
-  boxShadow: "0 6px 14px rgba(20,92,42,0.14)",
-};
-
-const tabInactive: React.CSSProperties = {
-  background: "#fff",
-  color: "#23412c",
-};
-
-const tabInner: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 6,
-  minWidth: 0,
-  maxWidth: "100%",
-};
-
-const tabLabel: React.CSSProperties = {
-  minWidth: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const badge: React.CSSProperties = {
-  minWidth: 18,
-  height: 18,
-  padding: "0 5px",
-  borderRadius: 999,
-  background: "#dc2626",
-  color: "#fff",
-  fontSize: 11,
-  fontWeight: 900,
-  lineHeight: "18px",
-  textAlign: "center",
-  flexShrink: 0,
-  boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
-};

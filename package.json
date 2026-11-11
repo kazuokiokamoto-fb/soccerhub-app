@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test lib/selection-frontend/*.test.ts lib/auth-session/*.test.ts lib/official-results/*.test.ts",
+    "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test lib/selection-frontend/*.test.ts lib/auth-session/*.test.ts lib/official-results/*.test.ts lib/home/*.test.ts",
     "selection:typecheck": "npm run typecheck -w soccerhub-selection",
     "selection:lint": "npm run lint -w soccerhub-selection",
     "selection:build": "npm run build -w soccerhub-selection",

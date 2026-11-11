@@ -1,0 +1,403 @@
+.home-page {
+  box-sizing: border-box;
+  width: min(980px, 100%);
+  margin: 0 auto;
+  padding: 12px 12px 32px;
+  display: grid;
+  gap: 12px;
+}
+
+.home-loading,
+.home-copy,
+.home-card-text,
+.home-meta,
+.home-step-text,
+.home-qa-a,
+.home-register-text,
+.home-report-text {
+  margin: 0;
+  color: #3f4d45;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.home-loading {
+  padding: 20px 12px;
+  border: 1px solid #e5ece7;
+  border-radius: 16px;
+  background: #fff;
+  text-align: center;
+}
+
+.home-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.home-hero {
+  border-radius: 18px;
+  padding: 18px 16px 16px;
+  background: linear-gradient(160deg, #1f8f43 0%, #0f4d23 100%);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(20, 92, 42, 0.16);
+}
+
+.home-hero-title {
+  margin: 0;
+  font-size: 1.45rem;
+  line-height: 1.35;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+
+.home-hero-title-rest {
+  display: block;
+}
+
+.home-hero-lead {
+  margin: 8px 0 0;
+  max-width: 40rem;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 0.95rem;
+  line-height: 1.75;
+}
+
+.home-hero-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.home-hero-actions .sh-btn {
+  width: 100%;
+}
+
+.home-hero .home-hero-primary {
+  background: #fff;
+  border-color: #fff;
+  color: #145c2a;
+}
+
+.home-hero .home-hero-primary:hover {
+  background: #f3fbf5;
+  border-color: #fff;
+  color: #0f4d23;
+}
+
+.home-hero .home-hero-secondary {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.78);
+  color: #fff;
+}
+
+.home-hero .home-hero-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: #fff;
+  color: #fff;
+}
+
+.home-cards {
+  display: grid;
+  gap: 10px;
+}
+
+.home-card,
+.home-panel,
+.home-register,
+.home-report,
+.home-fold,
+.home-contact {
+  border: 1px solid #dce9df;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 100%;
+  padding: 14px;
+  color: inherit;
+  text-decoration: none;
+  box-shadow: 0 6px 18px rgba(20, 92, 42, 0.04);
+}
+
+.home-card:hover,
+.home-panel-link:hover {
+  border-color: #9dccab;
+}
+
+.home-card:focus-visible,
+.home-panel-link:focus-visible,
+.home-inline-link:focus-visible,
+.home-mail:focus-visible,
+.home-fold-button:focus-visible {
+  outline: 3px solid #1f8f43;
+  outline-offset: 2px;
+}
+
+.home-card:active {
+  background: #f7fbf8;
+}
+
+.home-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.home-card-title,
+.home-section-title,
+.home-register-title,
+.home-fold-heading {
+  margin: 0;
+  color: #16391f;
+  font-size: 1.15rem;
+  line-height: 1.35;
+  font-weight: 900;
+}
+
+.home-card-top .home-card-cta {
+  margin-top: 0;
+}
+
+.home-card-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  min-height: 36px;
+  margin-top: auto;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #0f7a35;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.home-panel,
+.home-register,
+.home-report,
+.home-contact {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.home-panel-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.home-register {
+  border-color: #b7dfc3;
+  background: #f3fbf5;
+}
+
+.home-register-title {
+  font-size: 1.35rem;
+}
+
+.home-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.home-actions .sh-btn {
+  width: 100%;
+}
+
+.home-kicker,
+.home-report-label {
+  margin: 0;
+  color: #145c2a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.home-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #16391f;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.home-date,
+.home-role {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.home-date {
+  border: 1px solid #bbf7d0;
+  background: #ecfdf3;
+  color: #166534;
+}
+
+.home-role {
+  border: 1px solid #dce9df;
+  background: #eef6f0;
+  color: #14532d;
+}
+
+.home-inline-link,
+.home-mail {
+  color: #145c2a;
+  font-weight: 800;
+}
+
+.home-mail {
+  text-decoration: none;
+}
+
+.home-mypage {
+  margin: 0;
+  color: #3f4d45;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.home-report {
+  border-color: #f3d7a1;
+  background: #fff8eb;
+}
+
+.home-report-label {
+  color: #8a5a12;
+}
+
+.home-report-text {
+  color: #3f2d12;
+  overflow-wrap: anywhere;
+}
+
+.home-unread {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.home-fold {
+  overflow: hidden;
+}
+
+.home-fold-heading {
+  font-size: 1rem;
+}
+
+.home-fold-button {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 0;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #16391f;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 900;
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-fold-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 14px 14px;
+}
+
+.home-steps {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.home-step-title,
+.home-qa-q {
+  margin: 0;
+  color: #145c2a;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.home-qa {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid #eef3ef;
+}
+
+.home-qa:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+@media (min-width: 720px) {
+  .home-page {
+    padding: 16px 16px 40px;
+  }
+
+  .home-hero {
+    padding: 22px 22px 18px;
+  }
+
+  .home-hero-title {
+    font-size: 2rem;
+  }
+
+  .home-hero-title-rest {
+    display: inline;
+  }
+
+  .home-hero-actions,
+  .home-actions {
+    grid-auto-flow: column;
+    justify-content: start;
+  }
+
+  .home-hero-actions .sh-btn,
+  .home-actions .sh-btn {
+    width: auto;
+  }
+}
+
+@media (min-width: 840px) {
+  .home-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
