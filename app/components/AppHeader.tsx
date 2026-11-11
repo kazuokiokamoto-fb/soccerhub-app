@@ -133,7 +133,7 @@ export default function AppHeader() {
 
           <div>
             <div className="logoText">サカまっち</div>
-            <div className="smh-brandSub">Soccer Match</div>
+            <div className="smh-brandSub">練習試合とセレクション</div>
           </div>
         </ZoneLink>
 

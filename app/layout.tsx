@@ -25,7 +25,8 @@ const logoFont = Zen_Kaku_Gothic_New({
 
 export const metadata: Metadata = {
   title: "サカまっち",
-  description: "サッカー練習試合マッチング",
+  description:
+    "チーム同士で練習試合を探して、募集して、チャットで調整できます。セレクション情報もまとめて確認できます。",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

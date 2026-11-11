@@ -339,7 +339,8 @@ body {
 .smh-brandSub {
   font-size: 11px;
   color: #7a8a80;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
 }
 
 .smh-nav {
@@ -453,7 +454,8 @@ body {
   }
 
   .smh-brandSub {
-    font-size: 9px;
+    font-size: 10px;
+    letter-spacing: 0;
   }
 
   .smh-logout {
@@ -470,4 +472,85 @@ body {
 @keyframes sh-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+
+/* ===============================
+   TAB NAV
+================================ */
+
+.app-tab-nav {
+  margin-bottom: 0;
+}
+
+.app-tab-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.app-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 0;
+  border-radius: 999px;
+  border: 1px solid #d6eadb;
+  background: #fff;
+  color: #23412c;
+  text-align: center;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.app-tab--active {
+  background: #145c2a;
+  border-color: #145c2a;
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(20, 92, 42, 0.14);
+}
+
+.app-tab-label {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.app-tab-badge {
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+@media (min-width: 480px) {
+  .app-tab-row {
+    gap: 6px;
+  }
+
+  .app-tab {
+    padding: 10px 4px;
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .app-tab-badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    font-size: 11px;
+    line-height: 18px;
+  }
 }

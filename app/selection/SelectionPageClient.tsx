@@ -577,7 +577,7 @@ export default function SelectionListPage() {
     return groupedItems.filter(isNewArrival).length;
   }, [groupedItems]);
 
-  // ホーム画面(HomeCalendar.tsx)の集計基準(未来日程を持つグループのみをカウント)と揃える。
+  // これから開催日があるものだけを件数に数える。
   const totalHandledCount = useMemo(() => {
     return groupedItems.filter((g) => hasUpcomingDate(g.allEventDates)).length;
   }, [groupedItems]);
