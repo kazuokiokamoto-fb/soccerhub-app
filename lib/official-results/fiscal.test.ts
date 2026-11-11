@@ -8,10 +8,13 @@ import {
   fiscalPeriod,
   fiscalYearContaining,
   isCanonicalPolicy,
+  isExactReportingYear,
   isReportingYear,
   listedDuties,
   overdueStartsAt,
   periodEndsAt,
+  reportingYearChoices,
+  resolveReportingYear,
 } from "./fiscal.ts";
 
 const may31End = new Date("2026-05-31T14:59:59.999Z");
@@ -46,6 +49,37 @@ test("May 31 is still on time and June 1 00:00 Asia/Tokyo is overdue", () => {
   assert.equal(overdue.lateSubmission, "allowed");
   assert.equal(overdueStartsAt(2025).toISOString(), "2026-05-31T15:00:00.000Z");
   assert.equal(june1Start.getTime() - may31End.getTime(), 1);
+});
+
+test("the year menu offers every reportable year, newest first", () => {
+  const in2026 = reportingYearChoices(june1Start);
+  assert.equal(in2026[0], 2026);
+  assert.equal(in2026[1], 2025);
+  assert.equal(in2026.at(-1), 1990);
+  assert.equal(in2026.includes(2027), false);
+  assert.deepEqual(
+    listedDuties(june1Start).map((duty) => duty.fiscalYear).sort((a, b) => b - a),
+    in2026.slice(0, 2),
+  );
+  assert.ok(in2026.every((year, index) => index === 0 || in2026[index - 1] === year + 1));
+  assert.ok(in2026.every((year) => isReportingYear(year, june1Start)));
+
+  const beforeApril = reportingYearChoices(march31End);
+  assert.equal(beforeApril[0], 2025);
+  assert.equal(beforeApril[1], 2024);
+  assert.equal(beforeApril.includes(2026), false);
+});
+
+test("an address year opens when it can be reported, otherwise the year in progress", () => {
+  assert.equal(isExactReportingYear("2024", june1Start), true);
+  assert.equal(resolveReportingYear("2024", june1Start), 2024);
+  assert.equal(resolveReportingYear("1990", june1Start), 1990);
+  assert.equal(resolveReportingYear(null, june1Start), 2026);
+  assert.equal(resolveReportingYear("", june1Start), 2026);
+  assert.equal(resolveReportingYear("2027", june1Start), 2026);
+  assert.equal(resolveReportingYear("1989", june1Start), 2026);
+  assert.equal(resolveReportingYear("20ab", june1Start), 2026);
+  assert.equal(resolveReportingYear("2026", march31End), 2025);
 });
 
 test("the home list shows the current fiscal year and the one before it", () => {

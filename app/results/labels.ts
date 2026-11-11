@@ -62,3 +62,19 @@ export const PHASE_TEXT: Record<string, string> = {
 export function fiscalYearLabel(year: number): string {
   return `${year}年度（${year}-04-01〜${year + 1}-03-31）`;
 }
+
+/** Short label for the year menu. 2026年度（2026/4〜2027/3） */
+export function fiscalYearChoiceLabel(year: number): string {
+  return `${year}年度（${year}/4〜${year + 1}/3）`;
+}
+
+export const RESULT_TEXT: Record<string, string> = {
+  win: "勝ち",
+  loss: "負け",
+  draw: "引き分け",
+  unknown: "未確定",
+};
+
+export function resultText(value: string): string {
+  return RESULT_TEXT[value] ?? value;
+}

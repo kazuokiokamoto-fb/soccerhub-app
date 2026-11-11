@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { errorText, fiscalYearLabel, OBLIGATION_TEXT, PHASE_TEXT } from "./labels";
+import { errorText, fiscalYearChoiceLabel, OBLIGATION_TEXT, PHASE_TEXT } from "./labels";
+import "./results.css";
 
 type YearStatus = {
   fiscalYear: number;
@@ -81,8 +82,11 @@ export default function ResultsHome() {
                   <ul>
                     {team.years.map((year) => (
                       <li key={year.fiscalYear}>
-                        <Link href={`/results/${team.id}?year=${year.fiscalYear}`}>
-                          {fiscalYearLabel(year.fiscalYear)}
+                        <Link
+                          className="or-year-link"
+                          href={`/results/${team.id}?year=${year.fiscalYear}`}
+                        >
+                          {fiscalYearChoiceLabel(year.fiscalYear)}
                         </Link>
                         <div>
                           {PHASE_TEXT[year.phase] ?? year.phase} 期限 {year.deadlineDate} の終わり（日本時間）。{" "}

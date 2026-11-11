@@ -14,10 +14,10 @@ import {
   obligation,
   type ReportOutcome,
   type ReportState,
-  resultLabel,
   sourceDoesNotSubmit,
 } from "@/lib/official-results/rules";
 import { fetchPublicPage, PublicFetchError } from "@/lib/official-results/ssrf";
+import { isGoalCount, resolveResultLabel } from "@/lib/official-results/lineInput";
 import { cleanTeamText } from "@/lib/official-results/text";
 
 const FETCH_LIMIT = 8;
@@ -346,13 +346,15 @@ function parseLineInput(body: Record<string, unknown>, year: number) {
       ? null
       : cleanTeamText(String(body.teamNote), 200);
   if (body.teamNote && note === null) return null;
+  const label = resolveResultLabel(goals.team, goals.opponent, body.resultLabel);
+  if (!label) return null;
   return {
     competition_name: competition,
     opponent_name: opponent,
     played_on: playedOn,
     team_goals: goals.team,
     opponent_goals: goals.opponent,
-    result_label: resultLabel(goals.team, goals.opponent),
+    result_label: label,
     included: body.included !== false,
     team_note: note,
   };
@@ -361,8 +363,7 @@ function parseLineInput(body: Record<string, unknown>, year: number) {
 function parseGoals(team: unknown, opponent: unknown) {
   if (team == null && opponent == null) return { team: null, opponent: null };
   if (typeof team !== "number" || typeof opponent !== "number") return null;
-  if (!Number.isInteger(team) || !Number.isInteger(opponent)) return null;
-  if (team < 0 || team > 20 || opponent < 0 || opponent > 20) return null;
+  if (!isGoalCount(team) || !isGoalCount(opponent)) return null;
   return { team, opponent };
 }
 
