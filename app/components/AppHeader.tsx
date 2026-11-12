@@ -149,7 +149,7 @@ export default function AppHeader() {
               <IconFlag size={20} />
             </div>
             <div>
-              <div className="logoText">セレクション</div>
+              <div className="logoText">セレクション検索</div>
             </div>
           </ZoneLink>
         ) : (
@@ -167,14 +167,18 @@ export default function AppHeader() {
 
             <div>
               <div className="logoText">サカまっち</div>
-              <div className="smh-brandSub">練習試合とセレクション</div>
+              <div className="smh-brandSub">練習試合マッチング</div>
             </div>
           </ZoneLink>
         )}
 
         <nav className="smh-nav">
           {selectionZone ? (
-            <ZoneLink href="/" className="sm-back-home">
+            <ZoneLink
+              href="/"
+              className="sm-back-home"
+              aria-label="セレクション検索から、サカまっちへ戻る"
+            >
               サカまっちへ戻る
             </ZoneLink>
           ) : null}
@@ -205,7 +209,7 @@ export default function AppHeader() {
         {selectionZone ? null : (
           <ZoneLink href="/selection" className="sm-selection-entry">
             <IconFlag size={16} />
-            セレクション
+            セレクション検索
             {selectionUnread > 0 ? (
               <span className="sm-selection-count">
                 {selectionUnread > 99 ? "99+" : selectionUnread}

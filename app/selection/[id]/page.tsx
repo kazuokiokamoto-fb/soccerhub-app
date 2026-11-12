@@ -1,8 +1,13 @@
 // /app/selection/[id]/page.tsx
 
 import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, Metadata, ReactNode } from "react";
 import ZoneLink from "@/app/components/ZoneLink";
+
+export const metadata: Metadata = {
+  title: "セレクション検索",
+  description: "セレクション検索。気になるチームのセレクションを探せます。",
+};
 
 import { fetchSelectionEventById } from "@/app/lib/selections";
 
@@ -140,7 +145,7 @@ export default async function SelectionDetailPage(props: {
           一覧
         </Link>
 
-        <ZoneLink href="/" className="sm-back-home">
+        <ZoneLink href="/" className="sm-back-home" aria-label="セレクション検索から、サカまっちへ戻る">
           サカまっちへ戻る
         </ZoneLink>
       </div>

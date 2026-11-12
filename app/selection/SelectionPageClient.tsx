@@ -1084,7 +1084,7 @@ export default function SelectionListPage() {
       <AppTabNav />
 
       <header className="sm-stack">
-        <h1 className="sm-title">セレクション</h1>
+        <h1 className="sm-title">セレクション検索</h1>
         <div className="sm-stat-row">
           <p className="sm-stat">
             <strong>{totalHandledCount}</strong>

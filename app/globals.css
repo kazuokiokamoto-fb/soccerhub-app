@@ -475,6 +475,10 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .home-speed {
+    animation: none;
+  }
+
   .sh-btn,
   .sh-card,
   .app-tab,

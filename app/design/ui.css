@@ -25,9 +25,11 @@
 .sm-title {
   margin: 0;
   color: var(--sm-accent-ink);
+  font-family: var(--font-score), "Zen Maru Gothic", sans-serif;
+  font-style: italic;
   font-size: 28px;
   font-weight: 700;
-  letter-spacing: 0;
+  letter-spacing: 0.01em;
   line-height: 1.25;
 }
 
@@ -58,10 +60,17 @@
 }
 
 .sm-stat strong {
+  color: var(--sm-pitch);
+  font-family: var(--font-score), "Zen Maru Gothic", sans-serif;
+  font-style: italic;
   font-size: 40px;
   font-weight: 700;
-  letter-spacing: 0;
+  letter-spacing: 0.02em;
   line-height: 1;
+}
+
+html[data-zone="selection"] .sm-stat strong {
+  color: var(--sm-accent-ink);
 }
 
 .sm-stat span {
@@ -73,9 +82,11 @@
 .sm-key {
   margin: 0;
   color: var(--sm-accent-ink);
+  font-family: var(--font-score), "Zen Maru Gothic", sans-serif;
+  font-style: italic;
   font-size: 32px;
   font-weight: 700;
-  letter-spacing: 0;
+  letter-spacing: 0.02em;
   line-height: 1.2;
 }
 
@@ -337,7 +348,7 @@
 }
 
 html[data-zone="selection"] .logoText {
-  font-size: 20px;
+  font-size: 15px;
   letter-spacing: 0;
   transform: none;
 }
@@ -345,6 +356,8 @@ html[data-zone="selection"] .logoText {
 html[data-zone="selection"] .smh-brandMark {
   width: 32px;
   height: 32px;
+  background: var(--sm-fill);
+  color: var(--sm-accent-strong);
 }
 
 html[data-zone="selection"] .sm-back-site {

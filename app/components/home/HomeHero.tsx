@@ -6,6 +6,7 @@ export default function HomeHero() {
   return (
     <section className="home-hero" aria-labelledby="home-hero-title">
       <span className="home-ball" aria-hidden="true" />
+      <span className="home-speed" aria-hidden="true" />
       <h1 id="home-hero-title" className="home-hero-title">
         練習試合の相手が見つかる、
         <span className="home-hero-title-rest">サカまっち</span>

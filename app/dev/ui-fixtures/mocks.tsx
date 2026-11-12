@@ -145,7 +145,7 @@ function TeamMock() {
 function SelectionMock() {
   return (
     <>
-      <h1 className="sm-title">セレクション</h1>
+      <h1 className="sm-title">セレクション検索</h1>
       <div className="sm-stat-row">
         <p className="sm-stat"><strong>48</strong><span>掲載</span></p>
         <p className="sm-stat"><strong>3</strong><span>7日の新着</span></p>

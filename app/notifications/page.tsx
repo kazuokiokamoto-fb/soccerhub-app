@@ -34,7 +34,7 @@ function fmt(dt: string) {
 function notificationTypeLabel(type?: string | null) {
   switch (type) {
     case "selection_event":
-      return "セレクション";
+      return "セレクション検索";
     case "match_request":
       return "試合申込";
     case "chat":

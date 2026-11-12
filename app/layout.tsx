@@ -1,6 +1,6 @@
 import React from "react";
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Zen_Kaku_Gothic_New } from "next/font/google";
+import { Barlow_Condensed, Geist, Geist_Mono, Zen_Kaku_Gothic_New } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/app/lib/auth";
 import AppHeader from "@/app/components/AppHeader";
@@ -15,6 +15,13 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+const scoreboard = Barlow_Condensed({
+  variable: "--font-score",
+  subsets: ["latin"],
+  weight: ["700"],
+  style: ["italic"],
 });
 
 const logoFont = Zen_Kaku_Gothic_New({
@@ -68,7 +75,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${logoFont.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${logoFont.variable} ${scoreboard.variable} antialiased`}
       >
         <AuthProvider>
           <AppHeader />
