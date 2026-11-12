@@ -162,10 +162,8 @@ function evaluateCandidates(
       score += 80;
       reasons.push("title_has_team_name");
     }
-    if (isKnownMediaDomain(r.link)) {
-      score += 60;
-      reasons.push("known_media_domain");
-    }
+    // Media roundups are not a team's selection page. Never save them.
+    if (isKnownMediaDomain(r.link)) continue;
     if (officialHost && hostOf(r.link) === officialHost) {
       score += 50;
       reasons.push("official_domain");
@@ -266,7 +264,22 @@ serve(async (req) => {
           team.official_url,
         );
 
+        if (candidate && (isExcludedDomain(candidate.url) || isKnownMediaDomain(candidate.url))) {
+          results.push({ teamName: team.team_name, status: "rejected_unsafe_url", url: candidate.url });
+          continue;
+        }
+
         if (candidate) {
+          const { data: existingResearch } = await supabase
+            .from("team_selection_research")
+            .select("selection_page_url")
+            .eq("team_master_id", team.id)
+            .maybeSingle();
+          const currentUrl = existingResearch?.selection_page_url || "";
+          if (currentUrl && !isExcludedDomain(currentUrl) && !isKnownMediaDomain(currentUrl)) {
+            results.push({ teamName: team.team_name, status: "kept_existing", url: currentUrl });
+            continue;
+          }
           const { error: upsertError } = await supabase
             .from("team_selection_research")
             .upsert({

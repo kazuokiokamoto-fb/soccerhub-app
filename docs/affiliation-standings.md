@@ -24,7 +24,7 @@
 
 保存済みの結果ページを、前回の取得から7日以上たっているものだけ取ります。対象年度のカテゴリと最終順位を候補として残し、URL、取得時刻、根拠の短い抜粋を保存します。候補だけでは提出になりません。失敗は取得履歴に残し、画面や他の機能は止めません。
 
-Vercel Hobby の cron は1日1回までです。週1回の式は使わず、既存の毎日の `/api/cron/selection-crawler` が offset 0 のときだけ `/api/cron/results-standings` を起こします。専用の cron を足す場合も毎日の式にし、7日未満のページは処理しません。1回の実行は3チームで、続きは最大12回です。`vercel.json` は足していません。ダッシュボードの既存 cron を置き換えないためです。
+Vercel Hobby の cron は1日1回までです。週1回の式は使わず、ルートの `vercel.json` が毎日 `0 20 * * *`（05:00 JST）に `/api/cron/results-standings` を起こします。7日未満のページは処理しません。1回の実行は3チームで、続きは `after()` で最大12回です。`/api/cron/selection-crawler` はスケジュールしません。セレクションページの巡回は Supabase の cron が担当します。この `vercel.json` がダッシュボードの cron を置き換えるので、ほかの cron がある場合は同じファイルに写してからマージしてください。
 
 ## 提出
 
@@ -36,5 +36,5 @@ Vercel Hobby の cron は1日1回までです。週1回の式は使わず、既�
 
 1. `supabase/migrations/20261111193000_team_affiliation_standings.sql` を、`20261105214326` のあとで適用する。そのあと `supabase/migrations/20261112042135_team_affiliation_league_level.sql` を適用する。フォルダ全体の `supabase db push` はしない。古い表は落とさない。リーグの列は空のままで、既存チームの強さは変えない。
 2. 新しい必須の環境変数はない。任意で `RESULTS_SEARCH_ENDPOINT`、`RESULTS_SEARCH_API_KEY`、`RESULTS_SEARCH_KEY_HEADER`。cron は既存の `CRON_SECRET`、`NEXT_PUBLIC_SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY` を使う。検索キーが無いときは、種の URL か入力を使う。service role が無いと候補は保存できない。所属と URL の保存はユーザーの RLS で動く。
-3. cron は既存の selection-crawler が毎日起こす。別にするときはダッシュボードで `GET /api/cron/results-standings` を `0 18 * * *`（UTC、1日1回）にする。Hobby で週次の式が拒否されるので毎日にする。`/api/cron/selection-crawler` は残す。
+3. 結果順位の cron は `vercel.json` の毎日 `0 20 * * *`（UTC）です。`CRON_SECRET` が本番にあることを確認する。`/api/cron/selection-crawler` は手動のままです。
 4. マイグレーションのあとにアプリをデプロイする。列が無い間、ホームの案内は空になり、順位の提出は `schema_unavailable` を返す。ログインや試合は止まらない。

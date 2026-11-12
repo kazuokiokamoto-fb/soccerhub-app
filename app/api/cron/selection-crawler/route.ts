@@ -10,6 +10,9 @@ function boundedInt(value: string | null, fallback: number, min: number, max: nu
   return Math.min(max, Math.max(min, Math.trunc(parsed)));
 }
 
+// Left unscheduled. This source crawler is a second writer, and one Vercel Hobby
+// invocation cannot finish the selection-source list. Selection pages stay on the
+// Supabase cron. The only Vercel cron is /api/cron/results-standings.
 export async function GET(req: Request) {
   if (!hasCronAuthorization(req)) return cronUnauthorized();
 
