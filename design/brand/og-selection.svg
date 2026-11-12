@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <clipPath id="ball-clip"><circle cx="32" cy="32" r="29.15"/></clipPath>
+    <pattern id="sky" width="72" height="630" patternUnits="userSpaceOnUse">
+      <rect width="36" height="630" fill="#eaf4ff"/>
+      <rect x="36" width="36" height="630" fill="#d4e5f7"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="url(#sky)"/>
+  <circle cx="300" cy="300" r="188" fill="none" stroke="#2f6cb8" stroke-width="10" opacity="0.18"/>
+  <rect x="18" y="18" width="1164" height="594" rx="36" fill="none" stroke="#2f6cb8" stroke-width="12"/>
+  <circle cx="312" cy="336" r="156" fill="#ffd45a"/>
+  <g transform="translate(300 312) scale(5.15) translate(-32 -32)">
+    <circle cx="32" cy="32" r="30" fill="#f7fff8"/>
+    <g clip-path="url(#ball-clip)" fill="#0c5c32" stroke="#f7fff8" stroke-width="1.6" stroke-linejoin="round">
+      <polygon points="32,21.4 42.1,28.7 52.2,21.4 48.3,9.5 35.9,9.5"/><polygon points="42.1,28.7 38.2,40.6 48.3,47.9 58.4,40.6 54.5,28.7"/><polygon points="38.2,40.6 25.8,40.6 21.9,52.4 32,59.8 42.1,52.4"/><polygon points="25.8,40.6 21.9,28.7 9.5,28.7 5.6,40.6 15.7,47.9"/><polygon points="21.9,28.7 32,21.4 28.1,9.5 15.7,9.5 11.8,21.4"/>
+    </g>
+    <polygon points="32,21.4 42.1,28.7 38.2,40.6 25.8,40.6 21.9,28.7" fill="#ffd45a" stroke="#f7fff8" stroke-width="1.6" stroke-linejoin="round"/>
+  </g>
+  <g transform="translate(548 176)">
+    <rect width="248" height="58" rx="29" fill="#eaf4ff" stroke="#8ebff0" stroke-width="3"/>
+    <text x="124" y="40" text-anchor="middle" font-family="Zen Maru Gothic" font-weight="700" font-size="28" fill="#1d4f91">サカまっち</text>
+  </g>
+  <g transform="translate(540 392) skewX(-6)">
+    <text font-family="Zen Maru Gothic" font-weight="700" font-size="68" fill="#1d4f91">セレクション検索</text>
+  </g>
+</svg>

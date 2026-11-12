@@ -312,7 +312,7 @@ body {
   height: 36px;
   border-radius: 50%;
   overflow: hidden;
-  background: #000;
+  background: var(--sm-pitch);
   display: inline-flex;
   align-items: center;
   justify-content: center;

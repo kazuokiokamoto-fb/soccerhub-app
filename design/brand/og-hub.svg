@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <clipPath id="ball-clip"><circle cx="32" cy="32" r="29.15"/></clipPath>
+    <pattern id="pitch" width="72" height="630" patternUnits="userSpaceOnUse">
+      <rect width="36" height="630" fill="#e7f6ec"/>
+      <rect x="36" width="36" height="630" fill="#d5f0df"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="url(#pitch)"/>
+  <circle cx="300" cy="300" r="188" fill="none" stroke="#0c5c32" stroke-width="10" opacity="0.16"/>
+  <rect x="18" y="18" width="1164" height="594" rx="36" fill="none" stroke="#0c5c32" stroke-width="12"/>
+  <circle cx="312" cy="336" r="156" fill="#ffd45a"/>
+  <g transform="translate(300 312) scale(5.15) translate(-32 -32)">
+    <circle cx="32" cy="32" r="30" fill="#f7fff8"/>
+    <g clip-path="url(#ball-clip)" fill="#0c5c32" stroke="#f7fff8" stroke-width="1.6" stroke-linejoin="round">
+      <polygon points="32,21.4 42.1,28.7 52.2,21.4 48.3,9.5 35.9,9.5"/><polygon points="42.1,28.7 38.2,40.6 48.3,47.9 58.4,40.6 54.5,28.7"/><polygon points="38.2,40.6 25.8,40.6 21.9,52.4 32,59.8 42.1,52.4"/><polygon points="25.8,40.6 21.9,28.7 9.5,28.7 5.6,40.6 15.7,47.9"/><polygon points="21.9,28.7 32,21.4 28.1,9.5 15.7,9.5 11.8,21.4"/>
+    </g>
+    <polygon points="32,21.4 42.1,28.7 38.2,40.6 25.8,40.6 21.9,28.7" fill="#ffd45a" stroke="#f7fff8" stroke-width="1.6" stroke-linejoin="round"/>
+  </g>
+  <g transform="translate(548 188)">
+    <rect width="392" height="64" rx="32" fill="#ffd45a"/>
+    <text x="196" y="44" text-anchor="middle" font-family="Zen Maru Gothic" font-weight="500" font-size="30" fill="#5c3b00">練習試合マッチング</text>
+  </g>
+  <g transform="translate(548 400) skewX(-6)">
+    <text font-family="Zen Maru Gothic" font-weight="700" font-size="104" fill="#0c5c32">サカまっち</text>
+  </g>
+</svg>
