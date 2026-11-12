@@ -239,7 +239,7 @@ create index official_standing_fetches_team_time_idx
 comment on table public.official_standing_fetches is
   'Every crawl attempt, including failures. Failures stay here and do not surface as product errors.';
 
-create function public.touch_updated_at()
+create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
 set search_path = public
