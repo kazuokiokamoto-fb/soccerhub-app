@@ -447,7 +447,9 @@ export default function MyPage() {
 
         <div style={teamList}>
           {teams.length === 0 ? (
-            <p className="sm-meta">まだチームがありません。</p>
+            <div className="sm-empty">
+              <p className="sm-meta">まだチームがありません。</p>
+            </div>
           ) : (
             teams.map((team) => {
               const role = roleByTeamId.get(team.id);

@@ -26,9 +26,9 @@
   margin: 0;
   color: var(--sm-accent-ink);
   font-size: 28px;
-  font-weight: 900;
-  letter-spacing: -0.03em;
-  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.25;
 }
 
 .sm-meta {
@@ -51,7 +51,7 @@
   justify-items: center;
   gap: 4px;
   padding: 14px 8px;
-  border-radius: 18px;
+  border-radius: 24px;
   background: var(--sm-accent-soft);
   color: var(--sm-accent-ink);
   text-align: center;
@@ -59,8 +59,8 @@
 
 .sm-stat strong {
   font-size: 40px;
-  font-weight: 900;
-  letter-spacing: -0.04em;
+  font-weight: 700;
+  letter-spacing: 0;
   line-height: 1;
 }
 
@@ -74,9 +74,9 @@
   margin: 0;
   color: var(--sm-accent-ink);
   font-size: 32px;
-  font-weight: 900;
-  letter-spacing: -0.03em;
-  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.2;
 }
 
 .sm-chip-row,
@@ -101,7 +101,7 @@
   color: var(--sm-accent);
   font: inherit;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
   text-decoration: none;
 }
@@ -109,9 +109,9 @@
 .sm-chip[aria-pressed="true"],
 .chip-grid button[aria-pressed="true"],
 .unknown-chip[aria-pressed="true"] {
-  background: var(--sm-accent);
-  border-color: var(--sm-accent);
-  color: #fff;
+  background: var(--sm-fill);
+  border-color: var(--sm-sun);
+  color: var(--sm-accent-strong);
 }
 
 .sm-chip--static {
@@ -128,20 +128,20 @@
 
 .sm-seg button {
   min-height: 52px;
-  border-radius: 16px;
+  border-radius: 999px;
   border: 2px solid var(--sm-line);
   background: #fff;
   color: var(--sm-accent);
   font: inherit;
   font-size: 16px;
-  font-weight: 900;
+  font-weight: 700;
   cursor: pointer;
 }
 
 .sm-seg button[aria-pressed="true"] {
-  background: var(--sm-accent);
-  border-color: var(--sm-accent);
-  color: #fff;
+  background: linear-gradient(180deg, var(--sm-sun-soft), var(--sm-fill));
+  border-color: var(--sm-sun);
+  color: var(--sm-accent-strong);
 }
 
 .status-chip,
@@ -202,7 +202,7 @@
 
 .sm-more {
   border: 1px solid var(--sm-line);
-  border-radius: 16px;
+  border-radius: 24px;
   background: #fff;
   padding: 0;
 }
@@ -264,9 +264,11 @@
   display: grid;
   gap: 6px;
   padding: 18px 16px;
-  border-radius: 22px;
-  background: linear-gradient(160deg, var(--sm-accent-bright), var(--sm-accent-strong));
-  color: #fff;
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 100% 0, var(--sm-sun-soft), transparent 42%),
+    linear-gradient(165deg, #fff, var(--sm-accent-soft));
+  color: var(--sm-accent-ink);
   box-shadow: var(--sm-shadow);
 }
 
@@ -288,7 +290,7 @@
 
 .sm-hero-desc {
   margin: 0;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--sm-muted);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -328,9 +330,9 @@
 }
 
 .sm-brand-mark--selection {
-  border-radius: 12px;
-  background: var(--sm-accent);
-  color: #fff;
+  border-radius: 14px;
+  background: var(--sm-fill);
+  color: var(--sm-accent-strong);
   box-shadow: none;
 }
 
@@ -353,7 +355,7 @@ html[data-zone="selection"] .sm-back-site {
 .sm-list {
   display: grid;
   border: 1px solid var(--sm-line);
-  border-radius: 20px;
+  border-radius: 28px;
   background: #fff;
   overflow: hidden;
 }
@@ -419,4 +421,47 @@ html[data-zone="selection"] .sm-back-site {
   font-size: 13px;
   font-weight: 800;
   color: var(--sm-muted);
+}
+
+.sm-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.sm-empty::before,
+.home-empty::before,
+.home-ball {
+  content: "";
+  width: 54px;
+  height: 54px;
+  margin-inline: auto;
+  border-radius: 50%;
+  background: url("/play-ball.svg") center / contain no-repeat;
+  box-shadow: 0 8px 0 0 var(--sm-sun);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sm-chip,
+  .chip-grid button,
+  .sm-seg button,
+  .app-tab,
+  .sm-row {
+    transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .sm-chip:hover,
+  .chip-grid button:hover,
+  .sm-seg button:hover,
+  .app-tab:hover {
+    transform: translateY(-2px) scale(1.03);
+  }
+
+  .sm-chip:active,
+  .chip-grid button:active,
+  .sm-seg button:active,
+  .app-tab:active {
+    transform: translateY(1px) scale(0.98);
+  }
 }

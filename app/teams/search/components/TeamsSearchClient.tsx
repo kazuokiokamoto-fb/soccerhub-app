@@ -704,7 +704,7 @@ export default function TeamsSearchClient() {
           読み込み中…
         </div>
       ) : filteredTeams.length === 0 ? (
-        <div className="ui-card" style={emptyBox}>
+        <div className="ui-card sm-empty" style={emptyBox}>
           条件に一致するチームがありません
         </div>
       ) : (

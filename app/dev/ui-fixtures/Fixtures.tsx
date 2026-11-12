@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import LoggedInMocks from "./mocks";
 import AppHero from "@/app/components/AppHero";
@@ -24,6 +24,13 @@ export default function UiFixtures() {
     organizationName: "",
   });
   const [note, setNote] = useState("");
+
+  useEffect(() => {
+    document.documentElement.dataset.fixtureAuth = "in";
+    return () => {
+      delete document.documentElement.dataset.fixtureAuth;
+    };
+  }, []);
 
   if (
     screen === "chat" ||

@@ -82,7 +82,7 @@ export default function HomeSchedule({
 
   if (mode === "guest") {
     return (
-      <section className="home-panel">
+      <section className="home-panel home-empty">
         {title}
         <p className="home-copy">
           ログインすると、自分の試合予定がここに表示されます。
@@ -120,7 +120,7 @@ export default function HomeSchedule({
   const next = loaded?.items[0];
   if (!next) {
     return (
-      <section className="home-panel">
+      <section className="home-panel home-empty">
         {title}
         <p className="home-copy">{"まだ予定はありません。"}<Link href="/teams/search" className="home-inline-link">練習試合を探す</Link>{"か、"}<Link href="/match/new" className="home-inline-link">募集</Link>{"してみましょう。"}</p>
       </section>

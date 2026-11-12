@@ -702,7 +702,7 @@ const baseControl: React.CSSProperties = {
   minHeight: 48,
   display: "block",
   boxSizing: "border-box",
-  borderRadius: 12,
+  borderRadius: 18,
   border: "1px solid var(--sm-line)",
   background: "#fff",
   fontSize: 16,

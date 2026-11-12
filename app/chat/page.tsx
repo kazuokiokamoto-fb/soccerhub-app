@@ -591,7 +591,7 @@ function ChatListPageInner() {
           </Link>
         </div>
       ) : teamChats.length === 0 && threads.length === 0 ? (
-        <div className="sm-card">
+        <div className="sm-card sm-empty">
           <p className="sm-meta">まだチャットはありません。チーム登録、試合申込、招待送信後にここへ表示されます。</p>
         </div>
       ) : (

@@ -16,7 +16,21 @@ export default function AppHeader() {
   const { user, loading, signOut } = useAuth();
 
   const [busy, setBusy] = useState(false);
+  const [fixtureAuth, setFixtureAuth] = useState(false);
   const headerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const sync = () => {
+      setFixtureAuth(document.documentElement.dataset.fixtureAuth === "in");
+    };
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-fixture-auth"],
+    });
+    return () => observer.disconnect();
+  }, [pathname]);
 
   useEffect(() => {
     const el = headerRef.current;
@@ -159,9 +173,12 @@ export default function AppHeader() {
           ) : null}
           {loading ? (
             <span className="smh-user">...</span>
-          ) : user ? (
+          ) : user || fixtureAuth ? (
             <button
-              onClick={onLogout}
+              type="button"
+              onClick={() => {
+                if (user) void onLogout();
+              }}
               disabled={busy}
               className="sh-btn smh-logout"
             >

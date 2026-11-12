@@ -1501,7 +1501,7 @@ export default function SelectionListPage() {
               })}
             </section>
           ) : (
-            <div className="ui-card" style={emptyBox}>
+            <div className="ui-card sm-empty" style={emptyBox}>
               条件に合うセレクション情報がありません
             </div>
           )}

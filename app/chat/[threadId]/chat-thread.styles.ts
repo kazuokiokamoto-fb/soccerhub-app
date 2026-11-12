@@ -160,9 +160,9 @@ export const bubbleBase: React.CSSProperties = {
 };
 
 export const bubbleMine: React.CSSProperties = {
-  background: "var(--sm-accent)",
-  color: "#fff",
-  borderTopRightRadius: 8,
+  background: "var(--sm-fill)",
+  color: "var(--sm-accent-strong)",
+  borderTopRightRadius: 12,
 };
 
 export const bubbleOther: React.CSSProperties = {

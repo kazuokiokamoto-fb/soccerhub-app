@@ -187,7 +187,7 @@ export function DaySlotList(props: {
   return (
     <section style={card} className="ui-card">
       {sortedSlots.length === 0 ? (
-        <div style={emptyBox}>
+        <div className="sm-empty" style={emptyBox}>
           <div style={emptyTitle} className="ui-title">
             該当する募集がありません
           </div>

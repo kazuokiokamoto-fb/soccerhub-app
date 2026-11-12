@@ -456,7 +456,7 @@ function TeamsPageInner() {
       {loading || authLoading ? (
         <div style={emptyBox}>読み込み中…</div>
       ) : filteredTeams.length === 0 ? (
-        <div style={emptyBox}>
+        <div className="sm-empty" style={emptyBox}>
           条件に一致するチームがありません。
           <br />
           条件をゆるめて再度お試しください。

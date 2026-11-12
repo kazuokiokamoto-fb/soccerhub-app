@@ -49,7 +49,7 @@ export const metadata: Metadata = {
 const appZone = process.env.NEXT_PUBLIC_APP_ZONE === "selection" ? "selection" : "hub";
 
 export const viewport: Viewport = {
-  themeColor: appZone === "selection" ? "#1e3a8a" : "#145c2a",
+  themeColor: appZone === "selection" ? "#4c8fe0" : "#1a9a52",
 };
 
 export default function RootLayout({
@@ -59,6 +59,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja" data-zone={appZone}>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${logoFont.variable} antialiased`}
       >
