@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { cronUnauthorized, hasCronAuthorization } from "@/app/lib/server/internalAuth";
 import { runStandingsCron, standingsService } from "@/app/lib/server/standingsCron";
 
@@ -27,14 +27,18 @@ export async function GET(req: Request) {
       const cronSecret = process.env.CRON_SECRET;
       if (cronSecret) {
         const nextUrl = `${url.origin}/api/cron/results-standings?pass=${pass + 1}`;
-        fetch(nextUrl, {
-          method: "GET",
-          headers: { authorization: `Bearer ${cronSecret}` },
-        }).catch((error) => {
-          console.error(
-            "results standings chain skipped:",
-            error instanceof Error ? error.message : "unknown",
-          );
+        after(async () => {
+          try {
+            await fetch(nextUrl, {
+              method: "GET",
+              headers: { authorization: `Bearer ${cronSecret}` },
+            });
+          } catch (error) {
+            console.error(
+              "results standings chain skipped:",
+              error instanceof Error ? error.message : "unknown",
+            );
+          }
         });
       }
     }

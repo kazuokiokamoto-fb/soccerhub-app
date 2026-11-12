@@ -134,16 +134,23 @@
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { CrawlFetchError, createSupabaseHostStore, HostGate } from "../_shared/host-gate.ts";
+import { chooseEventDate, filterExtractedDates, jstYmd } from "../../../lib/selection-crawl/dates.ts";
+import { isUncrawlableUrl, normalizeSelectionUrl, selectionIdentity } from "../../../lib/selection-crawl/urls.ts";
+
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void } | undefined;
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
-const MAX_RUN_MS = 50_000;
-const FETCH_TIMEOUT_MS = 12_000;
+const MAX_RUN_MS = 100_000;
 const RECRAWL_HOURS = 24;
-const BATCH_SIZE = 5;
+const BATCH_SIZE = 4;
+const INSTAGRAM_SKIP_BATCH = 40;
+
+let gate: HostGate | null = null;
 const SITE_BASE_URL = "https://www.sakamatch.com";
 
 const BAD_DOMAINS = [
@@ -315,10 +322,14 @@ function truncateAtNoiseSection(text: string): string {
 }
 
 function isBadDomain(url: string) {
+  if (!url) return true;
   try {
     const host = new URL(url).hostname.toLowerCase();
-    return BAD_DOMAINS.some((d) => host.includes(d));
-  } catch { return true; }
+    if (BAD_DOMAINS.some((d) => host.includes(d))) return true;
+  } catch {
+    return true;
+  }
+  return isUncrawlableUrl(url);
 }
 
 // [2026-07-14 追加、2026-07-19 拡張] team_master の official_url が壊れている/
@@ -435,63 +446,37 @@ function extractLinks(html: string, baseUrl: string) {
   return links;
 }
 
-async function fetchHtml(url: string): Promise<{ html: string; finalUrl: string }> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
-        "accept": "text/html,application/xhtml+xml,*/*;q=0.8",
-        "accept-language": "ja,en-US;q=0.9,en;q=0.8",
-      },
-      redirect: "follow",
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const ct = res.headers.get("content-type") || "";
-    if (!ct.includes("text/html") && !ct.includes("xhtml") && !ct.includes("text/plain")) {
-      throw new Error(`not html: ${ct}`);
-    }
-    return { html: await res.text(), finalUrl: res.url || url };
-  } finally {
-    clearTimeout(timer);
+function rethrowIfStopped(error: unknown) {
+  if (
+    error instanceof CrawlFetchError &&
+    (error.result.failure === "budget" || error.result.failure === "rate" || error.result.failure === "robots")
+  ) {
+    throw error;
   }
 }
 
-async function probeUrlOk(url: string): Promise<boolean> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      method: "HEAD",
-      signal: controller.signal,
-      headers: {
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
-      },
-      redirect: "follow",
-    });
-    if (res.ok) return true;
-  } catch {
-  } finally {
-    clearTimeout(timer);
+function activeGate(): HostGate {
+  if (!gate) {
+    gate = new HostGate(createSupabaseHostStore(supabase), Date.now() + MAX_RUN_MS);
   }
+  return gate;
+}
 
-  const controller2 = new AbortController();
-  const timer2 = setTimeout(() => controller2.abort(), FETCH_TIMEOUT_MS);
+async function fetchHtml(url: string): Promise<{ html: string; finalUrl: string; status: number }> {
+  const result = await activeGate().fetch(url);
+  if (!result.ok) throw new CrawlFetchError(result);
+  return { html: result.html, finalUrl: result.finalUrl, status: result.status };
+}
+
+async function probeUrlOk(url: string): Promise<boolean> {
   try {
-    const res2 = await fetch(url, {
-      signal: controller2.signal,
-      headers: {
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
-      },
-      redirect: "follow",
-    });
-    return res2.ok;
-  } catch {
+    await fetchHtml(url);
+    return true;
+  } catch (error) {
+    if (error instanceof CrawlFetchError && (error.result.failure === "budget" || error.result.failure === "rate")) {
+      throw error;
+    }
     return false;
-  } finally {
-    clearTimeout(timer2);
   }
 }
 
@@ -539,7 +524,7 @@ async function findDeeperSelectionPage(
       const bk = b.dateKey || "";
       return bk > ak ? 1 : (bk < ak ? -1 : 0);
     })
-    .slice(0, 10);
+    .slice(0, 2);
 
   for (const candidate of candidates) {
     try {
@@ -562,7 +547,10 @@ async function findDeeperSelectionPage(
       if (includesAny(cText, CORE_SELECTION_WORDS)) {
         return { url: cUrl, html: cHtml, text: cText, title: getTitle(cHtml, candidate.label) };
       }
-    } catch { continue; }
+    } catch (error) {
+      rethrowIfStopped(error);
+      continue;
+    }
   }
   return null;
 }
@@ -734,7 +722,7 @@ function extractTimeRange(text: string) {
 }
 
 function displayStatus(eventDates: string[], deadline: string | null, text: string): string {
-  const today = toDateString(new Date())!;
+  const today = jstYmd(new Date());
   if (text.includes("募集終了") || text.includes("受付終了") || text.includes("締め切りました")) return "申込終了";
   if (deadline && deadline < today) return "申込終了";
   if (eventDates.length > 0 && eventDates[eventDates.length-1] < today) return "開催終了";
@@ -805,7 +793,8 @@ async function resolveOfficialUrl(
     try {
       await fetchHtml(candidate);
       return candidate;
-    } catch {
+    } catch (error) {
+      rethrowIfStopped(error);
     }
   }
 
@@ -822,7 +811,17 @@ async function crawlAndFindSelectionPageRaw(
   selectionPageUrl: string,
   teamName: string,
 ): Promise<{ url: string; html: string; text: string; title: string } | null> {
-  if (isBadDomain(selectionPageUrl)) return null;
+  if (isBadDomain(selectionPageUrl)) {
+    throw new CrawlFetchError({
+      ok: false,
+      status: 0,
+      html: "",
+      finalUrl: selectionPageUrl,
+      error: "blocked",
+      failure: "blocked",
+      retryAt: null,
+    });
+  }
 
   try {
     const { html, finalUrl } = await fetchHtml(selectionPageUrl);
@@ -854,11 +853,11 @@ async function crawlAndFindSelectionPageRaw(
       const p = pathOf(l.url);
       return NEWS_LIST_PATTERNS.some(pattern => p.includes(pattern)) ||
         includesAny(l.label, ["ニュース","お知らせ","最新情報","topics","news","information"]);
-    }).slice(0, 3);
+    }).slice(0, 1);
 
     const directLinks = links.filter(l =>
       includesAny(`${l.url} ${l.label}`, [...CORE_SELECTION_WORDS,"selection","recruit","boshu","taiken"])
-    ).slice(0, 5);
+    ).slice(0, 2);
 
     for (const link of directLinks) {
       try {
@@ -868,7 +867,10 @@ async function crawlAndFindSelectionPageRaw(
         if (includesAny(lText, CORE_SELECTION_WORDS)) {
           return { url: lUrl, html: lHtml, text: lText, title: getTitle(lHtml, link.label) };
         }
-      } catch { continue; }
+      } catch (error) {
+        rethrowIfStopped(error);
+        continue;
+      }
     }
 
     for (const newsList of newsListLinks) {
@@ -880,7 +882,7 @@ async function crawlAndFindSelectionPageRaw(
           .filter(l => {
             const p = pathOf(l.url);
             return /\d{4}/.test(p) || /\/(news|entry|post|article|topics)\/[^/]+/.test(p);
-          }).slice(0, 10);
+          }).slice(0, 2);
 
         for (const article of articleLinks) {
           try {
@@ -890,13 +892,20 @@ async function crawlAndFindSelectionPageRaw(
             if (includesAny(aText, CORE_SELECTION_WORDS)) {
               return { url: aUrl, html: aHtml, text: aText, title: getTitle(aHtml, article.label) };
             }
-          } catch { continue; }
+          } catch (error) {
+            rethrowIfStopped(error);
+            continue;
+          }
         }
-      } catch { continue; }
+      } catch (error) {
+        rethrowIfStopped(error);
+        continue;
+      }
     }
 
     return null;
-  } catch {
+  } catch (error) {
+    if (error instanceof CrawlFetchError) throw error;
     return null;
   }
 }
@@ -914,57 +923,98 @@ async function crawlAndFindSelectionPage(
   return { ...page, url: resolvedUrl, resolvedFromMatome };
 }
 
-async function claimResearchRows(limit: number) {
-  const cutoffIso = new Date(Date.now() - RECRAWL_HOURS * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
-    .from("team_selection_research")
-    .select("*, team_master:team_master_id(id, team_name, prefecture, category, current_league_name, current_league_rank, gender)")
-    .not("selection_page_url", "is", null)
-    .neq("selection_page_url", "")
-    .or(`checked_at.is.null,checked_at.lt.${cutoffIso}`)
-    .order("checked_at", { ascending: true, nullsFirst: true })
-    .limit(limit * 5);
-
-  if (error) throw error;
-
-  const rows = data || [];
-
-  const groups = new Map<string, any[]>();
-  for (const row of rows) {
-    const key = row.team_master_id || `no_team_${row.id}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(row);
-  }
-
-  const groupList = Array.from(groups.values()).map((groupRows) => {
-    groupRows.sort((a, b) => {
-      const aOfficial = isOfficialSourceRow(a) ? 0 : 1;
-      const bOfficial = isOfficialSourceRow(b) ? 0 : 1;
-      return aOfficial - bOfficial;
-    });
-    return groupRows;
-  });
-
-  groupList.sort((a, b) => {
-    const aTeam = a[0].team_master;
-    const bTeam = b[0].team_master;
-    const catOrder: Record<string, number> = { "U15": 0, "U18": 1, "U12": 2 };
-    const aCat = catOrder[aTeam?.category || ""] ?? 9;
-    const bCat = catOrder[bTeam?.category || ""] ?? 9;
-    if (aCat !== bCat) return aCat - bCat;
-    const aRank = aTeam?.current_league_rank ?? 999;
-    const bRank = bTeam?.current_league_rank ?? 999;
-    return aRank - bRank;
-  });
-
-  const flat: any[] = [];
-  for (const group of groupList) {
-    flat.push(...group);
-    if (flat.length >= limit) break;
-  }
-
-  return flat.slice(0, limit);
+function survivorRank(row: any): number {
+  if (row.manual_locked && row.status === "published") return 0;
+  if (row.manual_locked) return 1;
+  if (row.status === "published") return 2;
+  if (row.status === "hidden") return 3;
+  if (row.status === "collapsed" || row.status === "replaced") return 8;
+  return 4;
 }
+
+async function saveStableSelectionEvent(research: any, eventRow: any, duplicateKey: string) {
+  const norm = normalizeSelectionUrl(research.selection_page_url);
+  let related: any[] = [];
+  if (research.team_master_id) {
+    const { data, error } = await supabase
+      .from("selection_events")
+      .select("id, manual_locked, status, hidden_reason, source_url, duplicate_key, last_seen_at")
+      .eq("team_master_id", research.team_master_id)
+      .limit(500);
+    if (error) throw new Error(`lookup error: ${JSON.stringify(error)}`);
+    related = (data || []).filter((row: any) =>
+      row.duplicate_key === duplicateKey || normalizeSelectionUrl(row.source_url || "") === norm
+    );
+  } else {
+    const { data, error } = await supabase
+      .from("selection_events")
+      .select("id, manual_locked, status, hidden_reason, source_url, duplicate_key, last_seen_at")
+      .eq("duplicate_key", duplicateKey)
+      .limit(20);
+    if (error) throw new Error(`lookup error: ${JSON.stringify(error)}`);
+    related = data || [];
+  }
+
+  related.sort((a, b) =>
+    survivorRank(a) - survivorRank(b) ||
+    Date.parse(b.last_seen_at || 0) - Date.parse(a.last_seen_at || 0)
+  );
+  const existing = related[0];
+
+  if (!existing) {
+    await supabase.from("selection_events").update({ content_hash: null }).eq("content_hash", duplicateKey);
+    const { data: insertedRow, error } = await supabase
+      .from("selection_events")
+      .insert({ ...eventRow, created_at: nowIso(), content_updated_at: nowIso() })
+      .select("id")
+      .single();
+    if (error) throw new Error(`insert error: ${JSON.stringify(error)}`);
+    return { status: "inserted", eventDate: eventRow.event_date, id: insertedRow?.id, contentChanged: true };
+  }
+
+  for (const other of related.slice(1)) {
+    if (other.manual_locked) continue;
+    await supabase.from("selection_events").update({
+      status: "collapsed",
+      hidden_reason: "collapsed_duplicate",
+      collapsed_into: existing.id,
+      content_hash: null,
+      duplicate_key: `collapsed:${other.id}`,
+      updated_at: nowIso(),
+    }).eq("id", other.id);
+  }
+
+  if (existing.manual_locked) {
+    await supabase.from("selection_events").update({
+      last_seen_at: nowIso(),
+      fetched_at: nowIso(),
+    }).eq("id", existing.id);
+    return { status: "manual_locked", eventDate: eventRow.event_date, id: existing.id, contentChanged: false };
+  }
+
+  await supabase.from("selection_events").update({ content_hash: null }).eq("content_hash", duplicateKey).neq("id", existing.id);
+
+  const { data: beforeUpdate } = await supabase
+    .from("selection_events")
+    .select("event_date, event_dates, application_deadline, venue_name, display_status, title")
+    .eq("id", existing.id)
+    .maybeSingle();
+  const contentChanged = !beforeUpdate || (
+    String(beforeUpdate.event_date || "") !== String(eventRow.event_date || "") ||
+    JSON.stringify(beforeUpdate.event_dates || []) !== JSON.stringify(eventRow.event_dates || []) ||
+    String(beforeUpdate.application_deadline || "") !== String(eventRow.application_deadline || "") ||
+    beforeUpdate.venue_name !== eventRow.venue_name ||
+    beforeUpdate.display_status !== eventRow.display_status ||
+    beforeUpdate.title !== eventRow.title
+  );
+  const { error } = await supabase
+    .from("selection_events")
+    .update(contentChanged ? { ...eventRow, content_updated_at: nowIso() } : eventRow)
+    .eq("id", existing.id);
+  if (error) throw new Error(`update error: ${JSON.stringify(error)}`);
+  return { status: "updated", eventDate: eventRow.event_date, id: existing.id, contentChanged };
+}
+
 
 async function notifyMatchingUsers(params: {
   prefecture: string | null;
@@ -1076,11 +1126,13 @@ async function upsertSelectionEvents(
 
   const rawTextForExtraction = truncateAtNoiseSection(rawText);
 
-  // このページ内に含まれる、セレクションの全ての開催日をここで抽出する。
-  // 複数日程(1次/2次/3次選考等)が見つかった場合、後段の datesToProcess ループで
-  // それぞれ個別の行として selection_events に保存される(情報を1つに
-  // まとめて潰したり、代表の1件だけ残したりはしない)。
-  const eventDates = extractEventDates(rawTextForExtraction);
+  // 複数日程は1行の event_dates にまとめる。日付は duplicate_key に入れない。
+  // クロール当日と、その翌年同月日は、ページに年が書かれていない限り捨てる。
+  const eventDates = filterExtractedDates(
+    extractEventDates(rawTextForExtraction),
+    new Date(),
+    rawTextForExtraction,
+  );
   const deadline = extractDeadline(rawTextForExtraction);
   const venue = extractVenue(rawTextForExtraction);
 
@@ -1092,6 +1144,9 @@ async function upsertSelectionEvents(
   const sourceRank = inferSourceRank(leagueName, teamName);
   const admissionFiscalYear = extractAdmissionFiscalYear(fullText);
   const isRollingRecruitment = extractIsRollingRecruitment(fullText);
+  if (isRollingRecruitment && eventDates.length === 0 && statusText === "日付未取得") {
+    statusText = "募集中";
+  }
 
   // [2026-08-07 追加] ナビゲーションメニューの文言が summary/description の
   // 先頭を占めてしまい、実際の記事内容が読めない問題を修正。
@@ -1133,34 +1188,6 @@ async function upsertSelectionEvents(
     statusText = "日付未取得";
   }
 
-  // [2026-07-29 修正⑧] このteam_master_idについて、今回の source_url
-  // (= research.selection_page_url、このteam_selection_research行が指す
-  // 現在有効な入口URL)とは異なるURL由来の古い行を削除する。
-  // team_selection_research.selection_page_url が過去に変更された
-  // (まとめ記事URL→公式サイト直リンクへの切り替え等)際、旧URL由来の行が
-  // 自動的には削除されず、クロールのたびに履歴が積み重なり続けていた
-  // (実例: ジェフユナイテッド市原・千葉U-15で44件蓄積を確認)。
-  //
-  // 安全性について: この削除条件は「source_urlが違う」行だけを対象にする。
-  // 1つのteam_masterが正当に複数の深掘り先ページ(official_url)を持つケース
-  // (例: 湘南ベルマーレが1つのacademyページから3つの異なる募集記事(396855/
-  // 396966/398447)を持つ)には影響しない。なぜなら、それらは全て同じ
-  // research行(同じselection_page_url=academyページ)から見つかったもので
-  // あり、source_url(常にresearch.selection_page_urlそのものが入る)は
-  // 変わらず一致し続けるため、削除条件(source_url不一致)に該当しないから。
-  if (research.team_master_id) {
-    const { error: cleanupError } = await supabase
-      .from("selection_events")
-      .delete()
-      .eq("team_master_id", research.team_master_id)
-      .neq("source_url", research.selection_page_url);
-
-    if (cleanupError) {
-      console.error("old source_url cleanup error:", cleanupError);
-      // クリーンアップの失敗は致命的ではないので、処理は続行する
-    }
-  }
-
   const baseEventRow = {
     team_master_id: research.team_master_id || null,
     organization_name: teamName,
@@ -1198,87 +1225,37 @@ async function upsertSelectionEvents(
     is_rolling_recruitment: isRollingRecruitment,
   };
 
-  const results = [];
-  // eventDatesが複数見つかった場合、それぞれの日付ごとに1行ずつ保存する。
-  // (例: 1次選考6/21、2次選考7/5、3次選考7/19 のように3日程あれば3行)
-  const datesToProcess = eventDates.length > 0 ? eventDates : [null];
-
-  for (const eventDate of datesToProcess) {
-    const hashKey = eventDate
-      ? `${research.team_master_id}:${eventDate}:${research.selection_page_url}`
-      : `${research.team_master_id}:no_date:${research.selection_page_url}`;
-    const duplicateKey = await sha256(hashKey);
-    const title = eventDate
-      ? `${teamName} セレクション ${eventDate}`
-      : `${teamName} セレクション情報`;
-
-    const eventRow = {
-      ...baseEventRow,
-      title,
-      event_date: eventDate,
-      duplicate_key: duplicateKey,
-      content_hash: duplicateKey,
-      memo: cleanForDb(`team_master_id:${research.team_master_id}\nleague:${leagueName}\ncategory:${category}\nevent_date:${eventDate}\nall_dates:${eventDates.join(",")}\ncrawled_url:${page.url}${schoolCalendarSuspected ? "\nWARNING:school_calendar_suspected" : ""}`, 2000),
-    };
-
-    const { data: existing } = await supabase
-      .from("selection_events")
-      .select("id, manual_locked")
-      .eq("duplicate_key", duplicateKey)
-      .limit(1)
-      .maybeSingle();
-
-    if (existing?.manual_locked) {
-      results.push({ status: "manual_locked", eventDate });
-      continue;
-    }
-
-    if (existing?.id) {
-      // [2026-07-31 追加] 実際に内容(日程・締切・会場・状態・タイトル)が
-      // 変わった場合だけ content_updated_at を更新する。
-      // fetched_at はクロールが実行されるたびに(内容が変わらなくても)
-      // 常に更新されるため、これをNEW判定に使うと「10分おきの巡回だけで
-      // 常にNEW扱いされ続ける」問題が発生した(2026-07-31に確認)。
-      // content_updated_at は本当に情報が更新された時だけ動くタイムスタンプ
-      // として別途持たせ、NEWバッジ・新着順ソートの基準に使う。
-      const { data: beforeUpdate } = await supabase
-        .from("selection_events")
-        .select("event_date, event_dates, application_deadline, venue_name, display_status, title")
-        .eq("id", existing.id)
-        .maybeSingle();
-
-      const contentChanged = !beforeUpdate || (
-        beforeUpdate.event_date !== eventRow.event_date ||
-        JSON.stringify(beforeUpdate.event_dates) !== JSON.stringify(eventRow.event_dates) ||
-        beforeUpdate.application_deadline !== eventRow.application_deadline ||
-        beforeUpdate.venue_name !== eventRow.venue_name ||
-        beforeUpdate.display_status !== eventRow.display_status ||
-        beforeUpdate.title !== eventRow.title
-      );
-
-      const updatePayloadForEvent = contentChanged
-        ? { ...eventRow, content_updated_at: nowIso() }
-        : eventRow;
-
-      const { error } = await supabase
-        .from("selection_events")
-        .update(updatePayloadForEvent)
-        .eq("id", existing.id);
-      if (error) throw new Error(`update error: ${JSON.stringify(error)}`);
-      results.push({ status: "updated", eventDate, id: existing.id, contentChanged });
-    } else {
-      const { data: insertedRow, error } = await supabase
-        .from("selection_events")
-        .insert({ ...eventRow, created_at: nowIso(), content_updated_at: nowIso() })
-        .select("id")
-        .single();
-      if (error) throw new Error(`insert error: ${JSON.stringify(error)}`);
-      results.push({ status: "inserted", eventDate, id: insertedRow?.id });
-    }
+  const eventDate = chooseEventDate(eventDates, jstYmd(new Date()));
+  const duplicateKey = await sha256(selectionIdentity(
+    research.team_master_id,
+    research.selection_page_url,
+    teamName,
+  ));
+  const title = eventDates.length === 1 && eventDate
+    ? `${teamName} セレクション ${eventDate}`
+    : `${teamName} セレクション情報`;
+  const eventRow = {
+    ...baseEventRow,
+    title,
+    event_date: eventDate,
+    duplicate_key: duplicateKey,
+    content_hash: duplicateKey,
+    hidden_reason: null,
+    collapsed_into: null,
+    memo: cleanForDb(`team_master_id:${research.team_master_id}\nleague:${leagueName}\ncategory:${category}\nevent_date:${eventDate}\nall_dates:${eventDates.join(",")}\ncrawled_url:${page.url}${schoolCalendarSuspected ? "\nWARNING:school_calendar_suspected" : ""}`, 2000),
+  };
+  if (
+    (page.url && isUncrawlableUrl(page.url)) ||
+    (research.selection_page_url && isUncrawlableUrl(research.selection_page_url))
+  ) {
+    eventRow.status = "hidden";
+    eventRow.hidden_reason = "uncrawlable_instagram";
   }
+  const saved = await saveStableSelectionEvent(research, eventRow, duplicateKey);
+  const results = [saved];
 
   const insertedResults = results.filter(r => r.status === "inserted");
-  if (insertedResults.length > 0 && !schoolCalendarSuspected) {
+  if (insertedResults.length > 0 && !schoolCalendarSuspected && eventRow.status === "published") {
     await notifyMatchingUsers({
       prefecture,
       categories: baseEventRow.target_categories as string[],
@@ -1293,123 +1270,356 @@ async function upsertSelectionEvents(
   // その解決済みURLを team_selection_research に書き戻して固定化する。
   // これにより次回以降は直接公式サイトをクロールでき、まとめサイトへの
   // 依存を減らせる。
-  const updatePayload: Record<string, unknown> = { checked_at: nowIso() };
-  if (page.resolvedFromMatome) {
+  const updatePayload: Record<string, unknown> = {
+    checked_at: nowIso(),
+    crawl_after: null,
+    checked_by: "verify-selection-domain-pages",
+  };
+  if (page.resolvedFromMatome && page.url && !isUncrawlableUrl(page.url)) {
     updatePayload.selection_page_url = page.url;
+    updatePayload.checked_at = null;
     updatePayload.notes = `まとめサイトから公式サイトへ自動解決・固定化(${nowIso()})`;
   }
-
-  await supabase
-    .from("team_selection_research")
-    .update(updatePayload)
-    .eq("id", research.id);
+  await markResearch(research.id, updatePayload);
 
   return results;
 }
 
-serve(async (req) => {
-  try {
-    const body = await req.json().catch(() => ({}));
-    const batchSize = Math.min(Number(body.batchSize || body.limit || BATCH_SIZE), 20);
-    const startedAt = Date.now();
 
-    const rows = await claimResearchRows(batchSize);
-    if (rows.length === 0) {
-      return json({ ok: true, message: "no rows to process", processed: 0 });
+const RESEARCH_COLUMNS = "*, team_master:team_master_id(id, team_name, prefecture, category, current_league_name, current_league_rank, gender)";
+
+function cutoffIso() {
+  return new Date(Date.now() - RECRAWL_HOURS * 60 * 60 * 1000).toISOString();
+}
+
+async function claimWebRows(limit: number) {
+  const now = nowIso();
+  const due = `and(or(checked_at.is.null,checked_at.lt.${cutoffIso()}),or(crawl_after.is.null,crawl_after.lt.${now}))`;
+  let query = supabase
+    .from("team_selection_research")
+    .select(RESEARCH_COLUMNS)
+    .not("selection_page_url", "is", null)
+    .neq("selection_page_url", "")
+    .not("selection_page_url", "ilike", "%instagram.com%")
+    .or(due)
+    .order("checked_at", { ascending: true, nullsFirst: true })
+    .limit(limit * 8);
+  let { data, error } = await query;
+  if (error) {
+    const fallback = await supabase
+      .from("team_selection_research")
+      .select(RESEARCH_COLUMNS)
+      .not("selection_page_url", "is", null)
+      .neq("selection_page_url", "")
+      .not("selection_page_url", "ilike", "%instagram.com%")
+      .or(`checked_at.is.null,checked_at.lt.${cutoffIso()}`)
+      .order("checked_at", { ascending: true, nullsFirst: true })
+      .limit(limit * 8);
+    data = fallback.data;
+    error = fallback.error;
+  }
+  if (error) throw error;
+
+  const chosen: any[] = [];
+  const hosts = new Set<string>();
+  for (const row of data || []) {
+    if (row.crawl_after && Date.parse(row.crawl_after) > Date.now()) continue;
+    const host = hostOf(row.selection_page_url || "");
+    if (host && hosts.has(host)) continue;
+    if (host) hosts.add(host);
+    chosen.push(row);
+    if (chosen.length >= limit) break;
+  }
+  return chosen;
+}
+
+async function claimInstagramRows(limit: number) {
+  const { data, error } = await supabase
+    .from("team_selection_research")
+    .select("id, team_master_id, selection_page_url")
+    .ilike("selection_page_url", "%instagram.com%")
+    .or(`checked_at.is.null,checked_at.lt.${cutoffIso()}`)
+    .order("checked_at", { ascending: true, nullsFirst: true })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
+async function markResearch(id: string, patch: Record<string, unknown>) {
+  const { error } = await supabase.from("team_selection_research").update(patch).eq("id", id);
+  if (error && patch.crawl_after) {
+    const { crawl_after: _ignored, ...rest } = patch;
+    if (Object.keys(rest).length > 0) {
+      await supabase.from("team_selection_research").update(rest).eq("id", id);
+    }
+  }
+}
+
+async function hideUncrawlableEvents(teamMasterId: string | null) {
+  if (!teamMasterId) return;
+  const { data, error } = await supabase
+    .from("selection_events")
+    .select("id, source_url, official_url, selection_page_url")
+    .eq("team_master_id", teamMasterId)
+    .eq("status", "published")
+    .eq("manual_locked", false)
+    .limit(500);
+  if (error || !data) return;
+  const ids = data
+    .filter((row: any) =>
+      [row.source_url, row.official_url, row.selection_page_url].some((url) => url && isUncrawlableUrl(url))
+    )
+    .map((row: any) => row.id);
+  if (ids.length === 0) return;
+  await supabase
+    .from("selection_events")
+    .update({
+      status: "hidden",
+      hidden_reason: "uncrawlable_instagram",
+      updated_at: nowIso(),
+    })
+    .in("id", ids);
+}
+
+async function startCrawlRun(trigger: string, batchSize: number) {
+  await supabase
+    .from("selection_crawl_runs")
+    .update({
+      status: "interrupted",
+      finished_at: nowIso(),
+      error: "worker_stopped",
+    })
+    .eq("pipeline", "verify-selection-domain-pages")
+    .eq("status", "running")
+    .lt("started_at", new Date(Date.now() - 3 * 60 * 1000).toISOString());
+
+  const { data: active } = await supabase
+    .from("selection_crawl_runs")
+    .select("id")
+    .eq("pipeline", "verify-selection-domain-pages")
+    .eq("status", "running")
+    .limit(1);
+  if (active && active.length > 0) return { id: null, overlap: true };
+
+  const { data, error } = await supabase
+    .from("selection_crawl_runs")
+    .insert({
+      pipeline: "verify-selection-domain-pages",
+      status: "running",
+      trigger,
+      batch_size: batchSize,
+    })
+    .select("id")
+    .single();
+  if (error) {
+    console.error("crawl run log skipped", error.message);
+    return { id: null, overlap: false };
+  }
+  return { id: data.id as string, overlap: false };
+}
+
+async function recordOutcome(runId: string | null, row: Record<string, unknown>) {
+  if (!runId) return;
+  const { error } = await supabase.from("selection_crawl_url_outcomes").insert({
+    run_id: runId,
+    ...row,
+    finished_at: nowIso(),
+  });
+  if (error) console.error("url outcome skipped", error.message);
+}
+
+async function finishCrawlRun(runId: string | null, patch: Record<string, unknown>) {
+  if (!runId) return;
+  await supabase.from("selection_crawl_runs").update({
+    ...patch,
+    finished_at: nowIso(),
+  }).eq("id", runId);
+}
+
+async function runVerification(batchSize: number, runId: string | null) {
+  gate = new HostGate(createSupabaseHostStore(supabase), Date.now() + MAX_RUN_MS);
+  const startedAt = Date.now();
+  let urlsAttempted = 0;
+  let urlsSucceeded = 0;
+  let urlsFailed = 0;
+  let eventsInserted = 0;
+  let eventsUpdated = 0;
+  const results: any[] = [];
+
+  try {
+    const instagramRows = await claimInstagramRows(INSTAGRAM_SKIP_BATCH);
+    for (const research of instagramRows) {
+      urlsAttempted++;
+      await markResearch(research.id, { checked_at: nowIso(), checked_by: "verify-selection-domain-pages" });
+      await hideUncrawlableEvents(research.team_master_id);
+      await recordOutcome(runId, {
+        research_id: research.id,
+        team_master_id: research.team_master_id,
+        url: research.selection_page_url,
+        status: "skipped_uncrawlable",
+        http_status: null,
+        events_inserted: 0,
+        events_updated: 0,
+        error: "instagram",
+        started_at: nowIso(),
+      });
+      results.push({ status: "skipped_uncrawlable", url: research.selection_page_url });
     }
 
-    const results = [];
-    let totalInserted = 0, totalUpdated = 0, totalNotFound = 0, totalErrors = 0, totalSkipped = 0, totalCategoryMismatch = 0;
-    const succeededTeams = new Set<string>();
-
+    const rows = await claimWebRows(batchSize);
     for (const research of rows) {
       if (Date.now() - startedAt > MAX_RUN_MS) {
         results.push({ status: "time_limit_reached" });
         break;
       }
-
+      urlsAttempted++;
+      const started = nowIso();
+      gate.closeVisit();
       const teamName = research.team_master?.team_name || "不明";
-      const teamKey = research.team_master_id;
-
-      if (teamKey && succeededTeams.has(teamKey) && !isOfficialSourceRow(research)) {
-        await supabase
-          .from("team_selection_research")
-          .update({ checked_at: nowIso() })
-          .eq("id", research.id);
-        results.push({ teamName, status: "skipped_official_success" });
-        totalSkipped++;
-        continue;
-      }
-
       try {
+        if (isBadDomain(research.selection_page_url)) {
+          await markResearch(research.id, { checked_at: nowIso(), checked_by: "verify-selection-domain-pages" });
+          await hideUncrawlableEvents(research.team_master_id);
+          urlsFailed++;
+          await recordOutcome(runId, {
+            research_id: research.id,
+            team_master_id: research.team_master_id,
+            url: research.selection_page_url,
+            status: "skipped_uncrawlable",
+            events_inserted: 0,
+            events_updated: 0,
+            error: "blocked_host",
+            started_at: started,
+          });
+          continue;
+        }
+
         const page = await crawlAndFindSelectionPage(
           research.selection_page_url,
           teamName,
           research.official_homepage_url,
         );
-
         if (!page) {
-          await supabase
-            .from("team_selection_research")
-            .update({ checked_at: nowIso() })
-            .eq("id", research.id);
+          await markResearch(research.id, { checked_at: nowIso(), crawl_after: null, checked_by: "verify-selection-domain-pages" });
+          urlsFailed++;
+          await recordOutcome(runId, {
+            research_id: research.id,
+            team_master_id: research.team_master_id,
+            url: research.selection_page_url,
+            status: "not_found",
+            events_inserted: 0,
+            events_updated: 0,
+            error: null,
+            started_at: started,
+          });
           results.push({ teamName, status: "not_found", url: research.selection_page_url });
-          totalNotFound++;
           continue;
         }
 
         const upsertResults = await upsertSelectionEvents(research, page);
-        const inserted = upsertResults.filter(r => r.status === "inserted").length;
-        const updated = upsertResults.filter(r => r.status === "updated").length;
-        const categoryMismatch = upsertResults.filter(r => r.status === "category_mismatch").length;
-        totalInserted += inserted;
-        totalUpdated += updated;
-        totalCategoryMismatch += categoryMismatch;
-
-        if (categoryMismatch > 0) {
-          results.push({ teamName, status: "category_mismatch", url: page.url });
-          continue;
-        }
-
-        if (teamKey && isOfficialSourceRow(research)) {
-          succeededTeams.add(teamKey);
-        }
-
-        results.push({
-          teamName,
-          status: "success",
-          url: page.url,
-          eventDates: upsertResults.map(r => r.eventDate).filter(Boolean),
-          inserted,
-          updated,
+        const inserted = upsertResults.filter((item: any) => item.status === "inserted").length;
+        const updated = upsertResults.filter((item: any) => item.status === "updated").length;
+        eventsInserted += inserted;
+        eventsUpdated += updated;
+        urlsSucceeded++;
+        await recordOutcome(runId, {
+          research_id: research.id,
+          team_master_id: research.team_master_id,
+          url: research.selection_page_url,
+          final_url: page.url,
+          status: upsertResults.some((item: any) => item.status === "category_mismatch") ? "category_mismatch" : "success",
+          http_status: 200,
+          events_inserted: inserted,
+          events_updated: updated,
+          error: null,
+          started_at: started,
         });
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        results.push({ teamName, status: "error", error: message });
-        totalErrors++;
-        await supabase
-          .from("team_selection_research")
-          .update({ checked_at: nowIso() })
-          .eq("id", research.id);
+        results.push({ teamName, status: "success", url: page.url, inserted, updated });
+      } catch (error) {
+        const fetchError = error instanceof CrawlFetchError ? error.result : null;
+        const failure = fetchError?.failure || "error";
+        const message = error instanceof Error ? error.message : String(error);
+        const retryAt = fetchError?.retryAt;
+        if (failure === "rate" || failure === "timeout" || failure === "budget" || failure === "network") {
+          await markResearch(research.id, {
+            crawl_after: retryAt || new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+            checked_by: "verify-selection-domain-pages",
+          });
+        } else {
+          await markResearch(research.id, {
+            checked_at: nowIso(),
+            crawl_after: failure === "robots" ? retryAt : null,
+            checked_by: "verify-selection-domain-pages",
+          });
+        }
+        if (failure === "blocked") await hideUncrawlableEvents(research.team_master_id);
+        urlsFailed++;
+        await recordOutcome(runId, {
+          research_id: research.id,
+          team_master_id: research.team_master_id,
+          url: research.selection_page_url,
+          status: failure,
+          http_status: fetchError?.status || null,
+          events_inserted: 0,
+          events_updated: 0,
+          error: message.slice(0, 500),
+          started_at: started,
+        });
+        results.push({ teamName, status: failure, error: message });
       }
-
       await sleep(500);
     }
 
-    return json({
-      ok: true,
-      elapsedMs: Date.now() - startedAt,
-      processed: rows.length,
-      totalInserted,
-      totalUpdated,
-      totalNotFound,
-      totalErrors,
-      totalSkipped,
-      totalCategoryMismatch,
-      results,
+    await finishCrawlRun(runId, {
+      status: "succeeded",
+      urls_attempted: urlsAttempted,
+      urls_succeeded: urlsSucceeded,
+      urls_failed: urlsFailed,
+      events_inserted: eventsInserted,
+      events_updated: eventsUpdated,
     });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    return {
+      ok: true,
+      runId,
+      elapsedMs: Date.now() - startedAt,
+      urlsAttempted,
+      urlsSucceeded,
+      urlsFailed,
+      eventsInserted,
+      eventsUpdated,
+      results,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await finishCrawlRun(runId, {
+      status: "failed",
+      urls_attempted: urlsAttempted,
+      urls_succeeded: urlsSucceeded,
+      urls_failed: urlsFailed,
+      events_inserted: eventsInserted,
+      events_updated: eventsUpdated,
+      error: message.slice(0, 500),
+    });
+    return { ok: false, runId, error: message };
+  }
+}
+
+serve(async (req) => {
+  try {
+    const body = await req.json().catch(() => ({}));
+    const batchSize = Math.min(Number(body.batchSize || body.limit || BATCH_SIZE), 8);
+    const trigger = String(body.trigger || "manual");
+    const run = await startCrawlRun(trigger, batchSize);
+    if (run.overlap) return json({ ok: true, accepted: false, skipped: "overlap" });
+    const work = runVerification(batchSize, run.id);
+    if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+      EdgeRuntime.waitUntil(work);
+      return json({ ok: true, accepted: true, runId: run.id });
+    }
+    return json(await work);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     return json({ ok: false, error: message }, 500);
   }
 });
+
