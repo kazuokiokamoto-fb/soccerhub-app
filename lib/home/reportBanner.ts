@@ -31,12 +31,12 @@ function cleanTeamName(value: unknown): string {
   return name.slice(0, 80);
 }
 
-function dueMessage(teamName: string, fiscalYear: number, deadlineYear: number): string {
-  return `${teamName}の${fiscalYear}年度の公式戦年次報告の提出期限は${deadlineYear}年5月31日です。期限内に確認して提出してください。`;
+function dueMessage(deadlineYear: number): string {
+  return `期限内 ${deadlineYear}/5/31`;
 }
 
 function overdueMessage(deadlineYear: number): string {
-  return `提出期限（${deadlineYear}年5月31日）を過ぎています。期限後も提出できます。ほかの機能はそのまま使えます。`;
+  return `期限切れ ${deadlineYear}/5/31・提出できます`;
 }
 
 function noticeFromYear(
@@ -66,7 +66,7 @@ function noticeFromYear(
     phase,
     message:
       phase === "due"
-        ? dueMessage(teamName, fiscalYear, deadlineYear)
+        ? dueMessage(deadlineYear)
         : overdueMessage(deadlineYear),
   };
 }

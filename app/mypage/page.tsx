@@ -478,6 +478,11 @@ export default function MyPage() {
                         詳細
                       </Link>
                       {role === "owner" || role === "coach" ? (
+                        <Link href={`/teams/${team.id}/affiliation`} className="sh-btn">
+                          所属
+                        </Link>
+                      ) : null}
+                      {role === "owner" || role === "coach" ? (
                         <Link href={`/results/${team.id}`} className="sh-btn">
                           公式戦の年次報告
                         </Link>

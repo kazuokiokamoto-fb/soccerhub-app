@@ -14,6 +14,10 @@ import {
 } from "@/app/components/StrengthRankPicker";
 import { STRENGTH_GUIDES } from "@/app/lib/strengthGuides";
 import AppHero from "@/app/components/AppHero";
+import { AffiliationStep } from "@/app/components/affiliation/AffiliationStep";
+import { errorText } from "@/app/results/labels";
+import { validateAffiliation, type AffiliationDraft } from "@/lib/affiliation/validate";
+import "@/app/components/affiliation/affiliation.css";
 
 type Toast = { type: "success" | "error" | "info"; text: string };
 
@@ -106,6 +110,14 @@ export default function TeamNewPage() {
   const [addressDetail, setAddressDetail] = useState("");
 
   const [note, setNote] = useState("");
+  const [step, setStep] = useState<1 | 2>(1);
+  const [createdTeamId, setCreatedTeamId] = useState<string | null>(null);
+  const [affiliation, setAffiliation] = useState<AffiliationDraft>({
+    none: false,
+    prefecture: "",
+    category: "",
+    organizationName: "",
+  });
 
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
@@ -233,7 +245,12 @@ export default function TeamNewPage() {
   };
 
   const save = async () => {
-    if (!canSave) return;
+    const parsed = validateAffiliation(affiliation);
+    if (!parsed.ok) {
+      setToast({ type: "error", text: parsed.message });
+      return;
+    }
+    if (!canSave && !createdTeamId) return;
 
     setSaving(true);
     setToast({ type: "info", text: "保存中…" });
@@ -248,6 +265,8 @@ export default function TeamNewPage() {
         return;
       }
 
+      let teamId = createdTeamId;
+      if (!teamId) {
       const areaText = `${prefecture} ${city}${town ? "・" + town : ""}`;
       const addrDetail = addressDetail.trim();
 
@@ -345,10 +364,34 @@ export default function TeamNewPage() {
         setSaving(false);
         return;
       }
+      teamId = res.data.id;
+      setCreatedTeamId(teamId);
+      }
 
-      setToast({ type: "success", text: "✅ 登録しました" });
+      const response = await fetch("/api/team-affiliation", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ teamId, ...affiliation }),
+      });
+      const body = await response.json();
+      if (!response.ok || !body?.ok) {
+        setToast({
+          type: "error",
+          text:
+            body?.error === "schema_unavailable"
+              ? "チームは登録しました。所属の保存先は準備中なので、あとでマイページから登録できます。"
+              : errorText(body?.error ?? "write_failed"),
+        });
+        setSaving(false);
+        return;
+      }
 
-      router.push("/mypage");
+      setToast({ type: "success", text: "登録しました" });
+      if (body.resultsPage?.status === "needs_url") {
+        router.push(`/teams/${teamId}/affiliation`);
+      } else {
+        router.push("/mypage");
+      }
       resetForm();
       setSaving(false);
     } catch (e: any) {
@@ -388,7 +431,7 @@ export default function TeamNewPage() {
       <AppHero
         icon="👥"
         title="チーム登録"
-        desc="チーム情報を登録して、練習試合マッチングを始めましょう。"
+        desc={step === 2 ? "" : "チーム情報を登録して、練習試合マッチングを始めましょう。"}
       />
 
       <div style={backButtonWrap}>
@@ -399,6 +442,10 @@ export default function TeamNewPage() {
 
       <section className="sh-section" style={{ marginTop: 16 }}>
         <div style={{ display: "grid", gap: 18 }}>
+          {step === 2 ? (
+            <AffiliationStep value={affiliation} onChange={setAffiliation} disabled={saving} />
+          ) : (
+          <>
           <div style={infoNotice}>
             <div style={noticeTitle}>登録について</div>
             <div style={helperText}>
@@ -677,16 +724,39 @@ export default function TeamNewPage() {
               </div>
             </div>
           </div>
+          </>
+          )}
 
           <div style={actionRow}>
-            <button
-              className="sh-btn sh-btn--primary"
-              onClick={save}
-              type="button"
-              disabled={!canSave}
-            >
-              {saving ? "保存中..." : "保存"}
-            </button>
+            {step === 1 ? (
+              <button
+                className="sh-btn sh-btn--primary"
+                type="button"
+                disabled={!canSave}
+                onClick={() => setStep(2)}
+              >
+                次へ（所属）
+              </button>
+            ) : (
+              <>
+                <button
+                  className="sh-btn sh-btn--primary"
+                  type="button"
+                  disabled={saving || !validateAffiliation(affiliation).ok}
+                  onClick={save}
+                >
+                  {saving ? "保存中..." : "登録する"}
+                </button>
+                <button
+                  className="sh-btn"
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setStep(1)}
+                >
+                  戻る
+                </button>
+              </>
+            )}
 
             <Link href="/mypage" className="sh-btn sh-btn--ghost">
               キャンセル

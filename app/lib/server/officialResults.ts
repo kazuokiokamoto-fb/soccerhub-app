@@ -28,7 +28,7 @@ export const DISCOVERY = {
   automaticSearch: false,
   extent: "no_automatic_search",
   label:
-    "インターネット全体の自動検索はしていません。チームが指定した公開URLの取得と、チーム自身の入力だけです。取得結果は下書き候補であり、提出ではありません。",
+    "順位の候補は、登録された公開の結果ページから集めます。候補だけでは提出になりません。所有者またはコーチが内容を確認して提出します。",
 } as const;
 
 export type Failure = { ok: false; status: number; error: string };
@@ -41,14 +41,14 @@ function isUuid(value: string): boolean {
   return UUID_RE.test(value);
 }
 
-function schemaMissing(error: { code?: string; message?: string } | null): boolean {
+export function schemaMissing(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
   return error.code === "42P01" || error.code === "PGRST205" || error.code === "PGRST204";
 }
 
 type TeamRef = { id: string; name: string };
 
-async function requireManager(
+export async function requireManager(
   supabase: SupabaseClient,
   userId: string,
   teamId: string,
@@ -184,17 +184,40 @@ export async function listManagedTeams(supabase: SupabaseClient, userId: string)
   };
 }
 
-async function loadReport(
+export async function loadReport(
   supabase: SupabaseClient,
   teamId: string,
   year: number,
 ) {
-  const { data, error } = await supabase
+  const extended =
+    "id,team_id,reporting_year,state,outcome,version,submitted_at,submitted_by,created_at,updated_at,submission_kind,standing_category,standing_rank,standing_rank_unknown,standing_source_url";
+  let { data, error } = await supabase
     .from("official_result_reports")
-    .select("id,team_id,reporting_year,state,outcome,version,submitted_at,submitted_by,created_at,updated_at")
+    .select(extended)
     .eq("team_id", teamId)
     .eq("reporting_year", year)
     .maybeSingle();
+  if (error && (error.code === "42703" || error.code === "PGRST204")) {
+    const fallback = await supabase
+      .from("official_result_reports")
+      .select("id,team_id,reporting_year,state,outcome,version,submitted_at,submitted_by,created_at,updated_at")
+      .eq("team_id", teamId)
+      .eq("reporting_year", year)
+      .maybeSingle();
+    if (schemaMissing(fallback.error)) return fail(503, "schema_unavailable");
+    if (fallback.error) return fail(500, "read_failed");
+    data = fallback.data
+      ? {
+          ...fallback.data,
+          submission_kind: null,
+          standing_category: null,
+          standing_rank: null,
+          standing_rank_unknown: false,
+          standing_source_url: null,
+        }
+      : null;
+    error = null;
+  }
   if (schemaMissing(error)) return fail(503, "schema_unavailable");
   if (error) return fail(500, "read_failed");
   return { ok: true as const, report: data };

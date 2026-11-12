@@ -59,21 +59,27 @@ test("blank scores can declare a result, and a score decides the result", () => 
   assert.equal(resolveResultLabel(1, null, "win"), null);
 });
 
-test("the report screen picks years, dates, scores, and results", () => {
+test("the report screen is the standing confirm form", () => {
   const editor = readFileSync(new URL("../../app/results/ResultsEditor.tsx", import.meta.url), "utf8");
+  const card = readFileSync(new URL("../../app/results/StandingReport.tsx", import.meta.url), "utf8");
   const server = readFileSync(
     new URL("../../app/lib/server/officialResults.ts", import.meta.url),
     "utf8",
   );
   const home = readFileSync(new URL("../../app/results/ResultsHome.tsx", import.meta.url), "utf8");
-  assert.equal(editor.includes("この年を開く"), false);
-  assert.equal(editor.includes('inputMode="numeric"'), false);
-  assert.equal(editor.includes("fiscalYearChoiceLabel"), true);
-  assert.equal(editor.includes('type="date"'), true);
-  assert.equal(editor.includes("自チームの得点"), true);
-  assert.equal(editor.includes("相手の得点"), true);
-  assert.equal(editor.includes("勝敗"), true);
-  assert.equal(editor.includes("resolveResultLabel"), true);
+  const screen = `${editor}\n${card}`;
+  assert.equal(screen.includes("この内容で提出"), true);
+  assert.equal(screen.includes("直して提出"), true);
+  assert.equal(screen.includes("順位なし・不明"), true);
+  assert.equal(screen.includes("未確認"), true);
+  assert.equal(screen.includes("期限切れ"), true);
+  assert.equal(screen.includes("ログイン、試合、チャットはそのまま使えます"), false);
+  assert.equal(screen.includes("fiscalYearChoiceLabel"), true);
+  assert.equal(screen.includes("自チームの得点"), false);
+  assert.equal(screen.includes("相手の得点"), false);
+  assert.equal(screen.includes("このURLを取得する"), false);
+  assert.equal(screen.includes("取得した元の値"), false);
+  assert.equal(screen.includes('type="date"'), false);
   assert.equal(server.includes("resolveResultLabel"), true);
   assert.equal(server.includes("isGoalCount"), true);
   assert.equal(home.includes("fiscalYearChoiceLabel"), true);

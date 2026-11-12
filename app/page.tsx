@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import AppTabNav from "@/app/components/AppTabNav";
+import AffiliationPrompt from "@/app/components/home/AffiliationPrompt";
 import AnnualReportBanner from "@/app/components/home/AnnualReportBanner";
 import HomeContact from "@/app/components/home/HomeContact";
 import HomeEntryCards from "@/app/components/home/HomeEntryCards";
@@ -58,6 +59,7 @@ export default function HomePage() {
       <AppTabNav />
       {noTeam ? <HomeRegisterPrompt /> : null}
       {hasTeam && canFileReport ? <AnnualReportBanner userId={user.id} /> : null}
+      {hasTeam && canFileReport ? <AffiliationPrompt /> : null}
       <HomeSchedule
         mode={scheduleMode}
         teamIds={teamIds}
