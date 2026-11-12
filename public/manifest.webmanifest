@@ -1,7 +1,7 @@
 {
   "name": "サカまっち",
   "short_name": "サカまっち",
-  "description": "サッカー練習試合をもっと簡単に",
+  "description": "練習試合マッチングです。相手を探して、募集して、チャットで調整できます。",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

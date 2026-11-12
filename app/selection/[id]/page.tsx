@@ -5,9 +5,24 @@ import type { Metadata } from "next";
 import type { CSSProperties, ReactNode } from "react";
 import ZoneLink from "@/app/components/ZoneLink";
 
+const selectionDescription =
+  "セレクション検索。気になるチームのセレクションを探せます。";
+
 export const metadata: Metadata = {
   title: "セレクション検索",
-  description: "セレクション検索。気になるチームのセレクションを探せます。",
+  description: selectionDescription,
+  openGraph: {
+    title: "セレクション検索",
+    description: selectionDescription,
+    siteName: "セレクション検索",
+    locale: "ja_JP",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "セレクション検索",
+    description: selectionDescription,
+  },
 };
 
 import { fetchSelectionEventById } from "@/app/lib/selections";

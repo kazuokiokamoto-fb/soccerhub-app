@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "サカまっち",
     short_name: "サカまっち",
     description:
-      "チーム同士で練習試合を探して、募集して、チャットで調整できます。セレクション情報もまとめて確認できます。",
+      "練習試合マッチングです。相手を探して、募集して、チャットで調整できます。",
     start_url: "/",
     scope: "/",
     display: "standalone",
