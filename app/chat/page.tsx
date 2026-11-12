@@ -556,13 +556,13 @@ function ChatListPageInner() {
   }, [teamChats]);
 
   return (
-    <main style={{ padding: 16, maxWidth: 980, margin: "0 auto" }}>
+    <main className="sm-screen">
       <AppTabNav />
 
       <AppHero
         icon="💬"
         title="チャット"
-        desc="チーム内連絡と、対戦チームとの日程調整・会場確認ができます。"
+        desc=""
       />
 
       {loadError ? (
@@ -584,70 +584,32 @@ function ChatListPageInner() {
       {authLoading || loading ? (
         <div style={emptyBox}>読み込み中…</div>
       ) : !meId ? (
-        <div style={emptyBox}>
-          ログインが必要です。
-          <br />
-          <div style={{ marginTop: 12 }}>
-            <Link href="/login?redirect=/chat" className="sh-btn sh-btn--primary">
-              ログインする
-            </Link>
-          </div>
+        <div className="sm-card sm-stack">
+          <p className="sm-meta">ログインが必要です。</p>
+          <Link href="/login?redirect=/chat" className="sh-btn sh-btn--primary">
+            ログイン
+          </Link>
         </div>
       ) : teamChats.length === 0 && threads.length === 0 ? (
-        <div style={emptyBox}>
-          まだチャットはありません。
-          <br />
-          チーム登録、試合申込、招待送信後にここへ表示されます。
+        <div className="sm-card">
+          <p className="sm-meta">まだチャットはありません。チーム登録、試合申込、招待送信後にここへ表示されます。</p>
         </div>
       ) : (
         <>
-          <div style={tabWrap}>
+          <div className="sm-seg" role="group" aria-label="チャットの種類">
             <button
               type="button"
-              style={{
-                ...tabButton,
-                ...(activeTab === "team" ? tabButtonActive : null),
-              }}
+              aria-pressed={activeTab === "team"}
               onClick={() => setActiveTab("team")}
             >
-              <span style={tabInner}>
-                自チーム
-                {teamUnreadTotal > 0 ? (
-                  <span
-                    style={
-                      activeTab === "team"
-                        ? tabUnreadBadgeActive
-                        : tabUnreadBadge
-                    }
-                  >
-                    {teamUnreadTotal}
-                  </span>
-                ) : null}
-              </span>
+              自チーム{teamUnreadTotal > 0 ? ` ${teamUnreadTotal}` : ""}
             </button>
-
             <button
               type="button"
-              style={{
-                ...tabButton,
-                ...(activeTab === "battle" ? tabButtonActive : null),
-              }}
+              aria-pressed={activeTab === "battle"}
               onClick={() => setActiveTab("battle")}
             >
-              <span style={tabInner}>
-                他チーム
-                {battleUnreadTotal > 0 ? (
-                  <span
-                    style={
-                      activeTab === "battle"
-                        ? tabUnreadBadgeActive
-                        : tabUnreadBadge
-                    }
-                  >
-                    {battleUnreadTotal}
-                  </span>
-                ) : null}
-              </span>
+              他チーム{battleUnreadTotal > 0 ? ` ${battleUnreadTotal}` : ""}
             </button>
           </div>
 
@@ -694,7 +656,7 @@ function ChatListPageInner() {
 
                             <div style={threadMeta}>
                               <span style={threadTime}>{time}</span>
-                              {team.isUnread ? <span style={unreadDot} /> : null}
+                              {team.isUnread ? <span className="status-chip status-chip--late">未読</span> : null}
                             </div>
                           </div>
 
@@ -754,7 +716,7 @@ function ChatListPageInner() {
 
                             <div style={threadMeta}>
                               <span style={threadTime}>{time}</span>
-                              {t.isUnread ? <span style={unreadDot} /> : null}
+                              {t.isUnread ? <span className="status-chip status-chip--late">未読</span> : null}
                             </div>
                           </div>
 

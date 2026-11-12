@@ -46,8 +46,10 @@ export const metadata: Metadata = {
   },
 };
 
+const appZone = process.env.NEXT_PUBLIC_APP_ZONE === "selection" ? "selection" : "hub";
+
 export const viewport: Viewport = {
-  themeColor: "#145c2a",
+  themeColor: appZone === "selection" ? "#1e3a8a" : "#145c2a",
 };
 
 export default function RootLayout({
@@ -56,7 +58,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ja">
+    <html lang="ja" data-zone={appZone}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${logoFont.variable} antialiased`}
       >

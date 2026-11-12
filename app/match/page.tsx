@@ -1023,7 +1023,7 @@ export default function HomeCalendar(props: {
     (monthError && monthError.includes("match_slots:"));
 
   return (
-    <section style={wrap} ref={homeTopRef}>
+    <section className="sm-screen" ref={homeTopRef}>
       {showCriticalError ? (
         <div style={errorBox}>
           <div style={errorTitle}>読み込みエラー</div>
@@ -1051,32 +1051,24 @@ export default function HomeCalendar(props: {
         </div>
       ) : null}
 
-      <section style={summaryBox}>
-        <div style={summaryHead}>
-          <div style={summaryTextWrap}>
-            <div style={summaryTitle}>チーム条件で探す</div>
-            <div style={hitCountText}>{topHitText}</div>
-            <div style={summaryCount}>表示条件：{topConditionText}</div>
-          </div>
-
-          <div style={summaryButtonRow}>
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={openTeamFilterPanel}
-            >
-              条件変更
-            </button>
-
-            <button
-              type="button"
-              className="sh-btn sh-btn--primary"
-              onClick={openTeamListWindow}
-            >
-              チーム一覧
-            </button>
-          </div>
+      <section className="sm-card sm-stack">
+        <div className="sm-stat-row">
+          <p className="sm-stat">
+            <strong>{filteredTeams.length}</strong>
+            <span>チーム</span>
+          </p>
+          <p className="sm-stat">
+            <strong>{filteredSlotsInMonth.length}</strong>
+            <span>試合</span>
+          </p>
         </div>
+        <p className="sm-meta">{topConditionText}</p>
+        <button type="button" className="sh-btn" onClick={openTeamListWindow}>
+          チーム一覧
+        </button>
+        <button type="button" className="sm-quiet" onClick={openTeamFilterPanel}>
+          条件
+        </button>
       </section>
 
       <div ref={calendarRef}>
@@ -1148,15 +1140,6 @@ export default function HomeCalendar(props: {
           loading={loading}
         />
       </div>
-
-      {!loading && slotsOnSelectedDate.length === 0 ? (
-        <div style={emptyRecruitBox}>
-          <div style={emptyRecruitTitle}>該当する募集がありません</div>
-          <div style={emptyRecruitText}>
-            条件を緩めるか、別の日付を選んでください
-          </div>
-        </div>
-      ) : null}
 
       {panelMode !== "none" ? (
         <MatchFilterPanel

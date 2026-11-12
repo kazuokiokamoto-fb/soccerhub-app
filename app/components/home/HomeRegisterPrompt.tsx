@@ -8,15 +8,12 @@ export default function HomeRegisterPrompt() {
       <h1 id="home-register-title" className="home-register-title">
         まずはチームを登録しましょう
       </h1>
-      <p className="home-register-text">
-        チームを登録すると、練習試合の募集や申込、チャットでの調整ができるようになります。
-      </p>
       <div className="home-actions">
         <Link href="/teams/new" className="sh-btn sh-btn--primary">
           チームを登録する
         </Link>
-        <Link href="/mypage" className="sh-btn">
-          マイページへ
+        <Link href="/mypage" className="sm-quiet">
+          マイページ
         </Link>
       </div>
     </section>

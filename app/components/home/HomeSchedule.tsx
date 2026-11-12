@@ -88,8 +88,8 @@ export default function HomeSchedule({
           ログインすると、自分の試合予定がここに表示されます。
         </p>
         <div className="home-actions">
-          <Link href="/login?redirect=/" className="sh-btn sh-btn--primary">
-            ログインする
+          <Link href="/login?redirect=/" className="sm-quiet">
+            ログイン
           </Link>
         </div>
       </section>

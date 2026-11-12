@@ -135,13 +135,13 @@ export default async function SelectionDetailPage(props: {
 
   return (
     <main style={wrap}>
-      <div style={topBar}>
-        <Link href={backHref} className="sh-btn" scroll={false}>
-          ← 一覧へ
+      <div className="sm-top-links">
+        <Link href={backHref} className="sm-quiet" scroll={false}>
+          一覧
         </Link>
 
-        <ZoneLink href="/" className="sh-btn">
-          ホーム
+        <ZoneLink href="/" className="sm-back-site">
+          サカまっち
         </ZoneLink>
       </div>
 
@@ -174,9 +174,9 @@ export default async function SelectionDetailPage(props: {
               target="_blank"
               rel="noreferrer"
               className="sh-btn sh-btn--primary"
-              style={actionButton}
+              style={{ ...actionButton, width: "100%" }}
             >
-              公式サイトを見る
+              公式サイト
             </a>
           ) : null}
         </div>
@@ -216,11 +216,12 @@ export default async function SelectionDetailPage(props: {
 }
 
 const wrap: CSSProperties = {
-  padding: 16,
-  maxWidth: 900,
+  boxSizing: "border-box",
+  width: "min(720px, 100%)",
   margin: "0 auto",
+  padding: "20px 16px 56px",
   display: "grid",
-  gap: 12,
+  gap: 20,
 };
 
 const topBar: CSSProperties = {
@@ -325,10 +326,11 @@ const heroInfoLabel: CSSProperties = {
 };
 
 const heroInfoValue: CSSProperties = {
-  fontSize: 15,
+  fontSize: 28,
   fontWeight: 900,
-  color: "#16391f",
-  lineHeight: 1.4,
+  color: "var(--sm-accent-ink)",
+  lineHeight: 1.2,
+  letterSpacing: "-0.03em",
 };
 
 const detailCard: CSSProperties = {

@@ -12,9 +12,9 @@ export const pageWrap: React.CSSProperties = {
 };
 
 export const chatPanel: React.CSSProperties = {
-  border: "1px solid #e5ece7",
+  border: "1px solid var(--sm-line)",
   borderRadius: 20,
-  background: "#f6fbf7",
+  background: "var(--sm-canvas)",
   overflow: "hidden",
   display: "grid",
   gridTemplateRows: "auto minmax(0, 1fr) auto",
@@ -160,9 +160,9 @@ export const bubbleBase: React.CSSProperties = {
 };
 
 export const bubbleMine: React.CSSProperties = {
-  background: "#8de17a",
-  color: "#17311b",
-  borderTopRightRadius: 6,
+  background: "var(--sm-accent)",
+  color: "#fff",
+  borderTopRightRadius: 8,
 };
 
 export const bubbleOther: React.CSSProperties = {

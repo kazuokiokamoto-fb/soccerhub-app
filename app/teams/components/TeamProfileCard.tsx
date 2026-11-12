@@ -351,22 +351,18 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
           ) : null}
 
           {showGeminiSection && !mine ? (
-            <div style={teamMetaItem}>
-              <div style={metaLabel}>Geminiによるチーム情報</div>
-              <div style={metaValue}>
-                先に検索文を確認してから、コピーしてGeminiへ進めます。
-              </div>
-
-              <div style={geminiActionRow}>
+            <details className="sm-more">
+              <summary>調べる</summary>
+              <div className="sm-more-body">
                 <button
                   type="button"
-                  className="sh-btn sh-btn--primary"
+                  className="sh-btn"
                   onClick={() => setShowGeminiModal(true)}
                 >
-                  Geminiでこのチームを調べる
+                  Gemini
                 </button>
               </div>
-            </div>
+            </details>
           ) : null}
         </div>
       </section>
@@ -553,10 +549,11 @@ const strengthValueRow: React.CSSProperties = {
 };
 
 const strengthValueMain: React.CSSProperties = {
-  fontSize: 16,
-  color: "#1c2b22",
-  lineHeight: 1.7,
-  fontWeight: 800,
+  fontSize: 40,
+  color: "var(--sm-accent)",
+  lineHeight: 1,
+  fontWeight: 900,
+  letterSpacing: "-0.04em",
 };
 
 const strengthValueSub: React.CSSProperties = {

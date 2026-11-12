@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/lib/auth";
 import ZoneLink from "@/app/components/ZoneLink";
+import { IconChat, IconFlag, IconHome, IconUser } from "@/app/components/ui/Icons";
 import {
   getUnifiedBadgeCount,
   getUnreadChatCount,
@@ -12,10 +13,10 @@ import {
 } from "@/app/lib/badge";
 
 const TABS = [
-  { href: "/", label: "ホーム" },
-  { href: "/chat", label: "チャット" },
-  { href: "/selection", label: "セレクション" },
-  { href: "/mypage", label: "マイページ" },
+  { href: "/", label: "ホーム", icon: IconHome },
+  { href: "/chat", label: "チャット", icon: IconChat },
+  { href: "/selection", label: "セレクション", icon: IconFlag },
+  { href: "/mypage", label: "マイページ", icon: IconUser },
 ];
 
 function normalizePath(pathname: string) {
@@ -154,6 +155,7 @@ export default function AppTabNav() {
               className={active ? "app-tab app-tab--active" : "app-tab"}
               aria-current={active ? "page" : undefined}
             >
+              <tab.icon size={18} />
               <span className="app-tab-label">{tab.label}</span>
               {showBadge ? <span className="app-tab-badge">{badgeText}</span> : null}
             </ZoneLink>

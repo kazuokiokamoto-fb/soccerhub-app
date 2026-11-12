@@ -5,7 +5,10 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/app/lib/auth";
 import ZoneLink, { assignCrossZone } from "@/app/components/ZoneLink";
+import { IconFlag } from "@/app/components/ui/Icons";
 import { getUnreadChatCount, syncAppBadge } from "@/app/lib/badge";
+
+const selectionZone = process.env.NEXT_PUBLIC_APP_ZONE === "selection";
 
 export default function AppHeader() {
   const router = useRouter();
@@ -119,25 +122,41 @@ export default function AppHeader() {
   return (
     <header ref={headerRef} className="smh-header">
       <div className="smh-inner">
-        <ZoneLink href="/" className="smh-brand">
-          <div className="smh-brandMark">
-            <Image
-              src="/header-logo.png"
-              alt="サカまちロゴ"
-              width={36}
-              height={36}
-              className="smh-brandMarkImage"
-              priority
-            />
-          </div>
+        {selectionZone ? (
+          <ZoneLink href="/selection" className="smh-brand">
+            <div className="smh-brandMark sm-brand-mark--selection" aria-hidden="true">
+              <IconFlag size={20} />
+            </div>
+            <div>
+              <div className="logoText">セレクション</div>
+            </div>
+          </ZoneLink>
+        ) : (
+          <ZoneLink href="/" className="smh-brand">
+            <div className="smh-brandMark">
+              <Image
+                src="/header-logo.png"
+                alt="サカまちロゴ"
+                width={36}
+                height={36}
+                className="smh-brandMarkImage"
+                priority
+              />
+            </div>
 
-          <div>
-            <div className="logoText">サカまっち</div>
-            <div className="smh-brandSub">練習試合とセレクション</div>
-          </div>
-        </ZoneLink>
+            <div>
+              <div className="logoText">サカまっち</div>
+              <div className="smh-brandSub">練習試合とセレクション</div>
+            </div>
+          </ZoneLink>
+        )}
 
         <nav className="smh-nav">
+          {selectionZone ? (
+            <ZoneLink href="/" className="sm-back-site">
+              サカまっち
+            </ZoneLink>
+          ) : null}
           {loading ? (
             <span className="smh-user">...</span>
           ) : user ? (

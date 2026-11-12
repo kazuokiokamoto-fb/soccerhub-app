@@ -22,6 +22,7 @@ import {
 import { toProfileRow, toTeamRow } from "./mypage.utils";
 
 import { AccountSection, NotificationSection } from "./mypage.blocks";
+import { MorePanel } from "@/app/components/ui/MorePanel";
 
 import {
   pageWrap,
@@ -353,12 +354,12 @@ export default function MyPage() {
 
   if (authLoading || loading) {
     return (
-      <main style={loadingWrap}>
+      <main className="sm-screen">
         <AppTabNav />
         <AppHero
           icon="⚙️"
           title="マイページ"
-          desc="アカウント情報、チーム情報、グラウンド情報を確認・編集できます。"
+          desc=""
         />
         <div style={loadingBox}>Loading...</div>
       </main>
@@ -366,7 +367,7 @@ export default function MyPage() {
   }
 
   return (
-    <main style={pageWrap}>
+    <main className="sm-screen">
       {toast ? (
         <div
           style={{
@@ -395,7 +396,7 @@ export default function MyPage() {
       <AppHero
         icon="⚙️"
         title="マイページ"
-        desc="アカウント情報、チーム情報、グラウンド情報を確認・編集できます。"
+        desc=""
       />
 
       {!me ? (
@@ -439,20 +440,14 @@ export default function MyPage() {
       <section style={box}>
         <div style={sectionHead}>
           <h2 style={sectionTitle}>チーム</h2>
-          <div style={teamTopActions}>
-            <Link href="/teams/new" className="sh-btn">
-              ＋チーム登録
-            </Link>
-          </div>
+          <Link href="/teams/new" className={teams.length === 0 ? "sh-btn sh-btn--primary" : "sm-quiet"}>
+            チーム登録
+          </Link>
         </div>
 
         <div style={teamList}>
           {teams.length === 0 ? (
-            <div style={emptyTeamBox}>
-              まだチームが登録されていません。
-              <br />
-              先にチーム登録をしてください。
-            </div>
+            <p className="sm-meta">まだチームがありません。</p>
           ) : (
             teams.map((team) => {
               const role = roleByTeamId.get(team.id);
@@ -466,72 +461,49 @@ export default function MyPage() {
                   : String(team.category ?? "未設定");
 
               return (
-                <div key={team.id} style={teamCard}>
-                  <div style={teamCardHead}>
-                    <div style={teamNameBlock}>
-                      <div style={teamName}>{team.name || "名称未設定"}</div>
-                      <div style={roleBadge}>{roleLabel(role)}</div>
-                    </div>
-
-                    <div style={teamActions}>
-                      <Link href={`/teams/${team.id}?from=mypage`} className="sh-btn">
-                        詳細
-                      </Link>
-                      {role === "owner" || role === "coach" ? (
-                        <Link href={`/teams/${team.id}/affiliation`} className="sh-btn">
-                          所属
-                        </Link>
-                      ) : null}
-                      {role === "owner" || role === "coach" ? (
-                        <Link href={`/results/${team.id}`} className="sh-btn">
-                          公式戦の年次報告
-                        </Link>
-                      ) : null}
-
-                      {isOwner ? (
-                        <button
-                          type="button"
-                          className="sh-btn"
-                          onClick={() => void deleteTeam(team)}
-                          disabled={deleting}
-                          style={deleteButton}
-                        >
-                          {deleting ? "削除中…" : "削除"}
-                        </button>
-                      ) : null}
-                    </div>
+                <article key={team.id} className="sm-card sm-stack">
+                  <div className="sm-chip-row">
+                    <span className="status-chip status-chip--ok">{roleLabel(role)}</span>
+                    <span className="sm-chip sm-chip--static">{categories || "カテゴリ未設定"}</span>
+                    <span className="sm-chip sm-chip--static">{team.has_ground ? "グラウンドあり" : "グラウンドなし"}</span>
                   </div>
-
-                  <div style={teamMeta}>
-                    <div>
-                      <b>エリア：</b>
-                      {areaText(team)}
-                    </div>
-                    <div>
-                      <b>カテゴリ：</b>
-                      {categories || "未設定"}
-                    </div>
-                    <div>
-                      <b>グラウンド提供：</b>
-                      {team.has_ground ? "あり" : "なし"}
-                    </div>
-                    <div>
-                      <b>ユニフォーム：</b>
-                      {team.uniform_main || "未設定"} /{" "}
-                      {team.uniform_sub || "未設定"}
+                  <h3 className="sm-key">{team.name || "名称未設定"}</h3>
+                  <p className="sm-stat" style={{ justifySelf: "start" }}>
+                    <strong>{team.strength_rank || "–"}</strong>
+                    <span>{areaText(team)}</span>
+                  </p>
+                  <Link href={`/teams/${team.id}?from=mypage`} className="sh-btn sh-btn--primary">
+                    詳細
+                  </Link>
+                  <MorePanel label="その他">
+                    <p className="sm-meta">
+                      ユニフォーム {team.uniform_main || "未設定"} / {team.uniform_sub || "未設定"}
                       {"uniform_gk" in team && (team as any).uniform_gk
-                        ? ` / GK: ${(team as any).uniform_gk}`
+                        ? ` / GK ${(team as any).uniform_gk}`
                         : ""}
-                    </div>
-                  </div>
-
-                  <div style={categoryMetaBox}>
-                    <div style={categoryMetaTitle}>カテゴリ別設定</div>
-                    <div style={categoryMetaLine}>
-                      強さ：{team.strength_rank || "未設定"}
-                    </div>
-                  </div>
-                </div>
+                    </p>
+                    {role === "owner" || role === "coach" ? (
+                      <Link href={`/teams/${team.id}/affiliation`} className="sh-btn">
+                        所属
+                      </Link>
+                    ) : null}
+                    {role === "owner" || role === "coach" ? (
+                      <Link href={`/results/${team.id}`} className="sh-btn">
+                        年次報告
+                      </Link>
+                    ) : null}
+                    {isOwner ? (
+                      <button
+                        type="button"
+                        className="sh-btn sh-btn--danger"
+                        onClick={() => void deleteTeam(team)}
+                        disabled={deleting}
+                      >
+                        {deleting ? "削除中…" : "削除"}
+                      </button>
+                    ) : null}
+                  </MorePanel>
+                </article>
               );
             })
           )}
@@ -541,21 +513,13 @@ export default function MyPage() {
       <section style={box}>
         <div style={sectionHead}>
           <h2 style={sectionTitle}>グラウンド</h2>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Link href="/venues/new" className="sh-btn">
-              ＋グラウンド登録
-            </Link>
-            <Link href="/venues" className="sh-btn sh-btn--primary">
-              グラウンド管理
-            </Link>
-          </div>
+          <Link href="/venues" className="sh-btn sh-btn--primary">
+            グラウンド
+          </Link>
         </div>
-
-        <div style={{ color: "#555", lineHeight: 1.8 }}>
-          登録済みグラウンドを管理できます。
-          <br />
-          今後、募集枠作成時に登録済みグラウンドから選択しやすくなります。
-        </div>
+        <Link href="/venues/new" className="sm-quiet">
+          グラウンドを登録
+        </Link>
       </section>
     </main>
   );

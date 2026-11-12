@@ -361,7 +361,7 @@ function MatchCreatePageInner() {
         <AppHero
           icon="🗓️"
           title="募集する"
-          desc="日付・時間・カテゴリ・希望相手の強さを設定して募集を作成します。"
+          desc=""
         />
 
         <section style={card}>
@@ -604,7 +604,7 @@ function MatchCreatePageInner() {
                 {saving ? "作成中…" : "募集する"}
               </button>
 
-              <Link href="/" className="sh-btn">
+              <Link href="/" className="sm-quiet">
                 キャンセル
               </Link>
             </div>
@@ -788,20 +788,21 @@ const chipWrap: React.CSSProperties = {
 };
 
 const chip: React.CSSProperties = {
-  padding: "8px 12px",
+  minHeight: 44,
+  padding: "8px 14px",
   borderRadius: 999,
-  border: "1px solid #d6eadb",
+  border: "1px solid var(--sm-line)",
   background: "#fff",
-  color: "#23412c",
+  color: "var(--sm-accent)",
   fontWeight: 800,
-  fontSize: 13,
+  fontSize: 15,
   cursor: "pointer",
 };
 
 const chipActive: React.CSSProperties = {
-  background: "#145c2a",
+  background: "var(--sm-accent)",
   color: "#fff",
-  border: "1px solid #145c2a",
+  border: "1px solid var(--sm-accent)",
 };
 
 const chipDisabled: React.CSSProperties = {

@@ -1,0 +1,56 @@
+/* Shared by the hub and the selection app. Selection overrides the accent. */
+
+:root {
+  --sm-accent: #145c2a;
+  --sm-accent-strong: #0f4d23;
+  --sm-accent-bright: #1f8f43;
+  --sm-accent-soft: #eef6f0;
+  --sm-accent-ink: #16391f;
+  --sm-canvas: #f3f6f4;
+  --sm-card: #ffffff;
+  --sm-line: #d7e5db;
+  --sm-text: #1c2b22;
+  --sm-muted: #5e7066;
+  --sm-ok-bg: #ecfdf3;
+  --sm-ok-fg: #166534;
+  --sm-ok-line: #86efac;
+  --sm-late-bg: #fff7ed;
+  --sm-late-fg: #9a3412;
+  --sm-late-line: #fdba74;
+  --sm-wait-bg: #f4f6f5;
+  --sm-wait-fg: #3f4d45;
+  --sm-wait-line: #e5ece7;
+  --sm-info-bg: #eff6ff;
+  --sm-info-fg: #1d4ed8;
+  --sm-info-line: #bfdbfe;
+  --sm-danger: #b42318;
+  --sm-radius: 20px;
+  --sm-shadow: 0 10px 28px rgba(20, 60, 32, 0.06);
+  --sm-tap: 48px;
+
+  --sm-green-1: var(--sm-accent-bright);
+  --sm-green-2: var(--sm-accent);
+  --sm-green-3: var(--sm-accent-strong);
+  --sm-cream: var(--sm-canvas);
+  --sm-line: #d7e5db;
+  --sm-text: #1c2b22;
+  --sm-sub: var(--sm-muted);
+}
+
+html[data-zone="selection"] {
+  --sm-accent: #1e3a8a;
+  --sm-accent-strong: #172554;
+  --sm-accent-bright: #2563eb;
+  --sm-accent-soft: #eef3ff;
+  --sm-accent-ink: #172033;
+  --sm-canvas: #f4f6fb;
+  --sm-line: #d5e0f2;
+  --sm-text: #172033;
+  --sm-muted: #5c6b82;
+  --sm-sub: var(--sm-muted);
+  --sm-shadow: 0 10px 28px rgba(23, 37, 84, 0.08);
+  --sm-green-1: var(--sm-accent-bright);
+  --sm-green-2: var(--sm-accent);
+  --sm-green-3: var(--sm-accent-strong);
+  --sm-cream: var(--sm-canvas);
+}

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
+import LoggedInMocks from "./mocks";
 import AppHero from "@/app/components/AppHero";
 import { AffiliationStep } from "@/app/components/affiliation/AffiliationStep";
 import { ResultsUrlPrompt } from "@/app/components/affiliation/ResultsUrlPrompt";
@@ -23,6 +24,18 @@ export default function UiFixtures() {
     organizationName: "",
   });
   const [note, setNote] = useState("");
+
+  if (
+    screen === "chat" ||
+    screen === "mypage" ||
+    screen === "match" ||
+    screen === "team" ||
+    screen === "selection" ||
+    screen === "selection-detail" ||
+    screen === "home-in"
+  ) {
+    return <LoggedInMocks screen={screen} />;
+  }
 
   return (
     <main className="or-editor" style={{ maxWidth: 420 }}>
