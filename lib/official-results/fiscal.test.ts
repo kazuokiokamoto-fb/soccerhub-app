@@ -5,6 +5,7 @@ import { decideSubmit } from "./rules.ts";
 import {
   dateInFiscalYear,
   describeDuty,
+  defaultStandingYear,
   fiscalPeriod,
   fiscalYearContaining,
   isCanonicalPolicy,
@@ -29,6 +30,11 @@ test("2025年度 runs from April 1 through the next March 31", () => {
   assert.equal(dateInFiscalYear("2025-03-31", 2025), false);
   assert.equal(dateInFiscalYear("2026-04-01", 2025), false);
   assert.equal(dateInFiscalYear("2026-02-31", 2025), false);
+});
+
+test("the standing report defaults to the previous fiscal year", () => {
+  assert.equal(defaultStandingYear(march31End), 2024);
+  assert.equal(defaultStandingYear(april1Start), 2025);
 });
 
 test("the fiscal year changes at April 1 00:00 Asia/Tokyo", () => {

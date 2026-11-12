@@ -1,0 +1,85 @@
+.affiliation-step,
+.url-prompt {
+  margin: 0;
+  min-inline-size: 0;
+  border: 1px solid #e5ece7;
+  border-radius: 18px;
+  background: #fff;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.affiliation-step legend,
+.url-prompt h2 {
+  font-size: 18px;
+  font-weight: 900;
+  padding: 0;
+}
+
+.affiliation-step p,
+.url-prompt p {
+  margin: 0;
+  color: #3f4d45;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.affiliation-choice {
+  display: grid;
+  gap: 8px;
+}
+
+.affiliation-choice label,
+.affiliation-fields label,
+.url-prompt label {
+  display: grid;
+  gap: 6px;
+  font-weight: 800;
+}
+
+.affiliation-choice label {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid #d8e7db;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.affiliation-fields,
+.url-prompt {
+  display: grid;
+  gap: 12px;
+}
+
+.affiliation-step select,
+.affiliation-step input,
+.url-prompt input {
+  width: 100%;
+  min-height: 48px;
+  font-size: 16px;
+}
+
+.affiliation-note,
+.url-prompt-note,
+.url-prompt-message {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f7fbf8;
+}
+
+.home-affiliation {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #dce9df;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.home-affiliation p {
+  margin: 0;
+  line-height: 1.6;
+}

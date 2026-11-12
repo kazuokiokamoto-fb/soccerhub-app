@@ -46,8 +46,11 @@
   background: #fff;
 }
 
+.or-section h1,
 .or-section h2 {
-  font-size: 18px;
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.35;
 }
 
 .or-field {

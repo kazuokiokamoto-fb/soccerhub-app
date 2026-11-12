@@ -16,6 +16,18 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const offset = boundedInt(url.searchParams.get("offset"), 0, 0, 100000);
+    const cronSecretEarly = process.env.CRON_SECRET;
+    if (offset === 0 && cronSecretEarly) {
+      fetch(`${url.origin}/api/cron/results-standings`, {
+        method: "GET",
+        headers: { authorization: `Bearer ${cronSecretEarly}` },
+      }).catch((error) => {
+        console.error(
+          "results standings kick skipped:",
+          error instanceof Error ? error.message : "unknown",
+        );
+      });
+    }
     const limit = boundedInt(url.searchParams.get("limit"), 92, 1, 200);
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

@@ -115,6 +115,11 @@ export function isReportingYear(year: number, now: Date): boolean {
   return Number.isInteger(year) && year >= MIN_YEAR && year <= fiscalYearContaining(now);
 }
 
+/** The annual standing report is for the fiscal year that just finished. */
+export function defaultStandingYear(now: Date): number {
+  return Math.max(MIN_YEAR, fiscalYearContaining(now) - 1);
+}
+
 /**
  * Years the team screen can open, newest first.
  * The home list stays the fiscal year in progress and the one before it.

@@ -57,6 +57,8 @@ export class PublicFetchError extends Error {
 }
 
 export function isBlockedIp(ip: string): boolean {
+  const mapped = ip.toLowerCase().match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) return isBlockedIp(mapped[1]);
   const family = isIP(ip);
   if (family !== 4 && family !== 6) return true;
   return block.check(ip, family === 4 ? "ipv4" : "ipv6");

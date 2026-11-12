@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createDraft, markInReview, readReportBundle } from "@/app/lib/server/officialResults";
+import { readStandingExtras } from "@/app/lib/server/standingReport";
 import { authed, jsonResult, readBody, yearFrom } from "@/app/lib/server/officialResultsHttp";
 
 export const runtime = "nodejs";
@@ -15,9 +16,11 @@ export async function GET(req: Request, { params }: Params) {
   if (year === null) {
     return NextResponse.json({ ok: false, error: "validation" }, { status: 400 });
   }
-  return jsonResult(
-    await readReportBundle(auth.session.supabase, auth.session.userId, teamId, year),
-  );
+  const bundle = await readReportBundle(auth.session.supabase, auth.session.userId, teamId, year);
+  if (!bundle.ok || !("team" in bundle)) return jsonResult(bundle);
+  const standing = await readStandingExtras(auth.session.supabase, teamId, year);
+  if ("status" in standing) return jsonResult(standing);
+  return jsonResult({ ...bundle, standing });
 }
 
 export async function POST(req: Request, { params }: Params) {

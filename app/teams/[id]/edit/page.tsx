@@ -633,6 +633,9 @@ export default function TeamEditPage() {
         <Link href={`/teams/${teamId}`} className="sh-btn">
           戻る
         </Link>
+        <Link href={`/teams/${teamId}/affiliation`} className="sh-btn">
+          所属を編集
+        </Link>
       </div>
 
       <section className="sh-section" style={{ marginTop: 16 }}>
@@ -1191,5 +1194,6 @@ const backButtonWrap: React.CSSProperties = {
   marginTop: 14,
   marginBottom: 10,
   display: "flex",
+  gap: 8,
   justifyContent: "flex-start",
 };

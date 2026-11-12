@@ -184,7 +184,10 @@ test("enabled routing proxies an existing session and does not ask for a second 
     "/results/team-1",
     "/api/official-results",
     "/api/official-results/team-1/submit",
+    "/api/team-affiliation",
+    "/api/team-results-page",
     "/api/cron/selection-crawler",
+    "/api/cron/results-standings",
   ]) {
     assert.equal(
       hubSelectionPlan({
