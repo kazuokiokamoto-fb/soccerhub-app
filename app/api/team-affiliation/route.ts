@@ -1,5 +1,6 @@
 import { readAffiliationState, saveAffiliation } from "@/app/lib/server/affiliation";
 import { authed, jsonResult, readBody } from "@/app/lib/server/officialResultsHttp";
+import { affiliationDraftFromBody } from "@/lib/affiliation/validate";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -19,11 +20,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "validation" }, { status: 400 });
   }
   return jsonResult(
-    await saveAffiliation(auth.session.supabase, auth.session.userId, body.teamId, {
-      none: body.none === true,
-      prefecture: typeof body.prefecture === "string" ? body.prefecture : "",
-      category: typeof body.category === "string" ? body.category : "",
-      organizationName: typeof body.organizationName === "string" ? body.organizationName : "",
-    }),
+    await saveAffiliation(
+      auth.session.supabase,
+      auth.session.userId,
+      body.teamId,
+      affiliationDraftFromBody(body),
+    ),
   );
 }

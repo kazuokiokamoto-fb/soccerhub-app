@@ -13,16 +13,13 @@ import type { ProfileRow, TeamRow, Toast } from "./mypage.types";
 
 import {
   isMissingColumnError,
-  rankLabel,
-  areaText,
-  categoryText,
   toArray,
 } from "./mypage.helpers";
 
 import { toProfileRow, toTeamRow } from "./mypage.utils";
 
 import { AccountSection, NotificationSection } from "./mypage.blocks";
-import { MorePanel } from "@/app/components/ui/MorePanel";
+import { MyPageTeamCard } from "./MyPageTeamCard";
 
 import {
   pageWrap,
@@ -50,13 +47,6 @@ type TeamMemberRow = {
 
 function isTeamRole(value: string): value is TeamRole {
   return value === "owner" || value === "coach" || value === "member";
-}
-
-function roleLabel(role?: TeamRole | null) {
-  if (role === "owner") return "管理者";
-  if (role === "coach") return "コーチ";
-  if (role === "member") return "メンバー";
-  return "未設定";
 }
 
 function toTeamMemberRow(value: unknown): TeamMemberRow | null {
@@ -451,63 +441,15 @@ export default function MyPage() {
               <p className="sm-meta">まだチームがありません。</p>
             </div>
           ) : (
-            teams.map((team) => {
-              const role = roleByTeamId.get(team.id);
-              const isOwner = role === "owner";
-              const deleting = deletingTeamId === team.id;
-              const categories =
-                Array.isArray(team.categories) && team.categories.length > 0
-                  ? team.categories
-                      .map((c) => String(c))
-                      .join(" / ")
-                  : String(team.category ?? "未設定");
-
-              return (
-                <article key={team.id} className="sm-card sm-stack">
-                  <div className="sm-chip-row">
-                    <span className="status-chip status-chip--ok">{roleLabel(role)}</span>
-                    <span className="sm-chip sm-chip--static">{categories || "カテゴリ未設定"}</span>
-                    <span className="sm-chip sm-chip--static">{team.has_ground ? "グラウンドあり" : "グラウンドなし"}</span>
-                  </div>
-                  <h3 className="sm-key">{team.name || "名称未設定"}</h3>
-                  <p className="sm-stat" style={{ justifySelf: "start" }}>
-                    <strong>{team.strength_rank || "–"}</strong>
-                    <span>{areaText(team)}</span>
-                  </p>
-                  <Link href={`/teams/${team.id}?from=mypage`} className="sh-btn sh-btn--primary">
-                    詳細
-                  </Link>
-                  <MorePanel label="その他">
-                    <p className="sm-meta">
-                      ユニフォーム {team.uniform_main || "未設定"} / {team.uniform_sub || "未設定"}
-                      {"uniform_gk" in team && (team as any).uniform_gk
-                        ? ` / GK ${(team as any).uniform_gk}`
-                        : ""}
-                    </p>
-                    {role === "owner" || role === "coach" ? (
-                      <Link href={`/teams/${team.id}/affiliation`} className="sh-btn">
-                        所属
-                      </Link>
-                    ) : null}
-                    {role === "owner" || role === "coach" ? (
-                      <Link href={`/results/${team.id}`} className="sh-btn">
-                        年次報告
-                      </Link>
-                    ) : null}
-                    {isOwner ? (
-                      <button
-                        type="button"
-                        className="sh-btn sh-btn--danger"
-                        onClick={() => void deleteTeam(team)}
-                        disabled={deleting}
-                      >
-                        {deleting ? "削除中…" : "削除"}
-                      </button>
-                    ) : null}
-                  </MorePanel>
-                </article>
-              );
-            })
+            teams.map((team) => (
+              <MyPageTeamCard
+                key={team.id}
+                team={team}
+                role={roleByTeamId.get(team.id)}
+                deleting={deletingTeamId === team.id}
+                onDelete={() => void deleteTeam(team)}
+              />
+            ))
           )}
         </div>
       </section>

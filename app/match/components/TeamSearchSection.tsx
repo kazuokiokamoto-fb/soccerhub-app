@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
+import { levelToStrengthRank } from "@/app/match/constants/strengthGuides";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
@@ -41,14 +42,7 @@ function normalizeRank(level?: number | null, strengthRank?: string | null) {
   if (strengthRank && String(strengthRank).trim()) {
     return String(strengthRank).trim();
   }
-
-  const n = Number(level ?? 0);
-  if (!Number.isFinite(n)) return "";
-  if (n >= 9) return "SS";
-  if (n >= 7) return "S";
-  if (n >= 5) return "A";
-  if (n >= 3) return "B";
-  return "C";
+  return levelToStrengthRank(level);
 }
 
 export default function TeamsSearchClient() {

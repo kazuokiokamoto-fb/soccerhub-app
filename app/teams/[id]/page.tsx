@@ -142,6 +142,9 @@ export default function TeamDetailPage() {
   const [loadError, setLoadError] = useState("");
   const [team, setTeam] = useState<TeamRow | null>(null);
   const [myRole, setMyRole] = useState<MyMemberRole>("");
+  const [league, setLeague] = useState<{ level: string | null; division: number | null } | null>(
+    null,
+  );
 
   useEffect(() => {
     let active = true;
@@ -151,6 +154,7 @@ export default function TeamDetailPage() {
         if (!active) return;
         setTeam(null);
         setMyRole("");
+        setLeague(null);
         setLoadError("チームIDが不正です");
         setLoading(false);
         return;
@@ -160,7 +164,7 @@ export default function TeamDetailPage() {
       setLoadError("");
 
       try {
-        const { data, error } = await supabase
+        const teamQuery = supabase
           .from("teams")
           .select(
             [
@@ -184,6 +188,14 @@ export default function TeamDetailPage() {
           )
           .eq("id", teamId)
           .maybeSingle();
+        const affiliationQuery = myUserId
+          ? supabase
+              .from("team_affiliations")
+              .select("status,league_level,league_division")
+              .eq("team_id", teamId)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null });
+        const [{ data, error }, affiliation] = await Promise.all([teamQuery, affiliationQuery]);
 
         if (error) throw error;
 
@@ -192,6 +204,7 @@ export default function TeamDetailPage() {
         if (!data) {
           setTeam(null);
           setMyRole("");
+          setLeague(null);
           setLoadError("チームが見つかりません");
           return;
         }
@@ -200,6 +213,7 @@ export default function TeamDetailPage() {
         if (!nextTeam) {
           setTeam(null);
           setMyRole("");
+          setLeague(null);
           setLoadError("チームデータの形式が不正です");
           return;
         }
@@ -228,13 +242,29 @@ export default function TeamDetailPage() {
           }
         }
 
+        const affiliationRow =
+          affiliation.error || !affiliation.data || affiliation.data.status !== "affiliated"
+            ? null
+            : {
+                level:
+                  typeof affiliation.data.league_level === "string"
+                    ? affiliation.data.league_level
+                    : null,
+                division:
+                  typeof affiliation.data.league_division === "number"
+                    ? affiliation.data.league_division
+                    : null,
+              };
+
         setTeam(nextTeam);
         setMyRole(nextRole);
+        setLeague(affiliationRow);
       } catch (e: any) {
         console.error("[team detail] load error:", e);
         if (!active) return;
         setTeam(null);
         setMyRole("");
+        setLeague(null);
         setLoadError(e?.message ?? "チーム詳細の取得に失敗しました");
       } finally {
         if (active) {
@@ -338,6 +368,8 @@ export default function TeamDetailPage() {
             showStrengthHelpButton
             showAddressDetail={false}
             chatFrom={backConfig.chatFrom}
+            leagueLevel={league?.level ?? null}
+            leagueDivision={league?.division ?? null}
           />
         </>
       )}

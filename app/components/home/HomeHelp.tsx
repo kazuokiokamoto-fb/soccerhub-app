@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { STRENGTH_GUIDES } from "@/app/match/constants/strengthGuides";
 
 function Fold({
   title,
@@ -103,15 +104,12 @@ export default function HomeHelp({
             A. 練習試合の相手を探しやすくするための目安です。勝敗を保証するものではありません。
             <br />
             <br />
-            <b>SS</b>：都・県リーグ1・2部相当。試合強度は非常に高く、公式戦同等の緊張感を求めるチーム向け。
-            <br />
-            <b>S</b>：都・県リーグ3・4部相当。基礎技術が安定し、しっかり競り合える相手を求めるチーム向け。
-            <br />
-            <b>A</b>：地域リーグ1・2部相当。育成と競争のバランスを重視するチーム向け。
-            <br />
-            <b>B</b>：地域リーグ3・4部相当。試合経験を積みながら成長したいチーム向け。
-            <br />
-            <b>C</b>：フレンドリー。交流・経験重視で、勝敗よりも楽しく真剣に試合したいチーム向け。
+            {STRENGTH_GUIDES.map((guide) => (
+              <span key={guide.rank}>
+                <b>{guide.rank}</b>：{guide.short}。{guide.note}
+                <br />
+              </span>
+            ))}
           </p>
         </div>
         <div className="home-qa">

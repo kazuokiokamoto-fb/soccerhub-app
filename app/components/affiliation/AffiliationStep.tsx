@@ -1,5 +1,13 @@
 "use client";
 
+import { RankSuggestion } from "@/app/components/RankSuggestion";
+import {
+  LEAGUE_DIVISIONS,
+  LEAGUE_LEVELS,
+  suggestRankFromLeague,
+  type LeagueLevelId,
+  type StrengthRank,
+} from "@/app/match/constants/strengthGuides";
 import {
   AFFILIATION_CATEGORIES,
   AFFILIATION_PREFECTURES,
@@ -10,11 +18,30 @@ export function AffiliationStep({
   value,
   onChange,
   disabled = false,
+  currentRank = null,
+  onApplyRank,
+  applyHint,
 }: {
   value: AffiliationDraft;
   onChange: (next: AffiliationDraft) => void;
   disabled?: boolean;
+  currentRank?: string | null;
+  onApplyRank?: (rank: StrengthRank) => void;
+  applyHint?: string;
 }) {
+  const leagueLevel = value.leagueLevel ?? "";
+  const leagueDivision = value.leagueDivision ?? "";
+  const suggested = value.none ? null : suggestRankFromLeague(leagueLevel, leagueDivision);
+  const showDivision = leagueLevel === "prefecture" || leagueLevel === "district";
+
+  function chooseLevel(nextLevel: LeagueLevelId) {
+    onChange({
+      ...value,
+      leagueLevel: nextLevel,
+      leagueDivision: nextLevel === "other" ? "" : leagueDivision,
+    });
+  }
+
   return (
     <fieldset className="affiliation-step" disabled={disabled}>
       <legend>所属</legend>
@@ -33,7 +60,9 @@ export function AffiliationStep({
             type="radio"
             name="affiliation-mode"
             checked={value.none}
-            onChange={() => onChange({ ...value, none: true })}
+            onChange={() =>
+              onChange({ ...value, none: true, leagueLevel: "", leagueDivision: "" })
+            }
           />
           所属なし
         </label>
@@ -70,6 +99,39 @@ export function AffiliationStep({
               ))}
             </div>
           </div>
+          <div className="chip-block">
+            <span>リーグ</span>
+            <div className="chip-grid" role="radiogroup" aria-label="リーグ">
+              {LEAGUE_LEVELS.map((level) => (
+                <button
+                  key={level.id}
+                  type="button"
+                  aria-pressed={leagueLevel === level.id}
+                  onClick={() => chooseLevel(level.id)}
+                >
+                  {level.label}
+                </button>
+              ))}
+            </div>
+            <p className="affiliation-help">強さの目安に使います。あとから変えられます。</p>
+          </div>
+          {showDivision ? (
+            <div className="chip-block">
+              <span>部</span>
+              <div className="chip-grid" role="radiogroup" aria-label="部">
+                {LEAGUE_DIVISIONS.map((division) => (
+                  <button
+                    key={division}
+                    type="button"
+                    aria-pressed={leagueDivision === String(division)}
+                    onClick={() => onChange({ ...value, leagueDivision: String(division) })}
+                  >
+                    {division}部
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <label>
             <span>所属リーグ・連盟名</span>
             <input
@@ -80,6 +142,13 @@ export function AffiliationStep({
               maxLength={80}
             />
           </label>
+          <RankSuggestion
+            suggested={suggested}
+            current={currentRank}
+            onApply={onApplyRank}
+            disabled={disabled}
+            hint={applyHint}
+          />
         </div>
       )}
     </fieldset>

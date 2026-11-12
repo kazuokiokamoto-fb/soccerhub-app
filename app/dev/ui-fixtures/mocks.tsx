@@ -86,8 +86,8 @@ function MyPageMock() {
           <span>東京都 世田谷</span>
         </p>
         <a className="sh-btn sh-btn--primary" href="#team">詳細</a>
+        <a className="sh-btn" href="#aff">所属</a>
         <MorePanel label="その他">
-          <a className="sh-btn" href="#aff">所属</a>
           <a className="sh-btn" href="#report">年次報告</a>
           <button type="button" className="sh-btn sh-btn--danger">削除</button>
         </MorePanel>
@@ -131,7 +131,7 @@ function TeamMock() {
       <h1 className="sm-key">青葉FC</h1>
       <p className="sm-stat" style={{ justifySelf: "start" }}>
         <strong>A</strong>
-        <span>都・県リーグ1・2部</span>
+          <span>地域リーグ1・2部</span>
       </p>
       <p className="sm-meta">東京都 世田谷 · 18人</p>
       <a className="sh-btn sh-btn--primary" href="#edit">チーム編集</a>

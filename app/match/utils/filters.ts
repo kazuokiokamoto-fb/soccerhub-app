@@ -1,6 +1,7 @@
 // app/match/utils/filters.ts
 
 import type { StrengthRank } from "@/app/components/StrengthRankPicker";
+import { levelToStrengthRank } from "@/app/match/constants/strengthGuides";
 
 export type TeamFilterRow = {
   id: string;
@@ -49,11 +50,7 @@ const KANTO_PREFS = [
 ];
 
 export function levelLabel(level: number): StrengthRank {
-  if (level >= 9) return "SS";
-  if (level >= 7) return "S";
-  if (level >= 5) return "A";
-  if (level >= 3) return "B";
-  return "C";
+  return levelToStrengthRank(level) || "C";
 }
 
 export function parseBikeCapacity(value?: string | null) {

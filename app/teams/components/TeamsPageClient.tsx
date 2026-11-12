@@ -8,6 +8,7 @@ import { useAuth } from "@/app/lib/auth";
 import AppHero from "@/app/components/AppHero";
 import AppTabNav from "@/app/components/AppTabNav";
 import { categoryLabel } from "@/app/lib/categories";
+import { levelToStrengthRank } from "@/app/match/constants/strengthGuides";
 import { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
 
 type TeamRow = {
@@ -36,13 +37,7 @@ function norm(v?: string | null) {
 }
 
 function levelToRank(level?: number | null) {
-  const n = Number(level ?? 0);
-  if (!Number.isFinite(n)) return "";
-  if (n >= 9) return "SS";
-  if (n >= 7) return "S";
-  if (n >= 5) return "A";
-  if (n >= 3) return "B";
-  return "C";
+  return levelToStrengthRank(level);
 }
 
 function teamStrengthLabel(team: TeamRow) {

@@ -8,6 +8,8 @@
 
 チーム登録の2画面目で、都道府県、カテゴリ、所属リーグ・連盟名を必須にします。カテゴリは U-6、U-8、U-10、U-12、U-13、U-14、U-15、U-18、一般、女子、シニアです。「所属なし」を選ぶと、他の欄は空のままで登録できます。
 
+リーグと部は任意です。都・県リーグの1・2部は SS、3・4部は S、地域リーグの1・2部は A、3・4部は B、リーグなし・その他は C の目安になります。保存だけではチームの強さは変わりません。「このランクにする」を押したときだけ変わります。順位表の順位からは目安を出しません。
+
 すでにあるチームには、所有者とコーチの次のログインで、閉じられる案内を出します。案内は機能を止めません。あとからチーム編集とマイページの「所属」で直せます。
 
 ## 結果ページ
@@ -32,7 +34,7 @@ Vercel Hobby の cron は1日1回までです。週1回の式は使わず、既�
 
 ## 本番で必要な作業
 
-1. `supabase/migrations/20261111193000_team_affiliation_standings.sql` だけを、`20261105214326` のあとで適用する。フォルダ全体の `supabase db push` はしない。古い表は落とさない。
+1. `supabase/migrations/20261111193000_team_affiliation_standings.sql` を、`20261105214326` のあとで適用する。そのあと `supabase/migrations/20261112042135_team_affiliation_league_level.sql` を適用する。フォルダ全体の `supabase db push` はしない。古い表は落とさない。リーグの列は空のままで、既存チームの強さは変えない。
 2. 新しい必須の環境変数はない。任意で `RESULTS_SEARCH_ENDPOINT`、`RESULTS_SEARCH_API_KEY`、`RESULTS_SEARCH_KEY_HEADER`。cron は既存の `CRON_SECRET`、`NEXT_PUBLIC_SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY` を使う。検索キーが無いときは、種の URL か入力を使う。service role が無いと候補は保存できない。所属と URL の保存はユーザーの RLS で動く。
 3. cron は既存の selection-crawler が毎日起こす。別にするときはダッシュボードで `GET /api/cron/results-standings` を `0 18 * * *`（UTC、1日1回）にする。Hobby で週次の式が拒否されるので毎日にする。`/api/cron/selection-crawler` は残す。
 4. マイグレーションのあとにアプリをデプロイする。列が無い間、ホームの案内は空になり、順位の提出は `schema_unavailable` を返す。ログインや試合は止まらない。

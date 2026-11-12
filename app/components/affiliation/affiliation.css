@@ -70,6 +70,14 @@
   color: #3f4d45;
 }
 
+.affiliation-help {
+  margin: 0;
+  color: #66756d;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 .affiliation-step select,
 .affiliation-step input,
 .url-prompt input {

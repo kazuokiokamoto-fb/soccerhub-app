@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { supabase } from "@/app/lib/supabase";
+import { levelToStrengthRank } from "@/app/match/constants/strengthGuides";
 import { useAuth } from "@/app/lib/auth";
 import AppTabNav from "@/app/components/AppTabNav";
 
@@ -52,16 +53,7 @@ function norm(v?: string | null) {
 }
 
 function levelToRank(level?: number | null) {
-  const n = Number(level ?? 0);
-
-  if (!Number.isFinite(n)) return "";
-
-  if (n >= 9) return "SS";
-  if (n >= 7) return "S";
-  if (n >= 5) return "A";
-  if (n >= 3) return "B";
-
-  return "C";
+  return levelToStrengthRank(level);
 }
 
 function teamStrengthLabel(team: TeamRow) {

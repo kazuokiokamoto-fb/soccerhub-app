@@ -7,6 +7,7 @@ import AppHero from "@/app/components/AppHero";
 import { AffiliationStep } from "@/app/components/affiliation/AffiliationStep";
 import { ResultsUrlPrompt } from "@/app/components/affiliation/ResultsUrlPrompt";
 import { errorText } from "@/app/results/labels";
+import { suggestRankFromLeague, type StrengthRank } from "@/app/match/constants/strengthGuides";
 import type { AffiliationDraft } from "@/lib/affiliation/validate";
 import { validateAffiliation } from "@/lib/affiliation/validate";
 import "@/app/components/affiliation/affiliation.css";
@@ -15,11 +16,14 @@ type TeamState = {
   id: string;
   name: string;
   role: string;
+  strengthRank?: string | null;
   affiliation: {
     status: string;
     prefecture: string | null;
     category: string | null;
     organizationName: string | null;
+    leagueLevel?: string | null;
+    leagueDivision?: number | null;
   } | null;
   page: { status: string; url: string | null; suggestedUrl: string | null } | null;
 };
@@ -32,7 +36,10 @@ export default function TeamAffiliationPage() {
     prefecture: "",
     category: "",
     organizationName: "",
+    leagueLevel: "",
+    leagueDivision: "",
   });
+  const [currentRank, setCurrentRank] = useState<string | null>(null);
   const [page, setPage] = useState<TeamState["page"]>(null);
   const [ready, setReady] = useState(false);
   const [schemaReady, setSchemaReady] = useState(true);
@@ -63,8 +70,12 @@ export default function TeamAffiliationPage() {
           prefecture: team.affiliation.prefecture ?? "",
           category: team.affiliation.category ?? "",
           organizationName: team.affiliation.organizationName ?? "",
+          leagueLevel: team.affiliation.leagueLevel ?? "",
+          leagueDivision:
+            team.affiliation.leagueDivision != null ? String(team.affiliation.leagueDivision) : "",
         });
       }
+      setCurrentRank(team?.strengthRank ?? null);
       setPage(team?.page ?? null);
       setReady(true);
     })();
@@ -90,6 +101,7 @@ export default function TeamAffiliationPage() {
       const body = (await response.json()) as {
         ok?: boolean;
         error?: string;
+        leagueSaved?: boolean;
         resultsPage?: TeamState["page"];
       };
       if (!response.ok || !body.ok) {
@@ -97,7 +109,38 @@ export default function TeamAffiliationPage() {
         return;
       }
       setPage(body.resultsPage ?? null);
-      setMessage("保存しました");
+      setMessage(
+        body.leagueSaved === false && draft.leagueLevel
+          ? "所属は保存しました。リーグのレベルは準備中なので、あとでもう一度保存してください。"
+          : "保存しました",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyRank(rank: StrengthRank) {
+    const suggested = suggestRankFromLeague(draft.leagueLevel, draft.leagueDivision);
+    if (suggested !== rank) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/team-affiliation/apply-rank", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ teamId, ...draft }),
+      });
+      const body = (await response.json()) as { ok?: boolean; error?: string; strengthRank?: string };
+      if (!response.ok || !body.ok) {
+        setMessage(
+          body.error === "not_manager"
+            ? "強さの変更は、チームの管理者に頼んでください。"
+            : errorText(body.error ?? "write_failed"),
+        );
+        return;
+      }
+      setCurrentRank(body.strengthRank ?? rank);
+      setMessage(`強さを ${rank} にしました`);
     } finally {
       setBusy(false);
     }
@@ -138,7 +181,14 @@ export default function TeamAffiliationPage() {
       {!ready ? <p>読み込み中です。</p> : null}
       {ready && schemaReady ? (
         <>
-          <AffiliationStep value={draft} onChange={setDraft} disabled={busy} />
+          <AffiliationStep
+            value={draft}
+            onChange={setDraft}
+            disabled={busy}
+            currentRank={currentRank}
+            onApplyRank={(rank) => void applyRank(rank)}
+            applyHint="チームの強さに入ります。別のランクはチーム編集で選べます。"
+          />
           <button
             className="sh-btn sh-btn--primary"
             type="button"

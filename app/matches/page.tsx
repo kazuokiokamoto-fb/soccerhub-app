@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
+import { levelToStrengthRank } from "@/app/match/constants/strengthGuides";
 
 type DbTeam = {
   id: string;
@@ -72,11 +73,7 @@ function hhmm(v?: string | null) {
 }
 
 function levelLabel(level: number) {
-  if (level >= 9) return "SS";
-  if (level >= 7) return "S";
-  if (level >= 5) return "A";
-  if (level >= 3) return "B";
-  return "C";
+  return levelToStrengthRank(level) || "C";
 }
 
 function sumRoster(roster?: Record<string, number> | null) {

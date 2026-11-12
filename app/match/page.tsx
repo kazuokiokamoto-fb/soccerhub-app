@@ -13,7 +13,7 @@ import { MatchHelpModals } from "@/app/match/components/MatchHelpModals";
 
 import { useMatchFilters } from "@/app/match/hooks/useMatchFilters";
 import { useMatchData } from "@/app/match/hooks/useMatchData";
-import { STRENGTH_GUIDES } from "@/app/match/constants/strengthGuides";
+import { STRENGTH_GUIDES, levelToStrengthRank } from "@/app/match/constants/strengthGuides";
 
 import {
   buildCalendarCells,
@@ -41,26 +41,13 @@ function norm(v?: string | null) {
 }
 
 function levelToRank(level?: number | null) {
-  const n = Number(level ?? 0);
-  if (!Number.isFinite(n)) return "";
-  if (n >= 9) return "SS";
-  if (n >= 7) return "S";
-  if (n >= 5) return "A";
-  if (n >= 3) return "B";
-  return "C";
+  return levelToStrengthRank(level);
 }
 
 function teamStrengthLabel(team: any) {
   if (!team) return "未設定";
   if (team.strength_rank) return team.strength_rank;
-
-  const level = Number(team.level ?? 0);
-  if (!Number.isFinite(level)) return "未設定";
-  if (level >= 9) return "SS";
-  if (level >= 7) return "S";
-  if (level >= 5) return "A";
-  if (level >= 3) return "B";
-  return "C";
+  return levelToRank(team.level) || "未設定";
 }
 
 function parseBikeCapacity(value?: string | null) {

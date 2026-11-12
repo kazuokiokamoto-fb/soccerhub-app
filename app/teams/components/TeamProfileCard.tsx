@@ -3,7 +3,12 @@
 import React, { useMemo, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { categoryLabel } from "@/app/lib/categories";
-import { STRENGTH_GUIDES } from "@/app/match/constants/strengthGuides";
+import {
+  STRENGTH_GUIDES,
+  affiliationSuggestsRank,
+  levelToStrengthRank,
+  strengthGuideByRank,
+} from "@/app/match/constants/strengthGuides";
 
 export type TeamProfileCardRow = {
   id: string;
@@ -24,33 +29,16 @@ export type TeamProfileCardRow = {
   note?: string | null;
 };
 
-function levelToRank(level?: number | null) {
-  const n = Number(level ?? 0);
-  if (!Number.isFinite(n)) return "";
-  if (n >= 9) return "SS";
-  if (n >= 7) return "S";
-  if (n >= 5) return "A";
-  if (n >= 3) return "B";
-  return "C";
-}
-
 export function teamStrengthLabel(team?: TeamProfileCardRow | null) {
   if (!team) return "未設定";
   if (team.strength_rank && String(team.strength_rank).trim()) {
     return String(team.strength_rank).trim();
   }
-  return levelToRank(team.level) || "未設定";
+  return levelToStrengthRank(team.level) || "未設定";
 }
 
 export function teamStrengthShortDescription(team?: TeamProfileCardRow | null) {
-  const rank = teamStrengthLabel(team);
-
-  if (rank === "SS") return "全国・地域トップ級";
-  if (rank === "S") return "都・県リーグ上位";
-  if (rank === "A") return "都・県リーグ1・2部";
-  if (rank === "B") return "地域リーグ・育成中心";
-  if (rank === "C") return "交流・入門中心";
-  return "未設定";
+  return strengthGuideByRank(teamStrengthLabel(team))?.short || "未設定";
 }
 
 export function teamCategories(team?: TeamProfileCardRow | null) {
@@ -135,6 +123,8 @@ export type TeamProfileCardProps = {
   chatFrom?: string;
   chatSlotId?: string;
   chatDate?: string;
+  leagueLevel?: string | null;
+  leagueDivision?: number | null;
 };
 
 export default function TeamProfileCard(props: TeamProfileCardProps) {
@@ -155,7 +145,15 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
     chatFrom = "team-detail",
     chatSlotId = "",
     chatDate = "",
+    leagueLevel = null,
+    leagueDivision = null,
   } = props;
+
+  const matchesAffiliationGuide = affiliationSuggestsRank({
+    rank: teamStrengthLabel(team),
+    leagueLevel,
+    leagueDivision,
+  });
 
   const mine = !!myUserId && team.owner_id === myUserId;
   const canOpenChat = !!myUserId && !mine;
@@ -305,7 +303,6 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
               <span style={strengthValueSub}>
                 {teamStrengthShortDescription(team)}
               </span>
-
               {showStrengthHelpButton ? (
                 <button
                   type="button"
@@ -317,6 +314,9 @@ export default function TeamProfileCard(props: TeamProfileCardProps) {
                 </button>
               ) : null}
             </div>
+            {matchesAffiliationGuide ? (
+              <span style={affiliationHint}>所属リーグからの目安</span>
+            ) : null}
           </div>
 
           <div style={teamMetaItem}>
@@ -560,6 +560,21 @@ const strengthValueSub: React.CSSProperties = {
   fontSize: 14,
   color: "#4b5563",
   lineHeight: 1.7,
+};
+
+const affiliationHint: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  marginTop: 4,
+  minHeight: 24,
+  padding: "0 8px",
+  borderRadius: 999,
+  border: "1px solid #d9f0df",
+  background: "#f3fbf5",
+  color: "#3f6212",
+  fontSize: 12,
+  fontWeight: 800,
+  lineHeight: 1.4,
 };
 
 const helpButton: React.CSSProperties = {

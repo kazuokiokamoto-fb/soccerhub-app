@@ -13,6 +13,8 @@ import {
   strengthRankToLegacyLevel,
   legacyLevelToStrengthRank,
 } from "@/app/components/StrengthRankPicker";
+import { RankSuggestion, StrengthRankSelect } from "@/app/components/RankSuggestion";
+import { suggestRankFromLeague } from "@/app/match/constants/strengthGuides";
 import { CheckboxGroup } from "@/app/components/CheckboxGroup";
 import { STRENGTH_GUIDES } from "@/app/lib/strengthGuides";
 import AppHero from "@/app/components/AppHero";
@@ -75,6 +77,8 @@ export default function TeamEditPage() {
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const [showStrengthHelp, setShowStrengthHelp] = useState(false);
+  const [leagueLevel, setLeagueLevel] = useState<string | null>(null);
+  const [leagueDivision, setLeagueDivision] = useState<number | null>(null);
 
   const [ownerId, setOwnerId] = useState<string>("");
 
@@ -111,6 +115,11 @@ export default function TeamEditPage() {
     const first = categoryProfiles.find((p) => p.category === primaryCategory);
     return first?.strength_rank ?? "A";
   }, [categoryProfiles, primaryCategory]);
+
+  const suggestedRank = useMemo(
+    () => suggestRankFromLeague(leagueLevel, leagueDivision),
+    [leagueLevel, leagueDivision],
+  );
 
   const currentSnapshot = useMemo(() => {
     return JSON.stringify({
@@ -358,6 +367,24 @@ export default function TeamEditPage() {
     })();
   }, [teamId, router]);
 
+  useEffect(() => {
+    if (!teamId) return;
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("team_affiliations")
+        .select("status,league_level,league_division")
+        .eq("team_id", teamId)
+        .maybeSingle();
+      if (cancelled || error || !data || data.status !== "affiliated") return;
+      setLeagueLevel(typeof data.league_level === "string" ? data.league_level : null);
+      setLeagueDivision(typeof data.league_division === "number" ? data.league_division : null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [teamId]);
+
   const updateProfile = (
     category: string,
     patch: Partial<Omit<CategoryProfile, "category">>
@@ -365,6 +392,10 @@ export default function TeamEditPage() {
     setCategoryProfiles((prev) =>
       prev.map((p) => (p.category === category ? { ...p, ...patch } : p))
     );
+  };
+
+  const applySuggestedRank = (rank: StrengthRank) => {
+    setCategoryProfiles((prev) => prev.map((profile) => ({ ...profile, strength_rank: rank })));
   };
 
   async function existsRow(table: string, column: string, value: string) {
@@ -710,6 +741,17 @@ export default function TeamEditPage() {
           {categories.length > 0 ? (
             <div style={subSection}>
               <div style={blockTitle}>カテゴリごとの設定</div>
+              <RankSuggestion
+                suggested={suggestedRank}
+                current={primaryStrengthRank}
+                onApply={applySuggestedRank}
+                disabled={saving || deleting}
+                hint={
+                  categories.length > 1
+                    ? "すべてのカテゴリの強さに入ります。保存すると残ります。"
+                    : "保存すると残ります。別のランクでも大丈夫です。"
+                }
+              />
 
               <div style={{ display: "grid", gap: 12 }}>
                 {categories.map((category) => {
@@ -731,22 +773,11 @@ export default function TeamEditPage() {
                               ?
                             </button>
                           </span>
-                          <select
-                            className="sh-select"
+                          <StrengthRankSelect
                             value={profile?.strength_rank ?? "A"}
                             disabled={saving || deleting}
-                            onChange={(e) =>
-                              updateProfile(category, {
-                                strength_rank: e.target.value as StrengthRank,
-                              })
-                            }
-                          >
-                            <option value="SS">SS</option>
-                            <option value="S">S</option>
-                            <option value="A">A</option>
-                            <option value="B">B</option>
-                            <option value="C">C</option>
-                          </select>
+                            onChange={(rank) => updateProfile(category, { strength_rank: rank })}
+                          />
                         </label>
 
                         <label style={label}>
