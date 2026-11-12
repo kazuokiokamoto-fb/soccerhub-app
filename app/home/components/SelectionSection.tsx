@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
 import ZoneLink from "@/app/components/ZoneLink";
+import { IconFlag } from "@/app/components/ui/Icons";
 
 export function SelectionSection() {
   const { user } = useAuth();
@@ -58,6 +59,7 @@ export function SelectionSection() {
 
   return (
     <ZoneLink href="/selection" className="home-card">
+      <span className="home-card-icon" aria-hidden="true"><IconFlag /></span>
       <div className="home-card-top">
         <h2 className="home-card-title">セレクション情報</h2>
         {unreadSelectionCount > 0 ? (
@@ -67,10 +69,7 @@ export function SelectionSection() {
           </span>
         ) : null}
       </div>
-      <p className="home-card-text">
-        気になるチームのセレクションを、まとめて確認できます。
-      </p>
-      <span className="home-card-cta">セレクションを見る</span>
+      <span className="home-card-cta">見る</span>
     </ZoneLink>
   );
 }

@@ -60,42 +60,34 @@ export default function ResultsHome() {
   }, []);
 
   return (
-    <main style={{ padding: 24, maxWidth: 880, margin: "0 auto" }}>
-      <h1>年次報告</h1>
-      {error ? <p>{error}</p> : null}
+    <main className="sm-screen">
+      <h1 className="sm-title">年次報告</h1>
+      {error ? <p className="sm-feedback" role="alert">{error}</p> : null}
       {payload ? (
-        <>
-          {payload.teams.length === 0 ? (
-            <p>報告できるチームはありません。</p>
-          ) : (
-            <ul>
-              {payload.teams.map((team) => (
-                <li key={team.id} style={{ marginBottom: 16 }}>
-                  <strong>{team.name || "名称未設定"}</strong>
-                  <ul>
-                    {team.years.map((year) => (
-                      <li key={year.fiscalYear}>
-                        <Link
-                          className="or-year-link"
-                          href={`/results/${team.id}?year=${year.fiscalYear}`}
-                        >
-                          {fiscalYearChoiceLabel(year.fiscalYear)}
-                        </Link>
-                        <YearChip phase={year.phase} code={year.code} deadlineDate={year.deadlineDate} />
-                      </li>
-                    ))}
-                  </ul>
-                </li>
+        payload.teams.length === 0 ? (
+          <p className="sm-meta">報告できるチームはありません。</p>
+        ) : (
+          payload.teams.map((team) => (
+            <section key={team.id} className="sm-card sm-stack">
+              <h2 className="sm-key" style={{ fontSize: 24 }}>{team.name || "名称未設定"}</h2>
+              {team.years.map((year) => (
+                <div key={year.fiscalYear} className="sm-stack">
+                  <YearChip phase={year.phase} code={year.code} deadlineDate={year.deadlineDate} />
+                  <Link
+                    className="sh-btn sh-btn--primary"
+                    href={`/results/${team.id}?year=${year.fiscalYear}`}
+                  >
+                    {fiscalYearChoiceLabel(year.fiscalYear)}
+                  </Link>
+                </div>
               ))}
-            </ul>
-          )}
-        </>
+            </section>
+          ))
+        )
       ) : error ? null : (
-        <p>読み込み中</p>
+        <p className="sm-meta">読み込み中</p>
       )}
-      <p>
-        <Link href="/mypage">マイページへ</Link>
-      </p>
+      <Link href="/mypage" className="sm-quiet">マイページへ</Link>
     </main>
   );
 }

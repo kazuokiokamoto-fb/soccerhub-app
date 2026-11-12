@@ -56,22 +56,13 @@ export default function HomeHelp({
       >
         <ol className="home-steps">
           <li>
-            <p className="home-step-title">ログインしてチームを登録する</p>
-            <p className="home-step-text">
-              アカウントを作り、チーム名や活動エリアを登録します。
-            </p>
+            <p className="home-step-title"><span className="home-step-no">1</span>ログインしてチームを登録する</p>
           </li>
           <li>
-            <p className="home-step-title">練習試合を探すか、募集を出す</p>
-            <p className="home-step-text">
-              条件に合う相手を探すか、自分たちの日程で募集を出せます。
-            </p>
+            <p className="home-step-title"><span className="home-step-no">2</span>練習試合を探すか、募集を出す</p>
           </li>
           <li>
-            <p className="home-step-title">チャットで日程を調整する</p>
-            <p className="home-step-text">
-              申し込みのあと、チャットで日時や場所を決めます。
-            </p>
+            <p className="home-step-title"><span className="home-step-no">3</span>チャットで日程を調整する</p>
           </li>
         </ol>
       </Fold>

@@ -525,149 +525,143 @@ export default function TeamsSearchClient() {
     <main style={wrap}>
       <AppTabNav />
 
-      <div style={topBar}>
-        <div style={pageTitle}>練習試合を探す</div>
-      </div>
+      <header className="sm-stack">
+        <h1 className="sm-title">練習試合を探す</h1>
+        <p className="sm-stat" style={{ justifySelf: "start" }}>
+          <strong>{filteredTeams.length}</strong>
+          <span>チーム</span>
+        </p>
+      </header>
 
-      <section className="ui-card" style={searchBox}>
-        <div style={searchHeader}>
-          <div className="ui-title" style={searchTitle}>
-            条件検索
-          </div>
-
-          <button
-            type="button"
-            className="sh-btn"
-            onClick={() => setShowCalendar((v) => !v)}
-          >
-            {showCalendar ? "カレンダーを閉じる" : "カレンダー表示"}
-          </button>
-        </div>
-
+      <section className="sm-card sm-stack">
         <input
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
-          placeholder="チーム名・地域・カテゴリなど"
-          style={input}
+          placeholder="チーム名・地域"
+          className="sh-input"
         />
 
-        <div style={filterGrid}>
-
-          <select
-            value={prefectureFilter}
-            onChange={(e) => {
-              setPrefectureFilter(e.target.value);
-              setCityFilter("");
-            }}
-            style={select}
-          >
-            <option value="">都道府県すべて</option>
-
-            <option value="東京都">東京都</option>
-            <option value="神奈川県">神奈川県</option>
-            <option value="千葉県">千葉県</option>
-            <option value="埼玉県">埼玉県</option>
-            <option value="茨城県">茨城県</option>
-            <option value="栃木県">栃木県</option>
-            <option value="群馬県">群馬県</option>
-          </select>
-
-          <select
-            value={cityFilter}
-            onChange={(e) => setCityFilter(e.target.value)}
-            style={select}
-          >
-            <option value="">市区町村すべて</option>
-
-            {Array.from(
-              new Set(
-                teams
-                  .filter(
-                    (t) =>
-                      !prefectureFilter ||
-                      t.prefecture === prefectureFilter
-                  )
-                  .map((t) => t.city)
-                  .filter(Boolean)
-              )
-            )
-              .sort((a, b) => String(a).localeCompare(String(b), "ja"))
-              .map((city) => (
-                <option key={city} value={city ?? ""}>
-                  {city}
-                </option>
-              ))}
-          </select>
-
-          <select
-            value={categoryFilter[0] ?? ""}
-            onChange={(e) =>
-              setCategoryFilter(
-                e.target.value ? [e.target.value] : []
-              )
-            }
-            style={select}
-          >
-            <option value="">カテゴリすべて</option>
-
-            {CATEGORY_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
+        <div className="chip-block">
+          <span>都道府県</span>
+          <div className="chip-grid">
+            {["東京都", "神奈川県", "千葉県", "埼玉県", "茨城県", "栃木県", "群馬県"].map((name) => (
+              <button
+                key={name}
+                type="button"
+                aria-pressed={prefectureFilter === name}
+                onClick={() => {
+                  setPrefectureFilter(prefectureFilter === name ? "" : name);
+                  setCityFilter("");
+                }}
+              >
+                {name.replace("県", "").replace("都", "")}
+              </button>
             ))}
-          </select>
-
-          <select
-            value={strengthFilter[0] ?? ""}
-            onChange={(e) =>
-              setStrengthFilter(
-                e.target.value ? [e.target.value as any] : []
-              )
-            }
-            style={select}
-          >
-            <option value="">強さすべて</option>
-            <option value="SS">SS</option>
-            <option value="S">S</option>
-            <option value="A">A</option>
-            <option value="B">B</option>
-            <option value="C">C</option>
-          </select>
-
-          <select
-            value={groundFilter}
-            onChange={(e) =>
-              setGroundFilter(
-                e.target.value as "all" | "あり" | "なし"
-              )
-            }
-            style={select}
-          >
-            <option value="all">グラウンドすべて</option>
-            <option value="あり">あり</option>
-            <option value="なし">なし</option>
-          </select>
-
-        </div>
-
-        <div style={filterFooter}>
-          <div className="ui-meta">
-            表示件数：{filteredTeams.length}件
-            <br />
-            {filterSummaryText}
           </div>
-
-          <button
-            type="button"
-            className="sh-btn"
-            onClick={() => {
-              clearAllFilters();
-              setSelectedDate("");
-            }}
-          >
-            条件クリア
-          </button>
         </div>
+
+        <div className="chip-block">
+          <span>カテゴリ</span>
+          <div className="chip-grid">
+            {CATEGORY_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                aria-pressed={categoryFilter[0] === opt.value}
+                onClick={() =>
+                  setCategoryFilter(categoryFilter[0] === opt.value ? [] : [opt.value])
+                }
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <details className="sm-more">
+          <summary>条件</summary>
+          <div className="sm-more-body">
+            <label className="chip-block">
+              <span>市区町村</span>
+              <select
+                value={cityFilter}
+                onChange={(e) => setCityFilter(e.target.value)}
+                className="sh-select"
+              >
+                <option value="">すべて</option>
+                {Array.from(
+                  new Set(
+                    teams
+                      .filter((t) => !prefectureFilter || t.prefecture === prefectureFilter)
+                      .map((t) => t.city)
+                      .filter(Boolean)
+                  )
+                )
+                  .sort((a, b) => String(a).localeCompare(String(b), "ja"))
+                  .map((city) => (
+                    <option key={city} value={city ?? ""}>
+                      {city}
+                    </option>
+                  ))}
+              </select>
+            </label>
+
+            <div className="chip-block">
+              <span>強さ</span>
+              <div className="chip-grid">
+                {["SS", "S", "A", "B", "C"].map((rank) => (
+                  <button
+                    key={rank}
+                    type="button"
+                    aria-pressed={strengthFilter[0] === rank}
+                    onClick={() =>
+                      setStrengthFilter(strengthFilter[0] === rank ? [] : [rank as any])
+                    }
+                  >
+                    {rank}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="chip-block">
+              <span>グラウンド</span>
+              <div className="chip-grid">
+                {(["all", "あり", "なし"] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={groundFilter === value}
+                    onClick={() => setGroundFilter(value)}
+                  >
+                    {value === "all" ? "すべて" : value}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="sh-btn"
+              onClick={() => setShowCalendar((v) => !v)}
+            >
+              {showCalendar ? "カレンダーを閉じる" : "カレンダー"}
+            </button>
+
+            <p className="sm-meta">{filterSummaryText}</p>
+
+            <button
+              type="button"
+              className="sm-quiet"
+              onClick={() => {
+                clearAllFilters();
+                setSelectedDate("");
+              }}
+            >
+              条件クリア
+            </button>
+          </div>
+        </details>
       </section>
 
       {showCalendar ? (
@@ -710,7 +704,7 @@ export default function TeamsSearchClient() {
           読み込み中…
         </div>
       ) : filteredTeams.length === 0 ? (
-        <div className="ui-card" style={emptyBox}>
+        <div className="ui-card sm-empty" style={emptyBox}>
           条件に一致するチームがありません
         </div>
       ) : (
@@ -747,53 +741,27 @@ export default function TeamsSearchClient() {
                     ))}
                   </div>
 
-                  <div style={teamMeta}>
-                    <div>
-                      <strong>エリア：</strong>
-
-                      {[team.prefecture, team.city, team.town]
-                        .filter(Boolean)
-                        .join("・") ||
-                        team.area ||
-                        "未設定"}
-                    </div>
-
-                    <div>
-                      <strong>人数：</strong>
-                      {team.member_count ?? "未設定"}
-                    </div>
-
-                    <div>
-                      <strong>グラウンド：</strong>
-                      {team.has_ground ? "あり" : "なし"}
-                    </div>
-
-                    <div>
-                      <strong>駐輪場：</strong>
-                      {team.bike_parking || "不明"}
-                      {team.bike_parking_capacity
-                        ? ` / ${team.bike_parking_capacity}`
-                        : ""}
-                    </div>
-
-                    {(team.uniform_main ||
-                      team.uniform_sub) && (
-                      <div>
-                        <strong>ユニフォーム：</strong>
-
-                        {[team.uniform_main, team.uniform_sub]
-                          .filter(Boolean)
-                          .join(" / ")}
-                      </div>
-                    )}
-
-                    {team.note ? (
-                      <div>
-                        <strong>メモ：</strong>
-                        {team.note}
-                      </div>
+                  <p className="sm-key" style={{ fontSize: 22 }}>
+                    {[team.prefecture, team.city].filter(Boolean).join(" ") || team.area || "エリア未設定"}
+                  </p>
+                  <div className="sm-chip-row">
+                    <span className="sm-chip sm-chip--static">
+                      {team.member_count != null ? `${team.member_count}人` : "人数未設定"}
+                    </span>
+                    <span className={team.has_ground ? "status-chip status-chip--ok" : "status-chip status-chip--wait"}>
+                      {team.has_ground ? "グラウンド" : "グラウンドなし"}
+                    </span>
+                    <span className="sm-chip sm-chip--static">
+                      駐輪 {team.bike_parking || "不明"}
+                      {team.bike_parking_capacity ? ` ${team.bike_parking_capacity}` : ""}
+                    </span>
+                    {team.uniform_main || team.uniform_sub ? (
+                      <span className="sm-chip sm-chip--static">
+                        {[team.uniform_main, team.uniform_sub].filter(Boolean).join(" / ")}
+                      </span>
                     ) : null}
                   </div>
+                  {team.note ? <p className="sm-meta">{team.note}</p> : null}
                 </article>
               </Link>
             );

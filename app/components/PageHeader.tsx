@@ -38,7 +38,7 @@ export default function PageHeader({
 
         <div style={styles.brandTextWrap}>
           <div style={styles.brandMain}>サカまち</div>
-          <div style={styles.brandSub}>練習試合とセレクション</div>
+          <div style={styles.brandSub}>練習試合マッチング</div>
         </div>
       </Link>
 

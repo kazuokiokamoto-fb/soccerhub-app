@@ -417,14 +417,10 @@ function TeamsPageInner() {
   };
 
   return (
-    <main style={{ maxWidth: 980, margin: "0 auto", padding: 16 }}>
+    <main className="sm-screen">
       <AppTabNav />
 
-      <AppHero
-        icon="👥"
-        title="チーム一覧"
-        desc="サカまっちに登録している全チームを一覧表示します。条件変更は専用ページで行います。"
-      />
+      <AppHero icon="👥" title="チーム" desc="" />
 
       {loadError ? (
         <div style={errorBox}>
@@ -442,31 +438,25 @@ function TeamsPageInner() {
         </div>
       ) : null}
 
-      <section style={summaryBox}>
-        <div style={summaryTitle}>チーム条件で探す</div>
-
-        <div style={summaryInnerBox}>
-          <div style={summaryTopRow}>
-            <div>
-              <div style={summaryCount}>対象チーム数：{filteredTeams.length}件</div>
-              <div style={summarySub}>表示条件：{filterSummaryText}</div>
-            </div>
-
-            <button
-              type="button"
-              className="sh-btn"
-              onClick={openSearchPageWithCurrentFilters}
-            >
-              条件変更
-            </button>
-          </div>
-        </div>
+      <section className="sm-card sm-stack">
+        <p className="sm-stat" style={{ justifySelf: "start" }}>
+          <strong>{filteredTeams.length}</strong>
+          <span>チーム</span>
+        </p>
+        <p className="sm-meta">{filterSummaryText}</p>
+        <button
+          type="button"
+          className="sh-btn sh-btn--primary"
+          onClick={openSearchPageWithCurrentFilters}
+        >
+          条件
+        </button>
       </section>
 
       {loading || authLoading ? (
         <div style={emptyBox}>読み込み中…</div>
       ) : filteredTeams.length === 0 ? (
-        <div style={emptyBox}>
+        <div className="sm-empty" style={emptyBox}>
           条件に一致するチームがありません。
           <br />
           条件をゆるめて再度お試しください。
@@ -498,55 +488,34 @@ function TeamsPageInner() {
                   </div>
 
                   <div style={teamMeta}>
-                    <div>
-                      <strong>カテゴリ：</strong>
-                      {categories.length > 0
-                        ? categories
-                            .map((v) => categoryLabel(v) || v)
-                            .join(" / ")
-                        : "未設定"}
+                    <div className="sm-chip-row">
+                      <span className="sm-chip sm-chip--static">
+                        {categories.length > 0
+                          ? categories.map((v) => categoryLabel(v) || v).join(" / ")
+                          : "カテゴリ未設定"}
+                      </span>
+                      <span className="sm-chip sm-chip--static">
+                        {[team.prefecture, team.city, team.town].filter(Boolean).join("・") ||
+                          team.area ||
+                          "エリア未設定"}
+                      </span>
+                      <span className="sm-chip sm-chip--static">
+                        {team.member_count != null ? `${team.member_count}人` : "人数未設定"}
+                      </span>
+                      <span className={team.has_ground ? "status-chip status-chip--ok" : "status-chip status-chip--wait"}>
+                        {team.has_ground ? "グラウンド" : "グラウンドなし"}
+                      </span>
+                      <span className="sm-chip sm-chip--static">
+                        駐輪 {team.bike_parking || "不明"}
+                        {team.bike_parking_capacity ? ` ${team.bike_parking_capacity}` : ""}
+                      </span>
+                      {team.uniform_main || team.uniform_sub ? (
+                        <span className="sm-chip sm-chip--static">
+                          {[team.uniform_main, team.uniform_sub].filter(Boolean).join(" / ")}
+                        </span>
+                      ) : null}
                     </div>
-
-                    <div>
-                      <strong>エリア：</strong>
-                      {[team.prefecture, team.city, team.town]
-                        .filter(Boolean)
-                        .join("・") || team.area || "未設定"}
-                    </div>
-
-                    <div>
-                      <strong>チーム人数：</strong>
-                      {team.member_count ?? "未設定"}
-                    </div>
-
-                    <div>
-                      <strong>グラウンド：</strong>
-                      {team.has_ground ? "あり" : "なし"}
-                    </div>
-
-                    <div>
-                      <strong>駐輪場：</strong>
-                      {team.bike_parking || "不明"}
-                      {team.bike_parking_capacity
-                        ? ` / ${team.bike_parking_capacity}`
-                        : ""}
-                    </div>
-
-                    {(team.uniform_main || team.uniform_sub) && (
-                      <div>
-                        <strong>ユニフォーム：</strong>
-                        {[team.uniform_main, team.uniform_sub]
-                          .filter(Boolean)
-                          .join(" / ")}
-                      </div>
-                    )}
-
-                    {team.note ? (
-                      <div>
-                        <strong>メモ：</strong>
-                        {team.note}
-                      </div>
-                    ) : null}
+                    {team.note ? <p className="sm-meta">{team.note}</p> : null}
                   </div>
                 </div>
               </Link>

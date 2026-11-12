@@ -22,12 +22,13 @@ test("the home explains the service without the old empty counts", () => {
   ].map(read);
   const source = files.join("\n");
 
-  assert.match(read("app/components/AppHeader.tsx"), /練習試合とセレクション/);
+  assert.match(read("app/components/AppHeader.tsx"), /練習試合マッチング/);
+  assert.match(read("app/components/AppHeader.tsx"), /セレクション検索/);
   assert.doesNotMatch(read("app/components/AppHeader.tsx"), /Soccer Match/);
   const labels = [
     ...read("app/components/AppTabNav.tsx").matchAll(/label:\s*"([^"]+)"/g),
   ].map((match) => match[1]);
-  assert.deepEqual(labels, ["ホーム", "チャット", "セレクション", "マイページ"]);
+  assert.deepEqual(labels, ["ホーム", "チャット", "マイページ"]);
   assert.match(read("app/layout.tsx"), /セレクション情報もまとめて確認できます/);
   assert.match(source, /練習試合の相手が見つかる、/);
   assert.match(source, /無料ではじめる/);

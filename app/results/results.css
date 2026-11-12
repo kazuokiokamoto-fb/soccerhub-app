@@ -116,7 +116,7 @@
   border-radius: 16px;
   border: 1px solid #d8e7db;
   background: #fff;
-  color: #145c2a;
+  color: var(--sm-accent);
   font-size: 28px;
   font-weight: 700;
 }
@@ -140,14 +140,14 @@
   border-radius: 999px;
   border: 1px solid #d8e7db;
   background: #fff;
-  color: #145c2a;
+  color: var(--sm-accent);
   font: inherit;
   font-weight: 800;
 }
 
 .unknown-chip[aria-pressed="true"] {
-  background: #145c2a;
-  border-color: #145c2a;
+  background: var(--sm-accent);
+  border-color: var(--sm-accent);
   color: #fff;
 }
 
@@ -157,7 +157,7 @@
   padding: 0 8px;
   border: 0;
   background: transparent;
-  color: #145c2a;
+  color: var(--sm-accent);
   font: inherit;
   font-weight: 800;
 }
@@ -238,15 +238,15 @@
   border-radius: 999px;
   border: 1px solid #d8e7db;
   background: #fff;
-  color: #145c2a;
+  color: var(--sm-accent);
   font: inherit;
   font-size: 15px;
   font-weight: 800;
 }
 
 .chip-grid button[aria-pressed="true"] {
-  background: #145c2a;
-  border-color: #145c2a;
+  background: var(--sm-accent);
+  border-color: var(--sm-accent);
   color: #fff;
 }
 

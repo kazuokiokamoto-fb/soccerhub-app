@@ -1,6 +1,6 @@
 import React from "react";
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Zen_Kaku_Gothic_New } from "next/font/google";
+import { Barlow_Condensed, Geist, Geist_Mono, Zen_Kaku_Gothic_New } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/app/lib/auth";
 import AppHeader from "@/app/components/AppHeader";
@@ -15,6 +15,13 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+const scoreboard = Barlow_Condensed({
+  variable: "--font-score",
+  subsets: ["latin"],
+  weight: ["700"],
+  style: ["italic"],
 });
 
 const logoFont = Zen_Kaku_Gothic_New({
@@ -46,8 +53,10 @@ export const metadata: Metadata = {
   },
 };
 
+const appZone = process.env.NEXT_PUBLIC_APP_ZONE === "selection" ? "selection" : "hub";
+
 export const viewport: Viewport = {
-  themeColor: "#145c2a",
+  themeColor: appZone === "selection" ? "#4c8fe0" : "#1a9a52",
 };
 
 export default function RootLayout({
@@ -56,9 +65,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ja">
+    <html lang="ja" data-zone={appZone}>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${logoFont.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${logoFont.variable} ${scoreboard.variable} antialiased`}
       >
         <AuthProvider>
           <AppHeader />

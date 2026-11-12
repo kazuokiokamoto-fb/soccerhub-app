@@ -440,6 +440,11 @@ export default function TeamNewPage() {
         </Link>
       </div>
 
+      <ol className="sm-steps" aria-label="登録の手順">
+        <li className={step === 1 ? "is-current" : "is-done"}>1 チーム</li>
+        <li className={step === 2 ? "is-current" : ""}>2 所属</li>
+      </ol>
+
       <section className="sh-section" style={{ marginTop: 16 }}>
         <div style={{ display: "grid", gap: 18 }}>
           {step === 2 ? (

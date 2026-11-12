@@ -37,7 +37,7 @@
   border: 2px solid #d8e7db;
   border-radius: 16px;
   background: #fff;
-  color: #145c2a;
+  color: var(--sm-accent);
   font-weight: 900;
   font-size: 16px;
 }
@@ -51,8 +51,8 @@
 
 .seg label.seg-on,
 .seg label:has(input:checked) {
-  background: #145c2a;
-  border-color: #145c2a;
+  background: var(--sm-accent);
+  border-color: var(--sm-accent);
   color: #fff;
 }
 
@@ -91,15 +91,15 @@
   border-radius: 999px;
   border: 1px solid #d8e7db;
   background: #fff;
-  color: #145c2a;
+  color: var(--sm-accent);
   font: inherit;
   font-size: 15px;
   font-weight: 800;
 }
 
 .chip-grid button[aria-pressed="true"] {
-  background: #145c2a;
-  border-color: #145c2a;
+  background: var(--sm-accent);
+  border-color: var(--sm-accent);
   color: #fff;
 }
 
@@ -207,7 +207,7 @@
   min-height: 40px;
   border: 0;
   background: transparent;
-  color: #145c2a;
+  color: var(--sm-accent);
   font: inherit;
   font-weight: 800;
 }

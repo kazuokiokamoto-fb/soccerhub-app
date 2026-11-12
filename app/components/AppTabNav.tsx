@@ -4,18 +4,19 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/lib/auth";
 import ZoneLink from "@/app/components/ZoneLink";
+import { IconChat, IconHome, IconUser } from "@/app/components/ui/Icons";
 import {
   getUnifiedBadgeCount,
   getUnreadChatCount,
-  getUnreadSelectionCount,
   syncAppBadge,
 } from "@/app/lib/badge";
 
+const selectionZone = process.env.NEXT_PUBLIC_APP_ZONE === "selection";
+
 const TABS = [
-  { href: "/", label: "ホーム" },
-  { href: "/chat", label: "チャット" },
-  { href: "/selection", label: "セレクション" },
-  { href: "/mypage", label: "マイページ" },
+  { href: "/", label: "ホーム", icon: IconHome },
+  { href: "/chat", label: "チャット", icon: IconChat },
+  { href: "/mypage", label: "マイページ", icon: IconUser },
 ];
 
 function normalizePath(pathname: string) {
@@ -41,14 +42,11 @@ export default function AppTabNav() {
 
   // 「チャット」タブに表示する数字はチャット未読数のみ(通知全般の合算ではない)
   const [chatBadgeCount, setChatBadgeCount] = useState(0);
-  // 「セレクション」タブに表示する数字はセレクション新着通知の未読数のみ
-  const [selectionBadgeCount, setSelectionBadgeCount] = useState(0);
   const [trackedUserId, setTrackedUserId] = useState(meId);
 
   if (trackedUserId !== meId) {
     setTrackedUserId(meId);
     setChatBadgeCount(0);
-    setSelectionBadgeCount(0);
   }
 
   const chatBadgeText = useMemo(() => {
@@ -56,12 +54,6 @@ export default function AppTabNav() {
     if (chatBadgeCount > 99) return "99+";
     return String(chatBadgeCount);
   }, [chatBadgeCount]);
-
-  const selectionBadgeText = useMemo(() => {
-    if (selectionBadgeCount <= 0) return "";
-    if (selectionBadgeCount > 99) return "99+";
-    return String(selectionBadgeCount);
-  }, [selectionBadgeCount]);
 
   useEffect(() => {
     if (loading) return;
@@ -79,11 +71,6 @@ export default function AppTabNav() {
         const chatCount = await getUnreadChatCount(meId);
         if (!alive) return;
         setChatBadgeCount(chatCount);
-
-        // セレクションタブの表示用: セレクション新着通知の未読数のみ
-        const selectionCount = await getUnreadSelectionCount(meId);
-        if (!alive) return;
-        setSelectionBadgeCount(selectionCount);
 
         // OSアプリアイコンのバッジ用: チャット+その他通知の合算
         const unifiedTotal = await getUnifiedBadgeCount(meId);
@@ -129,23 +116,16 @@ export default function AppTabNav() {
     };
   }, [meId, loading]);
 
+  if (selectionZone) return null;
+
   return (
     <nav className="app-tab-nav" aria-label="メインナビゲーション">
       <div className="app-tab-row">
         {TABS.map((tab) => {
           const active = isActive(pathname, tab.href);
 
-          const showChatBadge = tab.href === "/chat" && chatBadgeCount > 0;
-          const showSelectionBadge =
-            tab.href === "/selection" && selectionBadgeCount > 0;
-
-          const badgeText = showChatBadge
-            ? chatBadgeText
-            : showSelectionBadge
-            ? selectionBadgeText
-            : "";
-
-          const showBadge = showChatBadge || showSelectionBadge;
+          const showBadge = tab.href === "/chat" && chatBadgeCount > 0;
+          const badgeText = showBadge ? chatBadgeText : "";
 
           return (
             <ZoneLink
@@ -154,6 +134,7 @@ export default function AppTabNav() {
               className={active ? "app-tab app-tab--active" : "app-tab"}
               aria-current={active ? "page" : undefined}
             >
+              <tab.icon size={18} />
               <span className="app-tab-label">{tab.label}</span>
               {showBadge ? <span className="app-tab-badge">{badgeText}</span> : null}
             </ZoneLink>

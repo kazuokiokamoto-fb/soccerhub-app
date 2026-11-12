@@ -248,7 +248,7 @@ const cellPast: React.CSSProperties = {
 };
 
 const cellToday: React.CSSProperties = {
-  border: "2px solid #22c55e",
+  border: "2px solid var(--sm-accent)",
 };
 
 const dayNum: React.CSSProperties = {

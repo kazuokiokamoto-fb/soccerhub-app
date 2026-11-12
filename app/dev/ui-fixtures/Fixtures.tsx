@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import LoggedInMocks from "./mocks";
 import AppHero from "@/app/components/AppHero";
 import { AffiliationStep } from "@/app/components/affiliation/AffiliationStep";
 import { ResultsUrlPrompt } from "@/app/components/affiliation/ResultsUrlPrompt";
@@ -23,6 +24,26 @@ export default function UiFixtures() {
     organizationName: "",
   });
   const [note, setNote] = useState("");
+
+  useEffect(() => {
+    document.documentElement.dataset.fixtureAuth = "in";
+    return () => {
+      delete document.documentElement.dataset.fixtureAuth;
+    };
+  }, []);
+
+  if (
+    screen === "chat" ||
+    screen === "mypage" ||
+    screen === "match" ||
+    screen === "team" ||
+    screen === "selection" ||
+    screen === "selection-detail" ||
+    screen === "home-in" ||
+    screen === "recruit"
+  ) {
+    return <LoggedInMocks screen={screen} />;
+  }
 
   return (
     <main className="or-editor" style={{ maxWidth: 420 }}>

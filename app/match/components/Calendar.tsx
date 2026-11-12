@@ -189,30 +189,20 @@ const topTitle: React.CSSProperties = {
 };
 
 const summaryBar: React.CSSProperties = {
-  marginTop: 8,
-  padding: 12,
-  borderRadius: 14,
-  background: "#f7fbf8",
-  border: "1px solid #dce9df",
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
+  marginTop: 12,
+  display: "grid",
   gap: 10,
-  flexWrap: "wrap",
 };
 
 const summaryLeft: React.CSSProperties = {
-  fontSize: 13,
-  color: "#3b6a49",
-  lineHeight: 1.55,
+  fontSize: 22,
+  fontWeight: 900,
+  color: "var(--sm-accent-ink)",
+  lineHeight: 1.3,
 };
 
 const summaryRight: React.CSSProperties = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-  marginLeft: "auto",
-  justifyContent: "flex-end",
+  display: "grid",
 };
 
 const legendRow: React.CSSProperties = {

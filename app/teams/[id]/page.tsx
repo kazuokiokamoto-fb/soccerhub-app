@@ -260,8 +260,8 @@ export default function TeamDetailPage() {
 
       <AppHero
         icon="👥"
-        title="チーム詳細"
-        desc="登録チームのプロフィールを確認できます。"
+        title="チーム"
+        desc=""
       />
 
       {loading || authLoading ? (

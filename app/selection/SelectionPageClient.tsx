@@ -1080,24 +1080,20 @@ export default function SelectionListPage() {
   }
 
   return (
-    <main style={wrap}>
+    <main className="sm-screen">
       <AppTabNav />
 
-      <div style={topBar}>
-        <div style={pageTitle}>セレクション情報</div>
-      </div>
-
-      <section className="ui-card" style={statsBox}>
-        <div style={statsRow}>
-          <div style={statItem}>
-            <div style={statNumber}>{totalHandledCount}</div>
-            <div style={statLabel}>掲載件数</div>
-          </div>
-          <div style={statDivider} />
-          <div style={statItem}>
-            <div style={statNumber}>{newArrivalCount}</div>
-            <div style={statLabel}>過去7日間の新着</div>
-          </div>
+      <header className="sm-stack">
+        <h1 className="sm-title">セレクション検索</h1>
+        <div className="sm-stat-row">
+          <p className="sm-stat">
+            <strong>{totalHandledCount}</strong>
+            <span>掲載</span>
+          </p>
+          <p className="sm-stat">
+            <strong>{newArrivalCount}</strong>
+            <span>7日の新着</span>
+          </p>
         </div>
 
         {admissionYearBreakdown.some(([label]) => label !== "未分類") ? (
@@ -1111,7 +1107,7 @@ export default function SelectionListPage() {
               ))}
           </div>
         ) : null}
-      </section>
+      </header>
 
       {myUnreadNotifiedIds.size > 0 ? (
         <div style={notifiedBannerRow}>
@@ -1155,99 +1151,24 @@ export default function SelectionListPage() {
         </div>
       ) : null}
 
-      <section className="ui-card" style={searchBox}>
-        <div style={searchHeader}>
-          <div className="ui-title" style={searchTitle}>
-            条件検索
-          </div>
-
-          <button
-            type="button"
-            className="sh-btn"
-            onClick={() => setShowCalendar((v) => !v)}
-          >
-            {showCalendar ? "カレンダーを閉じる" : "カレンダー表示"}
-          </button>
-        </div>
-
-        {/* 「現在の通知条件」を上、通知登録ボタンをその下に配置 */}
-        {!notifyConditionLoading ? (
-          <button
-            type="button"
-            style={currentNotifyConditionBox}
-            onClick={applySavedNotifyConditionToFilters}
-            disabled={!savedNotifyCondition || !savedNotifyCondition.enabled}
-          >
-            現在の通知条件:{" "}
-            {savedNotifyConditionText ?? "未設定(通知は届きません)"}
-            {savedNotifyCondition?.enabled ? (
-              <span style={applyHintText}>(タップで検索条件に反映)</span>
-            ) : null}
-          </button>
-        ) : null}
-
-        <div style={notifyRow}>
-          <button
-            type="button"
-            className="sh-btn sh-btn--primary"
-            onClick={saveNotifyCondition}
-            disabled={notifySaving}
-          >
-            {notifySaving ? "保存中…" : "🔔 この条件で通知を受け取る"}
-          </button>
-
-          {notifyMessage ? (
-            <span style={notifyMessageText}>{notifyMessage}</span>
-          ) : null}
-        </div>
-
-        <div style={notifyHint}>
-          ※ 通知の対象になるのは「都道府県・カテゴリ・ランク」です(市区町村・状態は対象外です)
-        </div>
-
+      <section className="sm-card sm-stack">
         <input
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
-          placeholder="チーム名・地域・カテゴリなど"
-          style={input}
+          placeholder="チーム名・地域"
+          className="sh-input"
         />
 
-        <div style={chipFilterGroup}>
-          <div style={chipFilterLabel}>都道府県(未選択ですべて)</div>
-          <div style={chipFilterRow}>
-            {availablePrefectures.map((p) => {
-              const active = prefectures.includes(p);
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  style={{ ...filterChip, ...(active ? filterChipActive : {}) }}
-                  onClick={() => {
-                    setPrefectures((prev) =>
-                      prev.includes(p)
-                        ? prev.filter((v) => v !== p)
-                        : [...prev, p]
-                    );
-                    setCity("all");
-                  }}
-                >
-                  {p}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div style={chipFilterGroup}>
-          <div style={chipFilterLabel}>対象カテゴリ(未選択ですべて)</div>
-          <div style={chipFilterRow}>
+        <div className="chip-block">
+          <span>カテゴリ</span>
+          <div className="chip-grid">
             {SELECTION_CATEGORY_OPTIONS.map((opt) => {
               const active = categories.includes(opt.value);
               return (
                 <button
                   key={opt.value}
                   type="button"
-                  style={{ ...filterChip, ...(active ? filterChipActive : {}) }}
+                  aria-pressed={active}
                   onClick={() => {
                     setCategories((prev) =>
                       prev.includes(opt.value)
@@ -1263,83 +1184,144 @@ export default function SelectionListPage() {
           </div>
         </div>
 
-        <div style={chipFilterGroup}>
-          <div style={chipFilterLabel}>ランク(未選択ですべて)</div>
-          <div style={chipFilterRow}>
-            {(
-              [
-                "j_academy",
-                "pref_top",
-                "pref_2",
-                "pref_3",
-                "pref_4",
-                "district",
-                "school",
-                "girls",
-              ] as RankFilter[]
-            ).map((r) => {
-              const active = ranks.includes(r);
-              return (
-                <button
-                  key={r}
-                  type="button"
-                  style={{ ...filterChip, ...(active ? filterChipActive : {}) }}
-                  onClick={() => {
-                    setRanks((prev) =>
-                      prev.includes(r) ? prev.filter((v) => v !== r) : [...prev, r]
-                    );
-                  }}
-                >
-                  {rankSelectLabel(r)}
-                </button>
-              );
-            })}
+        <details className="sm-more">
+          <summary>条件・通知</summary>
+          <div className="sm-more-body">
+            <div className="chip-block">
+              <span>都道府県</span>
+              <div className="chip-grid">
+                {availablePrefectures.map((p) => {
+                  const active = prefectures.includes(p);
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => {
+                        setPrefectures((prev) =>
+                          prev.includes(p) ? prev.filter((v) => v !== p) : [...prev, p]
+                        );
+                        setCity("all");
+                      }}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="chip-block">
+              <span>ランク</span>
+              <div className="chip-grid">
+                {(
+                  [
+                    "j_academy",
+                    "pref_top",
+                    "pref_2",
+                    "pref_3",
+                    "pref_4",
+                    "district",
+                    "school",
+                    "girls",
+                  ] as RankFilter[]
+                ).map((r) => {
+                  const active = ranks.includes(r);
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => {
+                        setRanks((prev) =>
+                          prev.includes(r) ? prev.filter((v) => v !== r) : [...prev, r]
+                        );
+                      }}
+                    >
+                      {rankSelectLabel(r)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <label className="chip-block">
+              <span>市区町村</span>
+              <select value={city} onChange={(e) => setCity(e.target.value)} className="sh-select">
+                <option value="all">すべて</option>
+                {cities.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="chip-block">
+              <span>状態</span>
+              <div className="chip-grid">
+                {(
+                  ["all", "募集中", "申込終了", "開催終了", "日程未定", "日付未取得"] as StatusFilter[]
+                ).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={status === value}
+                    onClick={() => setStatus(value)}
+                  >
+                    {value === "all" ? "すべて" : value}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="sm-chip"
+              aria-pressed={includePast}
+              onClick={() => setIncludePast((value) => !value)}
+            >
+              過去の開催も含めて表示
+            </button>
+
+            <button type="button" className="sh-btn" onClick={() => setShowCalendar((v) => !v)}>
+              {showCalendar ? "カレンダーを閉じる" : "カレンダー"}
+            </button>
+
+            {!notifyConditionLoading ? (
+              <button
+                type="button"
+                className="sm-chip"
+                onClick={applySavedNotifyConditionToFilters}
+                disabled={!savedNotifyCondition || !savedNotifyCondition.enabled}
+              >
+                通知 {savedNotifyConditionText ?? "未設定"}
+                {savedNotifyCondition?.enabled ? "・反映" : ""}
+              </button>
+            ) : null}
+
+            <p className="sm-meta">
+              通知の対象は都道府県・カテゴリ・ランクです。市区町村と状態は対象外です。
+            </p>
+
+            <button
+              type="button"
+              className="sh-btn sh-btn--primary"
+              onClick={saveNotifyCondition}
+              disabled={notifySaving}
+            >
+              {notifySaving ? "保存中…" : "この条件で通知"}
+            </button>
+            {notifyMessage ? <p className="sm-feedback" role="status">{notifyMessage}</p> : null}
+
+            <p className="sm-meta">
+              {selectedDateText} / 表示 {filteredItems.length} / 取得 {groupedItems.length} / 新着 {newArrivalCount}
+            </p>
+            <button type="button" className="sm-quiet" onClick={clearFilters}>
+              条件クリア
+            </button>
           </div>
-        </div>
-
-        <div style={filterGrid}>
-          <select value={city} onChange={(e) => setCity(e.target.value)} style={select}>
-            <option value="all">市区町村すべて</option>
-            {cities.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value as StatusFilter)}
-            style={select}
-          >
-            <option value="all">状態すべて</option>
-            <option value="募集中">募集中</option>
-            <option value="申込終了">申込終了</option>
-            <option value="開催終了">開催終了</option>
-            <option value="日程未定">日程未定</option>
-            <option value="日付未取得">日付未取得</option>
-          </select>
-        </div>
-
-        <label style={pastToggleRow}>
-          <input
-            type="checkbox"
-            checked={includePast}
-            onChange={(e) => setIncludePast(e.target.checked)}
-          />
-          <span>過去の開催も含めて表示</span>
-        </label>
-
-        <div style={filterFooter}>
-          <div className="ui-meta">
-            {selectedDateText} / 表示件数：{filteredItems.length}件 / 取得件数：
-            {groupedItems.length}件 / 過去7日間の新着：{newArrivalCount}件
-          </div>
-
-          <button type="button" className="sh-btn" onClick={clearFilters}>
-            条件クリア
-          </button>
-        </div>
+        </details>
       </section>
 
       {showCalendar ? (
@@ -1379,15 +1361,24 @@ export default function SelectionListPage() {
                   セレクション情報
                 </div>
 
-                <select
-                  value={sortOrder}
-                  onChange={(e) => setSortOrder(e.target.value as SortOrder)}
-                  style={sortSelect}
-                >
-                  <option value="newest">新着順</option>
-                  <option value="date_asc">開催日が近い順</option>
-                  <option value="date_desc">開催日が遠い順</option>
-                </select>
+                <div className="chip-grid" role="group" aria-label="並び順">
+                  {(
+                    [
+                      ["newest", "新着"],
+                      ["date_asc", "近い順"],
+                      ["date_desc", "遠い順"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={sortOrder === value}
+                      onClick={() => setSortOrder(value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {filteredItems.map((item) => {
@@ -1510,7 +1501,7 @@ export default function SelectionListPage() {
               })}
             </section>
           ) : (
-            <div className="ui-card" style={emptyBox}>
+            <div className="ui-card sm-empty" style={emptyBox}>
               条件に合うセレクション情報がありません
             </div>
           )}
@@ -1708,9 +1699,9 @@ const filterChip: CSSProperties = {
 };
 
 const filterChipActive: CSSProperties = {
-  background: "#dcfce7",
-  borderColor: "#bbf7d0",
-  color: "#166534",
+  background: "var(--sm-accent)",
+  borderColor: "var(--sm-accent)",
+  color: "#fff",
 };
 
 const select: CSSProperties = {
@@ -1795,7 +1786,7 @@ const calendarBox: CSSProperties = {
 const calendarTitle: CSSProperties = {
   fontSize: 18,
   fontWeight: 900,
-  color: "#16391f",
+  color: "var(--sm-accent-ink)",
 };
 
 const calendarHint: CSSProperties = {
@@ -1976,9 +1967,9 @@ const label: CSSProperties = {
 };
 
 const value: CSSProperties = {
-  fontSize: 14,
-  fontWeight: 800,
-  color: "#1f2937",
+  fontSize: 22,
+  fontWeight: 900,
+  color: "var(--sm-accent-ink)",
   overflowWrap: "anywhere",
   wordBreak: "break-word",
 };

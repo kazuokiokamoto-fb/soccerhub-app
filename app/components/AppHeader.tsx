@@ -5,7 +5,10 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/app/lib/auth";
 import ZoneLink, { assignCrossZone } from "@/app/components/ZoneLink";
-import { getUnreadChatCount, syncAppBadge } from "@/app/lib/badge";
+import { IconFlag } from "@/app/components/ui/Icons";
+import { getUnreadChatCount, getUnreadSelectionCount, syncAppBadge } from "@/app/lib/badge";
+
+const selectionZone = process.env.NEXT_PUBLIC_APP_ZONE === "selection";
 
 export default function AppHeader() {
   const router = useRouter();
@@ -13,7 +16,22 @@ export default function AppHeader() {
   const { user, loading, signOut } = useAuth();
 
   const [busy, setBusy] = useState(false);
+  const [fixtureAuth, setFixtureAuth] = useState(false);
+  const [selectionUnread, setSelectionUnread] = useState(0);
   const headerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const sync = () => {
+      setFixtureAuth(document.documentElement.dataset.fixtureAuth === "in");
+    };
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-fixture-auth"],
+    });
+    return () => observer.disconnect();
+  }, [pathname]);
 
   useEffect(() => {
     const el = headerRef.current;
@@ -45,6 +63,7 @@ export default function AppHeader() {
   useEffect(() => {
     if (!user?.id) {
       void syncAppBadge(0);
+      setSelectionUnread(0);
       return;
     }
 
@@ -52,8 +71,12 @@ export default function AppHeader() {
 
     const loadBadge = async () => {
       try {
-        const total = await getUnreadChatCount(user.id);
+        const [total, selection] = await Promise.all([
+          getUnreadChatCount(user.id),
+          getUnreadSelectionCount(user.id),
+        ]);
         if (!alive) return;
+        setSelectionUnread(selection);
         await syncAppBadge(total);
       } catch (e) {
         console.error("AppHeader loadBadge error:", e);
@@ -119,30 +142,54 @@ export default function AppHeader() {
   return (
     <header ref={headerRef} className="smh-header">
       <div className="smh-inner">
-        <ZoneLink href="/" className="smh-brand">
-          <div className="smh-brandMark">
-            <Image
-              src="/header-logo.png"
-              alt="サカまちロゴ"
-              width={36}
-              height={36}
-              className="smh-brandMarkImage"
-              priority
-            />
-          </div>
+        <div className="smh-top">
+        {selectionZone ? (
+          <ZoneLink href="/selection" className="smh-brand">
+            <div className="smh-brandMark sm-brand-mark--selection" aria-hidden="true">
+              <IconFlag size={20} />
+            </div>
+            <div>
+              <div className="logoText">セレクション検索</div>
+            </div>
+          </ZoneLink>
+        ) : (
+          <ZoneLink href="/" className="smh-brand">
+            <div className="smh-brandMark">
+              <Image
+                src="/header-logo.png"
+                alt="サカまちロゴ"
+                width={36}
+                height={36}
+                className="smh-brandMarkImage"
+                priority
+              />
+            </div>
 
-          <div>
-            <div className="logoText">サカまっち</div>
-            <div className="smh-brandSub">練習試合とセレクション</div>
-          </div>
-        </ZoneLink>
+            <div>
+              <div className="logoText">サカまっち</div>
+              <div className="smh-brandSub">練習試合マッチング</div>
+            </div>
+          </ZoneLink>
+        )}
 
         <nav className="smh-nav">
+          {selectionZone ? (
+            <ZoneLink
+              href="/"
+              className="sm-back-home"
+              aria-label="セレクション検索から、サカまっちへ戻る"
+            >
+              サカまっちへ戻る
+            </ZoneLink>
+          ) : null}
           {loading ? (
             <span className="smh-user">...</span>
-          ) : user ? (
+          ) : user || fixtureAuth ? (
             <button
-              onClick={onLogout}
+              type="button"
+              onClick={() => {
+                if (user) void onLogout();
+              }}
               disabled={busy}
               className="sh-btn smh-logout"
             >
@@ -158,6 +205,18 @@ export default function AppHeader() {
             </ZoneLink>
           )}
         </nav>
+        </div>
+        {selectionZone ? null : (
+          <ZoneLink href="/selection" className="sm-selection-entry">
+            <IconFlag size={16} />
+            セレクション検索
+            {selectionUnread > 0 ? (
+              <span className="sm-selection-count">
+                {selectionUnread > 99 ? "99+" : selectionUnread}
+              </span>
+            ) : null}
+          </ZoneLink>
+        )}
       </div>
     </header>
   );
