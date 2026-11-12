@@ -135,6 +135,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { CrawlFetchError, createSupabaseHostStore, HostGate } from "../_shared/host-gate.ts";
+import { requireSelectionSecret } from "../_shared/selection-secret.ts";
 import { chooseEventDate, filterExtractedDates, jstYmd } from "../../../lib/selection-crawl/dates.ts";
 import { isUncrawlableUrl, normalizeSelectionUrl, selectionIdentity } from "../../../lib/selection-crawl/urls.ts";
 
@@ -1605,6 +1606,8 @@ async function runVerification(batchSize: number, runId: string | null) {
 }
 
 serve(async (req) => {
+  const denied = requireSelectionSecret(req);
+  if (denied) return denied;
   try {
     const body = await req.json().catch(() => ({}));
     const batchSize = Math.min(Number(body.batchSize || body.limit || BATCH_SIZE), 8);

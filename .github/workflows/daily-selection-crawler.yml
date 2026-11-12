@@ -2,6 +2,8 @@ name: Daily Selection Crawler
 
 # 定期実行は Supabase pg_cron の crawl-selection-pages（10分ごと）が担当。
 # このワークフローは手動実行だけ。
+# SELECTION_SECRET はゲートウェイ用の JWT と x-selection-secret の両方に使う。
+# 関数の SELECTION_SECRET も同じ値にする。
 on:
   workflow_dispatch:
 
@@ -18,5 +20,6 @@ jobs:
           curl -X POST \
             'https://senspqsexmtrwjfsdadv.supabase.co/functions/v1/verify-selection-domain-pages' \
             -H 'Authorization: Bearer ${{ secrets.SELECTION_SECRET }}' \
+            -H 'x-selection-secret: ${{ secrets.SELECTION_SECRET }}' \
             -H 'Content-Type: application/json' \
             -d '{"batchSize": 4, "trigger": "workflow_dispatch"}'

@@ -4,6 +4,9 @@
 -- Deploy verify-selection-domain-pages and discover-official-sites immediately after,
 -- then run scripts/selection-crawl-schedule.sql. Until that script runs, job
 -- crawl-selection-pages is paused so the previous function cannot delete rows.
+-- Before enabling the cron, store the same SELECTION_SECRET value in vault as
+-- name selection_secret. The cron sends it as x-selection-secret. The functions
+-- reject the call when that header does not match their SELECTION_SECRET env.
 --
 -- Rollback (does not delete rows created after this migration):
 --
@@ -108,7 +111,12 @@ create table public.selection_crawl_hosts (
   robots_fetched_at timestamptz,
   last_request_at timestamptz,
   backoff_until timestamptz,
-  updated_at timestamptz not null default now()
+  last_failure text,
+  last_failure_at timestamptz,
+  updated_at timestamptz not null default now(),
+  constraint selection_crawl_hosts_last_failure_check check (
+    last_failure is null or last_failure in ('network', 'robots')
+  )
 );
 
 create table public.team_official_site_candidates (
@@ -180,6 +188,48 @@ $fn$;
 
 revoke all on function public.selection_url_is_uncrawlable(text) from public, anon, authenticated;
 grant execute on function public.selection_url_is_uncrawlable(text) to service_role;
+
+create or replace function public.selection_crawl_host(input_url text)
+returns text
+language sql
+immutable
+set search_path = public
+as $fn$
+  select nullif(
+    regexp_replace(
+      regexp_replace(
+        split_part(coalesce(public.normalize_selection_url(input_url), ''), '/', 1),
+        ':[0-9]+$',
+        ''
+      ),
+      '^www\.',
+      ''
+    ),
+    ''
+  );
+$fn$;
+
+create or replace function public.selection_host_observation_failed(input_url text, last_seen timestamptz)
+returns boolean
+language sql
+stable
+set search_path = public
+as $fn$
+  select exists (
+    select 1
+    from public.selection_crawl_hosts h
+    where h.host = public.selection_crawl_host(input_url)
+      and h.last_failure in ('network', 'robots')
+      and h.last_failure_at is not null
+      and last_seen is not null
+      and h.last_failure_at > last_seen
+  );
+$fn$;
+
+revoke all on function public.selection_crawl_host(text) from public, anon, authenticated;
+revoke all on function public.selection_host_observation_failed(text, timestamptz) from public, anon, authenticated;
+grant execute on function public.selection_crawl_host(text) to service_role;
+grant execute on function public.selection_host_observation_failed(text, timestamptz) to service_role;
 
 create temporary table selection_event_plan as
 with published as (
@@ -303,7 +353,10 @@ set
       or public.selection_url_is_uncrawlable(se.selection_page_url)
       or public.selection_url_is_uncrawlable(se.official_url)
       then 'hidden'
-    when plan.grp_last_seen < now() - interval '60 days' then 'hidden'
+    when plan.grp_last_seen < now() - interval '60 days'
+      and not public.selection_host_observation_failed(se.source_url, plan.grp_last_seen)
+      and not public.selection_host_observation_failed(se.selection_page_url, plan.grp_last_seen)
+      then 'hidden'
     else 'published'
   end,
   hidden_reason = case
@@ -311,7 +364,10 @@ set
       or public.selection_url_is_uncrawlable(se.selection_page_url)
       or public.selection_url_is_uncrawlable(se.official_url)
       then 'uncrawlable_instagram'
-    when plan.grp_last_seen < now() - interval '60 days' then 'stale_unseen'
+    when plan.grp_last_seen < now() - interval '60 days'
+      and not public.selection_host_observation_failed(se.source_url, plan.grp_last_seen)
+      and not public.selection_host_observation_failed(se.selection_page_url, plan.grp_last_seen)
+      then 'stale_unseen'
     else null
   end,
   updated_at = now()
@@ -401,7 +457,10 @@ begin
         or public.selection_url_is_uncrawlable(se.selection_page_url)
         or public.selection_url_is_uncrawlable(se.official_url)
         then 'hidden'
-      when se.last_seen_at < now() - interval '60 days' then 'hidden'
+      when se.last_seen_at < now() - interval '60 days'
+        and not public.selection_host_observation_failed(se.source_url, se.last_seen_at)
+        and not public.selection_host_observation_failed(se.selection_page_url, se.last_seen_at)
+        then 'hidden'
       else se.status
     end,
     hidden_reason = case
@@ -409,7 +468,10 @@ begin
         or public.selection_url_is_uncrawlable(se.selection_page_url)
         or public.selection_url_is_uncrawlable(se.official_url)
         then 'uncrawlable_instagram'
-      when se.last_seen_at < now() - interval '60 days' then 'stale_unseen'
+      when se.last_seen_at < now() - interval '60 days'
+        and not public.selection_host_observation_failed(se.source_url, se.last_seen_at)
+        and not public.selection_host_observation_failed(se.selection_page_url, se.last_seen_at)
+        then 'stale_unseen'
       else se.hidden_reason
     end,
     updated_at = now()
@@ -429,7 +491,8 @@ declare
     url := 'https://senspqsexmtrwjfsdadv.supabase.co/functions/v1/verify-selection-domain-pages',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key')
+      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key'),
+      'x-selection-secret', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'selection_secret')
     ),
     body := jsonb_build_object('batchSize', 4, 'trigger', 'pg_cron'),
     timeout_milliseconds := 5000
@@ -440,7 +503,8 @@ $cmd$;
     url := 'https://senspqsexmtrwjfsdadv.supabase.co/functions/v1/discover-official-sites',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key')
+      'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key'),
+      'x-selection-secret', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'selection_secret')
     ),
     body := jsonb_build_object('batchSize', 2, 'trigger', 'pg_cron'),
     timeout_milliseconds := 5000

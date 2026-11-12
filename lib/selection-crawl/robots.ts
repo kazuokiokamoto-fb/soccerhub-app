@@ -1,5 +1,5 @@
 export const SELECTION_CRAWL_USER_AGENT =
-  "SakamatchSelectionBot/1.0 (+https://www.sakamatch.com/; サカまっち)";
+  "SakamatchSelectionBot/1.0 (+https://www.sakamatch.com/)";
 
 type Rule = { allow: boolean; path: string };
 type Group = { agents: string[]; rules: Rule[] };
@@ -37,6 +37,36 @@ function agentMatches(agent: string, userAgent: string): boolean {
   return userAgent.toLowerCase().startsWith(agent);
 }
 
+/**
+ * RFC 9309 path match. `*` is any sequence of characters. A final `$` anchors
+ * the end of the path. Without `$` the pattern is a prefix. Matching is
+ * case-sensitive and uses the URL path, not the query.
+ */
+export function robotsPathMatches(pattern: string, path: string): boolean {
+  if (!pattern) return false;
+  const endAnchor = pattern.endsWith("$");
+  const body = endAnchor ? pattern.slice(0, -1) : pattern;
+  const parts = body.split("*");
+  let index = 0;
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i];
+    if (part === "") {
+      if (i === parts.length - 1) index = path.length;
+      continue;
+    }
+    if (i === 0) {
+      if (!path.startsWith(part)) return false;
+      index = part.length;
+      continue;
+    }
+    const found = path.indexOf(part, index);
+    if (found < 0) return false;
+    index = found + part.length;
+  }
+  if (endAnchor) return index === path.length;
+  return true;
+}
+
 /** Longest matching path wins. An equally long Allow beats Disallow. */
 export function robotsAllows(
   robotsTxt: string,
@@ -50,12 +80,11 @@ export function robotsAllows(
   const chosen = specific.length > 0
     ? specific
     : groups.filter((group) => group.agents.includes("*"));
-  const path = `${target.pathname}${target.search}` || "/";
+  const path = target.pathname || "/";
   let winner: Rule | null = null;
   for (const group of chosen) {
     for (const rule of group.rules) {
-      if (!rule.path) continue;
-      if (!path.startsWith(rule.path)) continue;
+      if (!robotsPathMatches(rule.path, path)) continue;
       if (!winner || rule.path.length > winner.path.length) winner = rule;
       else if (rule.path.length === winner.path.length && rule.allow) winner = rule;
     }

@@ -6,6 +6,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createSupabaseHostStore, HostGate } from "../_shared/host-gate.ts";
+import { requireSelectionSecret } from "../_shared/selection-secret.ts";
 import { decideOfficialSite, scoreOfficialPage } from "../../../lib/selection-crawl/official-site.ts";
 import { isPublicHttpUrl, isUncrawlableUrl, normalizeSelectionUrl } from "../../../lib/selection-crawl/urls.ts";
 
@@ -389,6 +390,8 @@ async function runDiscovery(batchSize: number, runId: string | null) {
 }
 
 serve(async (req) => {
+  const denied = requireSelectionSecret(req);
+  if (denied) return denied;
   try {
     const body = await req.json().catch(() => ({}));
     const batchSize = Math.min(Number(body.batchSize || body.limit || BATCH_SIZE), 4);

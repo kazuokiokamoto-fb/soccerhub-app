@@ -9,11 +9,11 @@ import {
   plusYears,
 } from "./dates.ts";
 import { decideOfficialSite, distinctiveParts, scoreOfficialPage } from "./official-site.ts";
-import { hostVisitDecision, HOST_INTERVAL_MS } from "./politeness.ts";
-import { robotsAllows, robotsDecision, SELECTION_CRAWL_USER_AGENT } from "./robots.ts";
+import { hostFailureBlocksStaleHide, hostObservationFailure, hostVisitDecision, HOST_INTERVAL_MS } from "./politeness.ts";
+import { robotsAllows, robotsDecision, robotsPathMatches, SELECTION_CRAWL_USER_AGENT } from "./robots.ts";
 import { isPublicHttpUrl, isUncrawlableUrl, officialCrawlTarget, selectionIdentity } from "./urls.ts";
 
-test("robots.txt is honored for サカまっち and for other agents", () => {
+test("robots.txt is honored for this crawler and for other agents", () => {
   const robots = `User-agent: *
 Disallow: /private
 Allow: /private/public
@@ -31,9 +31,48 @@ Disallow: /secret
   assert.equal(robotsAllows(robots, nested, "other-bot"), true);
   assert.equal(robotsDecision(404, "", visible), "allow");
   assert.equal(robotsDecision(403, "", visible), "unavailable");
-  assert.match(SELECTION_CRAWL_USER_AGENT, /サカまっち/);
   assert.match(SELECTION_CRAWL_USER_AGENT, /https:\/\/www\.sakamatch\.com\//);
   assert.equal(SELECTION_CRAWL_USER_AGENT.includes("Chrome"), false);
+});
+
+test("the selection crawler user agent is ASCII and a valid header", () => {
+  assert.match(SELECTION_CRAWL_USER_AGENT, /^[\u0000-\u007F]+$/);
+  assert.equal([...SELECTION_CRAWL_USER_AGENT].every((char) => char.charCodeAt(0) < 128), true);
+  assert.doesNotThrow(() => new Headers({ "user-agent": SELECTION_CRAWL_USER_AGENT }));
+});
+
+test("robots.txt * and $ follow RFC 9309", () => {
+  assert.equal(robotsPathMatches("/*.pdf$", "/files/a.pdf"), true);
+  assert.equal(robotsPathMatches("/*.pdf$", "/files/a.pdfx"), false);
+  assert.equal(robotsPathMatches("/*.pdf$", "/files/a.PDF"), false);
+  assert.equal(robotsPathMatches("/fish", "/fish.html"), true);
+  assert.equal(robotsPathMatches("/fish$", "/fish"), true);
+  assert.equal(robotsPathMatches("/fish$", "/fish.html"), false);
+  const robots = `User-agent: *
+Disallow: /files/
+Allow: /files/*.pdf$
+Disallow: /*.pdf$
+Disallow: /
+Allow: /ok$
+`;
+  assert.equal(robotsAllows(robots, new URL("https://example.com/files/a.pdf")), true);
+  assert.equal(robotsAllows(robots, new URL("https://example.com/files/a.txt")), false);
+  assert.equal(robotsAllows(robots, new URL("https://example.com/other/a.pdf")), false);
+  assert.equal(robotsAllows(robots, new URL("https://example.com/ok")), true);
+  assert.equal(robotsAllows(robots, new URL("https://example.com/ok/more")), false);
+});
+
+test("a network or robots failure newer than last_seen blocks the stale hide", () => {
+  const seen = Date.parse("2026-01-01T00:00:00.000Z");
+  const failed = Date.parse("2026-11-12T00:00:00.000Z");
+  assert.equal(hostObservationFailure("timeout"), "network");
+  assert.equal(hostObservationFailure("robots"), "robots");
+  assert.equal(hostObservationFailure("http"), null);
+  assert.equal(hostFailureBlocksStaleHide(seen, "network", failed), true);
+  assert.equal(hostFailureBlocksStaleHide(seen, "robots", failed), true);
+  assert.equal(hostFailureBlocksStaleHide(failed, "network", seen), false);
+  assert.equal(hostFailureBlocksStaleHide(seen, "rate", failed), false);
+  assert.equal(hostFailureBlocksStaleHide(seen, null, failed), false);
 });
 
 test("instagram and private hosts are not crawl targets", () => {

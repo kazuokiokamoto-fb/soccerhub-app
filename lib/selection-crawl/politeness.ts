@@ -18,6 +18,22 @@ export type HostSnapshot = {
   lastRequestAt: number | null;
 };
 
+/** A failed observation. Timeout is stored as network: the page was not seen. */
+export function hostObservationFailure(failure: string | null | undefined): "network" | "robots" | null {
+  if (failure === "robots") return "robots";
+  if (failure === "network" || failure === "timeout") return "network";
+  return null;
+}
+
+/** True when the host's latest network or robots failure is newer than the last time we saw the page. */
+export function hostFailureBlocksStaleHide(
+  lastSeenAtMs: number,
+  failure: string | null,
+  failureAtMs: number | null,
+): boolean {
+  return hostObservationFailure(failure) != null && failureAtMs != null && failureAtMs > lastSeenAtMs;
+}
+
 export type VisitDecision =
   | { type: "defer"; retryAt: number }
   | { type: "cap" }

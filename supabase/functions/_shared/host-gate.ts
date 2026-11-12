@@ -1,6 +1,7 @@
 import {
   BACKOFF_MS,
   FETCH_TIMEOUT_MS,
+  hostObservationFailure,
   hostVisitDecision,
   PAGE_GAP_MS,
   type HostSnapshot,
@@ -47,6 +48,8 @@ type HostRow = {
   robots_fetched_at: string | null;
   last_request_at: string | null;
   backoff_until: string | null;
+  last_failure: string | null;
+  last_failure_at: string | null;
 };
 
 type Store = {
@@ -69,7 +72,7 @@ export function createSupabaseHostStore(supabase: { from: (table: string) => any
     async get(host) {
       const { data, error } = await supabase
         .from("selection_crawl_hosts")
-        .select("host, robots_txt, robots_status, robots_fetched_at, last_request_at, backoff_until")
+        .select("host, robots_txt, robots_status, robots_fetched_at, last_request_at, backoff_until, last_failure, last_failure_at")
         .eq("host", host)
         .maybeSingle();
       if (error) return null;
@@ -159,6 +162,7 @@ export class HostGate {
       const verdict = robotsDecision(robots.status, state.robots_txt || "", new URL(url), CRAWL_USER_AGENT);
       if (verdict === "deny") {
         state.backoff_until = iso(this.now() + BACKOFF_MS.robotsDeny);
+        this.noteObservation(state, "robots");
         await this.store.save(state);
         return result({
           ok: false, status: robots.status, html: "", finalUrl: url, error: "robots_disallow", failure: "robots", retryAt: state.backoff_until,
@@ -166,6 +170,7 @@ export class HostGate {
       }
       if (verdict === "unavailable") {
         state.backoff_until = iso(this.now() + BACKOFF_MS.robotsUnavailable);
+        this.noteObservation(state, "robots");
         await this.store.save(state);
         return result({
           ok: false, status: robots.status, html: "", finalUrl: url, error: "robots_unavailable", failure: "robots", retryAt: state.backoff_until,
@@ -176,6 +181,8 @@ export class HostGate {
     } else if (state.robots_txt) {
       const verdict = robotsDecision(state.robots_status || 200, state.robots_txt, new URL(url), CRAWL_USER_AGENT);
       if (verdict === "deny") {
+        this.noteObservation(state, "robots");
+        await this.store.save(state);
         return result({
           ok: false, status: 0, html: "", finalUrl: url, error: "robots_disallow", failure: "robots",
           retryAt: iso(this.now() + BACKOFF_MS.robotsDeny),
@@ -201,9 +208,23 @@ export class HostGate {
     } else if (page.ok) {
       state.backoff_until = null;
     }
+    this.noteObservation(state, page.ok ? null : page.failure);
     await this.store.save(state);
     if (page.failure === "timeout" || page.failure === "rate") page.retryAt = state.backoff_until;
     return page;
+  }
+
+  private noteObservation(state: HostRow, failure: string | null) {
+    const kind = hostObservationFailure(failure);
+    if (kind) {
+      state.last_failure = kind;
+      state.last_failure_at = iso(this.now());
+      return;
+    }
+    if (failure == null || failure === "http" || failure === "rate" || failure === "type" || failure === "blocked") {
+      state.last_failure = null;
+      state.last_failure_at = null;
+    }
   }
 
   private async load(host: string): Promise<HostRow> {
@@ -217,6 +238,8 @@ export class HostGate {
       robots_fetched_at: null,
       last_request_at: null,
       backoff_until: null,
+      last_failure: null,
+      last_failure_at: null,
     };
     this.memory.set(host, row);
     return row;
@@ -268,6 +291,9 @@ export class HostGate {
     }
     const verdict = robotsDecision(state.robots_status || 0, state.robots_txt || "", new URL(url), CRAWL_USER_AGENT);
     if (verdict === "allow") return null;
+    this.noteObservation(state, "robots");
+    state.backoff_until = iso(this.now() + (verdict === "deny" ? BACKOFF_MS.robotsDeny : BACKOFF_MS.robotsUnavailable));
+    await this.store.save(state);
     return result({
       ok: false,
       status: state.robots_status || 0,
