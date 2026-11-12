@@ -6,6 +6,13 @@ import { AuthProvider } from "@/app/lib/auth";
 import AppHeader from "@/app/components/AppHeader";
 import BadgeResync from "@/app/components/BadgeResync";
 import SelectionSessionBoundary from "@/app/components/SelectionSessionBoundary";
+import {
+  HUB_THEME_COLOR,
+  SELECTION_THEME_COLOR,
+  SITE_ORIGIN,
+  brandIcons,
+  hubShareImage,
+} from "@/lib/brand/site";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,6 +41,7 @@ const hubDescription =
   "練習試合マッチングです。相手を探して、募集して、チャットで調整できます。";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_ORIGIN),
   title: "サカまっち",
   description: hubDescription,
   manifest: "/manifest.webmanifest",
@@ -48,19 +56,16 @@ export const metadata: Metadata = {
     siteName: "サカまっち",
     locale: "ja_JP",
     type: "website",
+    url: "/",
+    images: [hubShareImage],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "サカまっち",
     description: hubDescription,
+    images: [hubShareImage.url],
   },
-  icons: {
-    apple: "/apple-icon.png",
-    icon: [
-      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
-    ],
-  },
+  icons: brandIcons,
   // Google Search Console 所有権確認用
   verification: {
     google: "gvJkFsQb91zPZOvAMBloH9h810SE1nc9kakUYxbOg60",
@@ -70,7 +75,7 @@ export const metadata: Metadata = {
 const appZone = process.env.NEXT_PUBLIC_APP_ZONE === "selection" ? "selection" : "hub";
 
 export const viewport: Viewport = {
-  themeColor: appZone === "selection" ? "#4c8fe0" : "#1a9a52",
+  themeColor: appZone === "selection" ? SELECTION_THEME_COLOR : HUB_THEME_COLOR,
 };
 
 export default function RootLayout({

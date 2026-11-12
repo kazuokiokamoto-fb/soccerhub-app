@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { selectionShareImage } from "@/lib/brand/site";
 import SelectionPageClient from "./SelectionPageClient";
 
 const selectionDescription =
@@ -14,11 +15,14 @@ export const metadata: Metadata = {
     siteName: "セレクション検索",
     locale: "ja_JP",
     type: "website",
+    url: "/selection",
+    images: [selectionShareImage],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "セレクション検索",
     description: selectionDescription,
+    images: [selectionShareImage.url],
   },
 };
 

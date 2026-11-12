@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs><clipPath id="ball-clip"><circle cx="32" cy="32" r="29.15"/></clipPath></defs>
+  <rect width="64" height="64" fill="#0c5c32"/>
+   <rect x="16" width="16" height="64" fill="#8ed9a8"/>
+   <rect x="48" width="16" height="64" fill="#8ed9a8"/>
+   <g transform="translate(32 32) scale(0.78) translate(-32 -32)">
+    <circle cx="32" cy="32" r="30" fill="#f7fff8"/>
+    <g clip-path="url(#ball-clip)" fill="#0c5c32" stroke="#f7fff8" stroke-width="1.6" stroke-linejoin="round">
+      <polygon points="32,21.4 42.1,28.7 52.2,21.4 48.3,9.5 35.9,9.5"/><polygon points="42.1,28.7 38.2,40.6 48.3,47.9 58.4,40.6 54.5,28.7"/><polygon points="38.2,40.6 25.8,40.6 21.9,52.4 32,59.8 42.1,52.4"/><polygon points="25.8,40.6 21.9,28.7 9.5,28.7 5.6,40.6 15.7,47.9"/><polygon points="21.9,28.7 32,21.4 28.1,9.5 15.7,9.5 11.8,21.4"/>
+    </g>
+    <polygon points="32,21.4 42.1,28.7 38.2,40.6 25.8,40.6 21.9,28.7" fill="#ffd45a" stroke="#f7fff8" stroke-width="1.6" stroke-linejoin="round"/>
+  </g>
+</svg>

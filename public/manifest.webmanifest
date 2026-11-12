@@ -5,8 +5,8 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#145c2a",
+  "background_color": "#f6fbf4",
+  "theme_color": "#127a3c",
   "orientation": "portrait",
   "icons": [
     {
@@ -24,6 +24,11 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "/apple-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
     }
   ],
 

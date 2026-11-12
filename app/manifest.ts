@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { CANVAS_COLOR, HUB_THEME_COLOR } from "@/lib/brand/site";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -9,8 +10,8 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/",
     scope: "/",
     display: "standalone",
-    background_color: "#f6fbf4",
-    theme_color: "#1a9a52",
+    background_color: CANVAS_COLOR,
+    theme_color: HUB_THEME_COLOR,
     orientation: "portrait",
     icons: [
       {

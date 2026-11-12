@@ -157,7 +157,7 @@ export default function AppHeader() {
             <div className="smh-brandMark">
               <Image
                 src="/header-logo.png"
-                alt="サカまちロゴ"
+                alt="サカまっちのロゴ"
                 width={36}
                 height={36}
                 className="smh-brandMarkImage"
