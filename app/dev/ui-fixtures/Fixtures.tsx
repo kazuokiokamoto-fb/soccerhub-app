@@ -32,7 +32,8 @@ export default function UiFixtures() {
     screen === "team" ||
     screen === "selection" ||
     screen === "selection-detail" ||
-    screen === "home-in"
+    screen === "home-in" ||
+    screen === "recruit"
   ) {
     return <LoggedInMocks screen={screen} />;
   }

@@ -28,6 +28,7 @@ export default function LoggedInMocks({ screen }: { screen: string }) {
       {screen === "selection" ? <SelectionMock /> : null}
       {screen === "selection-detail" ? <SelectionDetailMock /> : null}
       {screen === "home-in" ? <HomeInMock /> : null}
+      {screen === "recruit" ? <RecruitMock /> : null}
     </main>
   );
 }
@@ -190,6 +191,39 @@ function SelectionDetailMock() {
           <p className="sm-stat"><strong>調布</strong><span>地域</span></p>
         </div>
         <a className="sh-btn sh-btn--primary" href="#official">公式サイト</a>
+      </section>
+    </>
+  );
+}
+
+function RecruitMock() {
+  return (
+    <>
+      <h1 className="sm-title">募集する</h1>
+      <section className="sm-card sm-stack">
+        <label className="sm-stack">
+          <span className="sm-meta">ホストチーム</span>
+          <strong className="sm-row-title">青葉FC</strong>
+        </label>
+        <div className="sm-stat-row">
+          <p className="sm-stat"><strong style={{ fontSize: 22 }}>11/15</strong><span>日付</span></p>
+          <p className="sm-stat"><strong style={{ fontSize: 22 }}>13:00</strong><span>開始</span></p>
+        </div>
+        <p className="sm-meta">終了 15:00 · 世田谷区 三宿</p>
+        <div>
+          <p className="sm-meta">カテゴリ</p>
+          <div className="chip-grid">
+            <button type="button" aria-pressed="true">U-12</button>
+            <button type="button">U-15</button>
+            <button type="button">一般</button>
+          </div>
+        </div>
+        <div className="sm-chip-row">
+          <span className="sm-chip sm-chip--static">強さ 指定なし</span>
+          <span className="sm-chip sm-chip--static">既存グラウンド</span>
+        </div>
+        <button type="button" className="sh-btn sh-btn--primary">募集する</button>
+        <a className="sm-quiet" href="#cancel">キャンセル</a>
       </section>
     </>
   );

@@ -529,7 +529,10 @@ function MatchCreatePageInner() {
                   className="sh-btn"
                   onClick={() => setVenueMode("existing")}
                   disabled={saving}
-                  style={venueMode === "existing" ? activeModeBtn : undefined}
+                  style={{
+                    ...modeBtn,
+                    ...(venueMode === "existing" ? activeModeBtn : null),
+                  }}
                 >
                   既存から選ぶ
                 </button>
@@ -539,7 +542,10 @@ function MatchCreatePageInner() {
                   className="sh-btn"
                   onClick={() => setVenueMode("new")}
                   disabled={saving}
-                  style={venueMode === "new" ? activeModeBtn : undefined}
+                  style={{
+                    ...modeBtn,
+                    ...(venueMode === "new" ? activeModeBtn : null),
+                  }}
                 >
                   新しく登録する
                 </button>
@@ -600,6 +606,7 @@ function MatchCreatePageInner() {
                 className="sh-btn sh-btn--primary"
                 onClick={createSlot}
                 disabled={!canSave}
+                style={{ width: "100%" }}
               >
                 {saving ? "作成中…" : "募集する"}
               </button>
@@ -679,7 +686,7 @@ const label: React.CSSProperties = {
 
 const labelTitle: React.CSSProperties = {
   fontWeight: 800,
-  color: "#2d3b31",
+  color: "var(--sm-text)",
 };
 
 const subLabelTitle: React.CSSProperties = {
@@ -692,10 +699,11 @@ const baseControl: React.CSSProperties = {
   width: "100%",
   maxWidth: "100%",
   minWidth: 0,
+  minHeight: 48,
   display: "block",
   boxSizing: "border-box",
-  borderRadius: 10,
-  border: "1px solid #ddd",
+  borderRadius: 12,
+  border: "1px solid var(--sm-line)",
   background: "#fff",
   fontSize: 16,
   lineHeight: 1.2,
@@ -746,9 +754,8 @@ const subGrid: React.CSSProperties = {
 };
 
 const actionRow: React.CSSProperties = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
+  display: "grid",
+  gap: 4,
 };
 
 const helperText: React.CSSProperties = {
@@ -771,7 +778,7 @@ const sectionBox: React.CSSProperties = {
 
 const sectionTitle: React.CSSProperties = {
   fontWeight: 900,
-  color: "#1f5d30",
+  color: "var(--sm-accent-ink)",
   fontSize: 16,
 };
 
@@ -811,15 +818,20 @@ const chipDisabled: React.CSSProperties = {
 };
 
 const toggleRow: React.CSSProperties = {
-  display: "flex",
+  display: "grid",
   gap: 8,
-  flexWrap: "wrap",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+};
+
+const modeBtn: React.CSSProperties = {
+  width: "100%",
+  minHeight: 48,
 };
 
 const activeModeBtn: React.CSSProperties = {
-  borderColor: "#145c2a",
-  background: "#ecfdf3",
-  color: "#166534",
+  borderColor: "var(--sm-accent)",
+  background: "var(--sm-accent-soft)",
+  color: "var(--sm-accent-ink)",
 };
 
 const strengthTitleRow: React.CSSProperties = {
@@ -830,8 +842,8 @@ const strengthTitleRow: React.CSSProperties = {
 };
 
 const helpButton: React.CSSProperties = {
-  width: 36,
-  height: 36,
+  width: 44,
+  height: 44,
   borderRadius: 999,
   border: "1px solid #b7dcbf",
   background: "#f3fbf5",
