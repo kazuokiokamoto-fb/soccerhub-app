@@ -97,7 +97,7 @@ export default function TeamAffiliationPage() {
         return;
       }
       setPage(body.resultsPage ?? null);
-      setMessage(body.resultsPage?.status === "needs_url" ? "所属を保存しました。結果ページのURLを教えてください。" : "所属を保存しました。");
+      setMessage("保存しました");
     } finally {
       setBusy(false);
     }
@@ -128,13 +128,13 @@ export default function TeamAffiliationPage() {
 
   return (
     <main className="sh-page-wrap" style={{ padding: 16, maxWidth: 720, margin: "0 auto" }}>
-      <AppHero icon="🏟" title="所属" desc="都道府県、カテゴリ、所属リーグ・連盟名をあとから直せます。" />
+      <AppHero icon="🏟" title="所属" desc="" />
       <p>
         <Link href="/mypage" className="sh-btn">
           マイページ
         </Link>
       </p>
-      {!schemaReady ? <p>所属の保存先はまだ準備中です。ほかの機能はそのまま使えます。</p> : null}
+      {!schemaReady ? <p className="status-chip status-chip--wait">準備中</p> : null}
       {!ready ? <p>読み込み中です。</p> : null}
       {ready && schemaReady ? (
         <>

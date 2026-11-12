@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { errorText, fiscalYearChoiceLabel, OBLIGATION_TEXT, PHASE_TEXT } from "./labels";
+import { errorText, fiscalYearChoiceLabel } from "./labels";
 import "./results.css";
 
 type YearStatus = {
@@ -61,17 +61,10 @@ export default function ResultsHome() {
 
   return (
     <main style={{ padding: 24, maxWidth: 880, margin: "0 auto" }}>
-      <h1>公式戦の年次報告</h1>
-      <p>
-        所有者とコーチが、前年度のカテゴリと最終順位を確認して提出します。期限を過ぎてもログイン、試合、チャット、予定は止まりません。
-      </p>
+      <h1>年次報告</h1>
       {error ? <p>{error}</p> : null}
       {payload ? (
         <>
-          <p>{payload.discovery.label}</p>
-          <p>
-            対象は日本の年度です。4月1日から翌年3月31日までをその年度とします。提出するのは、その年度のカテゴリと最終順位です。期限は翌年度の5月31日で、過ぎていても提出できます。表示だけで、機能は止めません。
-          </p>
           {payload.teams.length === 0 ? (
             <p>報告できるチームはありません。</p>
           ) : (
@@ -88,10 +81,7 @@ export default function ResultsHome() {
                         >
                           {fiscalYearChoiceLabel(year.fiscalYear)}
                         </Link>
-                        <div>
-                          {PHASE_TEXT[year.phase] ?? year.phase} 期限 {year.deadlineDate} の終わり（日本時間）。{" "}
-                          {OBLIGATION_TEXT[year.code] ?? year.code}
-                        </div>
+                        <YearChip phase={year.phase} code={year.code} deadlineDate={year.deadlineDate} />
                       </li>
                     ))}
                   </ul>
@@ -101,11 +91,31 @@ export default function ResultsHome() {
           )}
         </>
       ) : error ? null : (
-        <p>読み込み中です。</p>
+        <p>読み込み中</p>
       )}
       <p>
         <Link href="/mypage">マイページへ</Link>
       </p>
     </main>
   );
+}
+
+function shortDeadline(value: string): string {
+  const [year, month, day] = value.split("-");
+  if (!year || !month || !day) return value;
+  return `${year}/${Number(month)}/${Number(day)}`;
+}
+
+function YearChip({ phase, code, deadlineDate }: { phase: string; code: string; deadlineDate: string }) {
+  if (code === "submitted_results" || code === "submitted_none") {
+    return <span className="status-chip status-chip--ok">提出済み</span>;
+  }
+  const date = shortDeadline(deadlineDate);
+  if (phase === "overdue") {
+    return <span className="status-chip status-chip--late">期限切れ {date}・提出できます</span>;
+  }
+  if (phase === "due") {
+    return <span className="status-chip status-chip--ok">期限内 {date}</span>;
+  }
+  return <span className="status-chip status-chip--wait">進行中</span>;
 }

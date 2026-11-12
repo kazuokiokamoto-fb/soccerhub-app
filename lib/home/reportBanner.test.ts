@@ -61,7 +61,7 @@ test("an unsubmitted report inside the deadline uses the in-window sentence", ()
     assert.equal(notices.length, 1);
     assert.equal(
       notices[0]?.message,
-      "青葉FCの2025年度の公式戦年次報告の提出期限は2026年5月31日です。期限内に確認して提出してください。",
+      "期限内 2026/5/31",
     );
     assert.equal(reportNoticeHref(notices), `/results/${TEAM}?year=2025`);
   }
@@ -80,7 +80,7 @@ test("an overdue unsubmitted report can still be filed and does not block the pr
   assert.equal(notices[0]?.phase, "overdue");
   assert.equal(
     notices[0]?.message,
-    "提出期限（2026年5月31日）を過ぎています。期限後も提出できます。ほかの機能はそのまま使えます。",
+    "期限切れ 2026/5/31・提出できます",
   );
   assert.equal(reportNoticeHref(notices), `/results/${TEAM}?year=2025`);
 });

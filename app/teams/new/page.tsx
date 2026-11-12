@@ -431,7 +431,7 @@ export default function TeamNewPage() {
       <AppHero
         icon="👥"
         title="チーム登録"
-        desc="チーム情報を登録して、練習試合マッチングを始めましょう。"
+        desc={step === 2 ? "" : "チーム情報を登録して、練習試合マッチングを始めましょう。"}
       />
 
       <div style={backButtonWrap}>

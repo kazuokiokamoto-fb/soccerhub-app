@@ -5,10 +5,13 @@ import { useSearchParams } from "next/navigation";
 import AppHero from "@/app/components/AppHero";
 import { AffiliationStep } from "@/app/components/affiliation/AffiliationStep";
 import { ResultsUrlPrompt } from "@/app/components/affiliation/ResultsUrlPrompt";
+import { AffiliationAsk } from "@/app/components/home/AffiliationPrompt";
+import { ReportNoticeList } from "@/app/components/home/AnnualReportBanner";
 import { StandingReportCard } from "@/app/results/StandingReport";
 import type { AffiliationDraft } from "@/lib/affiliation/validate";
 import type { StandingValue } from "@/lib/standings/submit";
 import "@/app/components/affiliation/affiliation.css";
+import "@/app/components/home/home.css";
 import "@/app/results/results.css";
 
 export default function UiFixtures() {
@@ -28,7 +31,7 @@ export default function UiFixtures() {
           teamName="青葉FC"
           initialUrl="https://example.com/standings"
           message={note}
-          onSave={(url) => setNote(`${url} を保存しました。提出にはなりません。`)}
+          onSave={(url) => setNote(`${url} を保存しました`)}
         />
       ) : null}
       {screen === "report" ? (
@@ -38,7 +41,7 @@ export default function UiFixtures() {
           years={[2025, 2026]}
           onYear={() => undefined}
           deadlineYear={2026}
-          phaseLabel="期限を過ぎています。提出はまだできます。"
+          phase="overdue"
           submitted={null}
           candidate={{
             category: "U-15",
@@ -60,7 +63,7 @@ export default function UiFixtures() {
           years={[2025]}
           onYear={() => undefined}
           deadlineYear={2026}
-          phaseLabel="期限を過ぎています。提出はまだできます。"
+          phase="overdue"
           submitted={null}
           candidate={null}
           busy={false}
@@ -70,9 +73,26 @@ export default function UiFixtures() {
           }
         />
       ) : null}
+      {screen === "prompt" ? (
+        <AffiliationAsk teamName="青葉FC" href="/teams/1/affiliation" onDismiss={() => undefined} />
+      ) : null}
+      {screen === "banner" ? (
+        <ReportNoticeList
+          notices={[
+            {
+              teamId: "11111111-1111-4111-8111-111111111111",
+              teamName: "青葉FC",
+              fiscalYear: 2025,
+              deadlineYear: 2026,
+              phase: "overdue",
+              message: "期限切れ 2026/5/31・提出できます",
+            },
+          ]}
+        />
+      ) : null}
       {screen === "affiliation" ? (
         <>
-          <AppHero icon="👥" title="チーム登録" desc="チーム情報を登録して、練習試合マッチングを始めましょう。" />
+          <AppHero icon="👥" title="チーム登録" desc="" />
           <AffiliationStep value={draft} onChange={setDraft} />
           <button className="sh-btn sh-btn--primary" type="button" style={{ width: "100%", minHeight: 48 }}>
             登録する

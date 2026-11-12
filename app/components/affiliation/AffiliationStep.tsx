@@ -18,20 +18,17 @@ export function AffiliationStep({
   return (
     <fieldset className="affiliation-step" disabled={disabled}>
       <legend>所属</legend>
-      <p>
-        公式戦の結果を探すために、都道府県・カテゴリ・所属リーグまたは連盟名を登録します。所属していない場合は「所属なし」を選ぶと、このまま登録できます。
-      </p>
-      <div className="affiliation-choice" role="radiogroup" aria-label="所属の有無">
-        <label>
+      <div className="seg" role="radiogroup" aria-label="所属の有無">
+        <label className={!value.none ? "seg-on" : ""}>
           <input
             type="radio"
             name="affiliation-mode"
             checked={!value.none}
             onChange={() => onChange({ ...value, none: false })}
           />
-          リーグ・連盟に所属している
+          所属あり
         </label>
-        <label>
+        <label className={value.none ? "seg-on" : ""}>
           <input
             type="radio"
             name="affiliation-mode"
@@ -41,9 +38,7 @@ export function AffiliationStep({
           所属なし
         </label>
       </div>
-      {value.none ? (
-        <p className="affiliation-note">所属なしで登録できます。結果ページの自動探索は行いません。</p>
-      ) : (
+      {value.none ? null : (
         <div className="affiliation-fields">
           <label>
             <span>都道府県</span>
@@ -60,28 +55,28 @@ export function AffiliationStep({
               ))}
             </select>
           </label>
-          <label>
+          <div className="chip-block">
             <span>カテゴリ</span>
-            <select
-              className="sh-select"
-              value={value.category}
-              onChange={(event) => onChange({ ...value, category: event.target.value })}
-            >
-              <option value="">選択してください</option>
+            <div className="chip-grid" role="radiogroup" aria-label="カテゴリ">
               {AFFILIATION_CATEGORIES.map((category) => (
-                <option key={category} value={category}>
+                <button
+                  key={category}
+                  type="button"
+                  aria-pressed={value.category === category}
+                  onClick={() => onChange({ ...value, category })}
+                >
                   {category}
-                </option>
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+          </div>
           <label>
             <span>所属リーグ・連盟名</span>
             <input
               className="sh-input"
               value={value.organizationName}
               onChange={(event) => onChange({ ...value, organizationName: event.target.value })}
-              placeholder="例：東京都社会人サッカーリーグ"
+              placeholder="リーグ・連盟名"
               maxLength={80}
             />
           </label>

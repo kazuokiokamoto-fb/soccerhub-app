@@ -25,16 +25,13 @@ export function ResultsUrlPrompt({
         onSave(url.trim());
       }}
     >
-      <h2>結果ページのURLを教えてください</h2>
-      <p>
-        {teamName ? `${teamName}の` : ""}
-        公開されている順位表や結果のページが見つからなかったか、確信度が低かったため、URLを教えてください。違っていれば直して保存できます。
-      </p>
-      <p className="url-prompt-note">
-        保存したページから順位の候補を集めます。集めただけでは提出になりません。
-      </p>
+      <div className="prompt-head">
+        <span className="status-badge">未確認</span>
+        <h2>結果ページのURLを教えてください</h2>
+      </div>
+      {teamName ? <strong className="prompt-team">{teamName}</strong> : null}
       <label>
-        <span>結果ページのURL</span>
+        <span className="sr-only">結果ページのURL</span>
         <input
           className="sh-input"
           type="url"

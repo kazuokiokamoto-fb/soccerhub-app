@@ -15,7 +15,7 @@ export default function AppHero(props: {
         <span style={{ marginRight: 6 }}>{icon}</span>
         {title}
       </h1>
-      <p style={heroDesc}>{desc}</p>
+      {desc ? <p style={heroDesc}>{desc}</p> : null}
     </section>
   );
 }

@@ -71,6 +71,9 @@ test("the report screen is the standing confirm form", () => {
   assert.equal(screen.includes("この内容で提出"), true);
   assert.equal(screen.includes("直して提出"), true);
   assert.equal(screen.includes("順位なし・不明"), true);
+  assert.equal(screen.includes("未確認"), true);
+  assert.equal(screen.includes("期限切れ"), true);
+  assert.equal(screen.includes("ログイン、試合、チャットはそのまま使えます"), false);
   assert.equal(screen.includes("fiscalYearChoiceLabel"), true);
   assert.equal(screen.includes("自チームの得点"), false);
   assert.equal(screen.includes("相手の得点"), false);

@@ -89,25 +89,14 @@ export default function AffiliationPrompt() {
     <div className="home-affiliation-list">
       {prompts.map((prompt) =>
         prompt.kind === "affiliation" ? (
-          <aside key={prompt.teamId} className="home-affiliation" aria-label="所属の登録">
-            <p className="home-report-label">所属</p>
-            <p>
-              {prompt.teamName || "名称未設定"}の所属（都道府県・カテゴリ・リーグ名）が未登録です。結果の確認に使います。今は閉じても、ほかの機能はそのまま使えます。
-            </p>
-            <div className="home-actions">
-              <Link href={`/teams/${prompt.teamId}/affiliation`} className="sh-btn sh-btn--primary">
-                所属を登録
-              </Link>
-              <button
-                type="button"
-                className="sh-btn"
-                disabled={busyId === prompt.teamId}
-                onClick={() => void dismiss(prompt.teamId)}
-              >
-                今は閉じる
-              </button>
-            </div>
-          </aside>
+          <AffiliationAsk
+            key={prompt.teamId}
+            teamName={prompt.teamName}
+            href={`/teams/${prompt.teamId}/affiliation`}
+            busy={busyId === prompt.teamId}
+            note={message}
+            onDismiss={() => void dismiss(prompt.teamId)}
+          />
         ) : (
           <ResultsUrlPrompt
             key={prompt.teamId}
@@ -120,5 +109,35 @@ export default function AffiliationPrompt() {
         ),
       )}
     </div>
+  );
+}
+
+export function AffiliationAsk({
+  teamName,
+  href,
+  busy = false,
+  note = "",
+  onDismiss,
+}: {
+  teamName: string;
+  href: string;
+  busy?: boolean;
+  note?: string;
+  onDismiss: () => void;
+}) {
+  return (
+    <aside className="home-affiliation" aria-label="所属の登録">
+      <span className="status-badge">未登録</span>
+      <p className="home-affiliation-title">{teamName || "名称未設定"}</p>
+      {note ? <p className="url-prompt-message">{note}</p> : null}
+      <div className="home-actions">
+        <Link href={href} className="sh-btn sh-btn--primary">
+          所属を登録
+        </Link>
+        <button type="button" className="or-quiet" disabled={busy} onClick={onDismiss}>
+          今は閉じる
+        </button>
+      </div>
+    </aside>
   );
 }

@@ -8,6 +8,29 @@ import {
   type ReportNotice,
 } from "@/lib/home/reportBanner";
 
+export function ReportNoticeList({ notices }: { notices: readonly ReportNotice[] }) {
+  return (
+    <aside className="home-report" aria-label="公式戦の年次報告">
+      {notices.map((notice) => (
+        <div key={`${notice.teamId}:${notice.fiscalYear}`} className="home-report-item">
+          <span className={notice.phase === "overdue" ? "status-chip status-chip--late" : "status-chip status-chip--ok"}>
+            {notice.message}
+          </span>
+          <p className="home-report-title">
+            {notice.teamName}
+            <span>{notice.fiscalYear}年度</span>
+          </p>
+        </div>
+      ))}
+      <div className="home-actions">
+        <Link href={reportNoticeHref(notices)} className="sh-btn sh-btn--primary">
+          報告を開く
+        </Link>
+      </div>
+    </aside>
+  );
+}
+
 export default function AnnualReportBanner({ userId }: { userId: string }) {
   const [notices, setNotices] = useState<ReportNotice[] | null>(null);
 
@@ -38,22 +61,5 @@ export default function AnnualReportBanner({ userId }: { userId: string }) {
 
   if (!notices || notices.length === 0) return null;
 
-  const several = notices.length > 1;
-
-  return (
-    <aside className="home-report" aria-label="公式戦の年次報告">
-      <p className="home-report-label">公式戦の年次報告</p>
-      {notices.map((notice) => (
-        <p key={`${notice.teamId}:${notice.fiscalYear}`} className="home-report-text">
-          {several && notice.phase === "overdue" ? `${notice.teamName}の` : null}
-          {notice.message}
-        </p>
-      ))}
-      <div className="home-actions">
-        <Link href={reportNoticeHref(notices)} className="sh-btn sh-btn--primary">
-          報告を開く
-        </Link>
-      </div>
-    </aside>
-  );
+  return <ReportNoticeList notices={notices} />;
 }

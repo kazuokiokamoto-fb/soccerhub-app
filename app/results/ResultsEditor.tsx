@@ -9,7 +9,7 @@ import {
   reportingYearChoices,
 } from "@/lib/official-results/fiscal";
 import type { StandingValue } from "@/lib/standings/submit";
-import { errorText, PHASE_TEXT } from "./labels";
+import { errorText } from "./labels";
 import { StandingReportCard, type StandingCandidateView } from "./StandingReport";
 import "./results.css";
 
@@ -101,10 +101,9 @@ export default function ResultsEditor() {
   return (
     <main className="or-editor">
       <p>
-        <Link href="/results">報告一覧</Link>
+        <Link href="/results">一覧</Link>
       </p>
-      <h1>公式戦の年次報告</h1>
-      {!bundle && !message ? <p>読み込み中です。</p> : null}
+      {!bundle && !message ? <p>読み込み中</p> : null}
       {bundle ? (
         <StandingReportCard
           key={`${teamId}:${year}:${report?.version ?? 0}:${candidate?.fetchedAt ?? "none"}`}
@@ -113,7 +112,11 @@ export default function ResultsEditor() {
           years={years.includes(year) ? years : [year, ...years]}
           onYear={(next) => router.replace(`/results/${teamId}?year=${next}`)}
           deadlineYear={year + 1}
-          phaseLabel={PHASE_TEXT[bundle.duty.phase] ?? ""}
+          phase={
+            bundle.duty.phase === "due" || bundle.duty.phase === "overdue" || bundle.duty.phase === "in_progress"
+              ? bundle.duty.phase
+              : "in_progress"
+          }
           submitted={
             submitted
               ? {
