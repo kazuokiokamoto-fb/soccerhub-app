@@ -1,7 +1,8 @@
 // /app/selection/[id]/page.tsx
 
 import Link from "next/link";
-import type { CSSProperties, Metadata, ReactNode } from "react";
+import type { Metadata } from "next";
+import type { CSSProperties, ReactNode } from "react";
 import ZoneLink from "@/app/components/ZoneLink";
 
 export const metadata: Metadata = {
