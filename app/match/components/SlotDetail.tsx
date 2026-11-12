@@ -3,6 +3,7 @@
 import React, { useMemo } from "react";
 import type { DbRequest, DbSlot, DbTeam, DbVenue } from "../types";
 import { categoryLabel } from "@/app/lib/categories";
+import { levelToStrengthRank } from "@/app/match/constants/strengthGuides";
 
 const DEFAULT_REQUEST_COMMENT =
   "はじめまして。練習試合を希望しています。条件が合えばぜひお願いします。";
@@ -13,13 +14,7 @@ function hhmm(v: string) {
 }
 
 function levelToRankLabel(level?: number | null) {
-  const n = Number(level ?? 0);
-  if (!Number.isFinite(n)) return "";
-  if (n >= 9) return "SS";
-  if (n >= 7) return "S";
-  if (n >= 5) return "A";
-  if (n >= 3) return "B";
-  return "C";
+  return levelToStrengthRank(level);
 }
 
 function slotStatusLabel(status: "decided" | "open" | "other") {

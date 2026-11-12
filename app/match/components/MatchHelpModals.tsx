@@ -109,30 +109,14 @@ export function MatchHelpModals({
                 </div>
 
                 <div style={guideBulletList}>
-                  <div style={guideBulletRow}>
-                    <span style={guideBulletMark}>•</span>
-                    <span><b>SS</b>：都・県リーグ上位、非常に高い強度</span>
-                  </div>
-
-                  <div style={guideBulletRow}>
-                    <span style={guideBulletMark}>•</span>
-                    <span><b>S</b>：都・県リーグ所属、高い強度</span>
-                  </div>
-
-                  <div style={guideBulletRow}>
-                    <span style={guideBulletMark}>•</span>
-                    <span><b>A</b>：地域リーグ上位、育成と競争のバランス型</span>
-                  </div>
-
-                  <div style={guideBulletRow}>
-                    <span style={guideBulletMark}>•</span>
-                    <span><b>B</b>：地域リーグ所属、成長重視の実戦経験向け</span>
-                  </div>
-
-                  <div style={guideBulletRow}>
-                    <span style={guideBulletMark}>•</span>
-                    <span><b>C</b>：交流・経験重視、フレンドリーマッチ向け</span>
-                  </div>
+                  {strengthGuides.map((item) => (
+                    <div key={item.rank} style={guideBulletRow}>
+                      <span style={guideBulletMark}>•</span>
+                      <span>
+                        <b>{item.rank}</b>：{item.short}。{item.note}
+                      </span>
+                    </div>
+                  ))}
                 </div>
 
                 <div style={guideNote}>

@@ -12,6 +12,8 @@ import {
   StrengthRank,
   strengthRankToLegacyLevel,
 } from "@/app/components/StrengthRankPicker";
+import { RankSuggestion, StrengthRankSelect } from "@/app/components/RankSuggestion";
+import { suggestRankFromLeague } from "@/app/match/constants/strengthGuides";
 import { STRENGTH_GUIDES } from "@/app/lib/strengthGuides";
 import AppHero from "@/app/components/AppHero";
 import { AffiliationStep } from "@/app/components/affiliation/AffiliationStep";
@@ -117,6 +119,8 @@ export default function TeamNewPage() {
     prefecture: "",
     category: "",
     organizationName: "",
+    leagueLevel: "",
+    leagueDivision: "",
   });
 
   const [contactEmail, setContactEmail] = useState("");
@@ -241,6 +245,40 @@ export default function TeamNewPage() {
   ) => {
     setCategoryProfiles((prev) =>
       prev.map((p) => (p.category === category ? { ...p, ...patch } : p))
+    );
+  };
+
+  const suggestedRank = suggestRankFromLeague(
+    affiliation.leagueLevel,
+    affiliation.leagueDivision,
+  );
+
+  const applySuggestedRank = async (rank: StrengthRank) => {
+    const next = categoryProfiles.map((profile) => ({ ...profile, strength_rank: rank }));
+    setCategoryProfiles(next);
+    if (!createdTeamId) {
+      setToast({
+        type: "info",
+        text: `強さを ${rank} にしました。登録すると保存されます。`,
+      });
+      return;
+    }
+    const { error } = await supabase
+      .from("teams")
+      .update({
+        strength_rank: rank,
+        level: strengthRankToLegacyLevel(rank),
+        category_profiles: next.map((profile) => ({
+          category: profile.category,
+          strength_rank: profile.strength_rank,
+          member_count: Math.max(0, Number(profile.member_count || 0) || 0),
+        })),
+      })
+      .eq("id", createdTeamId);
+    setToast(
+      error
+        ? { type: "error", text: "強さを入れられませんでした。登録のときに保存します。" }
+        : { type: "info", text: `強さを ${rank} にしました。` },
     );
   };
 
@@ -448,7 +486,14 @@ export default function TeamNewPage() {
       <section className="sh-section" style={{ marginTop: 16 }}>
         <div style={{ display: "grid", gap: 18 }}>
           {step === 2 ? (
-            <AffiliationStep value={affiliation} onChange={setAffiliation} disabled={saving} />
+            <AffiliationStep
+              value={affiliation}
+              onChange={setAffiliation}
+              disabled={saving}
+              currentRank={categoryProfiles[0]?.strength_rank ?? null}
+              onApplyRank={(rank) => void applySuggestedRank(rank)}
+              applyHint="登録すると保存されます。別のランクでも大丈夫です。"
+            />
           ) : (
           <>
           <div style={infoNotice}>
@@ -542,6 +587,17 @@ export default function TeamNewPage() {
           {categories.length > 0 ? (
             <div style={subSection}>
               <div style={blockTitle}>カテゴリごとの強さ・人数</div>
+              <RankSuggestion
+                suggested={suggestedRank}
+                current={categoryProfiles[0]?.strength_rank ?? null}
+                onApply={(rank) => void applySuggestedRank(rank)}
+                disabled={saving}
+                hint={
+                  categoryProfiles.length > 1
+                    ? "すべてのカテゴリの強さに入ります。登録すると保存されます。"
+                    : "登録すると保存されます。別のランクでも大丈夫です。"
+                }
+              />
 
               <div style={{ display: "grid", gap: 12 }}>
                 {categoryProfiles.map((profile) => (
@@ -562,22 +618,13 @@ export default function TeamNewPage() {
                             ?
                           </button>
                         </span>
-                        <select
+                        <StrengthRankSelect
                           value={profile.strength_rank}
-                          onChange={(e) =>
-                            updateProfile(profile.category, {
-                              strength_rank: e.target.value as StrengthRank,
-                            })
-                          }
-                          className="sh-select"
                           disabled={saving}
-                        >
-                          <option value="SS">SS</option>
-                          <option value="S">S</option>
-                          <option value="A">A</option>
-                          <option value="B">B</option>
-                          <option value="C">C</option>
-                        </select>
+                          onChange={(rank) =>
+                            updateProfile(profile.category, { strength_rank: rank })
+                          }
+                        />
                       </label>
 
                       <label style={label}>

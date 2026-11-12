@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { supabase } from "@/app/lib/supabase";
 import { useAuth } from "@/app/lib/auth";
 import { CATEGORY_OPTIONS, categoryLabel } from "@/app/lib/categories";
+import { levelToStrengthRank } from "@/app/match/constants/strengthGuides";
 import AppTabNav from "@/app/components/AppTabNav";
 
 import {
@@ -193,13 +194,7 @@ function teamStrengthLabel(team: any) {
     return team.strength_rank;
   }
 
-  const level = Number(team.level ?? 0);
-  if (!Number.isFinite(level)) return null;
-  if (level >= 9) return "SS";
-  if (level >= 7) return "S";
-  if (level >= 5) return "A";
-  if (level >= 3) return "B";
-  return "C";
+  return levelToStrengthRank(team.level) || null;
 }
 
 function statusStyle(status?: string): React.CSSProperties {

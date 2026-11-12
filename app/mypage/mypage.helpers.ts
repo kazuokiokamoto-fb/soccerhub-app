@@ -1,4 +1,5 @@
 import { categoryLabel, categoryLabels } from "@/app/lib/categories";
+import { levelToStrengthRank } from "@/app/match/constants/strengthGuides";
 import type { ScheduleStatus } from "@/app/lib/types";
 import type { TeamRow } from "./mypage.types";
 
@@ -42,12 +43,7 @@ export function isMissingColumnError(err: unknown) {
 }
 
 export function rankLabel(level?: number | null) {
-  const n = Number(level ?? 0);
-  if (n >= 9) return "SS";
-  if (n >= 7) return "S";
-  if (n >= 5) return "A";
-  if (n >= 3) return "B";
-  return "C";
+  return levelToStrengthRank(level) || "C";
 }
 
 export function areaText(team?: TeamRow | null) {

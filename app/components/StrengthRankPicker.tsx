@@ -1,110 +1,20 @@
 "use client";
 
 import React from "react";
+import { RankSuggestion } from "@/app/components/RankSuggestion";
+import {
+  STRENGTH_GUIDES,
+  levelToStrengthRank,
+  strengthGuideByRank,
+  strengthRankToLegacyLevel,
+  type StrengthRank,
+} from "@/app/match/constants/strengthGuides";
 
-export type StrengthRank = "SS" | "S" | "A" | "B" | "C";
-
-type StrengthDef = {
-  rank: StrengthRank;
-  shortLabel: string;
-  title: string;
-  bullets: string[];
-  note: string;
-  stars: string;
-};
-
-const STRENGTH_DEFS: StrengthDef[] = [
-  {
-    rank: "SS",
-    shortLabel: "都・県リーグ1・2部",
-    title: "公式戦上位レベルの強度を想定したカテゴリー",
-    bullets: [
-      "都・県リーグ上位所属",
-      "試合強度：★★★★★（非常に高い）",
-      "球際・切り替えが速く、戦術理解度が高い",
-      "公式戦同等レベルの緊張感ある試合を希望",
-    ],
-    note: "⭐︎ 「強度の高い実戦形式」を求めるチーム向け",
-    stars: "★★★★★",
-  },
-  {
-    rank: "S",
-    shortLabel: "都・県リーグ3・4部",
-    title: "公式戦基準の競争力を持つカテゴリー",
-    bullets: [
-      "都・県リーグ所属",
-      "試合強度：★★★★☆（高い）",
-      "基礎技術が安定し、組織的な守備・攻撃ができる",
-      "上位リーグ昇格を目指すレベル",
-    ],
-    note: "⭐︎ 「しっかり競り合える相手」を求めるチーム向け",
-    stars: "★★★★☆",
-  },
-  {
-    rank: "A",
-    shortLabel: "地域リーグ1・2部",
-    title: "育成と競争のバランス型カテゴリー",
-    bullets: [
-      "地域リーグ上位所属",
-      "試合強度：★★★☆☆（中〜やや高）",
-      "個人技術向上＋チーム連携を重視",
-      "チャレンジマッチにも適したレベル",
-    ],
-    note: "⭐︎ 「公式戦を想定しつつ育成も重視」するチーム向け",
-    stars: "★★★☆☆",
-  },
-  {
-    rank: "B",
-    shortLabel: "地域リーグ3・4部",
-    title: "成長重視の実戦経験カテゴリー",
-    bullets: [
-      "地域リーグ所属",
-      "試合強度：★★☆☆☆（やや穏やか）",
-      "試合経験を積みながら基礎力を伸ばす段階",
-      "バランスの良いマッチング向き",
-    ],
-    note: "⭐︎ 「経験を積みたい」「自信をつけたい」チーム向け",
-    stars: "★★☆☆☆",
-  },
-  {
-    rank: "C",
-    shortLabel: "フレンドリー",
-    title: "交流・経験重視カテゴリー",
-    bullets: [
-      "リーグ所属問わず",
-      "試合強度：★☆☆☆☆（交流中心）",
-      "新チーム編成・初心者中心・交流目的",
-      "勝敗よりも経験や交流を重視",
-    ],
-    note: "⭐︎ 「楽しく真剣に」「幅広い交流」を希望するチーム向け",
-    stars: "★☆☆☆☆",
-  },
-];
-
-export function strengthRankToLegacyLevel(rank: StrengthRank): number {
-  switch (rank) {
-    case "SS":
-      return 9;
-    case "S":
-      return 7;
-    case "A":
-      return 5;
-    case "B":
-      return 3;
-    case "C":
-      return 1;
-    default:
-      return 5;
-  }
-}
+export type { StrengthRank };
+export { strengthRankToLegacyLevel, levelToStrengthRank };
 
 export function legacyLevelToStrengthRank(level?: number | null): StrengthRank {
-  if (level == null) return "A";
-  if (level >= 8) return "SS";
-  if (level >= 6) return "S";
-  if (level >= 4) return "A";
-  if (level >= 2) return "B";
-  return "C";
+  return levelToStrengthRank(level) || "A";
 }
 
 export function StrengthRankPicker(props: {
@@ -114,6 +24,8 @@ export function StrengthRankPicker(props: {
   title?: string;
   allowEmpty?: boolean;
   emptyLabel?: string;
+  suggestedRank?: StrengthRank | null;
+  onApplySuggested?: (rank: StrengthRank) => void;
 }) {
   const {
     value,
@@ -122,10 +34,11 @@ export function StrengthRankPicker(props: {
     title = "強さ（ランク選択）",
     allowEmpty = false,
     emptyLabel = "指定なし",
+    suggestedRank = null,
+    onApplySuggested,
   } = props;
 
-  const selected =
-    STRENGTH_DEFS.find((x) => x.rank === value) ?? STRENGTH_DEFS[2];
+  const selected = strengthGuideByRank(value) ?? strengthGuideByRank("A") ?? STRENGTH_GUIDES[2];
 
   return (
     <div style={wrap}>
@@ -135,6 +48,13 @@ export function StrengthRankPicker(props: {
           <div style={subText}>ランクを押すと説明が切り替わります</div>
         </div>
       </div>
+
+      <RankSuggestion
+        suggested={suggestedRank ?? null}
+        current={value}
+        onApply={onApplySuggested}
+        disabled={disabled}
+      />
 
       <div style={rankList}>
         {allowEmpty ? (
@@ -158,7 +78,7 @@ export function StrengthRankPicker(props: {
           </button>
         ) : null}
 
-        {STRENGTH_DEFS.map((item) => {
+        {STRENGTH_GUIDES.map((item) => {
           const active = item.rank === value;
 
           return (
@@ -177,7 +97,7 @@ export function StrengthRankPicker(props: {
               <div style={rankRowLeft}>
                 <span style={rankCode}>{item.rank}</span>
                 <span style={rankStars}>{item.stars}</span>
-                <span style={rankLabel}>{item.shortLabel}</span>
+                <span style={rankLabel}>{item.short}</span>
               </div>
               {active ? <span style={selectedBadge}>選択中</span> : null}
             </button>
@@ -208,7 +128,7 @@ export function StrengthRankPicker(props: {
             <div style={detailTop}>
               <div style={rankPill}>{selected.rank}</div>
               <div style={{ display: "grid", gap: 4 }}>
-                <div style={detailShortLabel}>{selected.shortLabel}</div>
+                <div style={detailShortLabel}>{selected.short}</div>
                 <div style={detailStars}>{selected.stars}</div>
               </div>
             </div>
