@@ -8,7 +8,21 @@
 -- name selection_secret. The cron sends it as x-selection-secret. The functions
 -- reject the call when that header does not match their SELECTION_SECRET env.
 --
--- Rollback (does not delete rows created after this migration):
+-- Rollback (does not delete rows created after this migration).
+-- Restore backed-up rows first. The old status check rejects 'collapsed',
+-- so put that check back only after no row is still collapsed.
+--
+-- update public.selection_events se
+-- set content_hash = null
+-- where se.content_hash is not null
+--   and not exists (
+--     select 1 from public.selection_events_backup_20261112 b where b.id = se.id
+--   )
+--   and se.content_hash in (
+--     select b.content_hash
+--     from public.selection_events_backup_20261112 b
+--     where b.content_hash is not null
+--   );
 --
 -- update public.selection_events se
 -- set status = b.status,
@@ -22,6 +36,17 @@
 --     updated_at = b.updated_at
 -- from public.selection_events_backup_20261112 b
 -- where se.id = b.id;
+--
+-- update public.selection_events
+-- set status = 'hidden',
+--     hidden_reason = null,
+--     collapsed_into = null
+-- where status = 'collapsed';
+--
+-- alter table public.selection_events drop constraint if exists selection_events_status_check;
+-- alter table public.selection_events
+--   add constraint selection_events_status_check
+--   check (status in ('draft', 'published', 'hidden', 'expired'));
 --
 -- update public.team_selection_research
 -- set selection_page_url = previous_selection_page_url,
@@ -55,8 +80,14 @@
 --   ) AS request_id;
 -- select cron.unschedule('discover-official-sites');
 
-create table public.selection_events_backup_20261112 as
-select * from public.selection_events;
+do $backup$
+begin
+  if to_regclass('public.selection_events_backup_20261112') is null then
+    create table public.selection_events_backup_20261112 as
+    select * from public.selection_events;
+  end if;
+end
+$backup$;
 
 alter table public.selection_events_backup_20261112 enable row level security;
 revoke all on table public.selection_events_backup_20261112 from public, anon, authenticated;
@@ -72,7 +103,49 @@ alter table public.team_selection_research
   add column if not exists official_site_checked_at timestamptz,
   add column if not exists official_site_decision text;
 
-create table public.selection_crawl_runs (
+-- Production selection_events_status_check allows only draft, published,
+-- hidden, and expired. Widen it before any UPDATE. Writers of status are
+-- this file (published, hidden, collapsed), verify-selection-domain-pages
+-- (published, hidden, collapsed), selection-crawler (published), and
+-- verify-selection-candidates (published). The app does not write this column.
+-- 'replaced' is read by the verifier and is not written.
+alter table public.selection_events drop constraint if exists selection_events_status_check;
+
+do $status$
+declare
+  status_att smallint;
+  rec record;
+begin
+  select attnum into status_att
+  from pg_attribute
+  where attrelid = 'public.selection_events'::regclass
+    and attname = 'status'
+    and not attisdropped;
+
+  if status_att is null then
+    raise exception 'selection_events.status is missing';
+  end if;
+
+  for rec in
+    select con.conname
+    from pg_constraint con
+    where con.conrelid = 'public.selection_events'::regclass
+      and con.contype = 'c'
+      and (
+        status_att = any (con.conkey)
+        or pg_get_constraintdef(con.oid) ~ '\mstatus\M'
+      )
+  loop
+    execute format('alter table public.selection_events drop constraint %I', rec.conname);
+  end loop;
+end
+$status$;
+
+alter table public.selection_events
+  add constraint selection_events_status_check
+  check (status in ('draft', 'published', 'hidden', 'expired', 'collapsed'));
+
+create table if not exists public.selection_crawl_runs (
   id uuid primary key default gen_random_uuid(),
   pipeline text not null,
   status text not null,
@@ -88,7 +161,7 @@ create table public.selection_crawl_runs (
   error text
 );
 
-create table public.selection_crawl_url_outcomes (
+create table if not exists public.selection_crawl_url_outcomes (
   id uuid primary key default gen_random_uuid(),
   run_id uuid references public.selection_crawl_runs (id) on delete cascade,
   research_id uuid,
@@ -104,7 +177,7 @@ create table public.selection_crawl_url_outcomes (
   finished_at timestamptz
 );
 
-create table public.selection_crawl_hosts (
+create table if not exists public.selection_crawl_hosts (
   host text primary key,
   robots_txt text,
   robots_status integer,
@@ -119,7 +192,7 @@ create table public.selection_crawl_hosts (
   )
 );
 
-create table public.team_official_site_candidates (
+create table if not exists public.team_official_site_candidates (
   id uuid primary key default gen_random_uuid(),
   team_master_id uuid not null,
   research_id uuid,
@@ -152,13 +225,13 @@ create table public.team_official_site_candidates (
   )
 );
 
-create unique index team_official_site_candidates_team_url_idx
+create unique index if not exists team_official_site_candidates_team_url_idx
   on public.team_official_site_candidates (team_master_id, candidate_norm);
 
-create index selection_crawl_runs_pipeline_idx
+create index if not exists selection_crawl_runs_pipeline_idx
   on public.selection_crawl_runs (pipeline, status, started_at desc);
 
-create index selection_crawl_url_outcomes_run_idx
+create index if not exists selection_crawl_url_outcomes_run_idx
   on public.selection_crawl_url_outcomes (run_id);
 
 alter table public.selection_crawl_runs enable row level security;
@@ -555,6 +628,9 @@ where se.id = loser.id
   and loser.rn > 1
   and loser.manual_locked = false;
 
+-- selection_events_content_hash_unique is unique where content_hash is not null.
+-- Clear every hash the survivors are about to take, including the survivor row,
+-- before the next statement assigns them.
 update public.selection_events se
 set content_hash = null
 where se.content_hash in (

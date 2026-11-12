@@ -310,6 +310,26 @@ test("coverage is reported per league tier", () => {
   assert.match(sql, /Only a 2xx body can Disallow/);
 });
 
+test("the status check allows collapsed before any row update", () => {
+  const sql = readFileSync(new URL("../../supabase/migrations/20261112140000_selection_crawl_pipeline.sql", import.meta.url), "utf8");
+  const executable = sql
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n");
+  const widened = executable.indexOf("check (status in ('draft', 'published', 'hidden', 'expired', 'collapsed'))");
+  const collapsedWrite = executable.indexOf("status = 'collapsed'");
+  assert.ok(widened > 0);
+  assert.ok(collapsedWrite > widened);
+  assert.match(executable, /drop constraint if exists selection_events_status_check/);
+  assert.match(executable, /create table if not exists public\.selection_events_backup_20261112|to_regclass\('public\.selection_events_backup_20261112'\)/);
+
+  const rollback = sql.slice(0, sql.indexOf("do $backup$"));
+  const restoreAt = rollback.indexOf("from public.selection_events_backup_20261112 b");
+  const oldCheckAt = rollback.indexOf("check (status in ('draft', 'published', 'hidden', 'expired'))");
+  assert.ok(restoreAt > 0);
+  assert.ok(oldCheckAt > restoreAt);
+});
+
 test("a host is fetched once per minute, with a short same-visit page cap", () => {
   const now = 1_000_000;
   const defer = hostVisitDecision({
