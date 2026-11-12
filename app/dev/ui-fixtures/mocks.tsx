@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import AppTabNav from "@/app/components/AppTabNav";
+import { IconChat, IconPlus, IconSearch } from "@/app/components/ui/Icons";
 import { MorePanel } from "@/app/components/ui/MorePanel";
 
 function useZone(zone: "hub" | "selection") {
@@ -243,6 +244,11 @@ function HomeInMock() {
         <p className="sm-key" style={{ fontSize: 22 }}>9:00–11:00</p>
         <p className="sm-meta">駒沢SC · ホスト</p>
       </section>
+      <div className="home-big-row">
+        <a className="home-big" href="#search"><span className="home-big-icon"><IconSearch size={28} /></span>探す</a>
+        <a className="home-big" href="#new"><span className="home-big-icon"><IconPlus size={28} /></span>募集</a>
+        <a className="home-big" href="#chat"><span className="home-big-icon"><IconChat size={28} /></span>チャット</a>
+      </div>
     </>
   );
 }

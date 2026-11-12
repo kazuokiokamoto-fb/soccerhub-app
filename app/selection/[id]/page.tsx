@@ -140,8 +140,8 @@ export default async function SelectionDetailPage(props: {
           一覧
         </Link>
 
-        <ZoneLink href="/" className="sm-back-site">
-          サカまっち
+        <ZoneLink href="/" className="sm-back-home">
+          サカまっちへ戻る
         </ZoneLink>
       </div>
 

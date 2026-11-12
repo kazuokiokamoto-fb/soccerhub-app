@@ -157,9 +157,41 @@
   color: #fff;
 }
 
-.home-cards {
+.home-cards,
+.home-big-row {
   display: grid;
   gap: 10px;
+}
+
+.home-big-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.home-big {
+  min-height: 108px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 8px;
+  padding: 14px 8px;
+  border: 1px solid var(--sm-line);
+  border-radius: 28px;
+  background: #fff;
+  color: var(--sm-accent-ink);
+  box-shadow: var(--sm-shadow);
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.home-big-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--sm-sun-soft);
+  color: var(--sm-accent);
 }
 
 .home-card,

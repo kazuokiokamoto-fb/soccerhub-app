@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/app/lib/auth";
 import ZoneLink, { assignCrossZone } from "@/app/components/ZoneLink";
 import { IconFlag } from "@/app/components/ui/Icons";
-import { getUnreadChatCount, syncAppBadge } from "@/app/lib/badge";
+import { getUnreadChatCount, getUnreadSelectionCount, syncAppBadge } from "@/app/lib/badge";
 
 const selectionZone = process.env.NEXT_PUBLIC_APP_ZONE === "selection";
 
@@ -17,6 +17,7 @@ export default function AppHeader() {
 
   const [busy, setBusy] = useState(false);
   const [fixtureAuth, setFixtureAuth] = useState(false);
+  const [selectionUnread, setSelectionUnread] = useState(0);
   const headerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -62,6 +63,7 @@ export default function AppHeader() {
   useEffect(() => {
     if (!user?.id) {
       void syncAppBadge(0);
+      setSelectionUnread(0);
       return;
     }
 
@@ -69,8 +71,12 @@ export default function AppHeader() {
 
     const loadBadge = async () => {
       try {
-        const total = await getUnreadChatCount(user.id);
+        const [total, selection] = await Promise.all([
+          getUnreadChatCount(user.id),
+          getUnreadSelectionCount(user.id),
+        ]);
         if (!alive) return;
+        setSelectionUnread(selection);
         await syncAppBadge(total);
       } catch (e) {
         console.error("AppHeader loadBadge error:", e);
@@ -136,6 +142,7 @@ export default function AppHeader() {
   return (
     <header ref={headerRef} className="smh-header">
       <div className="smh-inner">
+        <div className="smh-top">
         {selectionZone ? (
           <ZoneLink href="/selection" className="smh-brand">
             <div className="smh-brandMark sm-brand-mark--selection" aria-hidden="true">
@@ -167,8 +174,8 @@ export default function AppHeader() {
 
         <nav className="smh-nav">
           {selectionZone ? (
-            <ZoneLink href="/" className="sm-back-site">
-              サカまっち
+            <ZoneLink href="/" className="sm-back-home">
+              サカまっちへ戻る
             </ZoneLink>
           ) : null}
           {loading ? (
@@ -194,6 +201,18 @@ export default function AppHeader() {
             </ZoneLink>
           )}
         </nav>
+        </div>
+        {selectionZone ? null : (
+          <ZoneLink href="/selection" className="sm-selection-entry">
+            <IconFlag size={16} />
+            セレクション
+            {selectionUnread > 0 ? (
+              <span className="sm-selection-count">
+                {selectionUnread > 99 ? "99+" : selectionUnread}
+              </span>
+            ) : null}
+          </ZoneLink>
+        )}
       </div>
     </header>
   );

@@ -27,7 +27,7 @@ test("the home explains the service without the old empty counts", () => {
   const labels = [
     ...read("app/components/AppTabNav.tsx").matchAll(/label:\s*"([^"]+)"/g),
   ].map((match) => match[1]);
-  assert.deepEqual(labels, ["ホーム", "チャット", "セレクション", "マイページ"]);
+  assert.deepEqual(labels, ["ホーム", "チャット", "マイページ"]);
   assert.match(read("app/layout.tsx"), /セレクション情報もまとめて確認できます/);
   assert.match(source, /練習試合の相手が見つかる、/);
   assert.match(source, /無料ではじめる/);

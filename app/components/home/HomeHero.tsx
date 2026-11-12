@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import ZoneLink from "@/app/components/ZoneLink";
 
 export default function HomeHero() {
   return (
@@ -17,16 +16,12 @@ export default function HomeHero() {
         <span>チャット</span>
       </div>
       <p className="home-sr">
-        チーム同士で練習試合を探して、募集して、チャットで調整できます。セレクション情報もまとめて確認できます。
+        チーム同士で練習試合を探して、募集して、チャットで調整できます。
       </p>
       <div className="home-hero-actions">
         <Link href="/login" className="sh-btn home-hero-primary">
           無料ではじめる
         </Link>
-      </div>
-      <div className="home-hero-links">
-        <Link href="/teams/search">練習試合を探す</Link>
-        <ZoneLink href="/selection">セレクションを見る</ZoneLink>
       </div>
     </section>
   );

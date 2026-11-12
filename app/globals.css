@@ -287,11 +287,16 @@ body {
   max-width: 1180px;
   margin: 0 auto;
   padding: 10px 14px;
+  display: grid;
+  gap: 8px;
+}
 
+.smh-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .smh-brand {
@@ -460,6 +465,10 @@ body {
     font-size: 13px;
   }
 
+  .logoText {
+    font-size: 22px;
+  }
+
   .sh-btn {
     min-height: 44px;
   }
@@ -470,6 +479,7 @@ body {
   .sh-card,
   .app-tab,
   .home-card,
+  .home-big,
   .sm-chip,
   .chip-grid button,
   .sm-seg button {
@@ -480,6 +490,7 @@ body {
   .sh-btn:active,
   .sh-card:hover,
   .home-card:hover,
+  .home-big:hover,
   .app-tab:hover {
     transform: none;
   }
@@ -500,8 +511,8 @@ body {
 
 .app-tab-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 3px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .app-tab {
@@ -512,16 +523,16 @@ body {
   justify-content: center;
   gap: 2px;
   min-width: 0;
-  min-height: 58px;
-  padding: 6px 2px;
-  border-radius: 22px;
+  min-height: 72px;
+  padding: 8px 4px;
+  border-radius: 24px;
   border: 1px solid var(--sm-line);
   background: #fff;
   color: var(--sm-accent-ink);
   text-align: center;
   text-decoration: none;
-  font-size: 10px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 700;
   line-height: 1.2;
   letter-spacing: 0;
 }
