@@ -7,6 +7,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createSupabaseHostStore, HostGate } from "../_shared/host-gate.ts";
 import { requireSelectionSecret } from "../_shared/selection-secret.ts";
+import { orderByTeamStrength } from "../_shared/strength-order.ts";
 import { decideOfficialSite, scoreOfficialPage } from "../../../lib/selection-crawl/official-site.ts";
 import { isPublicHttpUrl, isUncrawlableUrl, normalizeSelectionUrl } from "../../../lib/selection-crawl/urls.ts";
 
@@ -62,15 +63,22 @@ async function serperSearch(query: string) {
 
 async function claimInstagramTeams(limit: number) {
   const cutoff = new Date(Date.now() - RECHECK_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
-    .from("team_selection_research")
-    .select("id, team_master_id, selection_page_url, official_homepage_url, previous_selection_page_url, notes, team_master:team_master_id(id, team_name, prefecture, official_url)")
-    .ilike("selection_page_url", "%instagram.com%")
-    .or(`official_site_checked_at.is.null,official_site_checked_at.lt.${cutoff}`)
-    .order("official_site_checked_at", { ascending: true, nullsFirst: true })
-    .limit(limit);
-  if (error) throw error;
-  return data || [];
+  const pageSize = 1000;
+  const rows: any[] = [];
+  for (let from = 0; from < 5000; from += pageSize) {
+    const { data, error } = await supabase
+      .from("team_selection_research")
+      .select("id, team_master_id, selection_page_url, official_homepage_url, previous_selection_page_url, notes, official_site_checked_at, team_master:team_master_id(id, team_name, prefecture, official_url, current_league_name, current_league_rank)")
+      .ilike("selection_page_url", "%instagram.com%")
+      .or(`official_site_checked_at.is.null,official_site_checked_at.lt.${cutoff}`)
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  const ordered = await orderByTeamStrength(supabase, rows, "official_site_checked_at");
+  return ordered.slice(0, limit);
 }
 
 async function startRun(trigger: string, batchSize: number) {

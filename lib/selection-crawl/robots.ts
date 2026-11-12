@@ -93,13 +93,20 @@ export function robotsAllows(
   return winner.allow;
 }
 
+/**
+ * A robots.txt we did not successfully read is not a Disallow.
+ * 2xx: honor the parsed rules. 4xx, including 401 and 403, allows the page
+ * (RFC 9309 "unavailable"). 5xx, timeout, and connection errors (status 0)
+ * also allow: this crawler collects selection pages instead of treating an
+ * unreachable robots.txt as a full disallow. Redirects are followed by the
+ * fetcher before this is called.
+ */
 export function robotsDecision(
   status: number,
   body: string,
   target: URL,
   userAgent: string = SELECTION_CRAWL_USER_AGENT,
-): "allow" | "deny" | "unavailable" {
-  if (status === 404 || status === 410) return "allow";
-  if (status < 200 || status >= 300) return "unavailable";
+): "allow" | "deny" {
+  if (status < 200 || status >= 300) return "allow";
   return robotsAllows(body, target, userAgent) ? "allow" : "deny";
 }

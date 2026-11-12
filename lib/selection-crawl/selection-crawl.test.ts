@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   chooseEventDate,
@@ -10,6 +11,13 @@ import {
 } from "./dates.ts";
 import { decideOfficialSite, distinctiveParts, scoreOfficialPage } from "./official-site.ts";
 import { hostFailureBlocksStaleHide, hostObservationFailure, hostVisitDecision, HOST_INTERVAL_MS } from "./politeness.ts";
+import {
+  compareSelectionStrength,
+  isTopSelectionTier,
+  selectionStrengthTier,
+  takeDiverseHosts,
+  tierFromLeagueName,
+} from "./priority.ts";
 import { robotsAllows, robotsDecision, robotsPathMatches, SELECTION_CRAWL_USER_AGENT } from "./robots.ts";
 import { isPublicHttpUrl, isUncrawlableUrl, officialCrawlTarget, selectionIdentity } from "./urls.ts";
 
@@ -30,7 +38,14 @@ Disallow: /secret
   assert.equal(robotsAllows(robots, hidden, "other-bot"), false);
   assert.equal(robotsAllows(robots, nested, "other-bot"), true);
   assert.equal(robotsDecision(404, "", visible), "allow");
-  assert.equal(robotsDecision(403, "", visible), "unavailable");
+  assert.equal(robotsDecision(401, "", visible), "allow");
+  assert.equal(robotsDecision(403, "", visible), "allow");
+  assert.equal(robotsDecision(500, "User-agent: *\nDisallow: /\n", visible), "allow");
+  assert.equal(robotsDecision(0, "", visible), "allow");
+  assert.equal(
+    robotsDecision(200, "User-agent: *\nDisallow: /club\n", visible),
+    "deny",
+  );
   assert.match(SELECTION_CRAWL_USER_AGENT, /https:\/\/www\.sakamatch\.com\//);
   assert.equal(SELECTION_CRAWL_USER_AGENT.includes("Chrome"), false);
 });
@@ -206,6 +221,93 @@ test("official-site auto-accept needs a verified high-confidence homepage", () =
   ]);
   assert.equal(verifiedNamed.decision, "auto_accept");
   assert.equal(officialCrawlTarget("https://dios.jimdofree.com/team"), "https://dios.jimdofree.com/team");
+});
+
+test("strong leagues are crawled before lower ones", () => {
+  assert.equal(tierFromLeagueName("高円宮杯プレミアリーグ"), 10);
+  assert.equal(tierFromLeagueName("プリンスリーグ関東"), 10);
+  assert.equal(tierFromLeagueName("関東ユース(U-15)サッカーリーグ 1部"), 10);
+  assert.equal(tierFromLeagueName("関東ユース(U-15)サッカーリーグ 2部"), 20);
+  assert.equal(tierFromLeagueName("埼玉県クラブユース U-15 1部"), 20);
+  assert.equal(tierFromLeagueName("東京都クラブユース U-15 T1"), 20);
+  assert.equal(tierFromLeagueName("千葉県U-15 TOPリーグ"), 20);
+  assert.equal(tierFromLeagueName("群馬県U-15 ウルトラリーグ"), 20);
+  assert.equal(tierFromLeagueName("東京都クラブユース U-15 T2"), 30);
+  assert.equal(tierFromLeagueName("千葉県U-12 2N01"), 30);
+  assert.equal(tierFromLeagueName("埼玉県U-12 地区トップ"), 60);
+  assert.equal(isTopSelectionTier(selectionStrengthTier({ leagueName: "プリンスリーグ関東" })), true);
+  assert.equal(isTopSelectionTier(selectionStrengthTier({ leagueName: "東京都クラブユース U-15 T2" })), false);
+
+  const premier = selectionStrengthTier({ leagueName: "プリンスリーグ関東" });
+  const first = selectionStrengthTier({ leagueLevel: "prefecture", leagueDivision: 1 });
+  const fourth = selectionStrengthTier({ leagueLevel: "prefecture", leagueDivision: 4 });
+  const district = selectionStrengthTier({ leagueLevel: "district", leagueDivision: 1 });
+  const ranked = selectionStrengthTier({ leagueRank: 14, leagueName: "東京都クラブユース U-15 T4" });
+  const strength = selectionStrengthTier({ strengthRank: "SS" });
+  const unknown = selectionStrengthTier({});
+  assert.ok(premier < first);
+  assert.ok(first < fourth);
+  assert.ok(fourth < district);
+  assert.equal(first, 20);
+  assert.equal(ranked, 50);
+  assert.equal(strength, 20);
+  assert.equal(unknown, 90);
+  assert.ok(
+    compareSelectionStrength(
+      { leagueName: "埼玉県クラブユース U-15 1部", leagueRank: 21 },
+      { leagueName: "東京都クラブユース U-15 T2", leagueRank: 12 },
+    ) < 0,
+  );
+  assert.equal(
+    selectionStrengthTier({ leagueLevel: "prefecture", leagueDivision: 1, leagueRank: 201 }),
+    20,
+  );
+});
+
+test("a day's crawl finishes every top-tier team before a lower tier", () => {
+  const teams = [
+    { id: "low-a", host: "low-a.example", leagueName: "東京都クラブユース U-15 T4", leagueRank: 14, checkedAt: null },
+    { id: "top-b", host: "top-b.example", leagueName: "埼玉県クラブユース U-15 1部", leagueRank: 21, checkedAt: null },
+    { id: "top-a", host: "shared.example", leagueName: "関東ユース(U-15)サッカーリーグ 1部", leagueRank: 1, checkedAt: null },
+    { id: "top-c", host: "shared.example", leagueName: "プリンスリーグ関東", leagueRank: null, checkedAt: null },
+    { id: "low-b", host: "low-b.example", leagueName: "埼玉県U-12 地区トップ", leagueRank: 243, checkedAt: null },
+    { id: "mid", host: "mid.example", leagueName: "東京都クラブユース U-15 T2", leagueRank: 12, checkedAt: null },
+  ];
+  const pending = [...teams];
+  const crawled: typeof teams = [];
+  while (pending.length > 0) {
+    pending.sort(compareSelectionStrength);
+    const batch = takeDiverseHosts(pending, 2, (team) => team.host);
+    assert.ok(batch.length > 0);
+    crawled.push(...batch);
+    const chosen = new Set(batch.map((team) => team.id));
+    for (let i = pending.length - 1; i >= 0; i -= 1) {
+      if (chosen.has(pending[i].id)) pending.splice(i, 1);
+    }
+  }
+  const lastTop = crawled.findLastIndex((team) => isTopSelectionTier(selectionStrengthTier(team)));
+  const firstLower = crawled.findIndex((team) => !isTopSelectionTier(selectionStrengthTier(team)));
+  assert.ok(lastTop >= 0 && firstLower >= 0 && lastTop < firstLower);
+  assert.deepEqual(
+    crawled.map((team) => team.id),
+    ["top-a", "top-b", "top-c", "mid", "low-a", "low-b"],
+  );
+});
+
+test("coverage is reported per league tier", () => {
+  const sql = readFileSync(new URL("../../supabase/migrations/20261112140000_selection_crawl_pipeline.sql", import.meta.url), "utf8");
+  assert.match(sql, /create or replace view public\.selection_strength_coverage/);
+  for (const column of [
+    "teams_total",
+    "teams_with_official_site",
+    "teams_fetched_ok",
+    "teams_with_selection_page",
+    "teams_with_dated_events",
+  ]) {
+    assert.match(sql, new RegExp(column));
+  }
+  assert.match(sql, /プレミア・プリンス・関東1部/);
+  assert.match(sql, /Only a 2xx body can Disallow/);
 });
 
 test("a host is fetched once per minute, with a short same-visit page cap", () => {

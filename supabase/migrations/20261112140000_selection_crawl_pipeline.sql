@@ -231,6 +231,234 @@ revoke all on function public.selection_host_observation_failed(text, timestampt
 grant execute on function public.selection_crawl_host(text) to service_role;
 grant execute on function public.selection_host_observation_failed(text, timestamptz) to service_role;
 
+comment on column public.selection_crawl_hosts.robots_status is
+  'HTTP status of the last robots.txt fetch. 0 is a timeout or connection error. 4xx and 5xx do not block the page. Only a 2xx body can Disallow.';
+
+-- Tier numbers match lib/selection-crawl/priority.ts. Lower is crawled first.
+-- 10 and 20 are the daily top group: プレミア, プリンス, 関東1・2部, 都道府県1部.
+create or replace function public.selection_league_name_tier(league_name text)
+returns integer
+language plpgsql
+immutable
+set search_path = public
+as $fn$
+declare
+  name text := translate(coalesce(league_name, ''), '０１２３４５６７８９', '0123456789');
+begin
+  if name = '' then
+    return null;
+  end if;
+  if name ~ 'プレミア|プリンス' then
+    return 10;
+  end if;
+  if name ~ '関東' and name ~ '1部' then
+    return 10;
+  end if;
+  if name ~ '関東' and name ~ '2部' then
+    return 20;
+  end if;
+  if name ~ '地区' then
+    return 60;
+  end if;
+  if name ~* '(^|[^A-Za-z0-9])(T1|TOP|S1|C1)([^A-Za-z0-9]|$)' or name ~ 'ウルトラ|1部' then
+    return 20;
+  end if;
+  if name ~* '(^|[^A-Za-z0-9])(T2|G1|S2|C2)([^A-Za-z0-9]|$)' or name ~ '2部|2N' then
+    return 30;
+  end if;
+  if name ~* '(^|[^A-Za-z0-9])(T3|G2)([^A-Za-z0-9]|$)' or name ~ '3部' then
+    return 40;
+  end if;
+  if name ~* '(^|[^A-Za-z0-9])T4([^A-Za-z0-9]|$)' or name ~ '4部' then
+    return 50;
+  end if;
+  return null;
+end;
+$fn$;
+
+create or replace function public.selection_strength_tier(
+  league_level text,
+  league_division integer,
+  league_name text,
+  league_rank integer,
+  strength_rank text,
+  team_level integer
+) returns integer
+language plpgsql
+immutable
+set search_path = public
+as $fn$
+declare
+  named integer;
+begin
+  if league_level = 'prefecture' and league_division between 1 and 4 then
+    return 10 + league_division * 10;
+  end if;
+  if league_level = 'district' and league_division between 1 and 4 then
+    return case when league_division <= 2 then 60 else 65 end;
+  end if;
+  if league_level = 'other' then
+    return 80;
+  end if;
+
+  named := public.selection_league_name_tier(league_name);
+  if named is not null then
+    return named;
+  end if;
+
+  if league_rank is not null and league_rank > 0 then
+    if league_rank <= 1 then return 10; end if;
+    if league_rank = 2 then return 20; end if;
+    if league_rank between 101 and 199 then return 25; end if;
+    if league_rank >= 11 and league_rank < 100 then
+      case league_rank % 10
+        when 1 then return 20;
+        when 2 then return 30;
+        when 3 then return 40;
+        when 4 then return 50;
+        else return 55;
+      end case;
+    end if;
+    if league_rank >= 200 and league_rank < 400 then
+      return 70;
+    end if;
+    return 80;
+  end if;
+
+  if strength_rank in ('SS', 'S', 'A', 'B', 'C') then
+    return case strength_rank
+      when 'SS' then 20
+      when 'S' then 40
+      when 'A' then 60
+      when 'B' then 65
+      else 80
+    end;
+  end if;
+  if team_level is not null then
+    if team_level >= 9 then return 20; end if;
+    if team_level >= 7 then return 40; end if;
+    if team_level >= 5 then return 60; end if;
+    if team_level >= 3 then return 65; end if;
+    return 80;
+  end if;
+  return 90;
+end;
+$fn$;
+
+create or replace function public.selection_strength_tier_label(tier integer)
+returns text
+language sql
+immutable
+set search_path = public
+as $fn$
+  select case tier
+    when 10 then 'プレミア・プリンス・関東1部'
+    when 20 then '都道府県1部・関東2部'
+    when 25 then 'U-18'
+    when 30 then '2部'
+    when 40 then '3部'
+    when 50 then '4部'
+    when 55 then '都道府県下位'
+    when 60 then '地域・地区上位'
+    when 65 then '地域・地区下位'
+    when 70 then 'U-12・その他のリーグ'
+    when 80 then 'その他'
+    else '未設定'
+  end;
+$fn$;
+
+create or replace function public.selection_has_own_site(
+  official_url text,
+  homepage_url text,
+  selection_url text
+) returns boolean
+language sql
+immutable
+set search_path = public
+as $fn$
+  select exists (
+    select 1
+    from unnest(array[official_url, homepage_url, selection_url]) as candidate(url)
+    where coalesce(candidate.url, '') ~* '^https?://'
+      and not public.selection_url_is_uncrawlable(candidate.url)
+  );
+$fn$;
+
+revoke all on function public.selection_league_name_tier(text) from public, anon, authenticated;
+revoke all on function public.selection_strength_tier(text, integer, text, integer, text, integer) from public, anon, authenticated;
+revoke all on function public.selection_strength_tier_label(integer) from public, anon, authenticated;
+revoke all on function public.selection_has_own_site(text, text, text) from public, anon, authenticated;
+grant execute on function public.selection_league_name_tier(text) to service_role;
+grant execute on function public.selection_strength_tier(text, integer, text, integer, text, integer) to service_role;
+grant execute on function public.selection_strength_tier_label(integer) to service_role;
+grant execute on function public.selection_has_own_site(text, text, text) to service_role;
+
+create or replace view public.selection_strength_coverage
+with (security_invoker = true) as
+with team_rows as (
+  select
+    tm.id,
+    public.selection_strength_tier(
+      aff.league_level,
+      aff.league_division::integer,
+      tm.current_league_name,
+      tm.current_league_rank,
+      hub.strength_rank,
+      hub.level
+    ) as tier,
+    public.selection_has_own_site(tm.official_url, r.official_homepage_url, r.selection_page_url) as own_site,
+    exists (
+      select 1
+      from public.selection_crawl_url_outcomes o
+      where o.team_master_id = tm.id
+        and o.status = 'success'
+    ) as fetched_ok,
+    exists (
+      select 1
+      from public.selection_events e
+      where e.team_master_id = tm.id
+        and e.status is distinct from 'collapsed'
+    ) as selection_found,
+    exists (
+      select 1
+      from public.selection_events e
+      where e.team_master_id = tm.id
+        and e.status is distinct from 'collapsed'
+        and (
+          e.event_date is not null
+          or cardinality(coalesce(e.event_dates, array[]::text[])) > 0
+        )
+    ) as dated
+  from public.team_master tm
+  left join lateral (
+    select research.official_homepage_url, research.selection_page_url
+    from public.team_selection_research research
+    where research.team_master_id = tm.id
+    order by research.checked_at desc nulls last
+    limit 1
+  ) r on true
+  left join public.teams hub on hub.id = tm.id
+  left join public.team_affiliations aff
+    on aff.team_id = hub.id
+   and aff.status = 'affiliated'
+)
+select
+  tier,
+  public.selection_strength_tier_label(tier) as tier_label,
+  count(*)::integer as teams_total,
+  count(*) filter (where own_site)::integer as teams_with_official_site,
+  count(*) filter (where fetched_ok)::integer as teams_fetched_ok,
+  count(*) filter (where selection_found)::integer as teams_with_selection_page,
+  count(*) filter (where dated)::integer as teams_with_dated_events
+from team_rows
+group by tier;
+
+revoke all on public.selection_strength_coverage from public, anon, authenticated;
+grant select on public.selection_strength_coverage to service_role;
+
+comment on view public.selection_strength_coverage is
+  'Per league tier: catalog teams, own official site, successful fetch, selection page, and dated selection events. Tiers 10 and 20 are crawled before lower tiers.';
+
 create temporary table selection_event_plan as
 with published as (
   select

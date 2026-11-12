@@ -110,6 +110,11 @@ from public.team_selection_research
 where selection_page_url ilike '%instagram.com%'
   and official_site_decision = 'no_candidate';
 
+select tier, tier_label, teams_total, teams_with_official_site, teams_fetched_ok,
+       teams_with_selection_page, teams_with_dated_events
+from public.selection_strength_coverage
+order by tier;
+
 select count(*) as teams_whose_crawl_target_left_instagram
 from public.team_selection_research
 where research_status = 'official_site_auto_accepted'

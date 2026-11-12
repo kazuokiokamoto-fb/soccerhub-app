@@ -136,6 +136,8 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { CrawlFetchError, createSupabaseHostStore, HostGate } from "../_shared/host-gate.ts";
 import { requireSelectionSecret } from "../_shared/selection-secret.ts";
+import { orderByTeamStrength } from "../_shared/strength-order.ts";
+import { takeDiverseHosts } from "../../../lib/selection-crawl/priority.ts";
 import { chooseEventDate, filterExtractedDates, jstYmd } from "../../../lib/selection-crawl/dates.ts";
 import { isUncrawlableUrl, normalizeSelectionUrl, selectionIdentity } from "../../../lib/selection-crawl/urls.ts";
 
@@ -1293,45 +1295,38 @@ function cutoffIso() {
   return new Date(Date.now() - RECRAWL_HOURS * 60 * 60 * 1000).toISOString();
 }
 
+async function loadResearchPages(build: (from: number, to: number) => any) {
+  const pageSize = 1000;
+  const rows: any[] = [];
+  for (let from = 0; from < 5000; from += pageSize) {
+    const { data, error } = await build(from, from + pageSize - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  return rows;
+}
+
 async function claimWebRows(limit: number) {
   const now = nowIso();
   const due = `and(or(checked_at.is.null,checked_at.lt.${cutoffIso()}),or(crawl_after.is.null,crawl_after.lt.${now}))`;
-  let query = supabase
+  const base = () => supabase
     .from("team_selection_research")
     .select(RESEARCH_COLUMNS)
     .not("selection_page_url", "is", null)
     .neq("selection_page_url", "")
-    .not("selection_page_url", "ilike", "%instagram.com%")
-    .or(due)
-    .order("checked_at", { ascending: true, nullsFirst: true })
-    .limit(limit * 8);
-  let { data, error } = await query;
-  if (error) {
-    const fallback = await supabase
-      .from("team_selection_research")
-      .select(RESEARCH_COLUMNS)
-      .not("selection_page_url", "is", null)
-      .neq("selection_page_url", "")
-      .not("selection_page_url", "ilike", "%instagram.com%")
-      .or(`checked_at.is.null,checked_at.lt.${cutoffIso()}`)
-      .order("checked_at", { ascending: true, nullsFirst: true })
-      .limit(limit * 8);
-    data = fallback.data;
-    error = fallback.error;
+    .not("selection_page_url", "ilike", "%instagram.com%");
+  let rows: any[];
+  try {
+    rows = await loadResearchPages((from, to) => base().or(due).order("id", { ascending: true }).range(from, to));
+  } catch {
+    rows = await loadResearchPages((from, to) =>
+      base().or(`checked_at.is.null,checked_at.lt.${cutoffIso()}`).order("id", { ascending: true }).range(from, to)
+    );
   }
-  if (error) throw error;
-
-  const chosen: any[] = [];
-  const hosts = new Set<string>();
-  for (const row of data || []) {
-    if (row.crawl_after && Date.parse(row.crawl_after) > Date.now()) continue;
-    const host = hostOf(row.selection_page_url || "");
-    if (host && hosts.has(host)) continue;
-    if (host) hosts.add(host);
-    chosen.push(row);
-    if (chosen.length >= limit) break;
-  }
-  return chosen;
+  rows = rows.filter((row) => !row.crawl_after || Date.parse(row.crawl_after) <= Date.now());
+  const ordered = await orderByTeamStrength(supabase, rows, "checked_at");
+  return takeDiverseHosts(ordered, limit, (row) => hostOf(row.selection_page_url || ""));
 }
 
 async function claimInstagramRows(limit: number) {

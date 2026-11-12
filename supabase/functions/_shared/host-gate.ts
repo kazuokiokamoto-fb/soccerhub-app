@@ -153,11 +153,10 @@ export class HostGate {
     }
 
     if (decision.refreshRobots) {
-      const robotsUrl = new URL("/robots.txt", new URL(url).origin).toString();
-      const robots = await this.request(robotsUrl, false);
+      const robots = await this.fetchRobots(url);
       state.robots_fetched_at = iso(this.now());
       state.robots_status = robots.status;
-      state.robots_txt = robots.ok ? robots.html.slice(0, 100_000) : null;
+      state.robots_txt = robots.status >= 200 && robots.status < 300 ? robots.html.slice(0, 100_000) : null;
       state.last_request_at = state.robots_fetched_at;
       const verdict = robotsDecision(robots.status, state.robots_txt || "", new URL(url), CRAWL_USER_AGENT);
       if (verdict === "deny") {
@@ -168,18 +167,11 @@ export class HostGate {
           ok: false, status: robots.status, html: "", finalUrl: url, error: "robots_disallow", failure: "robots", retryAt: state.backoff_until,
         });
       }
-      if (verdict === "unavailable") {
-        state.backoff_until = iso(this.now() + BACKOFF_MS.robotsUnavailable);
-        this.noteObservation(state, "robots");
-        await this.store.save(state);
-        return result({
-          ok: false, status: robots.status, html: "", finalUrl: url, error: "robots_unavailable", failure: "robots", retryAt: state.backoff_until,
-        });
-      }
+      // 4xx, 5xx, timeout, and connection errors are stored in robots_status and do not block the page.
       state.backoff_until = null;
       await this.store.save(state);
     } else if (state.robots_txt) {
-      const verdict = robotsDecision(state.robots_status || 200, state.robots_txt, new URL(url), CRAWL_USER_AGENT);
+      const verdict = robotsDecision(state.robots_status ?? 200, state.robots_txt, new URL(url), CRAWL_USER_AGENT);
       if (verdict === "deny") {
         this.noteObservation(state, "robots");
         await this.store.save(state);
@@ -281,28 +273,39 @@ export class HostGate {
     const fetchedAt = state.robots_fetched_at ? Date.parse(state.robots_fetched_at) : null;
     const fresh = fetchedAt != null && this.now() - fetchedAt < 24 * 60 * 60 * 1000;
     if (!fresh) {
-      const robotsUrl = new URL("/robots.txt", new URL(url).origin).toString();
-      const robots = await this.request(robotsUrl, false);
+      const robots = await this.fetchRobots(url);
       state.robots_fetched_at = iso(this.now());
       state.robots_status = robots.status;
-      state.robots_txt = robots.ok ? robots.html.slice(0, 100_000) : null;
+      state.robots_txt = robots.status >= 200 && robots.status < 300 ? robots.html.slice(0, 100_000) : null;
       state.last_request_at = state.robots_fetched_at;
       await this.store.save(state);
     }
-    const verdict = robotsDecision(state.robots_status || 0, state.robots_txt || "", new URL(url), CRAWL_USER_AGENT);
-    if (verdict === "allow") return null;
+    const robotsStatus = state.robots_status ?? (state.robots_txt ? 200 : 0);
+    const verdict = robotsDecision(robotsStatus, state.robots_txt || "", new URL(url), CRAWL_USER_AGENT);
+    if (verdict !== "deny") return null;
     this.noteObservation(state, "robots");
-    state.backoff_until = iso(this.now() + (verdict === "deny" ? BACKOFF_MS.robotsDeny : BACKOFF_MS.robotsUnavailable));
+    state.backoff_until = iso(this.now() + BACKOFF_MS.robotsDeny);
     await this.store.save(state);
     return result({
       ok: false,
       status: state.robots_status || 0,
       html: "",
       finalUrl: url,
-      error: verdict === "deny" ? "robots_disallow" : "robots_unavailable",
+      error: "robots_disallow",
       failure: "robots",
-      retryAt: iso(this.now() + (verdict === "deny" ? BACKOFF_MS.robotsDeny : BACKOFF_MS.robotsUnavailable)),
+      retryAt: iso(this.now() + BACKOFF_MS.robotsDeny),
     });
+  }
+
+  private async fetchRobots(pageUrl: string): Promise<FetchResult & { redirect?: string }> {
+    let current = new URL("/robots.txt", new URL(pageUrl).origin).toString();
+    let response = await this.request(current, false);
+    for (let hop = 0; hop < 5 && response.redirect; hop += 1) {
+      if (!isPublicHttpUrl(response.redirect) || isUncrawlableUrl(response.redirect)) break;
+      current = response.redirect;
+      response = await this.request(current, false);
+    }
+    return response;
   }
 
   private async request(url: string, htmlOnly: boolean): Promise<FetchResult & { redirect?: string }> {
