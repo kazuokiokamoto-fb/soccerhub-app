@@ -30,15 +30,29 @@ const logoFont = Zen_Kaku_Gothic_New({
   weight: ["700", "900"],
 });
 
+const hubDescription =
+  "練習試合マッチングです。相手を探して、募集して、チャットで調整できます。";
+
 export const metadata: Metadata = {
   title: "サカまっち",
-  description:
-    "チーム同士で練習試合を探して、募集して、チャットで調整できます。セレクション情報もまとめて確認できます。",
+  description: hubDescription,
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "サカまっち",
+  },
+  openGraph: {
+    title: "サカまっち",
+    description: hubDescription,
+    siteName: "サカまっち",
+    locale: "ja_JP",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "サカまっち",
+    description: hubDescription,
   },
   icons: {
     apple: "/apple-icon.png",
