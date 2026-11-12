@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/app/lib/supabase";
 import { categoryLabel } from "@/app/lib/categories";
+import { teamChatOpenErrorMessage } from "@/lib/chat/teamChatError";
 
 export default function TeamChatRedirectPage() {
   const params = useParams<{ teamId: string }>();
@@ -42,38 +43,15 @@ export default function TeamChatRedirectPage() {
           return;
         }
 
-        const { data: existingThread, error: existingThreadError } =
-          await supabase
-            .from("chat_threads")
-            .select("id")
-            .eq("thread_type", "team")
-            .eq("team_a_id", teamId)
-            .is("team_b_id", null)
-            .is("slot_id", null)
-            .maybeSingle();
+        const { data: openedThreadId, error: openError } = await supabase.rpc(
+          "get_or_create_team_chat_thread",
+          { p_team_id: teamId },
+        );
 
-        if (existingThreadError) throw existingThreadError;
+        if (openError) throw openError;
 
-        let threadId = String(existingThread?.id ?? "");
-
-        if (!threadId) {
-          const { data: createdThread, error: createThreadError } =
-            await supabase
-              .from("chat_threads")
-              .insert({
-                thread_type: "team",
-                slot_id: null,
-                team_a_id: teamId,
-                team_b_id: null,
-                created_by: meId,
-              })
-              .select("id")
-              .single();
-
-          if (createThreadError) throw createThreadError;
-
-          threadId = String(createdThread?.id ?? "");
-        }
+        const threadId =
+          typeof openedThreadId === "string" ? openedThreadId : "";
 
         if (!threadId) {
           throw new Error("チームチャットの作成に失敗しました。");
@@ -120,10 +98,10 @@ export default function TeamChatRedirectPage() {
         if (cancelled) return;
 
         router.replace(`/chat/${threadId}?from=team-message&teamId=${teamId}`);
-      } catch (e: any) {
-        console.error("team chat redirect error:", e);
+      } catch (error: unknown) {
+        console.error("team chat redirect error:", error);
         if (!cancelled) {
-          setErrorText(e?.message ?? "チームチャットを開けませんでした。");
+          setErrorText(teamChatOpenErrorMessage(error));
         }
       }
     }
